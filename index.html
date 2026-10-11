@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>네오 아보카도</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="top">
+      <h1>네오 아보카도</h1>
+      <div class="account">
+        <span id="whoami"></span>
+        <button id="signIn" type="button" hidden>회원 로그인</button>
+        <button id="signOut" type="button" hidden>로그아웃</button>
+      </div>
+    </header>
+    <p id="status" role="status"></p>
+
+    <section id="welcome" hidden>
+      <p>
+        자캐 커뮤니티입니다. 회원만 볼 수 있어요. 나루 계정으로 회원 로그인해
+        주세요.
+      </p>
+    </section>
+
+    <section id="profileSetup" hidden>
+      <h2>처음 오셨네요</h2>
+      <form id="profileForm">
+        <label>
+          닉네임
+          <input id="nick" name="nick" maxlength="20" required />
+        </label>
+        <button type="submit">시작하기</button>
+      </form>
+    </section>
+
+    <main id="community" hidden>
+      <nav class="tabs">
+        <button id="tabLogs" type="button" aria-pressed="true">로그</button>
+        <button id="tabCharacters" type="button" aria-pressed="false">
+          캐릭터
+        </button>
+        <button id="tabShop" type="button" aria-pressed="false">상점</button>
+      </nav>
+
+      <section id="logsView">
+        <form id="logForm" class="card">
+          <h2>로그 올리기</h2>
+          <label>
+            그림
+            <input id="logImage" type="file" accept="image/*" required />
+          </label>
+          <label>
+            설명
+            <textarea id="logText" maxlength="2000" rows="3"></textarea>
+          </label>
+          <button type="submit">올리기</button>
+        </form>
+        <ol id="logs" class="logs"></ol>
+        <button id="moreLogs" type="button" hidden>로그 더 보기</button>
+      </section>
+
+      <section id="charactersView" hidden>
+        <form id="characterForm" class="card">
+          <h2>캐릭터 등록</h2>
+          <label>
+            이름
+            <input id="characterName" maxlength="40" required />
+          </label>
+          <label>
+            소속
+            <input id="characterSide" maxlength="40" />
+          </label>
+          <label>
+            프로필
+            <textarea
+              id="characterProfile"
+              maxlength="4000"
+              rows="4"
+            ></textarea>
+          </label>
+          <label>
+            두상
+            <input id="characterImage" type="file" accept="image/*" />
+          </label>
+          <button type="submit">등록</button>
+        </form>
+        <ul id="characters" class="characters"></ul>
+        <button id="moreCharacters" type="button" hidden>캐릭터 더 보기</button>
+      </section>
+
+      <section id="shopView" hidden>
+        <div class="card wallet">
+          <p>잔액 <strong id="balance">0</strong> 아보</p>
+          <button id="daily" type="button">출석 보상 받기</button>
+          <button id="gacha" type="button">뽑기 (50 아보)</button>
+        </div>
+        <h2>상점</h2>
+        <ul id="items" class="items"></ul>
+        <h2>내 인벤토리</h2>
+        <ul id="inventory" class="inventory"></ul>
+        <button id="moreInventory" type="button" hidden>더 보기</button>
+      </section>
+    </main>
+
+    <template id="logTemplate">
+      <li class="log card">
+        <img class="log-image" alt="" />
+        <p class="log-text"></p>
+        <p class="meta">
+          <span class="author"></span> · <time></time>
+          <button class="delete" type="button" hidden>삭제</button>
+        </p>
+        <details class="comments">
+          <summary>댓글</summary>
+          <ol class="comment-list"></ol>
+          <button class="more-comments" type="button" hidden>
+            댓글 더 보기
+          </button>
+          <form class="comment-form">
+            <input class="comment-text" maxlength="500" placeholder="댓글" />
+            <label class="dice-option">
+              <input class="comment-dice" type="checkbox" /> 주사위
+            </label>
+            <button type="submit">달기</button>
+          </form>
+        </details>
+      </li>
+    </template>
+
+    <template id="characterTemplate">
+      <li class="character card">
+        <img class="character-image" alt="" />
+        <div>
+          <h3 class="character-name"></h3>
+          <p class="character-side"></p>
+          <p class="character-profile"></p>
+          <p class="meta">
+            <span class="author"></span>
+            <button class="delete" type="button" hidden>삭제</button>
+          </p>
+        </div>
+      </li>
+    </template>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,126 @@
+:root {
+  color-scheme: light dark;
+  --avocado: #568203;
+  --pit: #6b4423;
+  --paper: #fbfcf5;
+  --ink: #1f2a12;
+  --line: #d6e0c0;
+  font-family:
+    "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #151a0e;
+    --ink: #e7efd6;
+    --line: #34401f;
+  }
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0 auto;
+  max-width: 760px;
+  padding: 16px;
+  background: var(--paper);
+  color: var(--ink);
+  line-height: 1.6;
+}
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 3px solid var(--avocado);
+}
+h1 {
+  margin: 8px 0;
+  color: var(--avocado);
+}
+button {
+  border: 1px solid var(--avocado);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  padding: 4px 12px;
+  font: inherit;
+  cursor: pointer;
+}
+button[type="submit"],
+.tabs button[aria-pressed="true"] {
+  background: var(--avocado);
+  color: #fff;
+}
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0;
+}
+.card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  margin: 12px 0;
+}
+form label {
+  display: block;
+  margin: 6px 0;
+}
+input:not([type="checkbox"]),
+textarea {
+  display: block;
+  width: 100%;
+  font: inherit;
+}
+.logs,
+.characters {
+  list-style: none;
+  padding: 0;
+}
+.log-image {
+  display: block;
+  max-width: 100%;
+  border-radius: 6px;
+}
+.meta {
+  color: var(--pit);
+  font-size: 0.9em;
+}
+.comment-list {
+  padding-left: 1.2em;
+}
+.comment-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.comment-form .comment-text {
+  flex: 1 1 200px;
+  width: auto;
+}
+.dice-option {
+  display: inline;
+}
+.dice {
+  font-weight: bold;
+  color: var(--avocado);
+}
+.character {
+  display: flex;
+  gap: 12px;
+}
+.character-image {
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+  border-radius: 50%;
+  flex: none;
+}
+.character-name {
+  margin: 0;
+}
+#status:empty {
+  display: none;
+}
