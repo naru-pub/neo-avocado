@@ -31,7 +31,9 @@
 
 ## 배포
 
-`main`에 푸시하면 `.github/workflows/deploy.yml`이 `npm run lint`와 `npm test`를 돌리고, 통과할 때만 페이지와 `_naru/`를 사이트 루트에 배포합니다. GitHub Actions OIDC를 쓰므로 비밀값은 필요 없고, 저장소 변수 `NARU_SITE`에 나루 로그인 이름이 들어 있습니다. 사이트에 있지만 저장소에 없는 파일은 배포할 때 지워집니다.
+나루 계정 `neo-avocado`의 [GitHub 배포](https://naru.pub/deploys)에 이 저장소가 GitHub 앱으로 연결되어 있어서, `main`에 푸시하면 나루가 그 커밋을 `https://neo-avocado.naru.pub/`에 바로 배포합니다. 워크플로나 저장소 변수는 쓰지 않습니다. 점(.)으로 시작하는 파일과 폴더, `node_modules`, 나루가 올릴 수 없는 형식의 파일은 배포되지 않고, 사이트에 있지만 저장소에 없는 파일은 배포할 때 지워집니다.
+
+`.github/workflows/test.yml`은 푸시와 풀 리퀘스트마다 검사만 합니다. 배포는 검사 결과를 기다리지 않으니, `main`에 올리기 전에 로컬에서 `npm test`와 `npm run lint`를 돌려 주세요.
 
 ## 개발
 

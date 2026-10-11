@@ -1,0 +1,23 @@
+name: Test
+
+# 배포는 나루의 GitHub 앱이 main에 푸시될 때마다 합니다. 이 워크플로는 검사만
+# 합니다.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
