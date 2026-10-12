@@ -55,6 +55,7 @@ button[type="submit"],
 .tabs {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
   margin: 16px 0;
 }
 .card {
@@ -123,4 +124,52 @@ textarea {
 }
 #status:empty {
   display: none;
+}
+dialog {
+  width: min(92vw, 560px);
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+dialog::backdrop {
+  background: #0008;
+}
+select {
+  max-width: 100%;
+  font: inherit;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+#inventory li {
+  margin: 12px 0;
+}
+#inventory label {
+  display: inline;
+}
+.outfit-image {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  vertical-align: middle;
+  margin-right: 8px;
+}
+.title-image {
+  max-width: 120px;
+  max-height: 40px;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+.message-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.character > div {
+  flex: 1;
+  min-width: 0;
+}
+.character-details li {
+  margin: 8px 0;
 }

@@ -30,7 +30,16 @@ function fakeDatabase(rows = {}) {
   };
   let clock = Date.parse("2030-01-01T09:00:00.000Z");
   const store = new Map(
-    [PROFILES, CHARACTERS, LOGS, COMMENTS].map((name) => [
+    [
+      PROFILES,
+      CHARACTERS,
+      LOGS,
+      COMMENTS,
+      "neo_avocado_recipes",
+      "neo_avocado_relations",
+      "neo_avocado_wardrobe",
+      "neo_avocado_boards",
+    ].map((name) => [
       name,
       (rows[name] ?? []).map((row) => ({
         revision: "r1.1",
@@ -85,8 +94,14 @@ function fakeDatabase(rows = {}) {
       store.get(name).push(row);
       return row;
     },
-    async set(id, data) {
-      calls.push({ method: "set", name, id, data });
+    async set(id, data, options) {
+      calls.push({
+        method: "set",
+        name,
+        id,
+        data,
+        ...(options ? { options } : {}),
+      });
       const row = {
         id,
         data,
@@ -119,7 +134,47 @@ function fakeDatabase(rows = {}) {
     },
     // 서버 함수는 나루에서 돈다. 여기서는 무엇을 불렀는지만 남기고, 테스트가
     // 정한 결과를 돌려준다.
+    async read(name, args = null) {
+      return this.call(name, args);
+    },
     async call(name, args = null) {
+      if (name === "neo-avocado/membership") {
+        const profile = await member
+          .collection(PROFILES)
+          .get(ME)
+          .catch((error) => {
+            if (error.code === "NOT_FOUND") return null;
+            throw error;
+          });
+        return { ok: true, status: "approved", role: "member", profile };
+      }
+      if (name === "neo-avocado/join")
+        return {
+          ok: true,
+          status: "approved",
+          profile: await member
+            .collection(PROFILES)
+            .set(ME, { nick: args.nick }),
+        };
+      if (name === "neo-avocado/communityData") {
+        const handle = member.collection(args.collection);
+        if (args.operation === "list")
+          return { ok: true, ...(await handle.list(args.options)) };
+        if (args.operation === "delete") {
+          await handle.delete(args.id, args.options);
+          return { ok: true, done: true };
+        }
+        return {
+          ok: true,
+          document: await handle[args.operation](
+            ...(args.operation === "add"
+              ? [args.data]
+              : args.operation === "set"
+                ? [args.id, args.data, args.options]
+                : [args.id]),
+          ),
+        };
+      }
       calls.push({ method: "call", name, args });
       return database.answer(name, args);
     },
@@ -129,7 +184,10 @@ function fakeDatabase(rows = {}) {
     store,
     member,
     signedIn: true,
-    answer: () => ({ ok: false, reason: "empty" }),
+    answer: (name) =>
+      name === "neo-avocado/messageStatus"
+        ? { ok: true, unread: false }
+        : { ok: false, reason: "empty" },
   };
   return database;
 }
@@ -141,6 +199,13 @@ async function page(database) {
   });
   const { window } = dom;
   window.confirm = () => true;
+  window.setInterval = () => 0;
+  window.HTMLDialogElement.prototype.showModal = function () {
+    this.open = true;
+  };
+  window.HTMLDialogElement.prototype.close = function () {
+    this.open = false;
+  };
   const context = dom.getInternalVMContext();
   const config = new SyntheticModule(
     ["config"],
@@ -191,6 +256,157 @@ async function page(database) {
 
 const me = { id: ME, data: { nick: "나" }, createdBy: ME };
 
+test("editing keeps image and metadata and sends the revision, while a conflict retains the draft", async () => {
+  const database = fakeDatabase({
+    [PROFILES]: [me],
+    [LOGS]: [
+      {
+        id: "mine",
+        createdBy: ME,
+        data: { image: "original.png", text: "before", extra: "keep" },
+      },
+      { id: "other", createdBy: "other-member", data: { image: "other.png" } },
+    ],
+  });
+  const { $, submit } = await page(database);
+  assert.equal($("logs").querySelector(".log .edit").hidden, true);
+  const own = [...$("logs").children].find(
+    (row) => row.querySelector(".log-text").textContent === "before",
+  );
+  own.querySelector(".edit").onclick();
+  assert.equal($("editor").open, true);
+  $("editorFields").querySelector('[name="text"]').value = "after";
+  await submit($("editorForm"));
+  const write = database.calls.filter((call) => call.method === "set").at(-1);
+  assert.deepEqual(write, {
+    method: "set",
+    name: LOGS,
+    id: "mine",
+    data: {
+      image: "original.png",
+      text: "after",
+      extra: "keep",
+      title: "",
+      category: "",
+      secret: false,
+    },
+    options: { condition: { revision: "r1.1" } },
+  });
+  assert.equal($("editor").open, false);
+  const edited = [...$("logs").children].find(
+    (row) => row.querySelector(".log-text").textContent === "after",
+  );
+  edited.querySelector(".edit").onclick();
+  const originalCollection = database.member.collection;
+  database.member.collection = (name) => ({
+    ...originalCollection(name),
+    set: async () => {
+      throw Object.assign(new Error("conflict"), { code: "CONFLICT" });
+    },
+  });
+  $("editorFields").querySelector('[name="text"]').value = "retained draft";
+  await submit($("editorForm"));
+  assert.equal($("editor").open, true);
+  assert.equal(
+    $("editorFields").querySelector('[name="text"]').value,
+    "retained draft",
+  );
+  assert.match($("editorStatus").textContent, /다른 곳에서 수정/);
+});
+
+test("profile and character edits use their original revisions and preserve extra fields", async () => {
+  const database = fakeDatabase({
+    [PROFILES]: [{ ...me, data: { nick: "나", mainCharacter: "character" } }],
+    [CHARACTERS]: [
+      {
+        id: "character",
+        createdBy: ME,
+        data: {
+          name: "캐릭터",
+          side: "동쪽",
+          profile: "소개",
+          image: "portrait.png",
+          custom: { color: "green" },
+        },
+      },
+    ],
+  });
+  const { $, settle, submit } = await page(database);
+  $("editProfile").onclick();
+  $("editorFields").querySelector('[name="nick"]').value = "새 이름";
+  await submit($("editorForm"));
+  assert.equal($("whoami").textContent, "새 이름 님");
+  assert.equal(database.store.get(PROFILES)[0].data.mainCharacter, "character");
+  $("tabCharacters").onclick();
+  await settle();
+  await settle();
+  $("characters").querySelector(".edit").onclick();
+  $("editorFields").querySelector('[name="name"]').value = "새 캐릭터";
+  await submit($("editorForm"));
+  assert.equal(
+    $("characters").querySelector(".character-name").textContent,
+    "새 캐릭터",
+  );
+  const saved = database.store.get(CHARACTERS)[0];
+  assert.equal(saved.data.image, "portrait.png");
+  assert.deepEqual(saved.data.custom, { color: "green" });
+  assert.deepEqual(
+    database.calls.filter((call) => call.method === "set").at(-1).options,
+    { condition: { revision: "r1.1" } },
+  );
+});
+
+test("the shop exposes later pages and crafts selected inventory through the server", async () => {
+  const database = fakeDatabase({ [PROFILES]: [me] });
+  database.store.set(WALLETS, [{ id: ME, data: { balance: 100 } }]);
+  database.store.set(
+    ITEMS,
+    Array.from({ length: 51 }, (_, n) => ({
+      id: `item-${n}`,
+      createdAt: String(n).padStart(3, "0"),
+      data: { name: `아이템 ${n}`, price: 1 },
+    })),
+  );
+  database.store.set(INVENTORY, [
+    {
+      id: "seed-1",
+      createdAt: "1",
+      data: { name: "씨앗", owner: ME, item: "seed" },
+    },
+  ]);
+  database.store.set("neo_avocado_recipes", [
+    {
+      id: "tree",
+      data: {
+        name: "나무 제작",
+        item: "tree",
+        ingredients: [{ item: "seed", count: 1 }],
+        cost: 5,
+      },
+    },
+  ]);
+  const { $, settle, submit } = await page(database);
+  $("tabShop").onclick();
+  for (let n = 0; n < 5; n++) await settle();
+  assert.equal($("items").children.length, 50);
+  assert.equal($("moreItems").hidden, false);
+  $("moreItems").onclick();
+  await settle();
+  assert.equal($("items").children.length, 51);
+  assert.equal($("moreItems").hidden, true);
+  $("inventory").querySelector(".material").checked = true;
+  submit($("craftForm"));
+  await settle();
+  assert.deepEqual(
+    database.calls.filter((call) => call.method === "call").at(-1),
+    {
+      method: "call",
+      name: "neo-avocado/craft",
+      args: { recipe: "tree", materials: ["seed-1"] },
+    },
+  );
+});
+
 test("signed out, the page asks nothing of the database and offers member sign-in", async () => {
   const database = fakeDatabase();
   database.signedIn = false;
@@ -224,7 +440,10 @@ test("a first visit sets a nickname under the member's own id, then reads the lo
   });
   assert.equal($("community").hidden, false);
   assert.equal($("whoami").textContent, "아보 님");
-  assert.equal(database.calls.at(2).name, LOGS);
+  assert.equal(
+    database.calls.some((call) => call.method === "list" && call.name === LOGS),
+    true,
+  );
 });
 
 test("logs are read a page at a time, newest first, and comments only when opened", async () => {
@@ -243,6 +462,7 @@ test("logs are read a page at a time, newest first, and comments only when opene
   const { $, settle } = await page(database);
   const listed = database.calls.filter((call) => call.method === "list");
   assert.deepEqual(listed, [
+    { method: "list", name: "neo_avocado_boards", size: 100, after: null },
     {
       method: "list",
       name: LOGS,
@@ -332,7 +552,14 @@ test("a log uploads its picture, then saves the stored URL", async () => {
     {
       method: "add",
       name: LOGS,
-      data: { image: "https://media.naru.pub/log.png", text: "첫 로그" },
+      data: {
+        image: "https://media.naru.pub/log.png",
+        text: "첫 로그",
+        board: "default",
+        title: "",
+        category: "",
+        secret: false,
+      },
     },
   ]);
   assert.equal($("logs").querySelector(".log-text").textContent, "첫 로그");
@@ -412,9 +639,13 @@ test("an ended sign-in returns the page to the welcome screen", async () => {
     },
   });
   $("moreLogs").hidden = false;
+  $("messageDetail").textContent = "private message";
+  $("messageBody").value = "private draft";
   $("moreLogs").onclick();
   await settle();
   assert.equal($("welcome").hidden, false);
+  assert.equal($("messageDetail").textContent, "");
+  assert.equal($("messageBody").value, "");
   assert.match($("status").textContent, /다시 회원 로그인/);
 });
 
@@ -469,7 +700,9 @@ test("the shop reads the wallet, items and own inventory when opened, and spends
     ["물약 · 10 아보 · 남은 3개"],
   );
   assert.deepEqual(
-    [...$("inventory").children].map((row) => row.textContent),
+    [...$("inventory").children].map(
+      (row) => row.querySelector("label").textContent,
+    ),
     ["물약"],
   );
   assert.deepEqual(
@@ -485,7 +718,11 @@ test("the shop reads the wallet, items and own inventory when opened, and spends
   $("gacha").onclick();
   for (let n = 0; n < 4; n += 1) await settle();
   assert.deepEqual(
-    database.calls.filter((call) => call.method === "call").at(0),
+    database.calls
+      .filter(
+        (call) => call.method === "call" && call.name === "neo-avocado/gacha",
+      )
+      .at(0),
     { method: "call", name: "neo-avocado/gacha", args: null },
   );
   assert.match($("status").textContent, /황금 아보카도/);

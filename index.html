@@ -9,8 +9,10 @@
   <body>
     <header class="top">
       <h1>네오 아보카도</h1>
+      <a href="admin.html">운영</a>
       <div class="account">
         <span id="whoami"></span>
+        <button id="editProfile" type="button" hidden>프로필 수정</button>
         <button id="signIn" type="button" hidden>회원 로그인</button>
         <button id="signOut" type="button" hidden>로그아웃</button>
       </div>
@@ -42,15 +44,32 @@
           캐릭터
         </button>
         <button id="tabShop" type="button" aria-pressed="false">상점</button>
+        <button id="tabMessages" type="button" aria-pressed="false">
+          쪽지
+        </button>
       </nav>
 
       <section id="logsView">
+        <label
+          >게시판
+          <select id="board"></select
+        ></label>
+        <p id="boardDescription"></p>
         <form id="logForm" class="card">
           <h2>로그 올리기</h2>
           <label>
             그림
             <input id="logImage" type="file" accept="image/*" required />
           </label>
+          <label>제목 <input id="logTitle" maxlength="120" /></label>
+          <label
+            >분류
+            <select id="logCategory"></select
+          ></label>
+          <label
+            ><input id="logSecret" type="checkbox" /> 비밀글 (작성자와
+            운영자만)</label
+          >
           <label>
             설명
             <textarea id="logText" maxlength="2000" rows="3"></textarea>
@@ -91,6 +110,13 @@
       </section>
 
       <section id="shopView" hidden>
+        <label
+          >인벤토리 캐릭터
+          <select id="inventoryCharacter"></select
+        ></label>
+        <p>
+          캐릭터를 고르면 구매·뽑기·제작한 아이템이 그 캐릭터에게 들어갑니다.
+        </p>
         <div class="card wallet">
           <p>잔액 <strong id="balance">0</strong> 아보</p>
           <button id="daily" type="button">출석 보상 받기</button>
@@ -98,19 +124,76 @@
         </div>
         <h2>상점</h2>
         <ul id="items" class="items"></ul>
+        <button id="moreItems" type="button" hidden>상점 더 보기</button>
         <h2>내 인벤토리</h2>
         <ul id="inventory" class="inventory"></ul>
         <button id="moreInventory" type="button" hidden>더 보기</button>
+        <form id="craftForm" class="card">
+          <h2>아이템 제작</h2>
+          <label
+            >레시피
+            <select id="recipe" required></select
+          ></label>
+          <p id="recipeDescription"></p>
+          <p>
+            인벤토리에서 재료를 선택하세요. 성공하면 선택한 재료가 소모됩니다.
+          </p>
+          <button type="submit">제작</button>
+        </form>
+        <details id="historyPanel">
+          <summary>내 활동·구매 기록</summary>
+          <ol id="history"></ol>
+          <button id="moreHistory" type="button" hidden>기록 더 보기</button>
+        </details>
+      </section>
+      <section id="messagesView" hidden>
+        <h2>쪽지</h2>
+        <form id="messageForm" class="card">
+          <label
+            >받는 회원 (최대 20명)
+            <select id="messageRecipients" multiple required></select
+          ></label>
+          <label
+            >내용
+            <textarea
+              id="messageBody"
+              required
+              maxlength="5000"
+              rows="5"
+            ></textarea>
+          </label>
+          <p id="messageCost"></p>
+          <button type="submit">쪽지 보내기</button>
+        </form>
+        <label
+          >보관함
+          <select id="messageBox">
+            <option value="inbox">받은 쪽지</option>
+            <option value="sent">보낸 쪽지</option>
+          </select></label
+        >
+        <button id="refreshMessages" type="button">새로고침</button>
+        <ul id="messages"></ul>
+        <button id="moreMessages" type="button" hidden>쪽지 더 보기</button>
+        <article id="messageDetail" class="card" hidden></article>
       </section>
     </main>
+    <section id="admissionPanel" class="card" hidden>
+      <h2 id="admissionTitle"></h2>
+      <p id="admissionDescription"></p>
+      <p id="admissionId"></p>
+      <button id="checkAdmission" type="button">승인 상태 확인</button>
+    </section>
 
     <template id="logTemplate">
       <li class="log card">
         <img class="log-image" alt="" />
         <p class="log-text"></p>
+        <h3 class="log-title"></h3>
         <p class="meta">
           <span class="author"></span> · <time></time>
           <button class="delete" type="button" hidden>삭제</button>
+          <button class="edit" type="button" hidden>수정</button>
         </p>
         <details class="comments">
           <summary>댓글</summary>
@@ -139,11 +222,51 @@
           <p class="meta">
             <span class="author"></span>
             <button class="delete" type="button" hidden>삭제</button>
+            <button class="edit" type="button" hidden>수정</button>
+            <button class="main-character" type="button" hidden>
+              대표 캐릭터로
+            </button>
           </p>
+          <details class="character-details">
+            <summary>능력치·관계·의상</summary>
+            <h4>능력치</h4>
+            <p class="progression"></p>
+            <ul class="stats"></ul>
+            <button class="allocate-stats" type="button" hidden>
+              능력치 배분
+            </button>
+            <h4>타이틀</h4>
+            <div class="titles"></div>
+            <select
+              class="title-choice"
+              aria-label="표시할 타이틀"
+              hidden
+            ></select>
+            <h4>커플</h4>
+            <ul class="couples"></ul>
+            <h4>관계</h4>
+            <ul class="relations"></ul>
+            <button class="add-relation" type="button" hidden>관계 등록</button>
+            <h4>옷장</h4>
+            <ul class="wardrobe"></ul>
+            <button class="add-outfit" type="button" hidden>의상 등록</button>
+            <button class="default-outfit" type="button" hidden>
+              기본 두상 사용
+            </button>
+          </details>
         </div>
       </li>
     </template>
 
+    <dialog id="editor">
+      <form id="editorForm">
+        <h2 id="editorTitle"></h2>
+        <div id="editorFields"></div>
+        <p id="editorStatus" role="status"></p>
+        <button type="submit">저장</button>
+        <button id="cancelEditor" type="button">취소</button>
+      </form>
+    </dialog>
     <script type="module" src="app.js"></script>
   </body>
 </html>
