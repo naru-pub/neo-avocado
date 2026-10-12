@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
+import * as boardRules from "../_naru/rules/community-board.js";
 import * as rules from "../_naru/functions/neo-avocado.js";
 
 if (!process.env.NARU_SDK_PATH)
@@ -97,11 +98,13 @@ write(`${P}recipes`, "tree-recipe", {
   cost: 20,
   ingredients: [{ item: "seed", count: 2 }],
 });
-const list = (name, options = {}) => {
-  const rows = [...table(name).values()].filter((row) =>
-    Object.entries(options.filter ?? {}).every(
-      ([key, value]) => row.data[key] === value,
-    ),
+const list = (name, options = {}, authorized = () => true) => {
+  const rows = [...table(name).values()].filter(
+    (row) =>
+      authorized(row) &&
+      Object.entries(options.filter ?? {}).every(
+        ([key, value]) => row.data[key] === value,
+      ),
   );
   for (const [field, direction] of [...(options.sort ?? [])].reverse()) {
     const value = (row) =>
@@ -120,6 +123,15 @@ const list = (name, options = {}) => {
   const next = start + documents.length;
   return { documents, nextCursor: next < rows.length ? String(next) : null };
 };
+function permitted(predicate, row) {
+  if (typeof predicate === "boolean") return predicate;
+  if (predicate.all) return predicate.all.every((term) => permitted(term, row));
+  if (predicate.any) return predicate.any.some((term) => permitted(term, row));
+  const [field, value] = predicate.eq ?? predicate.ne;
+  const actual =
+    typeof field === "string" ? row.data[field] : row[field.metadata];
+  return predicate.eq ? actual === value : actual !== value;
+}
 const ctx = {
   member: { id: ME },
   now: Date.now(),
@@ -302,7 +314,25 @@ try {
       }
     } else {
       const [name, id] = parts;
-      if (!isOwner)
+      const native =
+        !isOwner &&
+        request.method() === "GET" &&
+        [`${P}logs`, `${P}comments`].includes(name);
+      const options = {
+        filter: JSON.parse(url.searchParams.get("filter") ?? "null") ?? {},
+        sort: JSON.parse(url.searchParams.get("sort") ?? "null"),
+        size: Number(url.searchParams.get("size") ?? 50),
+        after: url.searchParams.get("after"),
+      };
+      const predicate = native
+        ? boardRules.scope(ctx, {
+            collection: name,
+            operation: id ? "get" : "list",
+            id,
+            filter: options.filter,
+          })
+        : true;
+      if (!isOwner && !native)
         return route.fulfill({
           status: 403,
           headers,
@@ -311,15 +341,10 @@ try {
           },
         });
       if (request.method() === "GET" && !id)
-        result = list(name, {
-          filter: JSON.parse(url.searchParams.get("filter") ?? "null"),
-          sort: JSON.parse(url.searchParams.get("sort") ?? "null"),
-          size: Number(url.searchParams.get("size") ?? 50),
-          after: url.searchParams.get("after"),
-        });
+        result = list(name, options, (row) => permitted(predicate, row));
       else if (request.method() === "GET") {
         const document = ctx.get(name, id);
-        if (!document)
+        if (!document || !permitted(predicate, document))
           return route.fulfill({
             status: 404,
             headers,
@@ -365,6 +390,57 @@ try {
   );
   await page.goto(`http://127.0.0.1:${server.address().port}`);
   await page.locator("#logs .log").waitFor();
+  write(
+    `${P}logs`,
+    "native-secret",
+    {
+      board: "default",
+      owner: ME,
+      secret: true,
+      title: "hidden",
+      text: "private body",
+      image: "https://media.naru.pub/secret.png",
+    },
+    ME,
+  );
+  write(
+    `${P}comments`,
+    "native-private-comment",
+    { logId: "native-secret", owner: ME, text: "private reply", dice: false },
+    ME,
+  );
+  const visibility = await page.evaluate(async () => {
+    const root = "https://naru.pub/api/data/v1/neo-avocado/";
+    const read = async (path, token) => {
+      const response = await fetch(root + path, {
+        headers: { Authorization: `Bearer m.${token.repeat(43)}` },
+        credentials: "omit",
+      });
+      return { status: response.status, body: await response.json() };
+    };
+    return {
+      owner: await read("neo_avocado_logs/native-secret", "x"),
+      other: await read("neo_avocado_logs/native-secret", "y"),
+      list: await read(
+        `neo_avocado_logs?filter=${encodeURIComponent(JSON.stringify({ board: "default" }))}`,
+        "y",
+      ),
+      comments: await read(
+        `neo_avocado_comments?filter=${encodeURIComponent(JSON.stringify({ logId: "native-secret" }))}`,
+        "y",
+      ),
+    };
+  });
+  assert.equal(visibility.owner.status, 200);
+  assert.equal(visibility.other.status, 404);
+  assert.equal(
+    visibility.list.body.documents.some((doc) => doc.id === "native-secret"),
+    false,
+  );
+  assert.deepEqual(visibility.comments.body.documents, []);
+  table(`${P}logs`).delete("native-secret");
+  table(`${P}comments`).delete("native-private-comment");
+
   await page.locator("#logs .edit").click();
   await page.locator('#editor [name="text"]').fill("브라우저 확인");
   await page.locator('#editor [type="submit"]').click();

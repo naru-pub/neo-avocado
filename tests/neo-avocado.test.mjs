@@ -46,9 +46,11 @@ function fakeDatabase(rows = {}) {
         createdAt: new Date((clock += 1000)).toISOString(),
         createdBy: null,
         ...row,
+        data: { ...(name === LOGS ? { board: "default" } : {}), ...row.data },
       })),
     ]),
   );
+  const gatewayReads = [];
   const collection = (name) => ({
     async get(id) {
       calls.push({ method: "get", name, id });
@@ -138,6 +140,7 @@ function fakeDatabase(rows = {}) {
     // 서버 함수는 나루에서 돈다. 여기서는 무엇을 불렀는지만 남기고, 테스트가
     // 정한 결과를 돌려준다.
     async read(name, args = null) {
+      if (name === "neo-avocado/communityData") gatewayReads.push(args);
       return this.call(name, args);
     },
     async call(name, args = null) {
@@ -186,6 +189,7 @@ function fakeDatabase(rows = {}) {
     calls,
     store,
     member,
+    gatewayReads,
     signedIn: true,
     answer: (name) =>
       name === "neo-avocado/messageStatus"
@@ -286,6 +290,7 @@ test("editing keeps image and metadata and sends the revision, while a conflict 
     name: LOGS,
     id: "mine",
     data: {
+      board: "default",
       image: "original.png",
       text: "after",
       extra: "keep",
@@ -469,6 +474,7 @@ test("logs are read a page at a time, newest first, and comments only when opene
     {
       method: "list",
       name: LOGS,
+      filter: { board: "default" },
       sort: [[{ metadata: "createdAt" }, "desc"]],
       size: 10,
       after: null,
@@ -476,6 +482,12 @@ test("logs are read a page at a time, newest first, and comments only when opene
   ]);
   const items = $("logs").querySelectorAll(".log");
   assert.equal(items.length, 10);
+  assert.equal(
+    database.gatewayReads.some((args) =>
+      [LOGS, COMMENTS].includes(args.collection),
+    ),
+    false,
+  );
   assert.equal(items[0].querySelector(".log-text").textContent, "로그 11");
   // 자기 로그에만 삭제가 보인다.
   assert.equal(items[0].querySelector(".delete").hidden, false);
@@ -776,9 +788,57 @@ test("a live platform ban clears private content after ACCESS_DENIED; board deni
     database.member.read = async () => {
       throw Object.assign(new Error("denied"), { code: "ACCESS_DENIED" });
     };
+    database.member.collection = () => ({
+      list: async () => {
+        throw Object.assign(new Error("denied"), { code: "ACCESS_DENIED" });
+      },
+    });
     await $("moreLogs").onclick();
     await settle();
     assert.equal($("admissionPanel").hidden, status === "approved");
     if (status === "banned") assert.equal($("logs").children.length, 0);
   }
+});
+
+test("post details and comment lists use native reads while deletion stays transactional", async () => {
+  const database = fakeDatabase({
+    [PROFILES]: [me],
+    [LOGS]: [
+      {
+        id: "long",
+        createdBy: ME,
+        data: { text: "x".repeat(200), image: "https://media.naru.pub/a.png" },
+      },
+    ],
+  });
+  const { $, settle } = await page(database);
+  const item = $("logs").querySelector(".log");
+  assert.equal(item.querySelector(".log-text").textContent.length, 150);
+  const expand = [...item.querySelectorAll("button")].find(
+    (button) => button.textContent === "본문 보기",
+  );
+  await expand.onclick();
+  await settle();
+  const full = $("logs").querySelector(".log");
+  assert.equal(full.querySelector(".log-text").textContent.length, 200);
+  full.querySelector(".comments").open = true;
+  full.querySelector(".comments").ontoggle();
+  await settle();
+  assert.equal(
+    database.gatewayReads.some((args) =>
+      [LOGS, COMMENTS].includes(args.collection),
+    ),
+    false,
+  );
+  let deletion;
+  const originalCall = database.member.call;
+  database.member.call = async (name, args) => {
+    if (name === "neo-avocado/communityData" && args.operation === "delete")
+      deletion = args;
+    return originalCall.call(database.member, name, args);
+  };
+  await full.querySelector(".delete").onclick();
+  await settle();
+  assert.equal(deletion.collection, LOGS);
+  assert.equal(deletion.operation, "delete");
 });

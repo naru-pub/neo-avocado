@@ -14,10 +14,12 @@ workflows and live acceptance still prevent deployment readiness.
    Create application metadata keyed by the site member ID with `role: "member"`.
    Do not infer these IDs from Naru account IDs or usernames. Preapprove staff
    separately, and grant `moderator` only where intended.
-4. Set **both read and write to admin on every application collection**,
-   including profiles, characters, logs, comments, wallets, inventory, catalogs,
-   configuration and private records. Leaving a member/world permission enabled
-   lets a native SDK request bypass the application gate.
+4. Publish `_naru/rules/community-board.js`. On `neo_avocado_logs` and
+   `neo_avocado_comments`, set **read to member, write to admin, and rules to
+   community-board**. The rules must be enabled before opening member reads.
+   Set **both read and write to admin on all other application collections**,
+   including profiles, characters, wallets, inventory, catalogs, configuration
+   and private records. Member/world access without rules bypasses the app gate.
 5. Publish the updated frontend and function module together during an
    application maintenance window. Old pages used native collection requests
    and will fail after the permission change. Naru's control plane itself does
@@ -59,8 +61,9 @@ SDK dependency. Do not deploy against a server lacking either capability.
 For a live community, separately reconcile existing approvals/bans and admission
 with platform states before publishing. Do not remove legacy gates while platform
 members are still default-approved. Preserve role/level metadata and keep every
-application collection admin/admin: platform membership does not replace board
-ACLs, secret redaction or ownership checks in the gateway.
+other application collection admin/admin. Post/comment reads use native
+collections plus board rules; platform membership alone does not replace board
+ACLs or ownership checks.
 
 Interrupted cleanup remains durable and owner-recoverable. Media deletion,
 public/guest boards, imports and unattended recovery remain separate work.
@@ -75,3 +78,25 @@ Add the protected `neo_avocado_boards` collection. A missing default board
 uses the virtual image board at level 2. Review each board's levels and secret
 policy before reopening. No backfill or permission changes have been made
 against a live site.
+
+## Native post and comment reads
+
+The frontend uses `member.collection()` for log get/list and comment get/list.
+Log lists always send `filter: { board }`, including the default board. Comment
+lists send `filter: { logId }`. Rules apply before pagination and totals.
+Inaccessible secret posts are absent from the list, rather than locked previews;
+get requests for them return NOT_FOUND. Short previews are produced locally from
+complete authorized documents; expansion rereads through the native collection.
+
+Member reads require the configured `community-board` module. Configure both
+collections in Naru's database panel as above; never open member reads without
+rules. Backfill missing legacy log board IDs before using this frontend. Publish
+the rules and frontend together after the Worker/control-plane release supporting
+collection rules. Allow the ten-second rules-file cache to expire before opening.
+No live permissions, membership states or document data have been changed.
+
+Post/comment mutations still call `communityData`; log/character deletion retains
+its durable, resumable cascade. Purchases, stock, rewards, gifts and private
+messages remain in transactional functions. Do not enable native member writes
+as part of this cutover. The rule file's write hook is defensive support for future
+changes, not permission to bypass the existing write functions.

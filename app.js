@@ -188,6 +188,9 @@ async function connect() {
   state.naru = createNaru(config.site ? { site: config.site } : undefined);
 }
 function communityCollection(collection) {
+  const nativeReads = [COLLECTION.logs, COLLECTION.comments].includes(
+    collection,
+  );
   const invoke = async (operation, id, data, options = {}) => {
     const method = ["get", "list"].includes(operation) ? "read" : "call";
     const result = await state.member[method](`${FUNCTIONS}/communityData`, {
@@ -219,8 +222,30 @@ function communityCollection(collection) {
     return result;
   };
   return {
-    get: async (id) => (await invoke("get", id)).document,
-    list: (options) => invoke("list", undefined, undefined, options),
+    get: async (id) =>
+      nativeReads
+        ? state.member.collection(collection).get(id)
+        : (await invoke("get", id)).document,
+    list: async (options) => {
+      if (!nativeReads) return invoke("list", undefined, undefined, options);
+      const page = await state.member.collection(collection).list(options);
+      // Native reads return complete visible posts; trim previews only in this page.
+      return collection === COLLECTION.logs
+        ? {
+            ...page,
+            documents: page.documents.map((doc) => ({
+              ...doc,
+              data: {
+                ...doc.data,
+                text: (doc.data.text ?? "").slice(0, 150),
+                ...((doc.data.text ?? "").length > 150
+                  ? { truncated: true }
+                  : {}),
+              },
+            })),
+          }
+        : page;
+    },
     add: async (data) => (await invoke("add", undefined, data)).document,
     set: async (id, data, options) =>
       (await invoke("set", id, data, options)).document,
@@ -389,7 +414,7 @@ async function start() {
 
 async function loadLogs({ more = false } = {}) {
   const page = await communityCollection(COLLECTION.logs).list({
-    ...(state.board !== "default" ? { board: state.board } : {}),
+    filter: { board: state.board },
     sort: [[{ metadata: "createdAt" }, "desc"]],
     size: LOG_PAGE,
     after: more ? state.logCursor : null,

@@ -1,3 +1,8 @@
+> Post/comment reads now use native member collections with the published
+> `community-board` rules. Writes, cascades and economy operations remain in
+> transactional functions. Enable collection rules before opening member reads;
+> see the membership cutover instructions below. No live cutover has occurred.
+
 > Membership update: caller approval, bans and admission now use Naru platform
 > membership. Local member records retain roles and board levels. See
 > [membership-cutover.md](membership-cutover.md) for current deployment prerequisites;
@@ -51,7 +56,7 @@ reason; passing the current demo tests is not completion of the port.
   creation that SDK JSON validation rejects; creation now omits optional IDs.
 - The approved `member.read()` extension is implemented locally in SDK 1.1.0; frozen 1.0.0 stays unchanged.
 - New collections required for this work: recipes, relations, wardrobe, character_state, stat_config, settings, levels, titles, couples and history;
-  all application collections must now be admin-readable and admin-written. The previous member access must be removed. See membership-cutover.md before deploying.
+  post/comment collections require member read, admin write and the community-board rules; all other application collections remain admin/admin. See membership-cutover.md before deploying.
 - Next: complete admission/member/moderation administration, boards and private messaging. Admission and bans require
   moving protected writes behind site functions; merely hiding controls will
   not enforce them. Private collections must be admin-readable and filtered
