@@ -80,6 +80,7 @@ const state = {
   shopLoaded: false,
   inventoryCursor: null,
   itemCursor: null,
+  itemCatalog: new Map(),
   profile: null,
   recipes: [],
   inventoryCharacter: null,
@@ -1096,7 +1097,11 @@ async function loadItems({ more = false } = {}) {
     size: SHOP_PAGE,
     after: more ? state.itemCursor : null,
   });
-  if (!more) $("items").replaceChildren();
+  if (!more) {
+    $("items").replaceChildren();
+    state.itemCatalog.clear();
+  }
+  for (const item of page.documents) state.itemCatalog.set(item.id, item);
   $("items").append(
     ...page.documents
       .filter((item) => !item.data.hidden)
@@ -1106,16 +1111,36 @@ async function loadItems({ more = false } = {}) {
   $("moreItems").hidden = !page.nextCursor;
 }
 
+function itemPortrait(data) {
+  const portrait = document.createElement("div");
+  portrait.className = "item-portrait";
+  if (data?.image?.startsWith("https://")) {
+    const image = document.createElement("img");
+    image.src = data.image;
+    image.alt = "";
+    image.loading = "lazy";
+    portrait.append(image);
+  } else {
+    const placeholder = document.createElement("i");
+    placeholder.textContent = data?.name?.slice(0, 1) || "·";
+    placeholder.setAttribute("aria-hidden", "true");
+    portrait.append(placeholder);
+  }
+  return portrait;
+}
+
 function shopItem(item) {
   const row = document.createElement("li");
-  row.className = "card";
+  row.className = "card shop-item";
+  row.append(itemPortrait(item.data));
   const label = document.createElement("span");
   const stock =
     typeof item.data.stock === "number" ? ` · 남은 ${item.data.stock}개` : "";
   label.textContent = `${item.data.name} · ${item.data.price ?? 0} 아보${stock}`;
   const buy = document.createElement("button");
   buy.type = "button";
-  buy.textContent = "사기";
+  buy.textContent = item.data.stock === 0 ? "품절" : "사기";
+  buy.disabled = item.data.stock === 0;
   buy.onclick = () =>
     spend(
       "buy",
@@ -1175,8 +1200,26 @@ async function loadInventory({ more = false } = {}) {
     after: more ? state.inventoryCursor : null,
   });
   if (!more) $("inventory").replaceChildren();
+  const missing = [
+    ...new Set(page.documents.map((row) => row.data.item)),
+  ].filter((id) => id && !state.itemCatalog.has(id));
+  for (const id of missing) {
+    try {
+      state.itemCatalog.set(
+        id,
+        await communityCollection(COLLECTION.items).get(id),
+      );
+    } catch (error) {
+      if (error?.code !== "NOT_FOUND") throw error;
+      state.itemCatalog.set(id, null);
+    }
+  }
   for (const owned of page.documents) {
     const row = document.createElement("li");
+    row.className = "inventory-slot";
+    row.append(
+      itemPortrait(state.itemCatalog.get(owned.data.item)?.data ?? owned.data),
+    );
     const label = document.createElement("label");
     const selected = document.createElement("input");
     selected.type = "checkbox";

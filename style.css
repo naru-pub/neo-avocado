@@ -505,3 +505,78 @@ dialog {
     height: 160px;
   }
 }
+
+/* Shop catalog tiles and individual inventory slots preserve each item's actions. */
+.items,
+.inventory {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  list-style: none;
+  padding: 0;
+}
+.shop-item {
+  text-align: center;
+  margin: 0;
+}
+.item-portrait {
+  height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+  background: var(--paper);
+}
+.item-portrait img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.item-portrait > i {
+  font-style: normal;
+  font-size: 28px;
+  color: #aaa;
+}
+.shop-item > span {
+  display: block;
+  margin: 8px 0;
+  font-weight: bold;
+}
+.shop-item p {
+  color: var(--pit);
+  text-align: left;
+}
+#inventory > .inventory-slot {
+  margin: 0;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.inventory-slot label {
+  display: block !important;
+  margin: 8px 0;
+  font-weight: bold;
+}
+.inventory-slot button {
+  font-size: 11px;
+  padding: 3px 8px;
+  margin: 3px 0;
+}
+.wallet {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.wallet p {
+  margin-right: auto;
+}
+.wallet strong {
+  font-size: 20px;
+  margin: 0 5px;
+}
+@media (max-width: 800px) {
+  .items,
+  .inventory {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
