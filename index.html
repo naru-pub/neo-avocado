@@ -84,6 +84,7 @@
       </section>
 
       <section id="charactersView" hidden>
+        <h2 class="section-heading">멤버 목록</h2>
         <form id="characterForm" class="card">
           <h2>캐릭터 등록</h2>
           <label>
@@ -225,7 +226,6 @@
         <div>
           <h3 class="character-name"></h3>
           <p class="character-side"></p>
-          <p class="character-profile"></p>
           <p class="meta">
             <span class="author"></span>
             <button class="delete" type="button" hidden>삭제</button>
@@ -235,31 +235,48 @@
             </button>
           </p>
           <details class="character-details">
-            <summary>능력치·관계·의상</summary>
-            <h4>능력치</h4>
-            <p class="progression"></p>
-            <ul class="stats"></ul>
-            <button class="allocate-stats" type="button" hidden>
-              능력치 배분
-            </button>
-            <h4>타이틀</h4>
-            <div class="titles"></div>
-            <select
-              class="title-choice"
-              aria-label="표시할 타이틀"
-              hidden
-            ></select>
-            <h4>커플</h4>
-            <ul class="couples"></ul>
-            <h4>관계</h4>
-            <ul class="relations"></ul>
-            <button class="add-relation" type="button" hidden>관계 등록</button>
-            <h4>옷장</h4>
-            <ul class="wardrobe"></ul>
-            <button class="add-outfit" type="button" hidden>의상 등록</button>
-            <button class="default-outfit" type="button" hidden>
-              기본 두상 사용
-            </button>
+            <summary>프로필 · 능력치·관계·의상</summary>
+            <p class="character-profile"></p>
+            <div class="profile-sections">
+              <section class="profile-section">
+                <h4>능력치</h4>
+                <p class="progression"></p>
+                <ul class="stats"></ul>
+                <button class="allocate-stats" type="button" hidden>
+                  능력치 배분
+                </button>
+              </section>
+              <section class="profile-section">
+                <h4>타이틀</h4>
+                <div class="titles"></div>
+                <select
+                  class="title-choice"
+                  aria-label="표시할 타이틀"
+                  hidden
+                ></select>
+              </section>
+              <section class="profile-section">
+                <h4>커플</h4>
+                <ul class="couples"></ul>
+              </section>
+              <section class="profile-section">
+                <h4>관계</h4>
+                <ul class="relations"></ul>
+                <button class="add-relation" type="button" hidden>
+                  관계 등록
+                </button>
+              </section>
+              <section class="profile-section">
+                <h4>옷장</h4>
+                <ul class="wardrobe"></ul>
+                <button class="add-outfit" type="button" hidden>
+                  의상 등록
+                </button>
+                <button class="default-outfit" type="button" hidden>
+                  기본 두상 사용
+                </button>
+              </section>
+            </div>
           </details>
         </div>
       </li>

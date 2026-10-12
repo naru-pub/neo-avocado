@@ -390,3 +390,118 @@ dialog {
     font-size: 16px;
   }
 }
+
+/* Portrait directory and expandable member profile, following member/list.skin. */
+.section-heading {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.characters {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: start;
+}
+.character.card {
+  display: block;
+  padding: 0;
+  background: var(--paper);
+}
+.character-image {
+  display: block;
+  width: 100%;
+  height: 200px;
+  object-fit: contain;
+  background: var(--surface);
+}
+.character > div {
+  padding: 10px;
+}
+.character-name {
+  font-size: 14px;
+  text-align: center;
+}
+.character-side {
+  color: var(--pit);
+  text-align: center;
+  margin: 5px 0 10px;
+}
+.character .meta {
+  font-size: 11px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+.character .meta button {
+  margin-top: 5px;
+}
+.character-details > summary {
+  text-align: center;
+  background: var(--surface);
+  margin-top: 10px;
+}
+.character:has(.character-details[open]) {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+}
+.character:has(.character-details[open]) .character-name,
+.character:has(.character-details[open]) .character-side {
+  text-align: left;
+}
+.character-profile {
+  padding: 15px 0;
+  margin: 0;
+}
+.profile-sections {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 15px;
+}
+.profile-section {
+  padding: 10px;
+  background: var(--surface);
+  min-width: 0;
+}
+.profile-section:last-child {
+  grid-column: 1 / -1;
+}
+.profile-section h4 {
+  margin: 0 0 10px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--line);
+}
+.profile-section ul {
+  list-style: none;
+  padding: 0;
+}
+.titles > span {
+  display: inline-block;
+  padding: 5px;
+}
+.wardrobe {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.wardrobe > li {
+  padding: 8px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+}
+@media (max-width: 800px) {
+  .characters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 640px) {
+  .character:has(.character-details[open]) {
+    display: block;
+  }
+  .character:has(.character-details[open]) .character-image {
+    height: 240px;
+  }
+  .profile-sections {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .character-image {
+    height: 160px;
+  }
+}
