@@ -1,30 +1,26 @@
+/* AvocadoEdition base: 1000px layout, compact forms and square theme boxes.
+   Its saved design config has no palette overrides; these are neutral defaults. */
 :root {
-  color-scheme: light dark;
-  --avocado: #568203;
-  --pit: #6b4423;
-  --paper: #fbfcf5;
-  --ink: #1f2a12;
-  --line: #d6e0c0;
-  font-family:
-    "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #151a0e;
-    --ink: #e7efd6;
-    --line: #34401f;
-  }
+  color-scheme: light;
+  --avocado: #444;
+  --pit: #777;
+  --paper: #fff;
+  --ink: #333;
+  --line: #ddd;
+  --surface: #f7f7f7;
+  font-family: "Dotum", "돋움", "Apple SD Gothic Neo", sans-serif;
+  font-size: 12px;
 }
 * {
   box-sizing: border-box;
 }
 body {
   margin: 0 auto;
-  max-width: 760px;
-  padding: 16px;
+  max-width: 1000px;
+  padding: 0 10px 30px;
   background: var(--paper);
   color: var(--ink);
-  line-height: 1.6;
+  line-height: 1.5;
 }
 .top {
   display: flex;
@@ -32,18 +28,21 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  border-bottom: 3px solid var(--avocado);
+  min-height: 80px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--line);
 }
 h1 {
   margin: 8px 0;
   color: var(--avocado);
 }
 button {
-  border: 1px solid var(--avocado);
-  border-radius: 6px;
-  background: transparent;
+  border: 1px solid #bbb;
+  border-radius: 0;
+  background: var(--paper);
   color: inherit;
-  padding: 4px 12px;
+  min-height: 28px;
+  padding: 3px 15px;
   font: inherit;
   cursor: pointer;
 }
@@ -54,15 +53,19 @@ button[type="submit"],
 }
 .tabs {
   display: flex;
-  gap: 8px;
+  gap: 0;
   flex-wrap: wrap;
-  margin: 16px 0;
+  justify-content: center;
+  padding: 20px 0;
+  margin: 0 0 20px;
+  border-bottom: 1px solid var(--line);
 }
 .card {
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 12px;
-  margin: 12px 0;
+  border-radius: 0;
+  padding: 10px;
+  margin: 10px 0;
+  background: var(--surface);
 }
 form label {
   display: block;
@@ -82,7 +85,7 @@ textarea {
 .log-image {
   display: block;
   max-width: 100%;
-  border-radius: 6px;
+  border-radius: 0;
 }
 .meta {
   color: var(--pit);
@@ -116,7 +119,7 @@ textarea {
   width: 96px;
   height: 96px;
   object-fit: cover;
-  border-radius: 50%;
+  border-radius: 0;
   flex: none;
 }
 .character-name {
@@ -130,7 +133,7 @@ dialog {
   background: var(--paper);
   color: var(--ink);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 0;
 }
 dialog::backdrop {
   background: #0008;
@@ -172,4 +175,218 @@ button:disabled {
 }
 .character-details li {
   margin: 8px 0;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+h1 {
+  font-size: 22px;
+}
+h2 {
+  font-size: 14px;
+  margin: 0 0 15px;
+}
+h3 {
+  font-size: 14px;
+}
+h4 {
+  font-size: 12px;
+}
+p {
+  overflow-wrap: anywhere;
+}
+.account {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+.top > a {
+  margin-left: auto;
+  padding: 5px 10px;
+}
+.tabs button {
+  border: 0;
+  min-width: 80px;
+  background: transparent;
+  font-weight: bold;
+}
+.tabs button[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--ink);
+  border-bottom: 2px solid var(--ink);
+}
+input:not([type="checkbox"]),
+textarea,
+select {
+  border: 1px solid #bbb;
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  padding: 5px 10px;
+  min-height: 30px;
+  max-width: 100%;
+}
+textarea {
+  padding: 5px;
+  resize: vertical;
+}
+input[type="file"] {
+  padding: 0;
+}
+input[type="checkbox"] {
+  accent-color: var(--avocado);
+}
+:focus-visible {
+  outline: 2px solid #555;
+  outline-offset: 2px;
+}
+button:hover:not(:disabled) {
+  background: #eee;
+  color: var(--ink);
+}
+button[type="submit"]:hover:not(:disabled) {
+  background: #222;
+  color: #fff;
+}
+[role="status"]:not(:empty) {
+  padding: 10px;
+  background: var(--surface);
+  border-left: 2px solid #888;
+}
+#welcome,
+#profileSetup,
+#adminWelcome {
+  margin: 30px auto;
+  max-width: 560px;
+}
+#logForm,
+#characterForm {
+  margin-bottom: 30px;
+}
+#boardDescription {
+  color: var(--pit);
+}
+.logs {
+  margin: 30px 0;
+}
+.log.card {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 20px;
+  padding: 0 0 25px;
+  margin: 0 0 35px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+}
+.log-picture,
+.log-discussion {
+  min-width: 0;
+}
+.log-title {
+  margin: 0;
+  padding: 5px 10px;
+  min-height: 30px;
+  background: var(--surface);
+}
+.log-image {
+  width: auto;
+  height: auto;
+  margin: 0 auto;
+}
+.log-text {
+  padding: 10px;
+  white-space: pre-wrap;
+}
+.log-discussion {
+  padding-top: 30px;
+}
+.log-discussion > .meta {
+  margin: 0 0 15px;
+  padding: 5px 10px;
+  background: var(--surface);
+}
+.meta button {
+  min-height: 25px;
+  padding: 2px 8px;
+  font-size: 11px;
+}
+summary {
+  cursor: pointer;
+  padding: 5px 0;
+}
+.comment-list {
+  list-style: none;
+  padding: 0;
+}
+.comment {
+  padding: 10px;
+  margin: 5px 0;
+  background: var(--surface);
+  border-bottom: 1px dashed var(--line);
+}
+.characters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.character.card {
+  margin: 0;
+}
+.character-image {
+  width: 80px;
+  height: 80px;
+}
+.character-profile {
+  white-space: pre-wrap;
+}
+#inventory,
+#adminRows {
+  list-style: none;
+  padding: 0;
+}
+#inventory > li,
+#adminRows > li {
+  padding: 10px;
+  border-bottom: 1px solid var(--line);
+}
+dialog {
+  padding: 20px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+@media (max-width: 640px) {
+  .top {
+    min-height: 60px;
+    padding: 10px 0;
+  }
+  .account {
+    width: 100%;
+  }
+  .tabs button {
+    flex: 1;
+    min-width: 0;
+    padding: 5px 10px;
+  }
+  .log.card,
+  .characters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .log-discussion {
+    padding-top: 0;
+  }
+  .character {
+    gap: 10px;
+  }
+  input:not([type="checkbox"]),
+  textarea,
+  select {
+    font-size: 16px;
+  }
 }

@@ -190,28 +190,32 @@
 
     <template id="logTemplate">
       <li class="log card">
-        <img class="log-image" alt="" />
-        <p class="log-text"></p>
-        <h3 class="log-title"></h3>
-        <p class="meta">
-          <span class="author"></span> · <time></time>
-          <button class="delete" type="button" hidden>삭제</button>
-          <button class="edit" type="button" hidden>수정</button>
-        </p>
-        <details class="comments">
-          <summary>댓글</summary>
-          <ol class="comment-list"></ol>
-          <button class="more-comments" type="button" hidden>
-            댓글 더 보기
-          </button>
-          <form class="comment-form">
-            <input class="comment-text" maxlength="500" placeholder="댓글" />
-            <label class="dice-option">
-              <input class="comment-dice" type="checkbox" /> 주사위
-            </label>
-            <button type="submit">달기</button>
-          </form>
-        </details>
+        <div class="log-picture">
+          <h3 class="log-title"></h3>
+          <img class="log-image" alt="" />
+          <p class="log-text"></p>
+        </div>
+        <div class="log-discussion">
+          <p class="meta">
+            <span class="author"></span> · <time></time>
+            <button class="delete" type="button" hidden>삭제</button>
+            <button class="edit" type="button" hidden>수정</button>
+          </p>
+          <details class="comments">
+            <summary>댓글</summary>
+            <ol class="comment-list"></ol>
+            <button class="more-comments" type="button" hidden>
+              댓글 더 보기
+            </button>
+            <form class="comment-form">
+              <input class="comment-text" maxlength="500" placeholder="댓글" />
+              <label class="dice-option">
+                <input class="comment-dice" type="checkbox" /> 주사위
+              </label>
+              <button type="submit">달기</button>
+            </form>
+          </details>
+        </div>
       </li>
     </template>
 
