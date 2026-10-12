@@ -35,20 +35,10 @@ export const models = {
     ],
   },
   members: {
-    label: "가입 승인·차단·운영 역할",
-    help: "회원 번호는 가입 요청 화면에서 확인합니다. 차단은 승인보다 우선하고, 운영 역할은 승인된 회원에게만 적용합니다.",
+    label: "회원 등급·운영 역할",
+    help: "가입 승인·차단은 나루 데이터베이스의 사이트 회원 관리에서 변경합니다. 여기서는 회원 번호별 게시판 등급과 운영 역할만 정합니다.",
     fields: [
       { key: "level", label: "회원 등급 (1~10)", type: "number", default: 2 },
-      {
-        key: "status",
-        label: "가입 상태",
-        type: "choice",
-        options: [
-          ["pending", "승인 대기"],
-          ["approved", "승인"],
-          ["banned", "차단"],
-        ],
-      },
       {
         key: "role",
         label: "커뮤니티 역할",
@@ -330,16 +320,6 @@ export const models = {
     help: "새 캐릭터가 받을 기본 배분 포인트입니다. 기존 캐릭터 값은 따로 변경하세요.",
     fixedId: "community",
     fields: [
-      {
-        key: "admission",
-        label: "가입 방식",
-        type: "choice",
-        options: [
-          ["open", "자유 가입"],
-          ["approval", "승인 후 가입"],
-          ["closed", "신규 가입 닫기"],
-        ],
-      },
       {
         key: "messageCost",
         label: "쪽지 발송 비용 (회원 한 명당)",

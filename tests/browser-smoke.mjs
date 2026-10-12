@@ -20,6 +20,7 @@ const ME = "member-me";
 let serial = 0;
 const memberCallBuckets = new Map();
 const memberReadBuckets = new Map();
+const platformStates = new Map();
 const tables = new Map();
 const table = (name) => {
   if (!tables.has(name)) tables.set(name, new Map());
@@ -215,6 +216,25 @@ try {
       request.headers().authorization === `Bearer m.${"y".repeat(43)}`
         ? "member-other"
         : ME;
+    if (url.pathname.startsWith("/api/membership/v1/"))
+      return route.fulfill({
+        headers,
+        json: {
+          id: ctx.member.id,
+          status: platformStates.get(ctx.member.id) ?? "approved",
+        },
+      });
+    if (
+      !isOwner &&
+      (platformStates.get(ctx.member.id) ?? "approved") !== "approved"
+    )
+      return route.fulfill({
+        status: 403,
+        headers,
+        json: {
+          error: { code: "ACCESS_DENIED", message: "Membership denied" },
+        },
+      });
     let result;
     if (parts[0] === "_batch") {
       assert.equal(isOwner, true);
@@ -640,7 +660,8 @@ try {
     null,
     { timeout: 15000 },
   );
-  write(`${P}members`, "member-other", { status: "banned", role: "member" });
+  platformStates.set("member-other", "banned");
+  write(`${P}members`, "member-other", { role: "member" });
   await page.locator("#tabShop").click();
   await page.locator("#admissionPanel").waitFor({ state: "visible" });
   assert.equal(await page.locator("#community").isVisible(), false);
@@ -656,7 +677,9 @@ try {
     .filter({ hasText: "친구" })
     .getByRole("button", { name: "수정", exact: true })
     .click();
-  await page.locator('#adminFields [name="status"]').selectOption("approved");
+  assert.equal(await page.locator('#adminFields [name="status"]').count(), 0);
+  await page.locator('#adminFields [name="role"]').selectOption("member");
+  platformStates.set("member-other", "approved");
   await page.locator('#adminForm [type="submit"]').click();
   await page.locator("#adminForm").waitFor({ state: "hidden" });
   write(`${P}characters`, "cleanup-character", {

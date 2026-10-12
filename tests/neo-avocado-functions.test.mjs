@@ -226,22 +226,14 @@ test("board categories, required secrets and previews are validated without trun
   );
 });
 
-test("approval and bans gate all protected operations without allowing profile or role forgery", () => {
+test("legacy admission fields do not override platform access; profile and role forgery stay forbidden", () => {
   const { ctx, table } = fakeCtx();
   table(`${P}settings`).set("community", { admission: "approval" });
-  assert.equal(membership(ctx).status, "pending");
-  assert.equal(join(ctx, { nick: "New" }).status, "pending");
+  assert.equal(membership(ctx).status, undefined);
+  assert.equal(join(ctx, { nick: "New" }).ok, true);
   assert.equal(table(`${P}members`).get("m-1").role, "member");
-  assert.equal(daily(ctx).reason, "approval_required");
-  assert.equal(
-    communityData(ctx, {
-      collection: `${P}profiles`,
-      operation: "get",
-      id: "m-1",
-    }).reason,
-    "approval_required",
-  );
-  table(`${P}members`).get("m-1").status = "approved";
+  assert.equal(table(`${P}members`).get("m-1").status, undefined);
+  assert.equal(daily(ctx).ok, true);
   const created = communityData(ctx, {
     collection: `${P}characters`,
     operation: "add",
@@ -274,18 +266,9 @@ test("approval and bans gate all protected operations without allowing profile o
     "access_denied",
   );
   table(`${P}members`).get("m-1").status = "banned";
-  for (const result of [
-    daily(ctx),
-    messageStatus(ctx),
-    communityData(ctx, {
-      collection: `${P}characters`,
-      operation: "get",
-      id: created.document.id,
-    }),
-    join(ctx, { nick: "Bypass" }),
-  ])
-    assert.equal(result.reason, "banned");
-  assert.equal(table(`${P}profiles`).get("m-1").nick, "New");
+  assert.equal(messageStatus(ctx).ok, true);
+  assert.equal(join(ctx, { nick: "Approved by platform" }).ok, true);
+  assert.equal(table(`${P}profiles`).get("m-1").nick, "Approved by platform");
 });
 
 test("content ownership, parent checks, revisions and moderator boundaries hold at the gateway", () => {

@@ -108,6 +108,21 @@ async function run(action) {
       clearPrivateViews();
       show();
     }
+    if (error?.code === "ACCESS_DENIED" && state.member) {
+      try {
+        const platform = await state.member.membership();
+        if (platform.status !== "approved") {
+          showAdmission(platform.status);
+          return;
+        }
+      } catch (statusError) {
+        if (statusError?.code === "AUTH_REQUIRED") {
+          state.member = null;
+          clearPrivateViews();
+          show();
+        }
+      }
+    }
     say(MESSAGES[error?.code] ?? "요청을 처리하지 못했습니다.");
   }
 }
@@ -183,10 +198,6 @@ function communityCollection(collection) {
       options,
     });
     if (!result.ok) {
-      if (["banned", "approval_required"].includes(result.reason)) {
-        clearPrivateViews();
-        showAdmission(result.reason === "banned" ? "banned" : "pending");
-      }
       const code =
         result.reason === "document_not_found"
           ? "NOT_FOUND"
@@ -240,7 +251,7 @@ function showAdmission(status) {
         ? REASONS.registration_closed
         : REASONS.approval_required;
   $("admissionId").textContent = `가입 문의용 회원 번호: ${state.member.id}`;
-  $("editProfile").hidden = status === "banned" || status === "closed";
+  $("editProfile").hidden = true;
 }
 $("checkAdmission").onclick = () => run(start);
 
@@ -337,12 +348,6 @@ $("editProfile").onclick = () => {
     ],
     async ({ nick, acceptMessages }) => {
       if (!nick) throw new Error("닉네임을 입력해 주세요.");
-      if (state.admission !== "approved") {
-        const joined = await callRule("join", { nick, acceptMessages });
-        show(joined.profile);
-        showAdmission(joined.status);
-        return;
-      }
       const saved = await communityCollection(COLLECTION.profiles).set(
         state.member.id,
         { ...profile.data, nick, acceptMessages },
@@ -360,17 +365,17 @@ async function start() {
   await connect();
   state.member = await state.naru.members.session();
   if (!state.member) return show();
+  const platform = await state.member.membership();
+  state.admission = platform.status;
+  if (platform.status !== "approved") {
+    show();
+    return showAdmission(platform.status);
+  }
   const status = await callRule("membership");
-  state.admission = status.status;
   state.role = status.role;
   state.level = status.level ?? 2;
   const profile = status.profile;
   show(profile);
-  if (
-    !["approved"].includes(status.status) &&
-    (profile || ["banned", "closed"].includes(status.status))
-  )
-    return showAdmission(status.status);
   if (profile) {
     state.nicks.set(state.member.id, Promise.resolve(profile.data.nick));
     await loadBoards();
@@ -673,8 +678,6 @@ async function callRule(name, args) {
     : "call";
   const result = await state.member[method](`${FUNCTIONS}/${name}`, args);
   if (!result?.ok) {
-    if (["banned", "approval_required"].includes(result?.reason))
-      showAdmission(result.reason === "banned" ? "banned" : "pending");
     throw new Error(REASONS[result?.reason] ?? "요청을 처리하지 못했습니다.");
   }
   return result;
@@ -1413,8 +1416,6 @@ function spend(name, args, success) {
   return run(async () => {
     const result = await state.member.call(`${FUNCTIONS}/${name}`, args);
     if (!result?.ok) {
-      if (["banned", "approval_required"].includes(result.reason))
-        showAdmission(result.reason === "banned" ? "banned" : "pending");
       return say(REASONS[result?.reason] ?? "하지 못했습니다.");
     }
     say(success(result));
@@ -1457,11 +1458,9 @@ $("profileForm").onsubmit = (event) => {
     if (!nick) return;
     // 회원 번호를 ID로 쓰는 문서는 그 회원만 만들 수 있다.
     const joined = await callRule("join", { nick });
-    state.admission = joined.status;
     const profile = joined.profile;
     state.nicks.set(state.member.id, Promise.resolve(nick));
     show(profile);
-    if (joined.status !== "approved") return showAdmission(joined.status);
     await loadBoards();
     await loadLogs();
   });

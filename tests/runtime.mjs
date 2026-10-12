@@ -312,19 +312,9 @@ try {
     22,
     "Bulk mail, charge and private ledger fit the write budget",
   );
-  put(`${P}members`, ME, { status: "pending", role: "moderator" });
-  assert.equal((await call("daily")).reason, "approval_required");
-  assert.equal(
-    (
-      await call("communityData", {
-        collection: `${P}characters`,
-        operation: "get",
-        id: "hero",
-      })
-    ).reason,
-    "approval_required",
-  );
-  put(`${P}members`, ME, { status: "approved", role: "member" });
+  // Legacy admission is inert; production rejects unapproved callers before QuickJS.
+  put(`${P}members`, ME, { status: "pending", role: "member" });
+  assert.equal((await call("membership")).status, undefined);
   const gated = await call("communityData", {
     collection: `${P}logs`,
     operation: "add",
@@ -402,8 +392,8 @@ try {
     );
   }
   put(`${P}members`, ME, { status: "banned", role: "moderator" });
-  assert.equal((await call("messageStatus")).reason, "banned");
-  assert.equal((await call("join", { nick: "Bypass" })).reason, "banned");
+  assert.equal((await call("messageStatus")).ok, true);
+  assert.equal((await call("join", { nick: "Platform approved" })).ok, true);
   console.log(
     "Actual Naru runner + QuickJS + SQLite checks passed, including rollback after partial writes.",
   );

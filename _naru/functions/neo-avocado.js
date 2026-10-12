@@ -25,38 +25,22 @@ const MESSAGES = `${PREFIX}messages`;
 const MEMBERS = `${PREFIX}members`;
 const BOARDS = `${PREFIX}boards`;
 
-function admission(ctx, id = ctx.member.id) {
+// Naru rejects pending and banned callers before entering any site function.
+// This collection contains only application roles and board levels.
+function communityAccess(ctx, id = ctx.member.id) {
   const row = ctx.get(MEMBERS, id);
-  if (row)
-    return {
-      status: row.data.status,
-      level:
-        Number.isInteger(row.data.level) &&
-        row.data.level >= 1 &&
-        row.data.level <= 10
-          ? row.data.level
-          : 2,
-      role: row.data.role === "moderator" ? "moderator" : "member",
-    };
-  const mode = ctx.get(SETTINGS, "community")?.data.admission ?? "open";
   return {
-    status:
-      mode === "open" ? "approved" : mode === "closed" ? "closed" : "pending",
-    role: "member",
-    level: 2,
+    level:
+      Number.isInteger(row?.data.level) &&
+      row.data.level >= 1 &&
+      row.data.level <= 10
+        ? row.data.level
+        : 2,
+    role: row?.data.role === "moderator" ? "moderator" : "member",
   };
 }
-function requireMember(ctx) {
-  const access = admission(ctx);
-  return access.status === "approved"
-    ? { ok: true, ...access }
-    : {
-        ok: false,
-        reason: access.status === "banned" ? "banned" : "approval_required",
-      };
-}
 export function membership(ctx) {
-  const access = admission(ctx);
+  const access = communityAccess(ctx);
   return {
     ok: true,
     ...access,
@@ -65,11 +49,7 @@ export function membership(ctx) {
   };
 }
 export function join(ctx, { nick, acceptMessages = true } = {}) {
-  const access = admission(ctx);
-  if (["banned", "closed"].includes(access.status))
-    return failure(
-      access.status === "banned" ? "banned" : "registration_closed",
-    );
+  const access = communityAccess(ctx);
   const old = ctx.get(PROFILES, ctx.member.id);
   const profile = ctx.set(PROFILES, ctx.member.id, {
     ...old?.data,
@@ -79,7 +59,6 @@ export function join(ctx, { nick, acceptMessages = true } = {}) {
   });
   if (!ctx.get(MEMBERS, ctx.member.id))
     ctx.set(MEMBERS, ctx.member.id, {
-      status: access.status,
       role: "member",
       requestedAt: ctx.now,
     });
@@ -155,8 +134,7 @@ export function communityData(
   ctx,
   { collection, operation, id, data, options = {} } = {},
 ) {
-  const access = requireMember(ctx);
-  if (!access.ok) return access;
+  const access = communityAccess(ctx);
   const kind =
     typeof collection === "string" && collection.startsWith(PREFIX)
       ? collection.slice(PREFIX.length)
@@ -420,8 +398,6 @@ function deleteCommunityDocument(ctx, collection, kind, row) {
 
 /** Message storage is admin-only; every public operation checks the parties. */
 export function sendMessage(ctx, { recipients, body } = {}) {
-  const access = requireMember(ctx);
-  if (!access.ok) return access;
   if (
     !Array.isArray(recipients) ||
     !recipients.length ||
@@ -437,7 +413,6 @@ export function sendMessage(ctx, { recipients, body } = {}) {
     if (
       id === ctx.member.id ||
       !recipient ||
-      admission(ctx, id).status !== "approved" ||
       recipient.data.acceptMessages === false
     )
       return failure("no_recipient");
@@ -466,8 +441,6 @@ export function sendMessage(ctx, { recipients, body } = {}) {
 }
 
 export function mailbox(ctx, { box = "inbox", after = null, size = 20 } = {}) {
-  const access = requireMember(ctx);
-  if (!access.ok) return access;
   if (
     !["inbox", "sent"].includes(box) ||
     !Number.isInteger(size) ||
@@ -500,8 +473,6 @@ export function mailbox(ctx, { box = "inbox", after = null, size = 20 } = {}) {
 }
 
 export function readMessage(ctx, { id } = {}) {
-  const access = requireMember(ctx);
-  if (!access.ok) return access;
   let message = typeof id === "string" ? ctx.get(MESSAGES, id) : null;
   if (
     !message ||
@@ -517,8 +488,6 @@ export function readMessage(ctx, { id } = {}) {
 }
 
 export function removeMessage(ctx, { id } = {}) {
-  const access = requireMember(ctx);
-  if (!access.ok) return access;
   const message = typeof id === "string" ? ctx.get(MESSAGES, id) : null;
   if (
     !message ||
@@ -530,8 +499,6 @@ export function removeMessage(ctx, { id } = {}) {
 }
 
 export function messageStatus(ctx) {
-  const access = requireMember(ctx);
-  if (!access.ok) return access;
   const page = ctx.list(MESSAGES, {
     filter: { to: ctx.member.id, readAt: null },
     size: 1,
@@ -543,8 +510,6 @@ function record(ctx, kind, details, owner = ctx.member.id) {
   ctx.add(HISTORY, { owner, kind, at: ctx.now, ...details });
 }
 export function history(ctx, { after = null, size = 20 } = {}) {
-  const access = requireMember(ctx);
-  if (!access.ok) return access;
   if (
     !Number.isInteger(size) ||
     size < 1 ||
@@ -644,8 +609,6 @@ function give(ctx, item, from, character = null) {
 
 /** 하루 한 번, 한국 시간으로 날이 바뀌면 받는 출석 보상. */
 export function daily(ctx) {
-  const access = requireMember(ctx);
-  if (!access.ok) return access;
   const current = wallet(ctx);
   const today = kstDay(ctx.now);
   if (current.lastDaily === today) return { ok: false, reason: "already" };
@@ -656,8 +619,6 @@ export function daily(ctx) {
 
 /** 상점에서 하나 산다. 재고(stock)가 없으면 무제한이다. */
 export function buy(ctx, { item, character = null, materials = [] } = {}) {
-  const access = requireMember(ctx);
-  if (!access.ok) return access;
   const listing = typeof item === "string" ? ctx.get(ITEMS, item) : null;
   if (!listing || listing.data.hidden) return { ok: false, reason: "no_item" };
   const { price = 0, stock } = listing.data;
@@ -822,8 +783,6 @@ function draw(ctx, source = null) {
 }
 
 export function gacha(ctx, args = {}) {
-  const access = requireMember(ctx);
-  if (!access.ok) return access;
   const { character = null } = args ?? {};
   if (character && !ownCharacter(ctx, character))
     return failure("no_character");
@@ -855,8 +814,6 @@ function ownedItem(ctx, id) {
 
 /** Selling consumes exactly one owned item; prices always come from the catalog. */
 export function sell(ctx, { inventory } = {}) {
-  const access = requireMember(ctx);
-  if (!access.ok) return access;
   const owned = ownedItem(ctx, inventory);
   if (!owned) return failure("not_owned");
   const item = ctx.get(ITEMS, owned.data.item);
@@ -884,14 +841,11 @@ export function gift(
   ctx,
   { inventory, recipient, character = null, memo = "" } = {},
 ) {
-  const access = requireMember(ctx);
-  if (!access.ok) return access;
   const owned = ownedItem(ctx, inventory);
   if (!owned) return failure("not_owned");
   if (
     typeof recipient !== "string" ||
     recipient === ctx.member.id ||
-    admission(ctx, recipient).status !== "approved" ||
     !ctx.get(PROFILES, recipient)
   )
     return failure("no_recipient");
@@ -941,8 +895,6 @@ export function gift(
 
 /** Selected materials are checked against the owner's recipe, then consumed atomically. */
 export function craft(ctx, { recipe, materials, character = null } = {}) {
-  const access = requireMember(ctx);
-  if (!access.ok) return access;
   if (character && !ownCharacter(ctx, character))
     return failure("no_character");
   const row = typeof recipe === "string" ? ctx.get(RECIPES, recipe) : null;
@@ -996,8 +948,6 @@ export function craft(ctx, { recipe, materials, character = null } = {}) {
 }
 
 export function assignInventory(ctx, { inventory, character = null } = {}) {
-  const access = requireMember(ctx);
-  if (!access.ok) return access;
   const owned = ownedItem(ctx, inventory);
   if (!owned) return failure("not_owned");
   if (character && !ownCharacter(ctx, character))
@@ -1009,8 +959,6 @@ export function assignInventory(ctx, { inventory, character = null } = {}) {
 }
 
 export function equipTitle(ctx, { character, title = null } = {}) {
-  const access = requireMember(ctx);
-  if (!access.ok) return access;
   if (!ownCharacter(ctx, character)) return failure("not_owned");
   const state = characterState(ctx, character);
   if (
@@ -1043,8 +991,6 @@ export function relation(
     revision,
   } = {},
 ) {
-  const access = requireMember(ctx);
-  if (!access.ok) return access;
   if (!ownCharacter(ctx, character)) return failure("not_owned");
   const targetCharacter =
     typeof target === "string" ? ctx.get(CHARACTERS, target) : null;
@@ -1085,8 +1031,6 @@ export function relation(
 }
 
 export function removeRelation(ctx, { id } = {}) {
-  const access = requireMember(ctx);
-  if (!access.ok) return access;
   const row = typeof id === "string" ? ctx.get(RELATIONS, id) : null;
   if (
     !row ||
@@ -1099,8 +1043,6 @@ export function removeRelation(ctx, { id } = {}) {
 }
 
 export function outfit(ctx, { character, name, image } = {}) {
-  const access = requireMember(ctx);
-  if (!access.ok) return access;
   if (!ownCharacter(ctx, character)) return failure("not_owned");
   const document = ctx.add(WARDROBE, {
     owner: ctx.member.id,
@@ -1112,8 +1054,6 @@ export function outfit(ctx, { character, name, image } = {}) {
 }
 
 export function wear(ctx, { character, outfit } = {}) {
-  const access = requireMember(ctx);
-  if (!access.ok) return access;
   const owned = ownCharacter(ctx, character);
   if (!owned) return failure("not_owned");
   const clothing =
@@ -1133,8 +1073,6 @@ export function wear(ctx, { character, outfit } = {}) {
 }
 
 export function removeOutfit(ctx, { id } = {}) {
-  const access = requireMember(ctx);
-  if (!access.ok) return access;
   const clothing = typeof id === "string" ? ctx.get(WARDROBE, id) : null;
   if (!clothing || clothing.data.owner !== ctx.member.id)
     return failure("not_owned");
@@ -1146,8 +1084,6 @@ export function removeOutfit(ctx, { id } = {}) {
 }
 
 export function mainCharacter(ctx, { character } = {}) {
-  const access = requireMember(ctx);
-  if (!access.ok) return access;
   if (!ownCharacter(ctx, character)) return failure("not_owned");
   const profile = ctx.get(PROFILES, ctx.member.id);
   if (!profile) return failure("no_profile");
@@ -1204,8 +1140,6 @@ function characterState(ctx, character, owner = ctx.member.id) {
 
 /** Public character progression is separate from member-editable profile fields. */
 export function characterStatus(ctx, { character } = {}) {
-  const access = requireMember(ctx);
-  if (!access.ok) return access;
   const profile =
     typeof character === "string" ? ctx.get(CHARACTERS, character) : null;
   if (!profile || profile.data.deleted) return failure("no_character");
@@ -1235,8 +1169,6 @@ export function allocateStats(
   ctx,
   { character, allocation, revision = null } = {},
 ) {
-  const access = requireMember(ctx);
-  if (!access.ok) return access;
   if (!ownCharacter(ctx, character)) return failure("not_owned");
   if (
     !allocation ||
@@ -1281,8 +1213,6 @@ export function allocateStats(
 
 /** Four built-in item actions mirror inventory/use_item.php. */
 export function useItem(ctx, { inventory, character, data = {} } = {}) {
-  const access = requireMember(ctx);
-  if (!access.ok) return access;
   const owned = ownedItem(ctx, inventory);
   if (!owned) return failure("not_owned");
   const item = ctx.get(ITEMS, owned.data.item);

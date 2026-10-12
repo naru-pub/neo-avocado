@@ -122,6 +122,9 @@ function fakeDatabase(rows = {}) {
   });
   const member = {
     id: ME,
+    async membership() {
+      return { id: ME, status: database.platformStatus ?? "approved" };
+    },
     collection,
     media: {
       async upload(file) {
@@ -743,4 +746,39 @@ test("the shop reads the wallet, items and own inventory when opened, and spends
     ),
     false,
   );
+});
+
+test("pending and banned members see platform status before any protected app reads", async () => {
+  for (const status of ["pending", "banned"]) {
+    const database = fakeDatabase({ [PROFILES]: [me] });
+    database.platformStatus = status;
+    const { $, settle } = await page(database);
+    await settle();
+    assert.equal($("admissionPanel").hidden, false);
+    assert.equal($("community").hidden, true);
+    assert.equal($("profileSetup").hidden, true);
+    assert.equal($("editProfile").hidden, true);
+    assert.equal($("signOut").hidden, false);
+    assert.equal(database.calls.length, 0);
+    database.platformStatus = "approved";
+    await $("checkAdmission").onclick();
+    await settle();
+    assert.equal($("admissionPanel").hidden, true);
+    assert.equal($("community").hidden, false);
+  }
+});
+
+test("a live platform ban clears private content after ACCESS_DENIED; board denials remain ordinary errors", async () => {
+  for (const status of ["banned", "approved"]) {
+    const database = fakeDatabase({ [PROFILES]: [me] });
+    const { $, settle } = await page(database);
+    database.platformStatus = status;
+    database.member.read = async () => {
+      throw Object.assign(new Error("denied"), { code: "ACCESS_DENIED" });
+    };
+    await $("moreLogs").onclick();
+    await settle();
+    assert.equal($("admissionPanel").hidden, status === "approved");
+    if (status === "banned") assert.equal($("logs").children.length, 0);
+  }
 });

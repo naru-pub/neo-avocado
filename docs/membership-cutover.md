@@ -10,8 +10,8 @@ workflows and live acceptance still prevent deployment readiness.
 1. Export the existing site database and media inventory. Preserve IDs, wallet
    balances, inventory, purchase counters, private messages and pending work.
 2. Create `neo_avocado_members`, with both read and write set to admin.
-3. For existing community members who should retain access, create a record
-   keyed by their site member ID, with `status: "approved"`, `role: "member"`.
+3. For existing community members, reconcile platform membership separately.
+   Create application metadata keyed by the site member ID with `role: "member"`.
    Do not infer these IDs from Naru account IDs or usernames. Preapprove staff
    separately, and grant `moderator` only where intended.
 4. Set **both read and write to admin on every application collection**,
@@ -28,40 +28,42 @@ workflows and live acceptance still prevent deployment readiness.
    moderator limits, multi-page reads, active-session bans and rate limits
    against a real authorized test site before opening the community.
 
-## Implemented rules
+## Platform membership
 
-- Free admission is the default. `settings/community.admission` may be `open`,
-  `approval` or `closed`. Explicit member records override the default.
-- `membership` returns only the caller's own status, role, ID and profile.
-  `join` creates/updates that profile and an ordinary member record; it cannot
-  unban or self-promote. Pending members may edit their joining nickname.
-- Approved members access data through `communityData` and other checked site
-  functions. Wallets and inventory are restricted to the caller. Member records
-  and private message/history storage cannot be queried through that gateway.
-- Moderators may edit/delete others' logs and comments. They do not gain
-  character/profile ownership, another member's wallet or arbitrary collection
-  access. Site owners retain their native administrator authority.
-- A deleted log/character is marked `deleted` before cleanup. Each call removes
-  small child batches. Incomplete cleanup stays marked durably and can be
-  resumed by its author (or a moderator for logs). New comments/references to
-  a deleting parent are refused. Purchased inventory is detached from a
-  deleted character rather than discarded; history and money are preserved.
+Admission and caller approval/bans now belong to Naru. The frontend calls
+`member.membership()` before any protected reads. Pending and banned members see
+their member ID and can recheck or sign out; they cannot submit/edit a profile
+until approved. An ACCESS_DENIED response triggers a fresh platform status check,
+so a live ban clears private views without confusing a board ACL denial with a ban.
 
-## Remaining acceptance gaps
+Naru rejects pending/banned tokens before data requests, site functions and media
+upload authorization/finalization. Functions retain application roles, board levels,
+ownership, secret-post redaction and transactional business rules. The local
+`membership` function now returns only profile/role/level; it does not decide status.
+`neo_avocado_members.status` and `settings/community.admission` are inert legacy
+fields. New member metadata contains role/level only. Local admin forms no longer
+edit approval, bans or admission; use Naru's database panel instead.
 
-- Deploy the approved read endpoint alongside SDK 1.1.0 before the new app.
-  The local Chrome fixture enforces 120 reads/minute and 30 calls/minute and
-  passes. Verify deployed routing, authentication and budgets before opening.
-- Naru's existing member upload endpoint has no application membership check.
-  A community ban blocks app data/functions, but its Naru token can still
-  request media uploads. Upload authority and orphan reconciliation need
-  explicit review; they are not claimed complete.
-- Interrupted cleanup stays durable. Owner recovery views now resume it in
-  revision-checked batches; re-sign in for the additional collection scopes.
-  Large cleanup and conflict preservation pass locally. Operators must review
-  the recovery queues during cutover; unattended background recovery is absent.
-- Media deletion, public/guest board access, richer moderation, imports and
-  the other outstanding workflows in `port-status.md` remain unfinished.
+Messages and gifts still require an existing recipient profile; messages honor
+recipient opt-out. They no longer consult legacy approval/ban fields. Naru's SDK
+cannot query another member's platform status, so a banned member can receive
+messages/gifts but cannot access them while banned. No wallet, inventory, history,
+private message, durable cleanup record or existing ID is deleted by this change.
+
+This is a code change only: no live data or permissions have been migrated.
+Before publishing, ensure all control-plane processes enforce platform membership
+and the served SDK supports both `membership()` and this app's existing `read()`
+API. Membership is committed on Naru main; read-only functions remain a separate
+SDK dependency. Do not deploy against a server lacking either capability.
+
+For a live community, separately reconcile existing approvals/bans and admission
+with platform states before publishing. Do not remove legacy gates while platform
+members are still default-approved. Preserve role/level metadata and keep every
+application collection admin/admin: platform membership does not replace board
+ACLs, secret redaction or ownership checks in the gateway.
+
+Interrupted cleanup remains durable and owner-recoverable. Media deletion,
+public/guest boards, imports and unattended recovery remain separate work.
 
 ## Board cutover
 

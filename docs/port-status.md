@@ -1,3 +1,8 @@
+> Membership update: caller approval, bans and admission now use Naru platform
+> membership. Local member records retain roles and board levels. See
+> [membership-cutover.md](membership-cutover.md) for current deployment prerequisites;
+> historical progress notes below describe the previous application gate.
+
 # AvocadoEdition port
 
 The reference is `/Users/limeburst/Git/AvocadoEdition/AvocadoEdition`.
