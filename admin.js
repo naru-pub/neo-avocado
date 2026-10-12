@@ -1,3 +1,4 @@
+import { applyTitles } from "./admin-titles.js";
 import { resumeCleanup } from "./admin-cleanup.js";
 import { config } from "./config.js";
 import {
@@ -8,6 +9,7 @@ import {
   walletWrites,
 } from "./admin-model.js";
 const $ = (id) => document.getElementById(id);
+let grantTitleId;
 let naru,
   owner,
   section = "couples",
@@ -116,6 +118,27 @@ async function load({ more = false } = {}) {
         await load();
       });
     li.append(edit, " ", remove);
+    if (section === "titles") {
+      const grant = document.createElement("button");
+      grant.type = "button";
+      grant.textContent = "지급·회수";
+      grant.onclick = () =>
+        run(async () => {
+          grantTitleId = row.id;
+          $("titleGrantHeading").textContent = `${row.data.name} 지급·회수`;
+          $("titleGrantStatus").textContent = "";
+          $("titleGrantCharacters").replaceChildren();
+          for (const character of await all("neo_avocado_characters")) {
+            if (character.data.deleted) continue;
+            const option = document.createElement("option");
+            option.value = character.id;
+            option.textContent = `${character.data.name} (${character.id})`;
+            $("titleGrantCharacters").append(option);
+          }
+          $("titleGrantForm").hidden = false;
+        });
+      li.append(" ", grant);
+    }
     $("adminRows").append(li);
   }
   cursor = page.nextCursor;
@@ -392,6 +415,7 @@ $("adminSection").onchange = () =>
   run(async () => {
     section = $("adminSection").value;
     $("adminForm").hidden = true;
+    $("titleGrantForm").hidden = true;
     await load();
   });
 $("adminSignIn").onclick = () =>
@@ -421,3 +445,45 @@ await run(async () => {
   references.profiles = await all("neo_avocado_profiles");
   await load();
 });
+
+$("titleGrantCancel").onclick = () => {
+  $("titleGrantForm").hidden = true;
+};
+$("titleGrantForm").onsubmit = async (event) => {
+  event.preventDefault();
+  const controls = [
+    ...$("titleGrantForm").querySelectorAll("button,input,select"),
+    $("adminSection"),
+    $("adminSignOut"),
+  ];
+  controls.forEach((control) => {
+    control.disabled = true;
+  });
+  try {
+    const result = await applyTitles(
+      owner,
+      grantTitleId,
+      {
+        action: $("titleGrantAction").value,
+        allApproved: $("titleGrantAll").checked,
+        characterIds: $("titleGrantAll").checked
+          ? []
+          : [...$("titleGrantCharacters").selectedOptions].map(
+              (option) => option.value,
+            ),
+      },
+      ({ completed, total }) => {
+        $("titleGrantStatus").textContent =
+          `${completed}/${total}명 처리했습니다.`;
+      },
+    );
+    $("titleGrantStatus").textContent =
+      `${result.completed}명에게 적용했습니다.`;
+  } catch (error) {
+    $("titleGrantStatus").textContent = error.message ?? message(error);
+  } finally {
+    controls.forEach((control) => {
+      control.disabled = false;
+    });
+  }
+};

@@ -30,6 +30,28 @@
       <button id="adminNew" type="button">새로 등록</button>
       <ul id="adminRows"></ul>
       <button id="adminMore" type="button" hidden>더 보기</button>
+      <form id="titleGrantForm" class="card" hidden>
+        <h2 id="titleGrantHeading">타이틀 지급·회수</h2>
+        <label
+          >처리<select id="titleGrantAction">
+            <option value="grant">지급</option>
+            <option value="revoke">회수</option>
+          </select></label
+        >
+        <label
+          ><input id="titleGrantAll" type="checkbox" />승인된 모든 캐릭터</label
+        >
+        <label
+          >대상 캐릭터 (여러 명 선택 가능)<select
+            id="titleGrantCharacters"
+            multiple
+            size="8"
+          ></select
+        ></label>
+        <p id="titleGrantStatus" role="status"></p>
+        <button type="submit">선택한 대상에게 적용</button>
+        <button id="titleGrantCancel" type="button">닫기</button>
+      </form>
       <form id="adminForm" class="card" hidden>
         <h2 id="adminFormTitle"></h2>
         <div id="adminFields"></div>

@@ -144,6 +144,7 @@ const server = createServer(async (req, res) => {
       "/admin.js": "admin.js",
       "/admin-model.js": "admin-model.js",
       "/admin-cleanup.js": "admin-cleanup.js",
+      "/admin-titles.js": "admin-titles.js",
       "/style.css": "style.css",
     };
     if (path === "/config.js") {
@@ -675,6 +676,38 @@ try {
       second: "character-other",
     });
   }
+  await page.locator("#adminSection").selectOption("titles");
+  await page.getByRole("button", { name: "지급·회수", exact: true }).click();
+  await page
+    .locator("#titleGrantCharacters")
+    .selectOption(["character-me", "character-other"]);
+  await page.locator('#titleGrantForm [type="submit"]').click();
+  await page
+    .locator("#titleGrantStatus")
+    .filter({ hasText: "2명에게 적용했습니다." })
+    .waitFor();
+  assert.ok(
+    table(`${P}character_state`)
+      .get("character-other")
+      .data.titles.includes("winner"),
+  );
+  await page.locator("#titleGrantAction").selectOption("revoke");
+  await page.locator('#titleGrantForm [type="submit"]').click();
+  await page.waitForFunction(
+    () =>
+      document.querySelector('#titleGrantForm [type="submit"]').disabled ===
+      false,
+  );
+  assert.equal(
+    table(`${P}character_state`).get("character-me").data.activeTitle,
+    null,
+  );
+  assert.equal(
+    table(`${P}character_state`)
+      .get("character-other")
+      .data.titles.includes("winner"),
+    false,
+  );
   await page.locator("#adminSection").selectOption("character_cleanup");
   for (
     let i = 0;

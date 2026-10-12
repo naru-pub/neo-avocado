@@ -1,165 +1,149 @@
-# neo-avocado
+# AvocadoEdition port
 
-네오 아보카도는 자캐 커뮤니티 솔루션 [아보카도 에디션](https://github.com/tateck-develop/AvocadoEdition)을 나루 회원과 서버 함수(데이터 SDK 1.1.0)로 옮기는 사이트입니다. 회원 로그인과 닉네임, 캐릭터와 관계·옷장, 그림 로그와 댓글, 댓글 주사위, 출석 보상과 상점·뽑기, 아이템 판매·선물·제작이 있습니다. 전체 포트는 진행 중입니다.
+The reference is `/Users/limeburst/Git/AvocadoEdition/AvocadoEdition`.
+The goal is to port its community workflows to Naru SDK 1.1.0, not merely
+reproduce the existing demo. SDK additions require the owner's approval.
 
-## 구조
+## Requirements and evidence
 
-| 파일                                                               | 하는 일                                                         |
-| ------------------------------------------------------------------ | --------------------------------------------------------------- |
-| `index.html`, `app.js`, `style.css`                                | 페이지                                                          |
-| `config.js`                                                        | 나루 로그인 이름. `<login>.naru.pub`에서는 비워 둡니다.         |
-| [`_naru/functions/neo-avocado.js`](_naru/functions/neo-avocado.js) | 서버 함수: 출석·상점·뽑기·판매·선물·제작, 관계·옷장·대표 캐릭터 |
+| Workflow                                          | Reference                                                   | Status                                                                                                                                                                                             |
+| ------------------------------------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Member login and profiles                         | `bbs/register*`, `mypage`                                   | Identity, profile, application approval/closed admission/bans implemented; upload authority remains unresolved; approved read budget implemented locally                                           |
+| Drawing logs and comments                         | `bbs/write*`, board skins                                   | Gateway CRUD, ownership/revisions, moderator edit/delete and resumable child cleanup implemented; board levels/categories/secrets/previews implemented; public/guest access and rich posts pending |
+| Character profiles                                | `mypage/character`, `adm/character_article*`                | Basic create/read/edit/delete and main character implemented; custom fields pending                                                                                                                |
+| Character relationships, couples, outfits, titles | `mypage/character`, `couple`, `adm/title*`                  | Relationships, wardrobe, owner-managed couples/title grants and member title selection implemented; bulk grants/revocation implemented; gallery review and title deletion cleanup pending          |
+| Stats, experience and ranks                       | `adm/status*`, `adm/exp*`, `adm/level*`                     | Allocation, recovery, official progression, rank display and owner administration implemented                                                                                                      |
+| Shop, attendance and gacha                        | `shop`, `extend/item.lib.php`                               | Member flows, private history, exchange costs and owner catalog/gacha/recipe forms implemented                                                                                                     |
+| Inventory use, sale, gift and crafting            | `inventory`, `adm/recipi*`                                  | Use eligibility, sale/gift/craft, character linking, owner inventory grants and validated catalog effects implemented                                                                              |
+| Quests                                            | `adm/quest*` and their callers                              | Reference has admin CRUD but no quest.php or member consumer; scheduled quest display/admin still pending                                                                                          |
+| Private messages and notifications                | `bbs/memo*`, `ajax/*call*`                                  | Private inbox/sent/read/reply/delete, receive preference, bulk costs and live unread notices implemented; board notifications pending                                                              |
+| Community administration                          | `adm/admin.menu*.php`                                       | Owner member status/role controls and existing catalog/economy controls implemented; broader board moderation pending; owner cleanup recovery implemented                                          |
+| Navigation, content, themes and emoticons         | `adm/menu*`, `adm/content*`, `adm/design*`, `adm/emoticon*` | Pending                                                                                                                                                                                            |
+| Existing data import                              | SQL schema and uploaded files                               | Pending: explicit ID/member mapping and media handling; never copy PHP credentials                                                                                                                 |
+| Browser and server acceptance                     | Naru release checklist                                      | 41 tests and synthetic Chrome pass; enforced budgets peak at 84 reads/120 and 10 mutations/30. Real deployment acceptance pending                                                                  |
 
-돈과 아이템을 바꾸는 규칙은 서버 함수에만 있습니다. 나루가 이 파일을 회원의 브라우저가 아니라 서버에서, 한 트랜잭션 안에서 돌리고, 페이지는 `member.call("neo-avocado/buy", …)`처럼 부르기만 합니다. 함수 파일은 사이트와 함께 배포되고 누구나 볼 수 있으니 비밀값을 넣지 마세요.
+Naru replaces PHP hosting, account passwords, email verification and SQL server
+maintenance. These platform implementation details are not new application features.
+Any other omitted reference workflow must be recorded with source evidence and a
+reason; passing the current demo tests is not completion of the port.
 
-## 컬렉션
+## Verification
 
-제어판의 데이터베이스에서 아래 컬렉션을 만드세요. 회원은 나루 계정으로 로그인한 방문자이고, 회원이 쓰는 컬렉션에서는 자기가 만든 문서만 고치고 지웁니다.
+- `npm test` verifies page requests and server rules.
+- `npm run lint` checks formatting.
+- Verify runtime behavior with the actual SDK and transactional function runtime.
+- Check all requirements above before declaring the port complete.
+- Deployment and SDK freeze are separate from implementing the application.
 
-| 컬렉션                        | 읽기     | 쓰기     | 담는 것                                                                                                |
-| ----------------------------- | -------- | -------- | ------------------------------------------------------------------------------------------------------ |
-| `neo_avocado_profiles`        | 관리자만 | 관리자만 | 회원마다 하나, 회원 번호를 ID로: 닉네임                                                                |
-| `neo_avocado_characters`      | 관리자만 | 관리자만 | 캐릭터 시트                                                                                            |
-| `neo_avocado_logs`            | 관리자만 | 관리자만 | 그림 로그                                                                                              |
-| `neo_avocado_comments`        | 관리자만 | 관리자만 | 로그의 댓글(`logId`)과 주사위                                                                          |
-| `neo_avocado_items`           | 관리자만 | 관리자만 | 상점 아이템: `name`, `price`, 선택으로 `stock`(없으면 무제한), `description`, `hidden`                 |
-| `neo_avocado_gacha`           | 관리자만 | 관리자만 | 뽑기 표: `item`(아이템 ID), `weight`(나올 비율)                                                        |
-| `neo_avocado_wallets`         | 관리자만 | 관리자만 | 회원마다 하나, 회원 번호를 ID로: `balance`, `lastDaily`. 출석 보상은 하루 100, 뽑기는 한 번에 50       |
-| `neo_avocado_inventory`       | 관리자만 | 관리자만 | 회원이 산 것과 뽑은 것: `owner`, `item`, `name`, `from`                                                |
-| `neo_avocado_recipes`         | 관리자만 | 관리자만 | 제작 레시피: `name`, `item`(결과 아이템 ID), `ingredients`(아래 형식), `cost`, `description`, `hidden` |
-| `neo_avocado_relations`       | 관리자만 | 관리자만 | 관계: `owner`, `character`, `target`, `affinity`, `memo`, `link`, `order`                              |
-| `neo_avocado_wardrobe`        | 관리자만 | 관리자만 | 의상: `owner`, `character`, `name`, `image`                                                            |
-| `neo_avocado_character_state` | 관리자만 | 관리자만 | 캐릭터 ID별 공식 경험치·능력치: `owner`, `character`, `exp`, `points`, `stats`, `titles`               |
-| `neo_avocado_stat_config`     | 관리자만 | 관리자만 | 능력치 정의. ID는 `hp`처럼 영문 소문자로 시작하는 영문/숫자/밑줄: `name`, `initial`, `max`             |
-| `neo_avocado_settings`        | 관리자만 | 관리자만 | `community` 문서의 `initialStatPoints`: 새 캐릭터의 배분 포인트                                        |
-| `neo_avocado_levels`          | 관리자만 | 관리자만 | 등급: `name`, `exp`(필요 경험치)                                                                       |
-| `neo_avocado_titles`          | 관리자만 | 관리자만 | 타이틀: `name`, `image`, `description`                                                                 |
-| `neo_avocado_couples`         | 관리자만 | 관리자만 | 커플: `first`, `second`(캐릭터 ID), `since`(시작일), `order`                                           |
-| `neo_avocado_history`         | 관리자만 | 관리자만 | 출석·구매·판매·선물·제작·뽑기·사용 기록. 회원은 서버 함수로 자기 기록만 읽습니다.                      |
-| `neo_avocado_messages`        | 관리자만 | 관리자만 | 비공개 쪽지. 회원은 서버 함수로 자기 받은/보낸 쪽지만 읽고 삭제합니다.                                 |
-| `neo_avocado_members`         | 관리자만 | 관리자만 | 회원 번호별 `status`(pending/approved/banned), `role`(member/moderator), 운영 메모                     |
+## Current verification and next implementation steps
 
-아이템과 뽑기 표는 관리자가 제어판에서 채웁니다. 주사위 눈은 서버가 댓글에 붙인 ID에서 정해지므로 회원이 고를 수 없습니다. 다만 회원은 자기 댓글을 지울 수 있어서, 지우고 다시 굴리는 것까지 막지는 못합니다.
+- 41 unit/page tests pass; Prettier passes.
+- `tests/browser-smoke.mjs` passed in actual Chrome with the committed SDK
+  1.1.0 and synthetic HTTP responses. It exercised revision-checked editing,
+  crafting, relationship creation, outfit registration and wearing. It is not
+  a production login, actual Durable Object transaction, or R2 test.
+- The browser pass caught an undefined-property argument in relationship
+  creation that SDK JSON validation rejects; creation now omits optional IDs.
+- The approved `member.read()` extension is implemented locally in SDK 1.1.0; frozen 1.0.0 stays unchanged.
+- New collections required for this work: recipes, relations, wardrobe, character_state, stat_config, settings, levels, titles, couples and history;
+  all application collections must now be admin-readable and admin-written. The previous member access must be removed. See membership-cutover.md before deploying.
+- Next: complete admission/member/moderation administration, boards and private messaging. Admission and bans require
+  moving protected writes behind site functions; merely hiding controls will
+  not enforce them. Private collections must be admin-readable and filtered
+  on the server, not by the browser.
+- Still required: cleanup of dependent records on character/log deletion,
+  the remaining feature rows above,
+  deployment/setup and live acceptance. Do not treat this milestone as a
+  finished port.
 
-아이템의 `sellPrice`는 판매 보상(0 이상의 정수)입니다. 없거나 `sellable: false`이면 판매할 수 없습니다. `giftable: false`이면 선물할 수 없습니다. 가격·재고·잔액은 0 이상의 안전한 정수이고, 뽑기 무게는 유한한 0 이상의 수입니다. 잘못된 설정은 서버 함수가 거부하므로 돈이나 아이템은 바뀌지 않습니다. 뽑기는 전체 페이지를 읽으며 한 표는 최대 2,000항목입니다.
+- Item use and stat allocation also passed the actual-SDK Chrome fixture.
+- `tests/runtime.mjs` loads the actual Naru `edge/src/functions.ts` runner, its
+  `DataError`, exact QuickJS 0.32.0 interpreter and memory cap. It executes the
+  port's source against SQLite and confirms rollback after an injected host
+  failure during crafting. It passed. This is not an actual Durable Object
+  HTTP/auth integration test.
 
-레시피 예:
+- Chrome actual-SDK pass now includes owner authentication restore, couple
+  creation, title creation and grant, member title selection, linked purchases
+  and private history. Owner credentials are synthetic; real sign-in remains
+  a deployment acceptance requirement.
+- QuickJS/SQLite checks include title selection, linked purchases, server-filtered
+  history and a twenty-material craft using 23 writes (within the 25-write limit).
+- `admin.html`, `admin.js`, `admin-model.js` implement named owner forms,
+  conditional replacement/new-record writes and conditional deletion. Remaining
+  administration rows are still unfinished; this is not a completed port.
 
-```json
-{
-  "name": "나무 만들기",
-  "item": "tree",
-  "ingredients": [{ "item": "seed", "count": 2 }],
-  "cost": 20
-}
-```
+- Catalog browser acceptance passed: owner creates a recovery item, a fractional-
+  weight draw row and a recipe with ingredient rows. Owner balance changes
+  use the SDK's existing conditional batch for balance plus history, and the
+  browser pass verifies both writes. Inventory grants validate recipient
+  character ownership and derive names from the catalog.
+- `docs/media-api-proposal.md` records a real SDK gap: uploaded-file deletion.
+  Media deletion remains unapproved and unchanged. The separate read API
+  has since been approved and implemented locally.
+  Continue independent port work; do not implement that extension without an
+  affirmative reply. Existing website owner tokens must retain their current
+  upload-only media permission.
 
-인벤토리에서 재료를 선택하고 제작합니다. 재료는 한 번에 최대 20개이고, 서버가 소유권과 정확한 종류·개수를 확인한 뒤 비용과 재료를 함께 소모하고 결과 아이템을 줍니다. 판매·선물도 서버에서 소유권을 확인합니다. 선물은 이미 프로필을 등록한 다른 회원에게 보낼 수 있습니다.
+- Private messages require the new messages collection with both read and
+  write set to admin. Listing, reading, deletion and read receipts are party-
+  checked inside site functions. Recipient opt-out and all recipients are
+  validated before charging/sending. Max 20 recipients and 5,000 characters.
+- QuickJS/SQLite tests verify third-party denial, recipient-only receipts and
+  maximum-size twenty-recipient delivery using 22 writes. Chrome sends and
+  reads between two synthetic members, replies, deletes, treats script-like
+  text as plain text, and detects a later message through live polling.
+- Original ajax/memo_call.php polls every five seconds; the port matches that
+  interval while visible, skipping open mailboxes and existing unread notices.
+  SDK call/monthly limits still apply. Comment/board alerts are not complete.
 
-닉네임·캐릭터·로그 설명·댓글을 수정할 수 있습니다. 수정은 원래 문서의 리비전을 보내므로 다른 창에서 바꾼 내용을 덮어쓰지 않고, 실패하면 입력한 초안을 수정창에 남깁니다. 페이지는 SDK `/sdk/1.1.0/naru.js`를 사용합니다.
+- Member approval/bans use protected member records. All public app functions
+  now gate membership, and community data goes through a collection whitelist
+  and owned-document checks. Moderators are limited to logs/comments.
+- `docs/membership-cutover.md` records the incompatible permission cutover,
+  existing-member preapproval, preserved inventory/history and remaining
+  gaps. No production permissions have changed; the approved SDK read API
+  is implemented locally.
+- Actual-SDK browser fixture denies every native member collection request;
+  the complete app flow still runs through its gateway. It exercises an active
+  member ban, owner reapproval and re-entry. The same fixture measured a peak
+  of 92 function calls/minute. Its pass does NOT prove production readiness.
+- The read-only SDK proposal is approved and implemented locally. Protected
+  get/list, membership/status, mailbox lists and history use `member.read`.
+  Sends, receipts, deletion and economic/content mutations keep `call`.
+  The latest Chrome fixture enforces both rates and passed at 84 reads/120
+  and 10 mutations/30 in a fixed minute. Media deletion remains unapproved.
+- Boards now enforce list/read/write/comment levels, categories and secret
+  visibility. List previews do not expose locked bodies/images. Full reads
+  retrieve the stored body without truncation. Existing logs require explicit
+  `board: "default"` backfill during cutover. Public/guest access, rich posts,
+  board notifications are still incomplete. Operator cleanup recovery is
+  implemented and verified locally.
+- Local SDK/member HTTP + Durable Object integration passes (27 checks,
+  one existing skip). It verifies read authentication, write rejection and
+  independent server budgets. The same SDK contract suite passes all 11
+  checks through the public Worker route. SDK build/reference freshness and
+  edge typechecking pass. Nothing has been deployed.
 
-전체 포트의 진행 상황은 [docs/port-status.md](docs/port-status.md)에 기록합니다. 아직 아보카도 에디션의 모든 기능을 옮긴 상태는 아닙니다.
+- Owner recovery views list durably marked logs/characters and resume bounded,
+  revision-checked batches. Conflicts leave the marker for retry. Character
+  cleanup now removes couple records too, within the 25-write function cap.
+  Purchased inventory is detached, while wallets and history remain intact.
+  43 unit/page checks pass; actual-SDK Chrome recovery and large QuickJS/SQLite
+  deletion checks pass. No media is deleted and nothing has been deployed.
 
-캐릭터의 관계와 옷장은 펼쳤을 때 읽습니다. 관계에는 상대 캐릭터, 호감도(-100~100), 설명, HTTPS 링크와 정렬 순서를 설정할 수 있습니다. 의상은 업로드한 이미지나 HTTPS 이미지 주소로 등록하고 바꿔 입습니다. 사용 중인 의상은 바로 삭제할 수 없습니다. 관계·의상·대표 캐릭터의 소유권은 서버 함수가 확인합니다.
+- Title administration now grants/revokes for selected characters or all approved
+  characters, matching adm/title_has_update.php's approved-only bulk grant and
+  duplicate prevention. Existing progression and other titles are preserved;
+  revocation clears the equipped title when applicable. Revision-checked chunks
+  report committed progress on failure; rerunning is idempotent. 46 unit/page
+  checks and actual-SDK Chrome selected grant/revoke pass. Gallery review and
+  cascading title-definition deletion are still pending.
 
-가입 승인·차단을 적용하려면 모든 컬렉션의 읽기와 쓰기를 관리자만으로 변경하고 회원 접근을 서버 함수로 처리해야 합니다. 기존 컬렉션도 권한 변경 대상입니다. 컬렉션을 만드는 API는 SDK 1.1.0에 없으므로 제어판에서 생성합니다. 현재 구현은 데이터 게이트를 제공하지만 함수 호출 한도 문제를 아직 해결하지 않아 배포 준비가 끝나지 않았습니다. 자세한 전환 절차는 docs/membership-cutover.md를 참고하세요.
+## 타이틀 일괄 지급·회수
 
-캐릭터 상세에서 공식 경험치·등급·능력치를 확인하고 포인트를 배분합니다. 능력치는 최대 20개이고, 기본값에 배분한 포인트가 더해집니다. 캐릭터 프로필에 적힌 경험치나 포인트는 공식 값으로 쓰지 않습니다. 능력치를 줄였다 다시 늘려도 피해량은 유지됩니다. 공식 경험치와 총 배분 포인트는 운영자가 `character_state`에서 설정하며, 등급은 경험치를 만족하는 가장 높은 단계입니다.
-
-아이템의 `effect`에는 아래 중 하나를 설정합니다. 회원은 인벤토리의 사용 버튼으로 캐릭터나 내용을 고릅니다. `reusable: true`이면 계속 사용할 수 있지만, 개인 아이템 제작권은 원본처럼 항상 소모됩니다. 실패한 사용은 아이템을 소모하지 않습니다.
-
-```json
-{ "type": "restore", "stat": "hp", "amount": 20 }
-{ "type": "draw" }
-{ "type": "create" }
-{ "type": "profile" }
-```
-
-뽑기권은 `gacha`에서 `source`가 그 아이템 ID인 항목만 사용합니다. 일반 뽑기는 `source`가 없는 항목만 사용합니다. `item: null` 항목은 꽝이며, 꽝도 뽑기권을 소모합니다. 개인 아이템은 이름·설명·이미지를 정할 수 있지만 가격이나 효과를 정할 수 없습니다. 프로필 수정권은 캐릭터 리비전과 소유권을 확인하고 이름·소속·소개만 바꾸며, 능력치는 바꾸지 않습니다.
-
-## 배포
-
-나루 계정 `neo-avocado`의 [GitHub 배포](https://naru.pub/deploys)에 이 저장소가 GitHub 앱으로 연결되어 있어서, `main`에 푸시하면 나루가 그 커밋을 `https://neo-avocado.naru.pub/`에 바로 배포합니다. 워크플로나 저장소 변수는 쓰지 않습니다. 점(.)으로 시작하는 파일과 폴더, `node_modules`, 나루가 올릴 수 없는 형식의 파일은 배포되지 않고, 사이트에 있지만 저장소에 없는 파일은 배포할 때 지워집니다.
-
-`.github/workflows/test.yml`은 푸시와 풀 리퀘스트마다 검사만 합니다. 배포는 검사 결과를 기다리지 않으니, `main`에 올리기 전에 로컬에서 `npm test`와 `npm run lint`를 돌려 주세요.
-
-## 운영
-
-가입 방식은 자유 가입·승인 후 가입·신규 가입 닫기 중 고릅니다. 가입 승인·차단 화면에서 회원 상태와 게시물 운영자 역할을 관리합니다. 승인 대기 회원은 자기 가입 정보만 확인하고 변경할 수 있으며, 차단은 운영 역할보다 우선합니다. 게시물 운영자는 다른 회원의 로그와 댓글을 수정·삭제할 수 있지만, 캐릭터나 프로필 소유권을 얻지는 않습니다.
-
-운영 화면에서 아이템·상점·뽑기 표·제작 레시피를 직접 등록하고 수정할 수 있습니다. 재료는 목록에서 고르고 개수와 소모 여부를 입력합니다. 회복 효과에는 능력치와 회복량이 필요합니다. 뽑기 표는 결과를 고르지 않으면 꽝이며, 무게는 소수도 가능합니다. 세력·종족 제한은 쉼표로 구분해 입력합니다.
-
-**회원 잔액**에서는 조정 사유를 반드시 입력합니다. 잔액과 조정 기록은 SDK의 원자적 배치로 함께 저장하고, 기존 구매 횟수는 유지합니다. **아이템 지급·보유 현황**에서는 회원·캐릭터·아이템을 선택합니다. 다른 회원의 캐릭터로는 지급할 수 없습니다. **전체 활동·구매 기록**은 읽기만 가능하며, 회원별 잔액 기록의 삭제 버튼은 제공하지 않습니다.
-
-운영 화면에 추가된 컬렉션을 읽거나 쓸 권한이 없으면 운영자 로그아웃 후 다시 로그인해 새 권한을 승인하세요. 가입 승인·차단은 앱 데이터에 적용되며 게시판 운영은 구현 중입니다. 나루의 기존 회원 토큰은 업로드를 계속 허용하므로 앱 차단이 미디어 업로드 권한까지 막는 것은 아닙니다. 그 경계도 배포 전 해결/검토가 필요합니다. 미디어 삭제에 필요한 SDK 추가 제안은 [docs/media-api-proposal.md](docs/media-api-proposal.md)에 있으며, 승인 전에는 SDK를 변경하지 않습니다.
-
-페이지의 **운영** 링크(`admin.html`)에서 사이트 소유자 계정으로 별도 로그인합니다. 회원 로그인만으로는 운영할 수 없습니다. 커플·타이틀·캐릭터 승인·공식 세력/종족·경험치·능력치·보유 타이틀·등급·기본 포인트를 관리합니다. 수정·삭제는 리비전을 확인하고, 신규 등록은 같은 ID를 덮어쓰지 않습니다. 커플은 서로 다른 두 캐릭터를 고릅니다. 회원은 지급받은 타이틀만 표시할 수 있습니다.
-
-상점에서 인벤토리 캐릭터를 선택하면 새 아이템이 그 캐릭터에게 들어갑니다. 기존 미지정 아이템은 **캐릭터 이동**으로 배정할 수 있습니다. 캐릭터에게 묶인 아이템을 선물할 때는 상대 회원의 캐릭터도 선택합니다. 제작 재료는 모두 같은 인벤토리의 것이어야 합니다.
-
-상점 아이템의 `requirements`에는 아래 조건을 설정할 수 있습니다. 공식 세력·종족·승인·경험치·타이틀은 운영자가 관리하는 캐릭터 상태로 검사합니다. 인벤토리에서 선택한 교환 아이템의 소유권과 종류·개수를 확인합니다. 교환 재료는 한 번에 최대 18개입니다.
-
-```json
-{
-  "approved": true,
-  "sides": ["forest"],
-  "classes": ["elf"],
-  "exp": 10,
-  "consumeExp": true,
-  "title": "winner",
-  "consumeTitle": false,
-  "limit": 2,
-  "consumeMoney": true,
-  "items": [{ "item": "seed", "count": 2, "consume": true }]
-}
-```
-
-`consumeMoney: false`이면 가격만큼 가진 회원인지 확인하고 돈은 소모하지 않습니다. 경험치·타이틀·교환 재료도 소모 여부를 설정합니다. 한도는 캐릭터별이며, 미지정 구매는 회원별입니다. 아이템을 팔거나 선물해도 구매 횟수는 줄지 않습니다. **내 활동·구매 기록**은 자기 기록만 표시합니다. 기록 컬렉션 자체는 회원에게 읽기를 허용하지 마세요.
-
-## 개발
-
-## 쪽지
-
-쪽지는 받은함·보낸함, 읽은 시간, 답장과 삭제를 지원합니다. 닉네임 설정의 **다른 회원의 쪽지 받기**를 끄면 새 쪽지를 받지 않습니다. 기존 쪽지는 계속 읽을 수 있습니다. 발송은 한 번에 최대 20명, 본문은 최대 5,000자입니다. 운영자는 기본 설정에서 회원 한 명당 발송 비용을 정합니다. 수신자를 모두 확인한 뒤 비용과 발송을 함께 처리하므로 일부 회원만 발송되거나 일부 비용만 빠지지 않습니다.
-
-원본처럼 보낸 사람이나 받는 사람이 쪽지를 삭제하면 양쪽 보관함에서 사라집니다. 메시지 컬렉션 자체는 읽기·쓰기 모두 **관리자만**으로 설정해야 합니다. 서버 함수가 보낸 사람/받는 사람을 검사하고, 목록에서는 짧은 미리보기만 반환합니다. 다른 회원의 ID를 짐작해도 본문이나 목록을 읽을 수 없습니다. 사이트 소유자는 나루 제어판의 데이터 관리 권한을 가지므로, 소유자에게도 숨기는 암호화 쪽지는 아닙니다.
-
-페이지가 보이는 동안 5초마다 새 쪽지를 확인합니다. 쪽지 화면을 보고 있거나 새 쪽지가 이미 표시되었을 때는 배경 확인을 쉬며, 읽은 뒤 다시 확인합니다. 로그아웃하거나 로그인이 만료되면 열린 쪽지와 초안은 페이지에서 지웁니다. 자동 확인과 쪽지 동작도 SDK 함수 호출 한도와 사이트 요청 예산에 포함됩니다.
-
-## 개발 검사
-
-```
-npm ci
-npm test      # 페이지가 보내는 질의와 서버 함수의 규칙을 검사합니다
-npm run lint  # Prettier 형식 검사
-```
-
-실제 SDK를 사용하는 브라우저 검사도 있습니다. Playwright와 Chromium(또는 Chrome)이 설치된 환경에서 다음과 같이 실행합니다. HTTP 응답은 테스트용이며 실제 나루 로그인·R2·QuickJS 검증을 대신하지 않습니다.
-
-```sh
-NARU_SDK_PATH=/path/to/naru-pub/control-plane/public/sdk/1.1.0/naru.js \
-  node tests/browser-smoke.mjs
-# Playwright가 다른 프로젝트에 있으면 PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs
-# 설치된 Chrome을 쓰려면 CHROMIUM_EXECUTABLE_PATH=/path/to/chrome
-```
-
-실제 나루 함수 실행기·QuickJS와 SQLite 트랜잭션 검사:
-
-```sh
-NARU_REPO_PATH=/path/to/naru-pub npm run test:runtime
-```
-
-이 검사는 서버와 같은 32 MiB 메모리 한도에서 실제 함수를 실행하며, 쓰기 도중 오류가 나면 SQLite 트랜잭션이 전부 되돌아가는지도 확인합니다. 실제 배포의 인증·R2·Durable Object 라우팅은 별도 검증이 필요합니다.
-
-`does78teux.naru.pub`의 `neo-avocado/`에서 옮겨 왔습니다.
-
-## 중단된 삭제 정리
-
-운영 화면에서 **삭제 중인 로그 정리** 또는 **삭제 중인 캐릭터 정리**를 선택하고
-**정리 계속**을 누릅니다. 한 번에 제한된 수의 자료를 정리하므로 남은 자료가 있으면
-다시 누르세요. 다른 창의 수정과 충돌하면 다시 불러온 뒤 재시도합니다. 캐릭터의
-관계·옷장·커플은 정리하고, 구매 아이템은 회원 인벤토리로 돌려놓습니다. 잔액과
-활동 기록은 보존합니다. 미디어 파일 삭제는 아직 지원하지 않습니다.
-
-이전 운영자 로그인에 댓글·관계·옷장 권한이 없으면 다시 로그인하여 추가 권한을
-승인하세요. 삭제 중인 자료는 커뮤니티에 표시되지 않고 운영 정리 목록에 남습니다.
+운영 화면의 **타이틀** 목록에서 **지급·회수**를 누릅니다. 여러 캐릭터를 선택하거나
+**승인된 모든 캐릭터**를 선택할 수 있습니다. 지급은 중복되지 않고, 회수한 타이틀을
+착용하고 있었다면 착용도 해제됩니다. 다른 타이틀과 경험치·능력치는 보존합니다.
+많은 대상은 나누어 처리하며 중단되면 완료한 인원 수를 표시합니다. 다시 실행해도
+중복 지급되지 않습니다. 전체 지급 대상은 공식 캐릭터 승인 기록을 기준으로 합니다.
