@@ -1,3 +1,9 @@
+import {
+  retryMemberMedia,
+  rememberUpload,
+  forgetUpload,
+  recoverPendingUploads,
+} from "./media-cleanup.js";
 import { config } from "./config.js";
 
 // 아보카도 에디션의 뼈대만 나루 회원으로 다시 만든 것: 회원 로그인과 닉네임,
@@ -98,11 +104,36 @@ const MESSAGES = {
 function say(message) {
   $("status").textContent = message;
 }
+async function recoverMedia() {
+  const member = state.member;
+  if (!member || state.admission !== "approved") return;
+  try {
+    await recoverPendingUploads(member);
+    await retryMemberMedia(member);
+  } catch {
+    /* The durable queue or local pending record is retried on the next visit. */
+  }
+}
+async function uploadManaged(file) {
+  const member = state.member;
+  const uploaded = await member.media.upload(file);
+  if (!uploaded.id) throw new Error("업로드한 파일 번호를 받지 못했습니다.");
+  rememberUpload(member, uploaded);
+  const registered = await member.call(`${FUNCTIONS}/registerMedia`, {
+    id: uploaded.id,
+    url: uploaded.url,
+  });
+  if (!registered.ok) throw new Error("미디어 기록을 저장하지 못했습니다.");
+  forgetUpload(member, uploaded.id);
+  return uploaded;
+}
+
 async function run(action) {
   try {
     await action();
   } catch (error) {
     console.error(error);
+    await recoverMedia();
     if (error?.code === "AUTH_REQUIRED") {
       state.member = null;
       clearPrivateViews();
@@ -219,6 +250,7 @@ function communityCollection(collection) {
         { code },
       );
     }
+    if (result.mediaCleanup) await recoverMedia();
     return result;
   };
   return {
@@ -277,6 +309,7 @@ function showAdmission(status) {
         : REASONS.approval_required;
   $("admissionId").textContent = `가입 문의용 회원 번호: ${state.member.id}`;
   $("editProfile").hidden = true;
+  $("retryMedia").hidden = true;
 }
 $("checkAdmission").onclick = () => run(start);
 
@@ -285,6 +318,7 @@ function show(profile) {
   const member = state.member;
   $("signIn").hidden = Boolean(member);
   $("signOut").hidden = !member;
+  $("retryMedia").hidden = !member;
   $("editProfile").hidden = !member || !profile;
   $("welcome").hidden = Boolean(member);
   $("profileSetup").hidden = !member || Boolean(profile);
@@ -396,6 +430,7 @@ async function start() {
     show();
     return showAdmission(platform.status);
   }
+  await recoverMedia();
   const status = await callRule("membership");
   state.role = status.role;
   state.level = status.level ?? 2;
@@ -705,6 +740,7 @@ async function callRule(name, args) {
   if (!result?.ok) {
     throw new Error(REASONS[result?.reason] ?? "요청을 처리하지 못했습니다.");
   }
+  if (result.mediaCleanup) await recoverMedia();
   return result;
 }
 
@@ -972,8 +1008,14 @@ function wireCharacterDetails(item, character) {
         },
       ],
       async ({ name, image, file }) => {
-        if (file) image = (await state.member.media.upload(file)).url;
-        await callRule("outfit", { character: character.id, name, image });
+        const uploaded = file ? await uploadManaged(file) : null;
+        if (uploaded) image = uploaded.url;
+        await callRule("outfit", {
+          character: character.id,
+          name,
+          image,
+          ...(uploaded ? { imageId: uploaded.id } : {}),
+        });
         await refresh();
       },
     );
@@ -1347,7 +1389,11 @@ async function useInventory(owned) {
     fields,
     async (values) => {
       const { character, file, ...data } = values;
-      if (file) data.image = (await state.member.media.upload(file)).url;
+      if (file) {
+        const uploaded = await uploadManaged(file);
+        data.image = uploaded.url;
+        data.imageId = uploaded.id;
+      }
       if (effect.type === "profile")
         data.revision = characters.find((row) => row.id === character).revision;
       const result = await callRule("useItem", {
@@ -1463,6 +1509,14 @@ function showTab(name) {
 /* ------------------------------------------------------------ wiring --- */
 
 $("signIn").onclick = () => run(() => state.naru.members.signIn());
+$("retryMedia").onclick = () =>
+  run(async () => {
+    await recoverPendingUploads(state.member);
+    const result = await retryMemberMedia(state.member);
+    say(
+      `${result.completed}개 파일을 정리했습니다.${result.remaining ? " 다시 눌러 남은 파일을 정리하세요." : ""}`,
+    );
+  });
 $("signOut").onclick = () =>
   run(async () => {
     const member = state.member;
@@ -1673,9 +1727,10 @@ $("logForm").onsubmit = (event) => {
     const board = state.boards.find((row) => row.id === state.board);
     if (!file && board?.data.kind !== "text") return say("그림을 골라 주세요.");
     say("올리는 중…");
-    const image = file ? await state.member.media.upload(file) : null;
+    const image = file ? await uploadManaged(file) : null;
     const log = await communityCollection(COLLECTION.logs).add({
       image: image?.url ?? null,
+      ...(image ? { imageId: image.id } : {}),
       text: $("logText").value.trim(),
       board: state.board,
       title: $("logTitle").value.trim(),
@@ -1747,12 +1802,14 @@ $("characterForm").onsubmit = (event) => {
     const name = $("characterName").value.trim();
     if (!name) return;
     const file = $("characterImage").files?.[0];
-    const image = file ? (await state.member.media.upload(file)).url : null;
+    const uploaded = file ? await uploadManaged(file) : null;
+    const image = uploaded?.url ?? null;
     const character = await communityCollection(COLLECTION.characters).add({
       name,
       side: $("characterSide").value.trim(),
       profile: $("characterProfile").value.trim(),
       image,
+      ...(uploaded ? { imageId: uploaded.id } : {}),
     });
     $("characters").prepend(await characterItem(character));
     $("characterForm").reset?.();

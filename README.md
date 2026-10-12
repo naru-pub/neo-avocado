@@ -1,3 +1,8 @@
+> Managed media now stores upload IDs and queues cleanup transactionally through
+> an admin-only media ledger. Members retry their own cleanup; owners recover it
+> with explicit deletion consent and a platform uploader check. See
+> [media lifecycle](docs/media-api-proposal.md) for setup and remaining recovery limits.
+
 > Post/comment reads now use native member collections with the published
 > `community-board` rules. Writes, cascades and economy operations remain in
 > transactional functions. Enable collection rules before opening member reads;

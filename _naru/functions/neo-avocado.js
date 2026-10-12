@@ -27,6 +27,119 @@ const BOARDS = `${PREFIX}boards`;
 
 // Naru rejects pending and banned callers before entering any site function.
 // This collection contains only application roles and board levels.
+const MEDIA = `${PREFIX}media_assets`;
+const mediaId = (value) =>
+  typeof value === "string" &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+export function registerMedia(ctx, { id, url } = {}) {
+  if (!mediaId(id)) return failure("invalid_input");
+  id = id.toLowerCase();
+  const previous = ctx.get(MEDIA, id);
+  if (previous)
+    return previous.data.owner === ctx.member.id && previous.data.url === url
+      ? { ok: true }
+      : failure("not_owned");
+  ctx.set(MEDIA, id, {
+    owner: ctx.member.id,
+    url: imageUrl(url),
+    refs: [],
+    status: "pending",
+    cleanup: true,
+    cleanupAfter: ctx.now + 10 * 60_000,
+  });
+  return { ok: true };
+}
+export function mediaCleanup(ctx) {
+  const page = ctx.list(MEDIA, {
+    filter: { owner: ctx.member.id, cleanup: true },
+    size: 5,
+  });
+  return {
+    ok: true,
+    files: page.documents.filter(
+      (file) => (file.data.cleanupAfter ?? 0) <= ctx.now,
+    ),
+    nextCursor: page.nextCursor,
+  };
+}
+export function claimMedia(ctx, { id } = {}) {
+  if (mediaId(id)) id = id.toLowerCase();
+  const asset = mediaId(id) ? ctx.get(MEDIA, id) : null;
+  if (!asset || asset.data.owner !== ctx.member.id) return failure("not_owned");
+  if (asset.data.refs.length || (asset.data.cleanupAfter ?? 0) > ctx.now)
+    return failure("media_in_use");
+  ctx.set(MEDIA, id, { ...asset.data, status: "deleting", cleanup: true });
+  return { ok: true };
+}
+export function completeMedia(ctx, { id } = {}) {
+  if (mediaId(id)) id = id.toLowerCase();
+  const asset = mediaId(id) ? ctx.get(MEDIA, id) : null;
+  if (!asset) return { ok: true };
+  if (
+    asset.data.owner !== ctx.member.id ||
+    asset.data.status !== "deleting" ||
+    asset.data.refs.length
+  )
+    return failure("not_owned");
+  ctx.delete(MEDIA, id);
+  return { ok: true };
+}
+function releaseMedia(ctx, collection, document) {
+  const id = document?.data.imageId;
+  const asset = mediaId(id) ? ctx.get(MEDIA, id) : null;
+  if (!asset) return;
+  const refs = asset.data.refs.filter(
+    (key) => key !== `${collection}/${document.id}`,
+  );
+  ctx.set(MEDIA, id, {
+    ...asset.data,
+    refs,
+    status: refs.length ? "active" : "pending",
+    cleanup: refs.length === 0,
+    cleanupAfter: ctx.now,
+  });
+}
+function saveImage(ctx, collection, before, value, input, id = before?.id) {
+  let imageId =
+    value.image === before?.data.image ? before?.data.imageId : null;
+  if (Object.hasOwn(input, "imageId")) imageId = input.imageId;
+  const data = { ...value };
+  if (typeof imageId === "string") imageId = imageId.toLowerCase();
+  if (imageId) {
+    const asset = mediaId(imageId) ? ctx.get(MEDIA, imageId) : null;
+    const preserving =
+      before?.data.imageId === imageId && before.data.image === value.image;
+    if (
+      !asset ||
+      asset.data.url !== value.image ||
+      asset.data.status === "deleting" ||
+      (!preserving && asset.data.owner !== ctx.member.id)
+    )
+      throw new Error("Media is unavailable or not owned.");
+    data.imageId = imageId;
+  } else delete data.imageId;
+  const document = id
+    ? ctx.set(collection, id, data)
+    : ctx.add(collection, data);
+  if (before?.data.imageId && before.data.imageId !== imageId)
+    releaseMedia(ctx, collection, before);
+  if (imageId) {
+    const asset = ctx.get(MEDIA, imageId);
+    const key = `${collection}/${document.id}`;
+    if (!asset.data.refs.includes(key)) {
+      if (asset.data.refs.length >= 50)
+        throw new Error("Media reference limit reached.");
+      ctx.set(MEDIA, imageId, {
+        ...asset.data,
+        refs: [...asset.data.refs, key],
+        status: "active",
+        cleanup: false,
+      });
+    }
+  }
+  return document;
+}
+
 function communityAccess(ctx, id = ctx.member.id) {
   const row = ctx.get(MEMBERS, id);
   return {
@@ -350,8 +463,22 @@ export function communityData(
   }
   return {
     ok: true,
-    document:
-      operation === "add"
+    mediaCleanup: Boolean(
+      previous?.data.imageId &&
+      (data.imageId !== undefined
+        ? data.imageId !== previous.data.imageId
+        : value.image !== previous.data.image),
+    ),
+    document: ["logs", "characters"].includes(kind)
+      ? saveImage(
+          ctx,
+          collection,
+          previous,
+          value,
+          data,
+          operation === "add" ? undefined : id,
+        )
+      : operation === "add"
         ? ctx.add(collection, value)
         : ctx.set(collection, id, value),
   };
@@ -365,7 +492,8 @@ function deleteCommunityDocument(ctx, collection, kind, row) {
   if (!row.data.deleted)
     ctx.set(collection, row.id, { ...row.data, deleted: true });
   let unfinished = false;
-  let remaining = 20;
+  let remaining = 10;
+  let mediaChanged = Boolean(row.data.imageId);
   const remove = (target, filter, detach = false) => {
     if (remaining === 0) {
       unfinished = true;
@@ -376,7 +504,11 @@ function deleteCommunityDocument(ctx, collection, kind, row) {
     for (const child of page.documents) {
       remaining--;
       if (detach) ctx.set(target, child.id, { ...child.data, character: null });
-      else ctx.delete(target, child.id);
+      else {
+        if (child.data.imageId) mediaChanged = true;
+        releaseMedia(ctx, target, child);
+        ctx.delete(target, child.id);
+      }
     }
   };
   if (kind === "logs") remove(`${PREFIX}comments`, { logId: row.id });
@@ -392,8 +524,11 @@ function deleteCommunityDocument(ctx, collection, kind, row) {
     if (profile?.data.mainCharacter === row.id)
       ctx.set(PROFILES, profile.id, { ...profile.data, mainCharacter: null });
   }
-  if (!unfinished) ctx.delete(collection, row.id);
-  return { ok: true, done: !unfinished };
+  if (!unfinished) {
+    releaseMedia(ctx, collection, row);
+    ctx.delete(collection, row.id);
+  }
+  return { ok: true, done: !unfinished, mediaCleanup: mediaChanged };
 }
 
 /** Message storage is admin-only; every public operation checks the parties. */
@@ -1042,14 +1177,20 @@ export function removeRelation(ctx, { id } = {}) {
   return { ok: true };
 }
 
-export function outfit(ctx, { character, name, image } = {}) {
+export function outfit(ctx, { character, name, image, imageId } = {}) {
   if (!ownCharacter(ctx, character)) return failure("not_owned");
-  const document = ctx.add(WARDROBE, {
-    owner: ctx.member.id,
-    character,
-    name: text(name, 80, true),
-    image: imageUrl(image),
-  });
+  const document = saveImage(
+    ctx,
+    WARDROBE,
+    null,
+    {
+      owner: ctx.member.id,
+      character,
+      name: text(name, 80, true),
+      image: imageUrl(image),
+    },
+    { imageId },
+  );
   return { ok: true, document };
 }
 
@@ -1079,8 +1220,9 @@ export function removeOutfit(ctx, { id } = {}) {
   const character = ownCharacter(ctx, clothing.data.character);
   if (!character) return failure("not_owned");
   if (character.data.outfit === clothing.id) return failure("outfit_in_use");
+  releaseMedia(ctx, WARDROBE, clothing);
   ctx.delete(WARDROBE, clothing.id);
-  return { ok: true };
+  return { ok: true, mediaCleanup: Boolean(clothing.data.imageId) };
 }
 
 export function mainCharacter(ctx, { character } = {}) {
@@ -1282,14 +1424,20 @@ export function useItem(ctx, { inventory, character, data = {} } = {}) {
     const name = text(data.name, 80, true);
     const description = text(data.description ?? "", 2000);
     const image = data.image ? imageUrl(data.image) : null;
-    const personal = ctx.add(ITEMS, {
-      name,
-      description,
-      image,
-      category: "personal",
-      hidden: true,
-      sellable: false,
-    });
+    const personal = saveImage(
+      ctx,
+      ITEMS,
+      null,
+      {
+        name,
+        description,
+        image,
+        category: "personal",
+        hidden: true,
+        sellable: false,
+      },
+      data,
+    );
     result.owned = give(
       ctx,
       personal,
@@ -1308,7 +1456,18 @@ export function useItem(ctx, { inventory, character, data = {} } = {}) {
     };
     if (Object.hasOwn(data, "image"))
       profile.image = data.image ? imageUrl(data.image) : null;
-    result.document = ctx.set(CHARACTERS, character, profile);
+    result.document = saveImage(
+      ctx,
+      CHARACTERS,
+      target,
+      profile,
+      data,
+      character,
+    );
+    result.mediaCleanup = Boolean(
+      target.data.imageId &&
+      target.data.imageId !== result.document.data.imageId,
+    );
   } else return failure("not_usable");
   // The original personal-item creation form always consumes its ticket.
   if (item.data.reusable !== true || effect.type === "create")

@@ -351,6 +351,14 @@ models.character_cleanup = {
   fields: [],
   help: "관계·옷장·커플을 정리하고 구매 아이템은 회원 인벤토리로 돌려놓습니다. 잔액과 활동 기록은 보존합니다.",
 };
+models.media_cleanup = {
+  label: "미디어 정리",
+  help: "참조가 없는 업로드를 삭제합니다. 나루에서 미디어 삭제 권한을 승인한 운영자 로그인이 필요합니다.",
+  collection: `${P}media_assets`,
+  cleanup: "media",
+  readOnly: true,
+  fields: [],
+};
 for (const [name, model] of Object.entries(models))
   model.collection ??= `${P}${name}`;
 export const scopes = [

@@ -22,6 +22,7 @@ let serial = 0;
 const memberCallBuckets = new Map();
 const memberReadBuckets = new Map();
 const platformStates = new Map();
+const deletedMedia = new Set();
 const tables = new Map();
 const table = (name) => {
   if (!tables.has(name)) tables.set(name, new Map());
@@ -157,6 +158,7 @@ const server = createServer(async (req, res) => {
       "/admin.js": "admin.js",
       "/admin-model.js": "admin-model.js",
       "/admin-cleanup.js": "admin-cleanup.js",
+      "/media-cleanup.js": "media-cleanup.js",
       "/admin-titles.js": "admin-titles.js",
       "/style.css": "style.css",
     };
@@ -247,6 +249,14 @@ try {
           error: { code: "ACCESS_DENIED", message: "Membership denied" },
         },
       });
+    if (parts[0] === "_files" && request.method() === "DELETE") {
+      const asset = ctx.get(`${P}media_assets`, parts[1]);
+      assert.ok(isOwner || asset?.data.owner === ctx.member.id);
+      if (isOwner)
+        assert.equal(url.searchParams.get("uploadedBy"), asset.data.owner);
+      deletedMedia.add(parts[1]);
+      return route.fulfill({ headers, json: { success: true } });
+    }
     let result;
     if (parts[0] === "_batch") {
       assert.equal(isOwner, true);
@@ -747,6 +757,25 @@ try {
   );
   await page.goto(`http://127.0.0.1:${server.address().port}/admin.html`);
   await page.locator("#adminWorkspace").waitFor({ state: "visible" });
+  const ownerCleanupId = "0190f1a2-0000-7000-8000-000000000071";
+  write(`${P}media_assets`, ownerCleanupId, {
+    owner: "member-other",
+    url: "https://media.naru.pub/owner-recovery.png",
+    refs: [],
+    status: "deleting",
+    cleanup: true,
+  });
+  await page.locator("#adminSection").selectOption("media_cleanup");
+  await page
+    .locator("#adminRows li")
+    .filter({ hasText: ownerCleanupId })
+    .getByRole("button", { name: "정리 계속" })
+    .click();
+  await page.waitForFunction(
+    () => document.querySelector("#adminRows").children.length === 0,
+  );
+  assert.equal(deletedMedia.has(ownerCleanupId), true);
+  assert.equal(table(`${P}media_assets`).has(ownerCleanupId), false);
   await page.locator("#adminSection").selectOption("members");
   await page
     .locator("#adminRows li")
@@ -840,6 +869,22 @@ try {
     });
   await page.goto(`http://127.0.0.1:${server.address().port}/?member=other`);
   await page.locator("#community").waitFor({ state: "visible" });
+  const memberCleanupId = "0190f1a2-0000-7000-8000-000000000072";
+  write(`${P}media_assets`, memberCleanupId, {
+    owner: "member-other",
+    url: "https://media.naru.pub/member-recovery.png",
+    refs: [],
+    status: "pending",
+    cleanup: true,
+  });
+  await page.locator("#retryMedia").click();
+  await page
+    .locator("#status")
+    .getByText("1개 파일을 정리했습니다.", { exact: true })
+    .waitFor();
+  assert.equal(deletedMedia.has(memberCleanupId), true);
+  assert.equal(table(`${P}media_assets`).has(memberCleanupId), false);
+
   assert.deepEqual(errors, []);
   const screenshot =
     process.env.NARU_SCREENSHOT_PATH ?? "/tmp/neo-avocado-browser.png";

@@ -116,3 +116,21 @@ test("recovery refuses active documents and a conflict leaves durable cleanup fo
   assert.equal(f.table(P + "comments").size, 1);
   assert.equal(f.table(P + "logs").get("l1").data.deleted, true);
 });
+
+test("owner cascade releases managed media references in the guarded document batch", async () => {
+  const f = fixture();
+  const id = "0190f1a2-0000-7000-8000-000000000001";
+  f.put("characters", "hero", { owner: "me", deleted: true, imageId: id });
+  f.put("wardrobe", "outfit", { character: "hero", imageId: id });
+  f.put("media_assets", id, {
+    owner: "me",
+    status: "active",
+    cleanup: false,
+    refs: [`${P}characters/hero`, `${P}wardrobe/outfit`],
+  });
+  await resumeCleanup(f.owner, "characters", "hero");
+  assert.equal(f.table(`${P}characters`).has("hero"), false);
+  assert.deepEqual(f.table(`${P}media_assets`).get(id).data.refs, []);
+  assert.equal(f.table(`${P}media_assets`).get(id).data.cleanup, true);
+  assert.equal(f.batches.length, 1);
+});

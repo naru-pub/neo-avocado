@@ -394,6 +394,50 @@ try {
   put(`${P}members`, ME, { status: "banned", role: "moderator" });
   assert.equal((await call("messageStatus")).ok, true);
   assert.equal((await call("join", { nick: "Platform approved" })).ok, true);
+  // Managed portraits and ten wardrobe assets exercise the 25-write cascade budget.
+  const assetId = (n) =>
+    `0190f1a2-0000-7000-8000-${String(n).padStart(12, "0")}`;
+  put(`${P}characters`, "media-cascade", {
+    owner: ME,
+    name: "Media",
+    image: "https://example.com/portrait.png",
+    imageId: assetId(1),
+  });
+  put(`${P}media_assets`, assetId(1), {
+    owner: ME,
+    url: "https://example.com/portrait.png",
+    refs: [`${P}characters/media-cascade`],
+    cleanup: false,
+    status: "active",
+  });
+  for (let n = 2; n <= 11; n++) {
+    const id = `media-outfit-${n}`;
+    put(`${P}wardrobe`, id, {
+      owner: ME,
+      character: "media-cascade",
+      imageId: assetId(n),
+    });
+    put(`${P}media_assets`, assetId(n), {
+      owner: ME,
+      refs: [`${P}wardrobe/${id}`],
+      cleanup: false,
+      status: "active",
+    });
+  }
+  let mediaDone = false;
+  for (let attempt = 0; !mediaDone && attempt < 5; attempt++) {
+    mediaDone = (
+      await call("communityData", {
+        collection: `${P}characters`,
+        operation: "delete",
+        id: "media-cascade",
+      })
+    ).done;
+    assert.ok(counts.writes <= MAX_WRITES);
+  }
+  assert.equal(mediaDone, true);
+  for (let n = 1; n <= 11; n++)
+    assert.equal(get(`${P}media_assets`, assetId(n)).data.cleanup, true);
   console.log(
     "Actual Naru runner + QuickJS + SQLite checks passed, including rollback after partial writes.",
   );

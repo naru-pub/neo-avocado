@@ -9,7 +9,7 @@ workflows and live acceptance still prevent deployment readiness.
 
 1. Export the existing site database and media inventory. Preserve IDs, wallet
    balances, inventory, purchase counters, private messages and pending work.
-2. Create `neo_avocado_members`, with both read and write set to admin.
+2. Create `neo_avocado_members` and `neo_avocado_media_assets`, with both read and write set to admin.
 3. For existing community members, reconcile platform membership separately.
    Create application metadata keyed by the site member ID with `role: "member"`.
    Do not infer these IDs from Naru account IDs or usernames. Preapprove staff
@@ -65,8 +65,10 @@ other application collection admin/admin. Post/comment reads use native
 collections plus board rules; platform membership alone does not replace board
 ACLs or ownership checks.
 
-Interrupted cleanup remains durable and owner-recoverable. Media deletion,
-public/guest boards, imports and unattended recovery remain separate work.
+Interrupted cleanup remains durable and owner-recoverable. Managed media IDs and
+deletion are implemented; see [media lifecycle](media-api-proposal.md) for ledger
+setup and owner deletion consent. Public/guest boards, imports and unattended
+recovery remain separate work.
 
 ## Board cutover
 

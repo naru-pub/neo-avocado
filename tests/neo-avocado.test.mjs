@@ -131,7 +131,10 @@ function fakeDatabase(rows = {}) {
     media: {
       async upload(file) {
         calls.push({ method: "media.upload", name: file.name });
-        return { url: `https://media.naru.pub/${file.name}` };
+        return {
+          id: "0190f1a2-0000-7000-8000-000000000001",
+          url: `https://media.naru.pub/${file.name}`,
+        };
       },
     },
     async signOut() {
@@ -144,6 +147,9 @@ function fakeDatabase(rows = {}) {
       return this.call(name, args);
     },
     async call(name, args = null) {
+      if (name === "neo-avocado/registerMedia") return { ok: true };
+      if (name === "neo-avocado/mediaCleanup")
+        return { ok: true, files: [], nextCursor: null };
       if (name === "neo-avocado/membership") {
         const profile = await member
           .collection(PROFILES)
@@ -249,7 +255,16 @@ async function page(database) {
       },
     },
   );
-  await app.link(async () => config);
+  const cleanup = new SourceTextModule(
+    await readFile(new URL("media-cleanup.js", root), "utf8"),
+    { context },
+  );
+  await cleanup.link(() => {
+    throw new Error("unexpected cleanup dependency");
+  });
+  await app.link(async (specifier) =>
+    specifier === "./media-cleanup.js" ? cleanup : config,
+  );
   await app.evaluate();
   const $ = (id) => window.document.getElementById(id);
   return {
@@ -569,6 +584,7 @@ test("a log uploads its picture, then saves the stored URL", async () => {
       name: LOGS,
       data: {
         image: "https://media.naru.pub/log.png",
+        imageId: "0190f1a2-0000-7000-8000-000000000001",
         text: "첫 로그",
         board: "default",
         title: "",
