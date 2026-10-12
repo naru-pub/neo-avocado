@@ -170,6 +170,18 @@ function fakeDatabase(rows = {}) {
         };
       if (name === "neo-avocado/communityData") {
         const handle = member.collection(args.collection);
+        if (args.operation === "getMany")
+          return {
+            ok: true,
+            documents: await Promise.all(
+              args.options.ids.map((id) =>
+                handle.get(id).catch((error) => {
+                  if (error.code === "NOT_FOUND") return null;
+                  throw error;
+                }),
+              ),
+            ),
+          };
         if (args.operation === "list")
           return { ok: true, ...(await handle.list(args.options)) };
         if (args.operation === "delete") {

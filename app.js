@@ -199,6 +199,27 @@ const mine = (document) =>
   state.member !== null &&
   (document.createdBy ?? document.data.owner) === state.member.id;
 
+/** Resolve the distinct authors for a page in bounded batches before rendering. */
+async function preloadNicks(rows) {
+  const member = state.member;
+  const missing = [
+    ...new Set(rows.map((row) => row.createdBy ?? row.data.owner)),
+  ].filter((id) => id && !state.nicks.has(id));
+  for (let offset = 0; offset < missing.length; offset += 50) {
+    const ids = missing.slice(offset, offset + 50);
+    const profiles = await communityCollection(COLLECTION.profiles).getMany(
+      ids,
+    );
+    if (state.member !== member) return;
+    profiles.forEach((profile, index) =>
+      state.nicks.set(
+        ids[index],
+        Promise.resolve(profile?.data.nick ?? "이름 없음"),
+      ),
+    );
+  }
+}
+
 /** 글쓴이의 닉네임. 처음 보는 회원만 한 번 묻는다. */
 async function nickOf(memberId) {
   if (!memberId) return "운영자";
@@ -224,7 +245,9 @@ function communityCollection(collection) {
     collection,
   );
   const invoke = async (operation, id, data, options = {}) => {
-    const method = ["get", "list"].includes(operation) ? "read" : "call";
+    const method = ["get", "getMany", "list"].includes(operation)
+      ? "read"
+      : "call";
     const result = await state.member[method](`${FUNCTIONS}/communityData`, {
       collection,
       operation,
@@ -255,6 +278,8 @@ function communityCollection(collection) {
     return result;
   };
   return {
+    getMany: async (ids) =>
+      (await invoke("getMany", undefined, undefined, { ids })).documents,
     get: async (id) =>
       nativeReads
         ? state.member.collection(collection).get(id)
@@ -455,6 +480,7 @@ async function loadLogs({ more = false } = {}) {
     size: LOG_PAGE,
     after: more ? state.logCursor : null,
   });
+  await preloadNicks(page.documents);
   if (!more) $("logs").replaceChildren();
   for (const log of page.documents) $("logs").append(await logItem(log));
   state.logCursor = page.nextCursor;
@@ -558,6 +584,7 @@ async function logItem(log) {
         size: COMMENT_PAGE,
         after: more ? cursor : null,
       });
+      await preloadNicks(page.documents);
       const list = item.querySelector(".comment-list");
       if (!more) list.replaceChildren();
       for (const comment of page.documents)
@@ -654,6 +681,7 @@ async function loadCharacters({ more = false } = {}) {
     size: CHARACTER_PAGE,
     after: more ? state.characterCursor : null,
   });
+  await preloadNicks(page.documents);
   if (!more) $("characters").replaceChildren();
   for (const character of page.documents)
     $("characters").append(await characterItem(character));
@@ -1203,16 +1231,9 @@ async function loadInventory({ more = false } = {}) {
   const missing = [
     ...new Set(page.documents.map((row) => row.data.item)),
   ].filter((id) => id && !state.itemCatalog.has(id));
-  for (const id of missing) {
-    try {
-      state.itemCatalog.set(
-        id,
-        await communityCollection(COLLECTION.items).get(id),
-      );
-    } catch (error) {
-      if (error?.code !== "NOT_FOUND") throw error;
-      state.itemCatalog.set(id, null);
-    }
+  if (missing.length) {
+    const items = await communityCollection(COLLECTION.items).getMany(missing);
+    items.forEach((item, index) => state.itemCatalog.set(missing[index], item));
   }
   for (const owned of page.documents) {
     const row = document.createElement("li");

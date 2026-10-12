@@ -162,3 +162,12 @@ reason; passing the current demo tests is not completion of the port.
 착용하고 있었다면 착용도 해제됩니다. 다른 타이틀과 경험치·능력치는 보존합니다.
 많은 대상은 나누어 처리하며 중단되면 완료한 인원 수를 표시합니다. 다시 실행해도
 중복 지급되지 않습니다. 전체 지급 대상은 공식 캐릭터 승인 기록을 기준으로 합니다.
+
+### Batched related reads
+
+Author names for post, comment and character pages and missing inventory catalog
+entries are read in batches of at most 50 through the existing read-only function
+gate. This needs the Naru Worker version with `ctx.getMany`; deploy that Worker
+before publishing this app revision. No collection permission changes are needed.
+For 10 distinct uncached authors, one batch replaces 10 read requests. Existing
+cached names need no request; missing profiles retain the name placeholder.

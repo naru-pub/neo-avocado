@@ -138,6 +138,7 @@ const ctx = {
   now: Date.now(),
   random: () => 0.5,
   get: (name, id) => table(name).get(id) ?? null,
+  getMany: (name, ids) => ids.map((id) => table(name).get(id) ?? null),
   list,
   set: (name, id, data) => write(name, id, data),
   add: (name, data) => write(name, `generated-${++serial}`, data),

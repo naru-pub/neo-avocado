@@ -72,6 +72,7 @@ const host = (operation, args) => {
   if (["add", "set", "delete"].includes(operation)) counts.writes++;
   const [collection, id, data] = args;
   if (operation === "get") return get(collection, id);
+  if (operation === "getMany") return id.map((key) => get(collection, key));
   if (operation === "set") return put(collection, id, data);
   if (operation === "add") return put(collection, randomUUID(), id);
   if (operation === "delete") {
@@ -315,6 +316,35 @@ try {
   // Legacy admission is inert; production rejects unapproved callers before QuickJS.
   put(`${P}members`, ME, { status: "pending", role: "member" });
   assert.equal((await call("membership")).status, undefined);
+  const batch = await call("communityData", {
+    collection: `${P}profiles`,
+    operation: "getMany",
+    options: { ids: [ME, "missing-profile", ME] },
+  });
+  assert.deepEqual(
+    batch.documents.map((row) => row?.id ?? null),
+    [ME, null, ME],
+  );
+  assert.equal(
+    (
+      await call("communityData", {
+        collection: `${P}wallets`,
+        operation: "getMany",
+        options: { ids: [ME] },
+      })
+    ).reason,
+    "access_denied",
+  );
+  assert.equal(
+    (
+      await call("communityData", {
+        collection: `${P}profiles`,
+        operation: "getMany",
+        options: { ids: Array(51).fill(ME) },
+      })
+    ).reason,
+    "invalid_input",
+  );
   const gated = await call("communityData", {
     collection: `${P}logs`,
     operation: "add",

@@ -253,6 +253,23 @@ export function communityData(
       ? collection.slice(PREFIX.length)
       : "";
   if (!Object.hasOwn(READ_LIMITS, kind)) return failure("access_denied");
+  if (operation === "getMany") {
+    if (!["profiles", "items"].includes(kind)) return failure("access_denied");
+    if (
+      !Array.isArray(options.ids) ||
+      options.ids.length > 50 ||
+      options.ids.some(
+        (id) => typeof id !== "string" || !/^[a-zA-Z0-9_-]{1,64}$/.test(id),
+      )
+    )
+      return failure("invalid_input");
+    return {
+      ok: true,
+      documents: ctx
+        .getMany(collection, options.ids)
+        .map((row) => (row?.data.deleted ? null : row)),
+    };
+  }
   if (operation === "list") {
     const query = {
       filter: options.filter,
