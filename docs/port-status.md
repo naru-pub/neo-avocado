@@ -26,7 +26,7 @@ reproduce the existing demo. SDK additions require the owner's approval.
 | Member login and profiles                         | `bbs/register*`, `mypage`                                   | Identity, profile, application approval/closed admission/bans implemented; upload authority remains unresolved; approved read budget implemented locally                                           |
 | Drawing logs and comments                         | `bbs/write*`, board skins                                   | Gateway CRUD, ownership/revisions, moderator edit/delete and resumable child cleanup implemented; board levels/categories/secrets/previews implemented; public/guest access and rich posts pending |
 | Character profiles                                | `mypage/character`, `adm/character_article*`                | Basic create/read/edit/delete and main character implemented; custom fields pending                                                                                                                |
-| Character relationships, couples, outfits, titles | `mypage/character`, `couple`, `adm/title*`                  | Relationships, wardrobe, owner-managed couples/title grants and member title selection implemented; bulk grants/revocation implemented; gallery review and title deletion cleanup pending          |
+| Character relationships, couples, outfits, titles | `mypage/character`, `couple`, `adm/title*`                  | Relationships, wardrobe, owner-managed couples/title grants and member title selection implemented; bulk grants/revocation implemented; gallery review pending; title deletion cleanup implemented |
 | Stats, experience and ranks                       | `adm/status*`, `adm/exp*`, `adm/level*`                     | Allocation, recovery, official progression, rank display and owner administration implemented                                                                                                      |
 | Shop, attendance and gacha                        | `shop`, `extend/item.lib.php`                               | Member flows, private history, exchange costs and owner catalog/gacha/recipe forms implemented                                                                                                     |
 | Inventory use, sale, gift and crafting            | `inventory`, `adm/recipi*`                                  | Use eligibility, sale/gift/craft, character linking, owner inventory grants and validated catalog effects implemented                                                                              |
@@ -154,3 +154,10 @@ reason; passing the current demo tests is not completion of the port.
   report committed progress on failure; rerunning is idempotent. 46 unit/page
   checks and actual-SDK Chrome selected grant/revoke pass. Gallery review and
   cascading title-definition deletion are still pending.
+
+- Title-definition deletion marks the title durably, blocks grants/equipping and
+  title-gated use/purchases while cleanup is pending, and removes it from all
+  progression records (including orphan/unapproved records). Revision-checked
+  batches preserve other titles and progression; reselect Delete to resume after
+  interruption. The final batch uses the existing media-reference release path.
+  Unit tests verify conflict recovery; current SDK QuickJS/SQLite checks pass.

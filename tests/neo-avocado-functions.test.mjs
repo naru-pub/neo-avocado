@@ -587,6 +587,11 @@ test("history ignores a caller's owner filter, paginates, and titles require act
     true,
   );
   assert.equal(table(`${P}character_state`).get("hero").activeTitle, "winner");
+  table(`${P}titles`).get("winner").deleted = true;
+  assert.equal(
+    equipTitle(ctx, { character: "hero", title: "winner" }).reason,
+    "missing_title",
+  );
   assert.equal(equipTitle(ctx, { character: "hero", title: null }).ok, true);
   table(`${P}history`).set("a", { owner: "m-1", kind: "daily" });
   table(`${P}history`).set("b", { owner: "m-2", memo: "private" });

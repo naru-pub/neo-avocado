@@ -29,6 +29,8 @@ export async function applyTitles(
   try {
     for (let start = 0; start < targets.length; start += 20) {
       const title = await owner.collection(`${P}titles`).get(titleId);
+      if (title.data.deleted)
+        throw new Error("삭제 중인 타이틀은 지급·회수할 수 없습니다.");
       const operations = [
         {
           collection: `${P}titles`,
@@ -108,4 +110,71 @@ export async function applyTitles(
     throw error;
   }
   return { completed, total: targets.length };
+}
+
+/** A durable marker blocks new grants; interrupted cleanup resumes on next delete. */
+export async function deleteTitle(
+  owner,
+  titleId,
+  progress = () => {},
+  finalize = async () => {},
+) {
+  const collection = owner.collection(`${P}titles`);
+  let title = await collection.get(titleId);
+  if (!title.data.deleted) {
+    await collection.set(
+      titleId,
+      { ...title.data, deleted: true },
+      { condition: { revision: title.revision } },
+    );
+    title = await collection.get(titleId);
+  }
+  let completed = 0;
+  for (;;) {
+    const targets = [];
+    for await (const page of owner
+      .collection(`${P}character_state`)
+      .pages({ size: 100 })) {
+      for (const row of page.documents) {
+        if (
+          row.data.titles?.includes(titleId) ||
+          row.data.activeTitle === titleId
+        )
+          targets.push(row);
+        if (targets.length === 20) break;
+      }
+      if (targets.length === 20) break;
+    }
+    const operations = targets.map((row) => ({
+      collection: `${P}character_state`,
+      set: {
+        id: row.id,
+        data: {
+          ...row.data,
+          titles: (row.data.titles ?? []).filter((id) => id !== titleId),
+          ...(row.data.activeTitle === titleId ? { activeTitle: null } : {}),
+        },
+        condition: { revision: row.revision },
+      },
+    }));
+    const done = targets.length < 20;
+    operations.push({
+      collection: `${P}titles`,
+      ...(done
+        ? { delete: { id: titleId, condition: { revision: title.revision } } }
+        : {
+            set: {
+              id: titleId,
+              data: title.data,
+              condition: { revision: title.revision },
+            },
+          }),
+    });
+    if (done) await finalize(title, operations);
+    await owner.batch(operations);
+    completed += targets.length;
+    progress({ completed, done });
+    if (done) return { completed };
+    title = await collection.get(titleId);
+  }
 }

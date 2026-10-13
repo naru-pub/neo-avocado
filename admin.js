@@ -1,5 +1,5 @@
 import { releaseMediaReferences } from "./media-cleanup.js";
-import { applyTitles } from "./admin-titles.js";
+import { applyTitles, deleteTitle } from "./admin-titles.js";
 import { resumeCleanup } from "./admin-cleanup.js";
 import { config } from "./config.js";
 import {
@@ -118,6 +118,24 @@ async function load({ more = false } = {}) {
     remove.onclick = () =>
       run(async () => {
         if (!confirm("이 자료를 삭제할까요?")) return;
+        if (section === "titles") {
+          await deleteTitle(
+            owner,
+            row.id,
+            ({ completed }) => {
+              $("adminStatus").textContent =
+                `${completed}명의 타이틀을 회수했습니다.`;
+            },
+            (title, operations) =>
+              releaseMediaReferences(
+                owner,
+                [{ collection: model.collection, document: title }],
+                operations,
+              ),
+          );
+          await load();
+          return;
+        }
         const operations = [
           {
             collection: model.collection,
@@ -137,6 +155,9 @@ async function load({ more = false } = {}) {
       const grant = document.createElement("button");
       grant.type = "button";
       grant.textContent = "지급·회수";
+      grant.disabled = Boolean(row.data.deleted);
+      if (row.data.deleted)
+        li.append(" (삭제 정리 중: 삭제를 다시 눌러 재개) ");
       grant.onclick = () =>
         run(async () => {
           grantTitleId = row.id;
@@ -163,7 +184,9 @@ async function openForm(row = null) {
   const requestedSection = section;
   references = {
     characters: await all("neo_avocado_characters"),
-    titles: await all("neo_avocado_titles"),
+    titles: (await all("neo_avocado_titles")).filter(
+      (row) => !row.data.deleted,
+    ),
     stats: await all("neo_avocado_stat_config"),
     items: await all("neo_avocado_items"),
     profiles: await all("neo_avocado_profiles"),

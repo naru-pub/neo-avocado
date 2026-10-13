@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applyTitles } from "../admin-titles.js";
+import { applyTitles, deleteTitle } from "../admin-titles.js";
 const P = "neo_avocado_";
 function fixture(count = 45) {
   const db = new Map(),
@@ -35,7 +35,15 @@ function fixture(count = 45) {
           throw Object.assign(new Error("missing"), { code: "NOT_FOUND" });
         return structuredClone(row);
       },
-      async *pages({ filter }) {
+      set: async (id, data, { condition }) => {
+        assert.equal(table(name).get(id)?.revision, condition.revision);
+        table(name).set(id, {
+          id,
+          data: structuredClone(data),
+          revision: `r${++sequence}`,
+        });
+      },
+      async *pages({ filter = {} }) {
         yield {
           documents: structuredClone(
             [...table(name).values()].filter((row) =>
@@ -50,18 +58,21 @@ function fixture(count = 45) {
     batch: async (operations) => {
       if (batches.length === failAt)
         throw Object.assign(new Error("changed"), { code: "CONFLICT" });
-      for (const { collection, set } of operations) {
-        const row = table(collection).get(set.id);
-        if (set.condition.absent) assert.equal(row, undefined);
-        else assert.equal(row?.revision, set.condition.revision);
+      for (const { collection, set, delete: remove } of operations) {
+        const write = set ?? remove;
+        const row = table(collection).get(write.id);
+        if (write.condition.absent) assert.equal(row, undefined);
+        else assert.equal(row?.revision, write.condition.revision);
       }
       batches.push(operations);
-      for (const { collection, set } of operations)
-        table(collection).set(set.id, {
-          id: set.id,
-          data: structuredClone(set.data),
-          revision: `r${++sequence}`,
-        });
+      for (const { collection, set, delete: remove } of operations)
+        if (remove) table(collection).delete(remove.id);
+        else
+          table(collection).set(set.id, {
+            id: set.id,
+            data: structuredClone(set.data),
+            revision: `r${++sequence}`,
+          });
     },
   };
   return {
@@ -133,4 +144,29 @@ test("a later conflict reports committed progress and a rerun safely finishes", 
       "old",
       "award",
     ]);
+});
+
+test("title deletion resumes after conflict and clears all holders, including orphan progression", async () => {
+  const f = fixture(25);
+  for (const row of f.table(P + "character_state").values()) {
+    row.data.titles.push("award");
+    row.data.activeTitle = "award";
+  }
+  f.table(P + "characters").delete("c0");
+  f.fail(1);
+  await assert.rejects(deleteTitle(f.owner, "award"), { code: "CONFLICT" });
+  assert.equal(f.table(P + "titles").get("award").data.deleted, true);
+  await assert.rejects(
+    applyTitles(f.owner, "award", { action: "grant", characterIds: ["c1"] }),
+    /삭제 중인 타이틀/,
+  );
+  f.fail(null);
+  await deleteTitle(f.owner, "award");
+  assert.equal(f.table(P + "titles").has("award"), false);
+  for (const row of f.table(P + "character_state").values()) {
+    assert.deepEqual(row.data.titles, ["old"]);
+    assert.equal(row.data.activeTitle, null);
+    assert.equal(row.data.exp, 100);
+    assert.equal(row.data.stats.hp.current, 7);
+  }
 });

@@ -816,7 +816,8 @@ export function buy(ctx, { item, character = null, materials = [] } = {}) {
     return failure("not_enough_exp");
   if (
     requirements.title &&
-    !progression.data.titles?.includes(requirements.title)
+    (!progression.data.titles?.includes(requirements.title) ||
+      ctx.get(TITLES, requirements.title)?.data.deleted)
   )
     return failure("missing_title");
   const counts = {
@@ -1117,7 +1118,8 @@ export function equipTitle(ctx, { character, title = null } = {}) {
     title !== null &&
     (typeof title !== "string" ||
       !state.data.titles?.includes(title) ||
-      !ctx.get(TITLES, title))
+      !ctx.get(TITLES, title) ||
+      ctx.get(TITLES, title)?.data.deleted)
   )
     return failure("missing_title");
   return {
@@ -1411,7 +1413,11 @@ export function useItem(ctx, { inventory, character, data = {} } = {}) {
     }
     if (official.exp < amount(requirements.exp ?? 0, "Use experience"))
       return failure("not_enough_exp");
-    if (requirements.title && !official.titles?.includes(requirements.title))
+    if (
+      requirements.title &&
+      (!official.titles?.includes(requirements.title) ||
+        ctx.get(TITLES, requirements.title)?.data.deleted)
+    )
       return failure("missing_title");
   }
   const effect = item.data.effect;

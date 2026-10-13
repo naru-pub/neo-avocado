@@ -1,7 +1,7 @@
 > Managed media now stores upload IDs and queues cleanup transactionally through
 > an admin-only media ledger. Members retry their own cleanup; owners recover it
 > with explicit deletion consent and a platform uploader check. See
-> [media lifecycle](docs/media-api-proposal.md) for setup and remaining recovery limits.
+> [media lifecycle](media-api-proposal.md) for setup and remaining recovery limits.
 
 > Post/comment reads now use native member collections with the published
 > `community-board` rules. Writes, cascades and economy operations remain in
@@ -10,7 +10,7 @@
 
 > Membership update: caller approval, bans and admission now use Naru platform
 > membership. Local member records retain roles and board levels. See
-> [membership-cutover.md](docs/membership-cutover.md) for current deployment prerequisites;
+> [membership-cutover.md](membership-cutover.md) for current deployment prerequisites;
 > historical progress notes below describe the previous application gate.
 
 # AvocadoEdition port
@@ -26,7 +26,7 @@ reproduce the existing demo. SDK additions require the owner's approval.
 | Member login and profiles                         | `bbs/register*`, `mypage`                                   | Identity, profile, application approval/closed admission/bans implemented; upload authority remains unresolved; approved read budget implemented locally                                           |
 | Drawing logs and comments                         | `bbs/write*`, board skins                                   | Gateway CRUD, ownership/revisions, moderator edit/delete and resumable child cleanup implemented; board levels/categories/secrets/previews implemented; public/guest access and rich posts pending |
 | Character profiles                                | `mypage/character`, `adm/character_article*`                | Basic create/read/edit/delete and main character implemented; custom fields pending                                                                                                                |
-| Character relationships, couples, outfits, titles | `mypage/character`, `couple`, `adm/title*`                  | Relationships, wardrobe, owner-managed couples/title grants and member title selection implemented; bulk grants/revocation implemented; gallery review and title deletion cleanup pending          |
+| Character relationships, couples, outfits, titles | `mypage/character`, `couple`, `adm/title*`                  | Relationships, wardrobe, owner-managed couples/title grants and member title selection implemented; bulk grants/revocation implemented; gallery review pending; title deletion cleanup implemented |
 | Stats, experience and ranks                       | `adm/status*`, `adm/exp*`, `adm/level*`                     | Allocation, recovery, official progression, rank display and owner administration implemented                                                                                                      |
 | Shop, attendance and gacha                        | `shop`, `extend/item.lib.php`                               | Member flows, private history, exchange costs and owner catalog/gacha/recipe forms implemented                                                                                                     |
 | Inventory use, sale, gift and crafting            | `inventory`, `adm/recipi*`                                  | Use eligibility, sale/gift/craft, character linking, owner inventory grants and validated catalog effects implemented                                                                              |
@@ -155,19 +155,13 @@ reason; passing the current demo tests is not completion of the port.
   checks and actual-SDK Chrome selected grant/revoke pass. Gallery review and
   cascading title-definition deletion are still pending.
 
-## 타이틀 일괄 지급·회수
+- Title-definition deletion marks the title durably, blocks grants/equipping and
+  title-gated use/purchases while cleanup is pending, and removes it from all
+  progression records (including orphan/unapproved records). Revision-checked
+  batches preserve other titles and progression; reselect Delete to resume after
+  interruption. The final batch uses the existing media-reference release path.
+  Unit tests verify conflict recovery; current SDK QuickJS/SQLite checks pass.
 
-운영 화면의 **타이틀** 목록에서 **지급·회수**를 누릅니다. 여러 캐릭터를 선택하거나
-**승인된 모든 캐릭터**를 선택할 수 있습니다. 지급은 중복되지 않고, 회수한 타이틀을
-착용하고 있었다면 착용도 해제됩니다. 다른 타이틀과 경험치·능력치는 보존합니다.
-많은 대상은 나누어 처리하며 중단되면 완료한 인원 수를 표시합니다. 다시 실행해도
-중복 지급되지 않습니다. 전체 지급 대상은 공식 캐릭터 승인 기록을 기준으로 합니다.
-
-### Batched related reads
-
-Author names for post, comment and character pages and missing inventory catalog
-entries are read in batches of at most 50 through the existing read-only function
-gate. This needs the Naru Worker version with `ctx.getMany`; deploy that Worker
-before publishing this app revision. No collection permission changes are needed.
-For 10 distinct uncached authors, one batch replaces 10 read requests. Existing
-cached names need no request; missing profiles retain the name placeholder.
+타이틀 정의를 삭제하면 모든 캐릭터의 보유·착용 기록도 정리합니다. 삭제 중인
+타이틀은 새로 지급하거나 착용할 수 없습니다. 정리가 중단되면 타이틀 목록에서
+**삭제**를 다시 눌러 이어가세요. 기존 미디어 정리 절차도 함께 적용합니다.

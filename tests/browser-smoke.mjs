@@ -837,6 +837,28 @@ try {
       .data.titles.includes("winner"),
     false,
   );
+  await page.locator("#titleGrantAction").selectOption("grant");
+  await page.locator("#titleGrantCharacters").selectOption("character-other");
+  await page.locator('#titleGrantForm [type="submit"]').click();
+  await page.waitForFunction(
+    () => !document.querySelector('#titleGrantForm [type="submit"]').disabled,
+  );
+  await page.locator("#titleGrantCancel").click();
+  await page
+    .locator("#adminRows li")
+    .filter({ hasText: "우승자" })
+    .getByRole("button", { name: "삭제", exact: true })
+    .click();
+  await page.waitForFunction(
+    () => document.querySelector("#adminRows").children.length === 0,
+  );
+  assert.equal(table(`${P}titles`).has("winner"), false);
+  assert.equal(
+    table(`${P}character_state`)
+      .get("character-other")
+      .data.titles.includes("winner"),
+    false,
+  );
   await page.locator("#adminSection").selectOption("character_cleanup");
   for (
     let i = 0;
