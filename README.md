@@ -30,7 +30,7 @@ reproduce the existing demo. SDK additions require the owner's approval.
 | Stats, experience and ranks                       | `adm/status*`, `adm/exp*`, `adm/level*`                     | Allocation, recovery, official progression, rank display and owner administration implemented                                                                                                      |
 | Shop, attendance and gacha                        | `shop`, `extend/item.lib.php`                               | Member flows, private history, exchange costs and owner catalog/gacha/recipe forms implemented                                                                                                     |
 | Inventory use, sale, gift and crafting            | `inventory`, `adm/recipi*`                                  | Use eligibility, sale/gift/craft, character linking, owner inventory grants and validated catalog effects implemented                                                                              |
-| Quests                                            | `adm/quest*` and their callers                              | Reference has admin CRUD but no quest.php or member consumer; scheduled quest display/admin still pending                                                                                          |
+| Quests                                            | `adm/quest*` and their callers                              | Reference admin fields implemented; scheduled member display and category pagination implemented; reference has no claim/reward endpoint                                                           |
 | Private messages and notifications                | `bbs/memo*`, `ajax/*call*`                                  | Private inbox/sent/read/reply/delete, receive preference, bulk costs and live unread notices implemented; board notifications pending                                                              |
 | Community administration                          | `adm/admin.menu*.php`                                       | Owner member status/role controls and existing catalog/economy controls implemented; broader board moderation pending; owner cleanup recovery implemented                                          |
 | Navigation, content, themes and emoticons         | `adm/menu*`, `adm/content*`, `adm/design*`, `adm/emoticon*` | Pending                                                                                                                                                                                            |
@@ -162,6 +162,23 @@ reason; passing the current demo tests is not completion of the port.
   interruption. The final batch uses the existing media-reference release path.
   Unit tests verify conflict recovery; current SDK QuickJS/SQLite checks pass.
 
-타이틀 정의를 삭제하면 모든 캐릭터의 보유·착용 기록도 정리합니다. 삭제 중인
-타이틀은 새로 지급하거나 착용할 수 없습니다. 정리가 중단되면 타이틀 목록에서
-**삭제**를 다시 눌러 이어가세요. 기존 미디어 정리 절차도 함께 적용합니다.
+- Quests preserve the reference's daily/weekly type, faction, title, start/end
+  scheduling and multiple image URLs. Owner forms validate Korean local times,
+  ordered periods and safe image URLs. Members have a paginated quest tab with
+  category filtering; the server excludes future, ended and malformed periods.
+  Start is inclusive, end exclusive. An absent boundary imposes no time limit.
+  Add admin/admin `neo_avocado_quests` and renew the owner collection grant.
+  Reference adm/quest_form.php links quest.php, but that file/claim implementation
+  is absent, so no invented reward/claim endpoint is introduced. 58 unit/page
+  tests and the current SDK QuickJS/SQLite suite pass.
+
+## 퀘스트
+
+`neo_avocado_quests` 컬렉션을 읽기·쓰기 모두 **관리자만**으로 만들고 운영자로
+다시 로그인하여 권한을 승인하세요. 운영 화면 **퀘스트**에서 일일·주간 구분,
+세력, 이름, 시작·종료 시간과 이미지 주소를 설정합니다. 이미지는 한 줄에 하나,
+최대 20개입니다. 시간은 한국 시간이며 빈 시작/종료는 제한이 없습니다.
+
+회원 화면 **퀘스트**에는 지금 게시 기간에 해당하는 자료만 표시됩니다. 시작
+시각부터 표시하고 종료 시각에는 숨깁니다. 원본 저장소에는 보상 수령 기능이
+없어 자동 보상이나 수령 버튼은 추가하지 않았습니다.

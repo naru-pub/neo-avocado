@@ -167,6 +167,7 @@ function clearPrivateViews() {
     "messages",
     "messageDetail",
     "history",
+    "quests",
     "messageRecipients",
   ])
     $(id).replaceChildren();
@@ -762,6 +763,7 @@ async function callRule(name, args) {
     "mailbox",
     "history",
     "characterStatus",
+    "quests",
   ].includes(name)
     ? "read"
     : "call";
@@ -1564,6 +1566,7 @@ function showTab(name) {
     ["tabCharacters", "charactersView", "characters"],
     ["tabShop", "shopView", "shop"],
     ["tabMessages", "messagesView", "messages"],
+    ["tabQuests", "questsView", "quests"],
   ]) {
     $(tab).setAttribute("aria-pressed", String(name === key));
     $(view).hidden = name !== key;
@@ -1882,3 +1885,41 @@ $("characterForm").onsubmit = (event) => {
 };
 
 await run(start);
+
+let questCursor = null;
+async function loadQuests(more = false) {
+  const page = await callRule("quests", {
+    type: $("questType").value,
+    after: more ? questCursor : null,
+  });
+  if (!more) $("quests").replaceChildren();
+  for (const row of page.documents) {
+    const li = document.createElement("li");
+    li.className = "card";
+    const heading = document.createElement("h3");
+    heading.textContent = row.data.name;
+    const detail = document.createElement("p");
+    detail.textContent = `${row.data.type === "weekly" ? "주간" : "일일"} · ${row.data.side || "공통"} · ${row.data.startsAt?.replace("T", " ") || "시작 제한 없음"} ~ ${row.data.endsAt?.replace("T", " ") || "종료 제한 없음"} (한국 시간)`;
+    li.append(heading, detail);
+    for (const url of row.data.images ?? []) {
+      if (typeof url !== "string" || !url.startsWith("https://")) continue;
+      const image = document.createElement("img");
+      image.src = url;
+      image.alt = row.data.name;
+      image.loading = "lazy";
+      image.style.maxWidth = "100%";
+      li.append(image);
+    }
+    $("quests").append(li);
+  }
+  questCursor = page.nextCursor;
+  $("moreQuests").hidden = !questCursor;
+}
+$("tabQuests").onclick = () =>
+  run(async () => {
+    showTab("quests");
+    await loadQuests();
+  });
+$("questType").onchange = () => run(() => loadQuests());
+$("refreshQuests").onclick = () => run(() => loadQuests());
+$("moreQuests").onclick = () => run(() => loadQuests(true));

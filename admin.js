@@ -238,7 +238,9 @@ async function openForm(row = null) {
     const value =
       field.key === "id"
         ? (row?.id ?? model.fixedId)
-        : (fieldValue(row?.data, field.key) ?? field.default);
+        : section === "quests" && field.key === "images"
+          ? (row?.data.images?.join("\n") ?? "")
+          : (fieldValue(row?.data, field.key) ?? field.default);
     if (field.type === "ingredients") {
       const group = document.createElement("fieldset");
       group.dataset.ingredients = field.key;

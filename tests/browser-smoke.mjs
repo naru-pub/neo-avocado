@@ -859,6 +859,18 @@ try {
       .data.titles.includes("winner"),
     false,
   );
+  await page.locator("#adminSection").selectOption("quests");
+  await page.locator("#adminNew").click();
+  await page.locator('#adminFields [name="id"]').fill("daily-quest");
+  await page.locator('#adminFields [name="name"]').fill("일일 퀘스트 테스트");
+  await page
+    .locator('#adminFields [name="images"]')
+    .fill("https://media.naru.pub/quest.png");
+  await page.locator('#adminForm [type="submit"]').click();
+  await page.locator("#adminForm").waitFor({ state: "hidden" });
+  assert.deepEqual(table(`${P}quests`).get("daily-quest").data.images, [
+    "https://media.naru.pub/quest.png",
+  ]);
   await page.locator("#adminSection").selectOption("character_cleanup");
   for (
     let i = 0;
@@ -908,6 +920,20 @@ try {
   assert.equal(deletedMedia.has(memberCleanupId), true);
   assert.equal(table(`${P}media_assets`).has(memberCleanupId), false);
 
+  await page.locator("#tabQuests").click();
+  await page
+    .locator("#quests h3")
+    .filter({ hasText: "일일 퀘스트 테스트" })
+    .waitFor();
+  assert.equal(
+    await page.locator("#quests img").getAttribute("src"),
+    "https://media.naru.pub/quest.png",
+  );
+  await page.locator("#questType").selectOption("weekly");
+  await page.waitForFunction(
+    () => document.querySelector("#quests").children.length === 0,
+  );
+  await page.locator("#tabLogs").click();
   assert.deepEqual(errors, []);
   const screenshot =
     process.env.NARU_SCREENSHOT_PATH ?? "/tmp/neo-avocado-browser.png";

@@ -32,6 +32,7 @@ import {
   membership,
   join,
   communityData,
+  quests,
 } from "../_naru/functions/neo-avocado.js";
 
 const P = "neo_avocado_";
@@ -1163,4 +1164,46 @@ test("gacha picks by weight with the server's roll, and costs what it says", () 
   // and fails the call, which Naru then rolls back.
   table(`${P}gacha`).set("g", { item: "gone", weight: 1 });
   assert.throws(() => gacha(ctx), /gone/);
+});
+
+test("quest reads enforce Korean start/end boundaries, categories and pagination", () => {
+  const { ctx, table } = fakeCtx();
+  ctx.now = Date.parse("2030-01-01T00:00:00Z");
+  table(`${P}quests`).set("active", {
+    name: "Active",
+    type: "daily",
+    startsAt: "2030-01-01T09:00",
+    endsAt: "2030-01-01T10:00",
+    images: [],
+  });
+  table(`${P}quests`).set("future", {
+    type: "daily",
+    startsAt: "2030-01-01T10:00",
+  });
+  table(`${P}quests`).set("ended", {
+    type: "daily",
+    endsAt: "2030-01-01T09:00",
+  });
+  table(`${P}quests`).set("corrupt", {
+    type: "daily",
+    startsAt: "2030-02-30T09:00",
+  });
+  table(`${P}quests`).set("weekly", { type: "weekly", images: [] });
+  assert.deepEqual(
+    quests(ctx, { type: "daily" }).documents.map((row) => row.id),
+    ["active"],
+  );
+  assert.deepEqual(
+    quests(ctx, { type: "weekly" }).documents.map((row) => row.id),
+    ["weekly"],
+  );
+  assert.equal(quests(ctx, { type: "bad" }).reason, "invalid_input");
+  for (let i = 0; i < 60; i++)
+    table(`${P}quests`).set(`extra${i}`, { type: "weekly" });
+  const page = quests(ctx, { type: "weekly" });
+  assert.equal(page.documents.length, 50);
+  assert.equal(
+    quests(ctx, { type: "weekly", after: page.nextCursor }).documents.length,
+    11,
+  );
 });

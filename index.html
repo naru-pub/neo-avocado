@@ -47,6 +47,9 @@
           캐릭터
         </button>
         <button id="tabShop" type="button" aria-pressed="false">상점</button>
+        <button id="tabQuests" type="button" aria-pressed="false">
+          퀘스트
+        </button>
         <button id="tabMessages" type="button" aria-pressed="false">
           쪽지
         </button>
@@ -149,6 +152,19 @@
           <ol id="history"></ol>
           <button id="moreHistory" type="button" hidden>기록 더 보기</button>
         </details>
+      </section>
+      <section id="questsView" hidden>
+        <h2>퀘스트</h2>
+        <label
+          >종류<select id="questType">
+            <option value="">전체</option>
+            <option value="daily">일일</option>
+            <option value="weekly">주간</option>
+          </select></label
+        >
+        <button id="refreshQuests" type="button">새로고침</button>
+        <ul id="quests"></ul>
+        <button id="moreQuests" type="button" hidden>더 보기</button>
       </section>
       <section id="messagesView" hidden>
         <h2>쪽지</h2>

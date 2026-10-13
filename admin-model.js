@@ -1,6 +1,41 @@
 // Pure forms/validation shared with tests. Only an SDK owner handle writes these.
 const P = "neo_avocado_";
 export const models = {
+  quests: {
+    label: "퀘스트",
+    help: "일일·주간 구분, 세력, 게시 기간과 여러 이미지를 설정합니다. 시간은 한국 시간입니다. 빈 시작/종료 시간은 제한 없음입니다.",
+    fields: [
+      { key: "name", label: "퀘스트 이름", required: true, max: 120 },
+      {
+        key: "type",
+        label: "종류",
+        type: "choice",
+        options: [
+          ["daily", "일일"],
+          ["weekly", "주간"],
+        ],
+      },
+      { key: "side", label: "세력 (빈칸: 공통)", max: 40 },
+      {
+        key: "startsAt",
+        label: "시작 (한국 시간)",
+        type: "datetime-local",
+        max: 19,
+      },
+      {
+        key: "endsAt",
+        label: "종료 (한국 시간)",
+        type: "datetime-local",
+        max: 19,
+      },
+      {
+        key: "images",
+        label: "이미지 주소 (한 줄에 하나)",
+        type: "textarea",
+        max: 20000,
+      },
+    ],
+  },
   boards: {
     label: "게시판",
     help: "등급은 회원 관리에서 설정합니다. 목록/본문/작성/댓글 권한을 따로 정합니다. 현재 비회원 공개/게스트 글쓰기는 아직 구현 중입니다.",
@@ -534,6 +569,43 @@ export function buildRecord(section, values, previous, references) {
     data.name = item.data.name;
     data.character = data.character || null;
     if (!previous) data.from = "admin";
+  }
+  if (section === "quests") {
+    const date = (value) => {
+      if (!value) return null;
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(value))
+        throw new Error("기간을 확인하세요.");
+      const stamp = Date.parse(`${value}+09:00`);
+      if (
+        !Number.isFinite(stamp) ||
+        new Date(stamp + 9 * 3600000).toISOString().slice(0, value.length) !==
+          value
+      )
+        throw new Error("기간을 확인하세요.");
+      return stamp;
+    };
+    const start = date(data.startsAt),
+      end = date(data.endsAt);
+    if (start !== null && end !== null && start >= end)
+      throw new Error("종료는 시작보다 늦어야 합니다.");
+    data.images = data.images
+      .split(/\r?\n/)
+      .map((value) => value.trim())
+      .filter(Boolean);
+    if (
+      data.images.length > 20 ||
+      data.images.some((value) => {
+        try {
+          const url = new URL(value);
+          return url.protocol !== "https:" || url.username || url.password;
+        } catch {
+          return true;
+        }
+      })
+    )
+      throw new Error(
+        "인증 정보 없는 HTTPS 이미지 주소를 최대 20개 입력하세요.",
+      );
   }
   if (section === "members" && (data.level < 1 || data.level > 10))
     throw new Error("회원 등급은 1~10입니다.");

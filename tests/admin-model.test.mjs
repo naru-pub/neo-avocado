@@ -241,3 +241,30 @@ test("official progression editing preserves purchase counts and validates title
   );
   assert.ok(scopes.includes("neo_avocado_character_state"));
 });
+
+test("quest forms validate Korean scheduling and multiline images", () => {
+  const values = {
+    id: "quest1",
+    name: "Daily",
+    type: "daily",
+    side: "forest",
+    startsAt: "2030-01-01T09:00",
+    endsAt: "2030-01-02T09:00",
+    images: "https://example.com/a.png\nhttps://example.com/b.png",
+  };
+  const row = buildRecord("quests", values, null, references);
+  assert.deepEqual(row.data.images, [
+    "https://example.com/a.png",
+    "https://example.com/b.png",
+  ]);
+  assert.ok(scopes.includes("neo_avocado_quests"));
+  for (const change of [
+    { endsAt: "2029-12-31T09:00" },
+    { startsAt: "2030-02-30T09:00" },
+    { images: "javascript:alert(1)" },
+    { images: "https://user:pass@example.com/a.png" },
+  ])
+    assert.throws(() =>
+      buildRecord("quests", { ...values, ...change }, null, references),
+    );
+});
