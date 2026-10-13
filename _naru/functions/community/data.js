@@ -14,6 +14,15 @@ import {
   failure,
 } from "../../modules/shared.js";
 
+export const readOnly = ["communityRead"];
+
+/** The gate's reads, declared read-only: they cannot write and use the read budget. */
+export async function communityRead(ctx, args = {}) {
+  if (!["get", "getMany", "list"].includes(args?.operation))
+    return failure("invalid_input");
+  return communityData(ctx, args);
+}
+
 /** Native collection permissions must be admin/admin. This gate owns app authorization. */
 export async function communityData(
   ctx,

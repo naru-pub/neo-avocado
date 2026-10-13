@@ -10,6 +10,8 @@ import {
   pay,
 } from "../../modules/shared.js";
 
+export const readOnly = ["mailbox", "messageStatus"];
+
 /** Message storage is admin-only; every public operation checks the parties. */
 export async function sendMessage(ctx, { recipients, body } = {}) {
   if (

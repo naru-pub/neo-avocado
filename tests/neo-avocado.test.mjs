@@ -144,11 +144,11 @@ function fakeDatabase(rows = {}) {
     },
     // 서버 함수는 나루에서 돈다. 여기서는 무엇을 불렀는지만 남기고, 테스트가
     // 정한 결과를 돌려준다.
-    async read(name, args = null) {
-      if (name === functionReference("communityData")) gatewayReads.push(args);
-      return this.call(name, args);
-    },
     async call(name, args = null) {
+      if (name === functionReference("communityRead")) {
+        gatewayReads.push(args);
+        name = functionReference("communityData");
+      }
       if (name === functionReference("registerMedia")) return { ok: true };
       if (name === functionReference("mediaCleanup"))
         return { ok: true, files: [], nextCursor: null };
@@ -857,8 +857,12 @@ test("a live platform ban clears private content after ACCESS_DENIED; board deni
     const database = fakeDatabase({ [PROFILES]: [me] });
     const { $, settle } = await page(database);
     database.platformStatus = status;
-    database.member.read = async () => {
-      throw Object.assign(new Error("denied"), { code: "ACCESS_DENIED" });
+    const call = database.member.call;
+    // Every read a banned member makes is refused; their other calls too.
+    database.member.call = async (name, args) => {
+      if (name.endsWith(":communityRead") || name.endsWith(":membership"))
+        throw Object.assign(new Error("denied"), { code: "ACCESS_DENIED" });
+      return call.call(database.member, name, args);
     };
     database.member.collection = () => ({
       list: async () => {

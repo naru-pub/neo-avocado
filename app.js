@@ -253,19 +253,17 @@ function communityCollection(collection) {
     collection,
   );
   const invoke = async (operation, id, data, options = {}) => {
-    const method = ["get", "getMany", "list"].includes(operation)
-      ? "read"
-      : "call";
-    const result = await state.member[method](
-      functionReference("communityData"),
-      {
-        collection,
-        operation,
-        ...(id !== undefined ? { id } : {}),
-        ...(data !== undefined ? { data } : {}),
-        options,
-      },
-    );
+    // Reads go through the gate's read-only export, on the read budget.
+    const gate = ["get", "getMany", "list"].includes(operation)
+      ? "communityRead"
+      : "communityData";
+    const result = await state.member.call(functionReference(gate), {
+      collection,
+      operation,
+      ...(id !== undefined ? { id } : {}),
+      ...(data !== undefined ? { data } : {}),
+      options,
+    });
     if (!result.ok) {
       const code =
         result.reason === "document_not_found"
@@ -805,20 +803,10 @@ async function characterItem(character) {
   return item;
 }
 
+// Which functions only read is declared in their modules (readOnly), so Naru
+// gives them the read budget; the page calls them all the same way.
 async function callRule(name, args) {
-  const method = [
-    "membership",
-    "messageStatus",
-    "mailbox",
-    "history",
-    "characterStatus",
-    "quests",
-    "contentPages",
-    "contentPage",
-  ].includes(name)
-    ? "read"
-    : "call";
-  const result = await state.member[method](functionReference(name), args);
+  const result = await state.member.call(functionReference(name), args);
   if (!result?.ok) {
     throw new Error(REASONS[result?.reason] ?? "요청을 처리하지 못했습니다.");
   }

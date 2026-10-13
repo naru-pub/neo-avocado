@@ -3,6 +3,7 @@ export const FUNCTION_MODULES = Object.freeze({
   membership: "community/membership",
   join: "community/membership",
   communityData: "community/data",
+  communityRead: "community/data",
   registerMedia: "community/media",
   mediaCleanup: "community/media",
   claimMedia: "community/media",

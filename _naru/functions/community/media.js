@@ -1,5 +1,7 @@
 import { MEDIA, mediaId, imageUrl, failure } from "../../modules/shared.js";
 
+export const readOnly = ["mediaCleanup"];
+
 export async function registerMedia(ctx, { id, url } = {}) {
   if (!mediaId(id)) return failure("invalid_input");
   id = id.toLowerCase();

@@ -1,5 +1,7 @@
 import { PREFIX, failure, contentReadable } from "../../modules/shared.js";
 
+export const readOnly = ["contentPages", "contentPage"];
+
 export async function contentPages(ctx, { after = null } = {}) {
   const page = await ctx.list(`${PREFIX}content`, { size: 10, after });
   const readable = await Promise.all(

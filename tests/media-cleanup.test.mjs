@@ -124,11 +124,12 @@ test("a failed media delete stays claimed and a later visit retries; another mem
   let fail = true;
   let deletes = 0;
   const member = {
-    read: async () => await mediaCleanup(ctx),
     call: async (name, args) =>
-      name.endsWith("claimMedia")
-        ? await claimMedia(ctx, args)
-        : await completeMedia(ctx, args),
+      name.endsWith("mediaCleanup")
+        ? await mediaCleanup(ctx)
+        : name.endsWith("claimMedia")
+          ? await claimMedia(ctx, args)
+          : await completeMedia(ctx, args),
     media: {
       delete: async () => {
         deletes++;

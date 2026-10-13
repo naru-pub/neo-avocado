@@ -1,5 +1,7 @@
 import { PREFIX, failure } from "../../modules/shared.js";
 
+export const readOnly = ["quests"];
+
 /** Scheduled image quests; the reference defines no claim/reward endpoint. */
 export async function quests(ctx, { type = "", after = null } = {}) {
   if (!["", "daily", "weekly"].includes(type)) return failure("invalid_input");

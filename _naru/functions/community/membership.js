@@ -5,6 +5,8 @@ import {
   text,
 } from "../../modules/shared.js";
 
+export const readOnly = ["membership"];
+
 export async function membership(ctx) {
   const access = await communityAccess(ctx);
   return {

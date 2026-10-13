@@ -10,6 +10,8 @@ import {
   characterState,
 } from "../../modules/shared.js";
 
+export const readOnly = ["characterStatus"];
+
 /** Public character progression is separate from member-editable profile fields. */
 export async function characterStatus(ctx, { character } = {}) {
   const profile =

@@ -3,7 +3,7 @@ const ASSETS = "neo_avocado_media_assets";
 
 /** Retry only assets atomically claimed as unreferenced by the server. */
 export async function retryMemberMedia(member) {
-  const page = await member.read(functionReference("mediaCleanup"));
+  const page = await member.call(functionReference("mediaCleanup"));
   if (!page.ok) throw new Error("미디어 정리 목록을 읽지 못했습니다.");
   let completed = 0;
   for (const file of page.files) {

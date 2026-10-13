@@ -1,5 +1,7 @@
 import { HISTORY, failure } from "../../modules/shared.js";
 
+export const readOnly = ["history"];
+
 export async function history(ctx, { after = null, size = 20 } = {}) {
   if (
     !Number.isInteger(size) ||
