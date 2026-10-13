@@ -1,3 +1,4 @@
+import { functionReference } from "../function-references.js";
 // 실행: npm test
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -144,14 +145,14 @@ function fakeDatabase(rows = {}) {
     // 서버 함수는 나루에서 돈다. 여기서는 무엇을 불렀는지만 남기고, 테스트가
     // 정한 결과를 돌려준다.
     async read(name, args = null) {
-      if (name === "neo-avocado:communityData") gatewayReads.push(args);
+      if (name === functionReference("communityData")) gatewayReads.push(args);
       return this.call(name, args);
     },
     async call(name, args = null) {
-      if (name === "neo-avocado:registerMedia") return { ok: true };
-      if (name === "neo-avocado:mediaCleanup")
+      if (name === functionReference("registerMedia")) return { ok: true };
+      if (name === functionReference("mediaCleanup"))
         return { ok: true, files: [], nextCursor: null };
-      if (name === "neo-avocado:membership") {
+      if (name === functionReference("membership")) {
         const profile = await member
           .collection(PROFILES)
           .get(ME)
@@ -161,7 +162,7 @@ function fakeDatabase(rows = {}) {
           });
         return { ok: true, status: "approved", role: "member", profile };
       }
-      if (name === "neo-avocado:join")
+      if (name === functionReference("join"))
         return {
           ok: true,
           status: "approved",
@@ -169,7 +170,7 @@ function fakeDatabase(rows = {}) {
             .collection(PROFILES)
             .set(ME, { nick: args.nick }),
         };
-      if (name === "neo-avocado:communityData") {
+      if (name === functionReference("communityData")) {
         const handle = member.collection(args.collection);
         if (args.operation === "getMany")
           return {
@@ -211,7 +212,7 @@ function fakeDatabase(rows = {}) {
     gatewayReads,
     signedIn: true,
     answer: (name) =>
-      name === "neo-avocado:messageStatus"
+      name === functionReference("messageStatus")
         ? { ok: true, unread: false }
         : { ok: false, reason: "empty" },
   };
@@ -268,13 +269,18 @@ async function page(database) {
       },
     },
   );
+  const references = new SourceTextModule(
+    await readFile(new URL("function-references.js", root), "utf8"),
+    { context },
+  );
+  await references.link(() => {
+    throw new Error("unexpected reference dependency");
+  });
   const cleanup = new SourceTextModule(
     await readFile(new URL("media-cleanup.js", root), "utf8"),
     { context },
   );
-  await cleanup.link(() => {
-    throw new Error("unexpected cleanup dependency");
-  });
+  await cleanup.link(() => references);
   const emoticons = new SourceTextModule(
     await readFile(new URL("emoticons.js", root), "utf8"),
     { context },
@@ -301,7 +307,9 @@ async function page(database) {
         ? emoticons
         : specifier === "./content-renderer.js"
           ? renderer
-          : config,
+          : specifier === "./function-references.js"
+            ? references
+            : config,
   );
   await app.evaluate();
   const $ = (id) => window.document.getElementById(id);
@@ -462,7 +470,7 @@ test("the shop exposes later pages and crafts selected inventory through the ser
     database.calls.filter((call) => call.method === "call").at(-1),
     {
       method: "call",
-      name: "neo-avocado:craft",
+      name: functionReference("craft"),
       args: { recipe: "tree", materials: ["seed-1"] },
     },
   );
@@ -786,7 +794,7 @@ test("the shop reads the wallet, items and own inventory when opened, and spends
   // The page never writes money or items itself: it calls the function, and
   // shows what the function decided.
   database.answer = (name) =>
-    name === "neo-avocado:gacha"
+    name === functionReference("gacha")
       ? { ok: true, balance: 70, owned: { data: { name: "황금 아보카도" } } }
       : { ok: false, reason: "already" };
   $("gacha").onclick();
@@ -794,10 +802,11 @@ test("the shop reads the wallet, items and own inventory when opened, and spends
   assert.deepEqual(
     database.calls
       .filter(
-        (call) => call.method === "call" && call.name === "neo-avocado:gacha",
+        (call) =>
+          call.method === "call" && call.name === functionReference("gacha"),
       )
       .at(0),
-    { method: "call", name: "neo-avocado:gacha", args: null },
+    { method: "call", name: functionReference("gacha"), args: null },
   );
   assert.match($("status").textContent, /황금 아보카도/);
   $("daily").onclick();
@@ -807,7 +816,11 @@ test("the shop reads the wallet, items and own inventory when opened, and spends
   for (let n = 0; n < 4; n += 1) await settle();
   assert.deepEqual(
     database.calls.filter((call) => call.method === "call").at(-1),
-    { method: "call", name: "neo-avocado:buy", args: { item: "potion" } },
+    {
+      method: "call",
+      name: functionReference("buy"),
+      args: { item: "potion" },
+    },
   );
   assert.equal(
     database.calls.some(
@@ -892,7 +905,10 @@ test("post details and comment lists use native reads while deletion stays trans
   let deletion;
   const originalCall = database.member.call;
   database.member.call = async (name, args) => {
-    if (name === "neo-avocado:communityData" && args.operation === "delete")
+    if (
+      name === functionReference("communityData") &&
+      args.operation === "delete"
+    )
       deletion = args;
     return originalCall.call(database.member, name, args);
   };

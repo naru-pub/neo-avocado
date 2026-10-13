@@ -35,7 +35,7 @@ import {
   quests,
   contentPages,
   contentPage,
-} from "../_naru/functions/neo-avocado.js";
+} from "../_naru/modules/index.js";
 
 const P = "neo_avocado_";
 function fakeCtx({ now = Date.parse("2030-01-01T03:00:00Z"), roll = 0 } = {}) {

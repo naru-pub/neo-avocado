@@ -6,13 +6,14 @@ import {
 } from "./media-cleanup.js";
 import { emoticonContent } from "./emoticons.js";
 import { renderContent } from "./content-renderer.js";
+import { functionReference } from "./function-references.js";
 import { config } from "./config.js";
 
 // 아보카도 에디션의 뼈대만 나루 회원으로 다시 만든 것: 회원 로그인과 닉네임,
 // 캐릭터 등록, 그림 로그와 댓글, 댓글 주사위, 상점과 뽑기. 회원이 쓰는
 // 컬렉션은 읽기·쓰기 모두 ‘회원’이라 로그인한 회원만 보고, 회원은 자기가 만든
 // 문서만 고치고 지운다. 돈과 아이템은 회원이 읽기만 하고, 사이트의 서버 함수
-// (/_naru/functions/neo-avocado.js)만 바꾼다.
+// (_naru/functions 아래의 모듈)만 바꾼다.
 const PREFIX = "neo_avocado_";
 const COLLECTION = {
   profiles: `${PREFIX}profiles`,
@@ -32,7 +33,6 @@ const COLLECTION = {
   boards: `${PREFIX}boards`,
   emoticons: `${PREFIX}emoticons`,
 };
-const FUNCTIONS = "neo-avocado";
 const SHOP_PAGE = 50;
 const REASONS = {
   already: "오늘은 이미 받았습니다.",
@@ -124,7 +124,7 @@ async function uploadManaged(file) {
   const uploaded = await member.media.upload(file);
   if (!uploaded.id) throw new Error("업로드한 파일 번호를 받지 못했습니다.");
   rememberUpload(member, uploaded);
-  const registered = await member.call(`${FUNCTIONS}:registerMedia`, {
+  const registered = await member.call(functionReference("registerMedia"), {
     id: uploaded.id,
     url: uploaded.url,
   });
@@ -256,13 +256,16 @@ function communityCollection(collection) {
     const method = ["get", "getMany", "list"].includes(operation)
       ? "read"
       : "call";
-    const result = await state.member[method](`${FUNCTIONS}:communityData`, {
-      collection,
-      operation,
-      ...(id !== undefined ? { id } : {}),
-      ...(data !== undefined ? { data } : {}),
-      options,
-    });
+    const result = await state.member[method](
+      functionReference("communityData"),
+      {
+        collection,
+        operation,
+        ...(id !== undefined ? { id } : {}),
+        ...(data !== undefined ? { data } : {}),
+        options,
+      },
+    );
     if (!result.ok) {
       const code =
         result.reason === "document_not_found"
@@ -815,7 +818,7 @@ async function callRule(name, args) {
   ].includes(name)
     ? "read"
     : "call";
-  const result = await state.member[method](`${FUNCTIONS}:${name}`, args);
+  const result = await state.member[method](functionReference(name), args);
   if (!result?.ok) {
     throw new Error(REASONS[result?.reason] ?? "요청을 처리하지 못했습니다.");
   }
@@ -1338,7 +1341,7 @@ async function loadInventory({ more = false } = {}) {
             { name: "memo", label: "메시지", multiline: true, max: 500 },
           ],
           async (data) => {
-            const result = await state.member.call(`${FUNCTIONS}:gift`, {
+            const result = await state.member.call(functionReference("gift"), {
               inventory: owned.id,
               ...data,
               character: data.character || null,
@@ -1599,7 +1602,7 @@ $("craftForm").onsubmit = (event) => {
  */
 function spend(name, args, success) {
   return run(async () => {
-    const result = await state.member.call(`${FUNCTIONS}:${name}`, args);
+    const result = await state.member.call(functionReference(name), args);
     if (!result?.ok) {
       return say(REASONS[result?.reason] ?? "하지 못했습니다.");
     }

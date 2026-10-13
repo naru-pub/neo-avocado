@@ -1,15 +1,18 @@
+import { functionReference } from "./function-references.js";
 const ASSETS = "neo_avocado_media_assets";
 
 /** Retry only assets atomically claimed as unreferenced by the server. */
 export async function retryMemberMedia(member) {
-  const page = await member.read("neo-avocado:mediaCleanup");
+  const page = await member.read(functionReference("mediaCleanup"));
   if (!page.ok) throw new Error("미디어 정리 목록을 읽지 못했습니다.");
   let completed = 0;
   for (const file of page.files) {
-    const claim = await member.call("neo-avocado:claimMedia", { id: file.id });
+    const claim = await member.call(functionReference("claimMedia"), {
+      id: file.id,
+    });
     if (!claim.ok) continue;
     await member.media.delete(file.id);
-    const done = await member.call("neo-avocado:completeMedia", {
+    const done = await member.call(functionReference("completeMedia"), {
       id: file.id,
     });
     if (!done.ok) throw new Error("미디어 정리 기록을 저장하지 못했습니다.");
@@ -128,7 +131,7 @@ export function forgetUpload(member, id) {
 }
 export async function recoverPendingUploads(member) {
   for (const file of pendingUploads(member).slice(0, 5)) {
-    const result = await member.call("neo-avocado:registerMedia", file);
+    const result = await member.call(functionReference("registerMedia"), file);
     if (!result.ok) throw new Error("미디어 기록을 복구하지 못했습니다.");
     forgetUpload(member, file.id);
   }

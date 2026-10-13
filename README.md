@@ -229,3 +229,7 @@ HTML은 [DOMPurify](https://github.com/cure53/DOMPurify)로 정리하여 표시�
 `member.read("neo-avocado:함수", 인자)` 형식입니다. 하위 폴더가 있으면
 `member.read("community/boards:list")`는 `_naru/functions/community/boards.js`의
 `list`를 호출합니다. 파일 경로와 함수는 `:`로 구분합니다.
+
+서버 함수는 `_naru/functions/`에 기능별로 나뉘어 있으며, 공통 코드는
+`_naru/modules/shared.js`를 정적 import합니다. 별도의 번들 생성은 필요하지
+않습니다. 자세한 구조는 [_naru/README.md](_naru/README.md)를 참고하세요.

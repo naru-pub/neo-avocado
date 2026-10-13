@@ -8,7 +8,7 @@ import {
   mediaCleanup,
   outfit,
   removeOutfit,
-} from "../_naru/functions/neo-avocado.js";
+} from "../_naru/modules/index.js";
 import { retryMemberMedia, retryOwnerMedia } from "../media-cleanup.js";
 const P = "neo_avocado_";
 const ID = "0190f1a2-0000-7000-8000-000000000001";

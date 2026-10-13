@@ -1,9 +1,10 @@
+import { FUNCTION_MODULES } from "../function-references.js";
 // Run the actual Naru runner, QuickJS-ng build and memory cap against SQLite.
 // NARU_REPO_PATH=/path/to/naru-pub node tests/runtime.mjs
 // This verifies the interpreter and transactional writes, not deployed auth/R2.
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { transformSync } from "esbuild";
+import { build, transformSync } from "esbuild";
 import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
 import {
@@ -25,20 +26,45 @@ const validation = compile(
     "utf8",
   ),
 );
-const rawRunner = await readFile(`${repo}/edge/src/functions.ts`, "utf8");
-assert.ok(
-  rawRunner.includes('"../../control-plane/src/lib/site-data/validation"'),
-  "Naru runner import changed; update this test's module resolution.",
-);
-const runner = compile(rawRunner).replace(
-  '"../../control-plane/src/lib/site-data/validation"',
-  JSON.stringify(uri(validation)),
-);
+const bundled = await build({
+  entryPoints: [`${repo}/edge/src/functions.ts`, `${repo}/edge/src/modules.ts`],
+  bundle: true,
+  write: false,
+  outdir: "runtime",
+  platform: "node",
+  format: "esm",
+  external: ["quickjs-emscripten-core", "data:*"],
+  plugins: [
+    {
+      name: "shared-validation",
+      setup(build) {
+        build.onLoad({ filter: /validation\.ts$/ }, () => ({
+          contents: `export * from ${JSON.stringify(uri(validation))};`,
+          loader: "js",
+        }));
+      },
+    },
+  ],
+});
+const runner = bundled.outputFiles.find((file) =>
+  file.path.endsWith("/functions.js"),
+).text;
 const { runFunction, MAX_WRITES, MAX_OPERATIONS } = await import(uri(runner));
+const { loadModuleGraph } = await import(
+  uri(
+    bundled.outputFiles.find((file) => file.path.endsWith("/modules.js")).text,
+  )
+);
 const { DataError } = await import(uri(validation));
-const source = await readFile(
-  new URL("../_naru/functions/neo-avocado.js", import.meta.url),
-  "utf8",
+const graphs = Object.fromEntries(
+  await Promise.all(
+    [...new Set(Object.values(FUNCTION_MODULES))].map(async (module) => [
+      module,
+      await loadModuleGraph(`functions/${module}.js`, async (filename) =>
+        readFile(new URL(`../_naru/${filename}`, import.meta.url), "utf8"),
+      ),
+    ]),
+  ),
 );
 const db = new DatabaseSync(":memory:");
 db.exec(
@@ -116,7 +142,12 @@ async function call(name, args = null, member = ME) {
     const result = runFunction(
       module,
       {
-        source,
+        source:
+          graphs[FUNCTION_MODULES[name]][
+            `functions/${FUNCTION_MODULES[name]}.js`
+          ],
+        filename: `functions/${FUNCTION_MODULES[name]}.js`,
+        modules: graphs[FUNCTION_MODULES[name]],
         name,
         args,
         member,

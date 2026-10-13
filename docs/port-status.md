@@ -218,3 +218,12 @@ reason; passing the current demo tests is not completion of the port.
   artifacts and guides are unchanged. Updated-SDK Chrome, 65 unit/page tests and
   QuickJS/SQLite verification pass. Coordinate the 1.1.0 server/asset/app cutover;
   nothing has been deployed.
+
+## Native function imports
+
+SDK 1.1.0 now loads static relative JavaScript imports from immutable function
+revisions. Neo-avocado's callable entry points are split into 13 domain modules
+in `_naru/functions/`, sharing `_naru/modules/shared.js`. Frontend calls use the
+`function-references.js` registry. Generated bundles and the build step were
+removed. Unit, actual QuickJS/SQLite and Chrome smoke checks pass. This requires
+the updated Naru Worker and control plane before installing the new site layout.

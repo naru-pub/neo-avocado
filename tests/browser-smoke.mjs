@@ -7,7 +7,15 @@ import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import * as boardRules from "../_naru/rules/community-board.js";
-import * as rules from "../_naru/functions/neo-avocado.js";
+import { FUNCTION_MODULES } from "../function-references.js";
+const modules = Object.fromEntries(
+  await Promise.all(
+    [...new Set(Object.values(FUNCTION_MODULES))].map(async (module) => [
+      module,
+      await import(`../_naru/functions/${module}.js`),
+    ]),
+  ),
+);
 
 if (!process.env.NARU_SDK_PATH)
   throw new Error("Set NARU_SDK_PATH to the actual SDK 1.1.0 naru.js.");
@@ -155,6 +163,7 @@ const server = createServer(async (req, res) => {
       "/": "index.html",
       "/index.html": "index.html",
       "/app.js": "app.js",
+      "/function-references.js": "function-references.js",
       "/emoticons.js": "emoticons.js",
       "/content-renderer.js": "content-renderer.js",
       "/vendor/purify.es.mjs": "vendor/purify.es.mjs",
@@ -314,10 +323,9 @@ try {
           ? { ...ctx, add: forbid, set: forbid, delete: forbid }
           : ctx;
         result = {
-          result: rules[parts.slice(1).join("/").split(":")[1]](
-            functionCtx,
-            request.postDataJSON().args,
-          ),
+          result: modules[parts.slice(1).join("/").split(":")[0]][
+            parts.slice(1).join("/").split(":")[1]
+          ](functionCtx, request.postDataJSON().args),
         };
         if (violation) throw new Error("read-only functions cannot write");
       } catch (error) {
