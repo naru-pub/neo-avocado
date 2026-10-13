@@ -12,6 +12,7 @@ import {
   newVariant,
 } from "quickjs-emscripten-core";
 import variant from "@jitl/quickjs-ng-wasmfile-release-sync";
+import { matches } from "./where.mjs";
 
 const repo = process.env.NARU_REPO_PATH;
 if (!repo)
@@ -27,7 +28,11 @@ const validation = compile(
   ),
 );
 const bundled = await build({
-  entryPoints: [`${repo}/edge/src/functions.ts`, `${repo}/edge/src/modules.ts`],
+  entryPoints: [
+    `${repo}/edge/src/functions.ts`,
+    `${repo}/edge/src/modules.ts`,
+    `${repo}/edge/src/rules.ts`,
+  ],
   bundle: true,
   write: false,
   outdir: "runtime",
@@ -55,6 +60,9 @@ const { loadModuleGraph } = await import(
     bundled.outputFiles.find((file) => file.path.endsWith("/modules.js")).text,
   )
 );
+const { ruleEntry } = await import(
+  uri(bundled.outputFiles.find((file) => file.path.endsWith("/rules.js")).text)
+);
 const { DataError } = await import(uri(validation));
 const graphs = Object.fromEntries(
   await Promise.all(
@@ -74,6 +82,10 @@ const P = "neo_avocado_";
 const ME = "member-me";
 let failingDelete = null;
 let counts;
+// Live messages and queued upload deletions, kept only if the call commits.
+let pending;
+const sent = [];
+const released = [];
 const get = (collection, id) => {
   const row = db
     .prepare("SELECT * FROM documents WHERE collection=? AND id=?")
@@ -94,8 +106,17 @@ const put = (collection, id, data, author = null) => {
   return get(collection, id);
 };
 const host = (operation, args) => {
+  if (["notify", "broadcast"].includes(operation)) {
+    pending.sent.push({ [operation]: args[0], data: args[1] });
+    return null;
+  }
   counts.operations++;
-  if (["add", "set", "delete"].includes(operation)) counts.writes++;
+  if (["add", "set", "delete", "mediaDelete"].includes(operation))
+    counts.writes++;
+  if (operation === "mediaDelete") {
+    pending.released.push(args[0]);
+    return null;
+  }
   const [collection, id, data] = args;
   if (operation === "get") return get(collection, id);
   if (operation === "getMany") return id.map((key) => get(collection, key));
@@ -117,10 +138,11 @@ const host = (operation, args) => {
       .prepare("SELECT id FROM documents WHERE collection=? ORDER BY id")
       .all(collection)
       .map((row) => get(collection, row.id))
-      .filter((row) =>
-        Object.entries(options.filter ?? {}).every(
-          ([key, value]) => row.data[key] === value,
-        ),
+      .filter(
+        (row) =>
+          Object.entries(options.filter ?? {}).every(
+            ([key, value]) => row.data[key] === value,
+          ) && matches(row, options.where),
       );
     const start = Number(options.after ?? 0);
     const documents = all.slice(start, start + (options.size ?? 50));
@@ -137,6 +159,7 @@ async function call(name, args = null, member = ME) {
     }),
   );
   counts = { operations: 0, writes: 0 };
+  pending = { sent: [], released: [] };
   db.exec("BEGIN");
   try {
     const result = runFunction(
@@ -158,13 +181,77 @@ async function call(name, args = null, member = ME) {
     assert.ok(counts.operations <= MAX_OPERATIONS);
     assert.ok(counts.writes <= MAX_WRITES);
     db.exec("COMMIT");
+    sent.push(...pending.sent);
+    released.push(...pending.released);
     return result;
   } catch (error) {
     db.exec("ROLLBACK");
     throw error;
   }
 }
+// The board rule runs from the function revision and imports modules/shared.js.
+const ruleGraph = await loadModuleGraph(
+  "rules/community-board.js",
+  async (filename) =>
+    readFile(new URL(`../_naru/${filename}`, import.meta.url), "utf8"),
+);
+async function rule(name, args, member = ME) {
+  const module = await newQuickJSWASMModuleFromVariant(
+    newVariant(variant, {
+      wasmMemory: () =>
+        Promise.resolve(new WebAssembly.Memory({ initial: 256, maximum: 512 })),
+    }),
+  );
+  counts = { operations: 0, writes: 0 };
+  pending = { sent: [], released: [] };
+  return runFunction(
+    module,
+    {
+      ...ruleEntry("rules/community-board.js"),
+      modules: ruleGraph,
+      name,
+      args,
+      member,
+      now: Date.parse("2030-01-01T00:00:00Z"),
+      readonly: true,
+    },
+    host,
+  );
+}
 try {
+  assert.ok(Object.hasOwn(ruleGraph, "modules/shared.js"));
+  put(`${P}logs`, "rule-secret", {
+    owner: "other-member",
+    board: "default",
+    secret: true,
+    title: "Secret",
+    text: "body",
+  });
+  const logScope = await rule("__naruScope", {
+    collection: `${P}logs`,
+    operation: "list",
+    filter: { board: "default" },
+    where: null,
+  });
+  assert.deepEqual(logScope.all[2].any[1], { eq: ["owner", ME] });
+  assert.equal(
+    await rule("__naruScope", {
+      collection: `${P}comments`,
+      operation: "list",
+      filter: { logId: "rule-secret" },
+      where: null,
+    }),
+    false,
+  );
+  assert.equal(
+    await rule(
+      "__naruScope",
+      { collection: `${P}logs`, operation: "list", filter: {}, where: null },
+      null,
+    ),
+    false,
+  );
+  db.prepare("DELETE FROM documents WHERE collection=?").run(`${P}logs`);
   put(`${P}characters`, "hero", { name: "Hero" }, ME);
   put(`${P}characters`, "other", { name: "Other" }, "other-member");
   put(`${P}profiles`, ME, { nick: "Tester" }, ME);
@@ -310,6 +397,10 @@ try {
     recipients: ["other-member"],
     body: "private runtime test",
   });
+  assert.deepEqual(sent.at(-1), {
+    notify: "other-member",
+    data: { unread: true },
+  });
   assert.equal(
     (await call("readMessage", { id: letter.ids[0] }, "stranger")).reason,
     "message_not_found",
@@ -343,6 +434,50 @@ try {
     counts.writes,
     22,
     "Bulk mail, charge and private ledger fit the write budget",
+  );
+  assert.equal(sent.length, 22, "One notice, one receipt, then twenty");
+  // A call that rolls back sends nothing and queues no deletions.
+  const before = { sent: sent.length, released: released.length };
+  failingDelete = "rollback-outfit";
+  put(`${P}wardrobe`, "rollback-outfit", {
+    owner: ME,
+    character: "hero",
+    name: "Rollback",
+    imageId: "0190f1a2-0000-7000-8000-00000000abcd",
+  });
+  put(`${P}media_assets`, "0190f1a2-0000-7000-8000-00000000abcd", {
+    owner: ME,
+    url: "https://example.com/rollback.png",
+    refs: [`${P}wardrobe/rollback-outfit`],
+    cleanup: false,
+    status: "active",
+  });
+  await assert.rejects(call("removeOutfit", { id: "rollback-outfit" }));
+  failingDelete = null;
+  assert.deepEqual({ sent: sent.length, released: released.length }, before);
+  assert.ok(get(`${P}media_assets`, "0190f1a2-0000-7000-8000-00000000abcd"));
+  // ctx.fail rolls back with a reason the page maps to its own text.
+  await assert.rejects(
+    call("outfit", {
+      character: "hero",
+      name: "Stolen",
+      image: "https://example.com/other.png",
+      imageId: "0190f1a2-0000-7000-8000-00000000abcd",
+    }),
+    (error) =>
+      error.code === "CONFLICT" &&
+      error.details?.reason === "media_unavailable",
+  );
+  // Gate `where` predicates reach the query; deleted rows stay out.
+  assert.deepEqual(
+    (
+      await call("communityRead", {
+        collection: `${P}characters`,
+        operation: "list",
+        options: { where: { eq: ["name", "Hero"] } },
+      })
+    ).documents.map((row) => row.id),
+    ["hero"],
   );
   // Legacy admission is inert; production rejects unapproved callers before QuickJS.
   put(`${P}members`, ME, { status: "pending", role: "member" });
@@ -497,8 +632,11 @@ try {
     assert.ok(counts.writes <= MAX_WRITES);
   }
   assert.equal(mediaDone, true);
-  for (let n = 1; n <= 11; n++)
-    assert.equal(get(`${P}media_assets`, assetId(n)).data.cleanup, true);
+  // Each released upload is dropped and queued for deletion with its commit.
+  for (let n = 1; n <= 11; n++) {
+    assert.equal(get(`${P}media_assets`, assetId(n)), null);
+    assert.ok(released.includes(assetId(n)));
+  }
   for (let i = 0; i < 10; i++)
     put(`${P}content`, `content-${i}`, {
       name: "Guide",

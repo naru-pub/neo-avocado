@@ -1,4 +1,10 @@
-import { MEDIA, mediaId, imageUrl, failure } from "../../modules/shared.js";
+import {
+  MEDIA,
+  mediaId,
+  imageUrl,
+  failure,
+  dropMedia,
+} from "../../modules/shared.js";
 
 export const readOnly = ["mediaCleanup"];
 
@@ -21,44 +27,33 @@ export async function registerMedia(ctx, { id, url } = {}) {
   return { ok: true };
 }
 
-export async function mediaCleanup(ctx) {
+/**
+ * The caller's uploads that nothing references and whose grace period has
+ * passed: uploads never attached to a post, and rows left by the old
+ * claim/complete flow. Released references are deleted when they are released.
+ * (A `where` on cleanupAfter would miss legacy rows without the field.)
+ */
+async function cleanable(ctx, size) {
   const page = await ctx.list(MEDIA, {
     filter: { owner: ctx.member.id, cleanup: true },
-    size: 5,
+    size,
   });
   return {
-    ok: true,
     files: page.documents.filter(
-      (file) => (file.data.cleanupAfter ?? 0) <= ctx.now,
+      (file) =>
+        !file.data.refs.length && (file.data.cleanupAfter ?? 0) <= ctx.now,
     ),
     nextCursor: page.nextCursor,
   };
 }
 
-export async function claimMedia(ctx, { id } = {}) {
-  if (mediaId(id)) id = id.toLowerCase();
-  const asset = mediaId(id) ? await ctx.get(MEDIA, id) : null;
-  if (!asset || asset.data.owner !== ctx.member.id) return failure("not_owned");
-  if (asset.data.refs.length || (asset.data.cleanupAfter ?? 0) > ctx.now)
-    return failure("media_in_use");
-  await ctx.set(MEDIA, id, {
-    ...asset.data,
-    status: "deleting",
-    cleanup: true,
-  });
-  return { ok: true };
+export async function mediaCleanup(ctx) {
+  return { ok: true, ...(await cleanable(ctx, 5)) };
 }
 
-export async function completeMedia(ctx, { id } = {}) {
-  if (mediaId(id)) id = id.toLowerCase();
-  const asset = mediaId(id) ? await ctx.get(MEDIA, id) : null;
-  if (!asset) return { ok: true };
-  if (
-    asset.data.owner !== ctx.member.id ||
-    asset.data.status !== "deleting" ||
-    asset.data.refs.length
-  )
-    return failure("not_owned");
-  await ctx.delete(MEDIA, id);
-  return { ok: true };
+/** Deletes those uploads with their ledger rows, in one transaction. */
+export async function cleanupMedia(ctx) {
+  const { files, nextCursor } = await cleanable(ctx, 10);
+  for (const file of files) await dropMedia(ctx, file.id);
+  return { ok: true, completed: files.length, remaining: Boolean(nextCursor) };
 }

@@ -43,6 +43,20 @@ export const mediaId = (value) =>
   typeof value === "string" &&
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
+/** Abort the call, rolling back its writes, with a reason the page maps to text. */
+export function fail(ctx, code, reason, message = reason) {
+  ctx.fail(code, message, { reason });
+}
+
+/** Forget the ledger row and queue the upload's deletion in the same commit. */
+export async function dropMedia(ctx, id) {
+  await ctx.delete(MEDIA, id);
+  await ctx.media.delete(id);
+}
+
+/** Writes releaseMedia may make: a ledger update, or a drop (row + upload). */
+export const RELEASE_WRITES = 2;
+
 export async function releaseMedia(ctx, collection, document) {
   const id = document?.data.imageId;
   const asset = mediaId(id) ? await ctx.get(MEDIA, id) : null;
@@ -50,13 +64,8 @@ export async function releaseMedia(ctx, collection, document) {
   const refs = asset.data.refs.filter(
     (key) => key !== `${collection}/${document.id}`,
   );
-  await ctx.set(MEDIA, id, {
-    ...asset.data,
-    refs,
-    status: refs.length ? "active" : "pending",
-    cleanup: refs.length === 0,
-    cleanupAfter: ctx.now,
-  });
+  if (!refs.length) return await dropMedia(ctx, id);
+  await ctx.set(MEDIA, id, { ...asset.data, refs, status: "active" });
 }
 
 export async function saveImage(
@@ -82,7 +91,12 @@ export async function saveImage(
       asset.data.status === "deleting" ||
       (!preserving && asset.data.owner !== ctx.member.id)
     )
-      throw new Error("Media is unavailable or not owned.");
+      fail(
+        ctx,
+        "CONFLICT",
+        "media_unavailable",
+        "Media is unavailable or not owned.",
+      );
     data.imageId = imageId;
   } else delete data.imageId;
   const document = id
@@ -95,7 +109,12 @@ export async function saveImage(
     const key = `${collection}/${document.id}`;
     if (!asset.data.refs.includes(key)) {
       if (asset.data.refs.length >= 50)
-        throw new Error("Media reference limit reached.");
+        fail(
+          ctx,
+          "INVALID_REQUEST",
+          "media_ref_limit",
+          "Media reference limit reached.",
+        );
       await ctx.set(MEDIA, imageId, {
         ...asset.data,
         refs: [...asset.data.refs, key],
@@ -202,7 +221,9 @@ export async function deleteCommunityDocument(ctx, collection, kind, row) {
     await ctx.set(collection, row.id, { ...row.data, deleted: true });
   let unfinished = false;
   let remaining = 10;
-  let mediaChanged = Boolean(row.data.imageId);
+  // 25 writes, less the marker, the parent's own release and delete, and the
+  // character's state and profile fix-ups: what the children may spend.
+  let writes = 25 - 2 - RELEASE_WRITES - 2;
   const remove = async (target, filter, detach = false) => {
     if (remaining === 0) {
       unfinished = true;
@@ -214,11 +235,18 @@ export async function deleteCommunityDocument(ctx, collection, kind, row) {
     });
     unfinished ||= Boolean(page.nextCursor);
     for (const child of page.documents) {
+      const cost = detach
+        ? 1
+        : 1 + (mediaId(child.data.imageId) ? RELEASE_WRITES : 0);
+      if (cost > writes) {
+        unfinished = true;
+        return;
+      }
       remaining--;
+      writes -= cost;
       if (detach)
         await ctx.set(target, child.id, { ...child.data, character: null });
       else {
-        if (child.data.imageId) mediaChanged = true;
         await releaseMedia(ctx, target, child);
         await ctx.delete(target, child.id);
       }
@@ -245,7 +273,7 @@ export async function deleteCommunityDocument(ctx, collection, kind, row) {
     await releaseMedia(ctx, collection, row);
     await ctx.delete(collection, row.id);
   }
-  return { ok: true, done: !unfinished, mediaCleanup: mediaChanged };
+  return { ok: true, done: !unfinished };
 }
 
 export async function record(ctx, kind, details, owner = ctx.member.id) {

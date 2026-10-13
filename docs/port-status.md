@@ -31,7 +31,7 @@ reproduce the existing demo. SDK additions require the owner's approval.
 | Shop, attendance and gacha                        | `shop`, `extend/item.lib.php`                               | Member flows, private history, exchange costs and owner catalog/gacha/recipe forms implemented                                                                                                          |
 | Inventory use, sale, gift and crafting            | `inventory`, `adm/recipi*`                                  | Use eligibility, sale/gift/craft, character linking, owner inventory grants and validated catalog effects implemented                                                                                   |
 | Quests                                            | `adm/quest*` and their callers                              | Reference admin fields implemented; scheduled member display and category pagination implemented; reference has no claim/reward endpoint                                                                |
-| Private messages and notifications                | `bbs/memo*`, `ajax/*call*`                                  | Private inbox/sent/read/reply/delete, receive preference, bulk costs and live unread notices implemented; board notifications pending                                                                   |
+| Private messages and notifications                | `bbs/memo*`, `ajax/*call*`                                  | Private inbox/sent/read/reply/delete, receive preference, bulk costs, live unread notices and new-post notices implemented; comment notifications pending                                               |
 | Community administration                          | `adm/admin.menu*.php`                                       | Owner member status/role controls and existing catalog/economy controls implemented; broader board moderation pending; owner cleanup recovery implemented                                               |
 | Navigation, content, themes and emoticons         | `adm/menu*`, `adm/content*`, `adm/design*`, `adm/emoticon*` | Emoticon owner CRUD, comment catalogue/picker and safe keyword rendering implemented; managed desktop/mobile content implemented; navigation and themes pending                                         |
 | Existing data import                              | SQL schema and uploaded files                               | Pending: explicit ID/member mapping and media handling; never copy PHP credentials                                                                                                                      |
@@ -107,10 +107,11 @@ reason; passing the current demo tests is not completion of the port.
 - QuickJS/SQLite tests verify third-party denial, recipient-only receipts and
   maximum-size twenty-recipient delivery using 22 writes. Chrome sends and
   reads between two synthetic members, replies, deletes, treats script-like
-  text as plain text, and detects a later message through live polling.
-- Original ajax/memo_call.php polls every five seconds; the port matches that
-  interval while visible, skipping open mailboxes and existing unread notices.
-  SDK call/monthly limits still apply. Comment/board alerts are not complete.
+  text as plain text, and shows a later message's live notice.
+- Original ajax/memo_call.php polls every five seconds. The port no longer
+  polls: `sendMessage` notifies recipients over `member.live()` (SDK 1.1.0)
+  and the page rereads the unread status only when the connection (re)opens.
+  Comment alerts are not complete; see "SDK 1.1.0 feature adoption".
 
 - Member approval/bans use protected member records. All public app functions
   now gate membership, and community data goes through a collection whitelist
@@ -227,3 +228,75 @@ in `_naru/functions/`, sharing `_naru/modules/shared.js`. Frontend calls use the
 `function-references.js` registry. Generated bundles and the build step were
 removed. Unit, actual QuickJS/SQLite and Chrome smoke checks pass. This requires
 the updated Naru Worker and control plane before installing the new site layout.
+
+## SDK 1.1.0 feature adoption
+
+Uses the 1.1.0 features that remove earlier workarounds. Nothing has been deployed.
+
+- **Live notices replace the poll.** The five-second `messageStatus` interval is
+  gone. `sendMessage` calls `ctx.notify(recipient, { unread: true })`, and a
+  read receipt notifies the reader's other tabs with the new status. The page
+  opens one `member.live({ topics: ["neo_avocado_logs"] })` after the profile
+  loads. It rereads `messageStatus` only when the connection opens or reopens,
+  since nothing is replayed, and closes on sign-out, ban or admission views.
+  An idle connection costs nothing; opening one counts as one request.
+- **New-post broadcasts.** `communityData` broadcasts `{ board, id }` on
+  `neo_avocado_logs` after adding a post, but only for non-secret posts on boards
+  a base level-2 member could both list and read. Broadcasts reach visitors
+  too, so nothing else is sent. The logs tab shows "새 글" for the current board
+  and reloads when clicked. The author's own posts are ignored. Edits,
+  comments and restricted boards are not announced.
+- **Rules share the functions' helpers.** `_naru/rules/community-board.js`
+  imports `communityAccess`, `boardOf`, `boardAllowed`, `logReadable` and
+  `author` from `_naru/modules/shared.js` instead of copying them. The
+  rule's own write validators stay local because their limits differ from the
+  gate's, as before. The semantics are unchanged: the Naru example's
+  scope/write cases are reproduced in `tests/neo-avocado-functions.test.mjs`,
+  and `tests/runtime.mjs` loads the rule through Naru's `ruleEntry` with its
+  `modules/shared.js` import. **Divergence:** Naru's
+  `docs/examples/community-board-rules.js`, which `naru/edge/src/functions.test.ts`
+  tests, is still the self-contained copy. It no longer matches this file
+  byte for byte. It needs updating in the Naru repository, which this change
+  does not edit.
+- **ctx.fail.** No function returned `{ ok: false }` after writing: every such
+  return precedes its writes, so those stay ordinary returns. Media checks in
+  `saveImage` now call `ctx.fail` with `details.reason` (`media_unavailable`,
+  `media_ref_limit`) instead of throwing plain errors. Those calls already rolled
+  back; now the page shows a specific message. `app.js` maps `error.details.reason`
+  through `REASONS` in `run()` and the editor, and a unique-field conflict
+  (`details.unique === "nick"`) to "이미 쓰는 닉네임입니다".
+- **`where` predicates.** The `communityRead` gate accepts `options.where` only
+  for collections it returns unredacted: profiles, characters, titles, couples,
+  relations, wardrobe, recipes and emoticons. A predicate on redacted logs
+  could probe locked secret bodies, so logs, inventory and other collections
+  refuse it. The gate ANDs `{ ne: ["deleted", true] }` so a predicate never
+  reaches soft-deleted rows. Fetch-all-then-filter loops now query a character's
+  titles (`in` on ID), couples (`any` first/second), the member's own characters,
+  visible recipes and message recipients. Two lists stay full reads: the gift
+  dialog's character list, which is refiltered as the recipient changes, and the
+  relation target list.
+- **Transactional media deletion.** When a document releases the last
+  reference to a managed upload, `releaseMedia` deletes the ledger row and calls
+  `ctx.media.delete` in the same transaction. A rolled-back call deletes
+  nothing. The browser's claim → `member.media.delete` → complete sequence and
+  the `claimMedia`/`completeMedia` exports are gone. Abandoned uploads (registered,
+  never attached, past the ten-minute grace) and rows the old flow left `pending`
+  or `deleting` are handled by one `cleanupMedia` call. A read-only `mediaCleanup`
+  check runs first, so an ordinary visit spends no write call. The log/character
+  cascade now budgets writes rather than only child count, since a release
+  can cost two writes. Owner recovery (`retryOwnerMedia`) is unchanged.
+- **Unique nicknames (deploy step, not assumed).** The app handles the
+  conflict, but the constraint needs the collection setting `unique: ["nick"]` on
+  `neo_avocado_profiles` (database panel or PATCH). Naru refuses it while two
+  profiles share a nickname, so resolve duplicates first. Matching is exact:
+  "Bob" and "bob" differ. See membership-cutover.md.
+- Verification: 84 unit/page tests, actual-runner QuickJS/SQLite checks (rule
+  import, notices after commit, none after rollback, `ctx.fail` details, gate
+  `where`, media drops in the 25-write cascade) and the Chrome smoke with the
+  real 1.1.0 SDK and a mocked live WebSocket pass. Chrome peaked at 10/30
+  mutations and 79/120 reads. The smoke fixture now classifies read-only calls
+  by each module's `readOnly`; it had been counting them as mutations since the
+  `readOnly` change.
+- Left deliberately: nothing periodic (no scheduled jobs). No comment or reply
+  notifications, which would need a per-member opt-out. No broadcast payload
+  beyond board and ID. Owner-side media recovery keeps its batch/consent path.

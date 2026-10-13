@@ -54,5 +54,5 @@ export async function removeOutfit(ctx, { id } = {}) {
   if (character.data.outfit === clothing.id) return failure("outfit_in_use");
   await releaseMedia(ctx, WARDROBE, clothing);
   await ctx.delete(WARDROBE, clothing.id);
-  return { ok: true, mediaCleanup: Boolean(clothing.data.imageId) };
+  return { ok: true };
 }

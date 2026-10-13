@@ -67,6 +67,9 @@ const REASONS = {
   registration_closed: "현재 신규 가입을 받지 않습니다.",
   document_not_found: "자료를 찾을 수 없습니다.",
   access_denied: "권한이 없습니다.",
+  media_unavailable: "그림 파일을 쓸 수 없습니다. 다시 올려 주세요.",
+  media_ref_limit: "이 그림을 더 많은 곳에 쓸 수 없습니다.",
+  nick_taken: "이미 쓰는 닉네임입니다.",
 };
 const LOG_PAGE = 10;
 const CHARACTER_PAGE = 20;
@@ -96,6 +99,9 @@ const state = {
   emoticons: null,
   boards: [],
   board: "default",
+  live: null,
+  newPost: null,
+  ownPosts: new Set(),
 };
 
 const MESSAGES = {
@@ -106,6 +112,14 @@ const MESSAGES = {
   UNAVAILABLE: "나루에 연결하지 못했습니다. 잠시 뒤에 다시 해 주세요.",
   CONFLICT: "다른 곳에서 수정되었습니다. 새로고침 후 다시 수정해 주세요.",
 };
+/** A function's ctx.fail reason, or a unique field it collided on. */
+function reasonOf(error) {
+  if (error?.details?.unique === "nick") return REASONS.nick_taken;
+  const reason = error?.details?.reason;
+  return typeof reason === "string" && Object.hasOwn(REASONS, reason)
+    ? REASONS[reason]
+    : undefined;
+}
 function say(message) {
   $("status").textContent = message;
 }
@@ -159,10 +173,13 @@ async function run(action) {
         }
       }
     }
-    say(MESSAGES[error?.code] ?? "요청을 처리하지 못했습니다.");
+    say(
+      reasonOf(error) ?? MESSAGES[error?.code] ?? "요청을 처리하지 못했습니다.",
+    );
   }
 }
 function clearPrivateViews() {
+  stopLive();
   state.emoticons = null;
   for (const id of [
     "logs",
@@ -206,6 +223,16 @@ export function diceOf(id) {
 const mine = (document) =>
   state.member !== null &&
   (document.createdBy ?? document.data.owner) === state.member.id;
+/** Narrows a read to the member's own characters; `mine` still decides. */
+const ownCharacters = async () =>
+  (
+    await allDocuments(COLLECTION.characters, undefined, {
+      any: [
+        { eq: ["owner", state.member.id] },
+        { eq: [{ metadata: "createdBy" }, state.member.id] },
+      ],
+    })
+  ).filter(mine);
 
 /** Resolve the distinct authors for a page in bounded batches before rendering. */
 async function preloadNicks(rows) {
@@ -283,7 +310,6 @@ function communityCollection(collection) {
         { code },
       );
     }
-    if (result.mediaCleanup) await recoverMedia();
     return result;
   };
   return {
@@ -413,7 +439,10 @@ function edit(title, fields, save) {
       $("editor").close();
     } catch (error) {
       $("editorStatus").textContent =
-        MESSAGES[error?.code] ?? error.message ?? "저장하지 못했습니다.";
+        reasonOf(error) ??
+        MESSAGES[error?.code] ??
+        error.message ??
+        "저장하지 못했습니다.";
     } finally {
       button.disabled = false;
     }
@@ -475,9 +504,62 @@ async function start() {
     state.nicks.set(state.member.id, Promise.resolve(profile.data.nick));
     await loadBoards();
     await loadLogs();
-    const notice = await callRule("messageStatus");
-    $("tabMessages").textContent = notice.unread ? "쪽지 · 새 쪽지" : "쪽지";
+    listen();
   }
+}
+
+/* ------------------------------------------------------------- live --- */
+
+// The topic communityData announces new, publicly listable posts on.
+const POSTS_TOPIC = COLLECTION.logs;
+function showUnread(unread) {
+  $("tabMessages").textContent = unread ? "쪽지 · 새 쪽지" : "쪽지";
+}
+function showNewPost(id) {
+  state.newPost = id;
+  $("tabLogs").textContent = id ? "로그 · 새 글" : "로그";
+}
+async function refreshUnread() {
+  const member = state.member;
+  const notice = await callRule("messageStatus");
+  if (state.member === member) showUnread(notice.unread);
+}
+/**
+ * Instead of polling, functions notify the member of new messages and
+ * broadcast new posts. Nothing is replayed, so the status is read again
+ * whenever the connection opens or reopens.
+ */
+function listen() {
+  stopLive();
+  const member = state.member;
+  if (!member?.live) return run(refreshUnread);
+  state.live = member.live({
+    topics: [POSTS_TOPIC],
+    onMessage(message) {
+      if (state.member !== member) return;
+      if (
+        message.type === "notice" &&
+        typeof message.data?.unread === "boolean"
+      )
+        showUnread(message.data.unread);
+      if (
+        message.type === "topic" &&
+        message.topic === POSTS_TOPIC &&
+        message.data?.board === state.board &&
+        typeof message.data.id === "string" &&
+        !state.ownPosts.has(message.data.id)
+      )
+        showNewPost(message.data.id);
+    },
+    onStatus(status) {
+      if (status === "open" && state.member === member && state.profile)
+        run(refreshUnread);
+    },
+  });
+}
+function stopLive() {
+  state.live?.close();
+  state.live = null;
 }
 
 /* ------------------------------------------------------------- logs --- */
@@ -490,7 +572,10 @@ async function loadLogs({ more = false } = {}) {
     after: more ? state.logCursor : null,
   });
   await preloadNicks(page.documents);
-  if (!more) $("logs").replaceChildren();
+  if (!more) {
+    $("logs").replaceChildren();
+    showNewPost(null);
+  }
   for (const log of page.documents) $("logs").append(await logItem(log));
   state.logCursor = page.nextCursor;
   $("moreLogs").hidden = !page.nextCursor;
@@ -810,7 +895,6 @@ async function callRule(name, args) {
   if (!result?.ok) {
     throw new Error(REASONS[result?.reason] ?? "요청을 처리하지 못했습니다.");
   }
-  if (result.mediaCleanup) await recoverMedia();
   return result;
 }
 
@@ -860,9 +944,15 @@ function wireCharacterDetails(item, character) {
           await refresh();
         },
       );
-    const titles = (await allDocuments(COLLECTION.titles)).filter((row) =>
-      status.state.titles?.includes(row.id),
-    );
+    // The gate reads only the character's titles (at most 100 per query).
+    const owned = [...new Set(status.state.titles ?? [])];
+    const titles = [];
+    for (let i = 0; i < owned.length; i += 100)
+      titles.push(
+        ...(await allDocuments(COLLECTION.titles, undefined, {
+          in: [{ metadata: "id" }, owned.slice(i, i + 100)],
+        })),
+      );
     const titleChoice = item.querySelector(".title-choice");
     item.querySelector(".titles").replaceChildren();
     titleChoice.replaceChildren();
@@ -896,10 +986,9 @@ function wireCharacterDetails(item, character) {
         });
         await refresh();
       });
-    const couples = (await allDocuments(COLLECTION.couples)).filter(
-      (row) =>
-        row.data.first === character.id || row.data.second === character.id,
-    );
+    const couples = await allDocuments(COLLECTION.couples, undefined, {
+      any: [{ eq: ["first", character.id] }, { eq: ["second", character.id] }],
+    });
     item.querySelector(".couples").replaceChildren();
     for (const couple of couples.sort(
       (a, b) => (a.data.order ?? 0) - (b.data.order ?? 0),
@@ -1132,9 +1221,7 @@ async function loadBalance() {
 }
 
 async function loadShop() {
-  state.ownCharacters = (await allDocuments(COLLECTION.characters)).filter(
-    mine,
-  );
+  state.ownCharacters = await ownCharacters();
   const selector = $("inventoryCharacter");
   selector.replaceChildren();
   for (const [value, label] of [
@@ -1449,9 +1536,8 @@ async function useInventory(owned) {
     requirements.exp ||
     requirements.title
   ) {
-    characters = (await allDocuments(COLLECTION.characters)).filter(
-      (row) =>
-        mine(row) && (!owned.data.character || owned.data.character === row.id),
+    characters = (await ownCharacters()).filter(
+      (row) => !owned.data.character || owned.data.character === row.id,
     );
     if (!characters.length) return say("사용할 내 캐릭터가 없습니다.");
     fields.push({
@@ -1531,7 +1617,7 @@ async function useInventory(owned) {
   }
 }
 
-async function allDocuments(collection, filter) {
+async function allDocuments(collection, filter, where) {
   const documents = [];
   let after = null;
   do {
@@ -1539,6 +1625,7 @@ async function allDocuments(collection, filter) {
       size: 100,
       after,
       ...(filter ? { filter } : {}),
+      ...(where ? { where } : {}),
     });
     documents.push(...page.documents);
     after = page.nextCursor;
@@ -1547,9 +1634,9 @@ async function allDocuments(collection, filter) {
 }
 
 async function loadRecipes() {
-  state.recipes = (await allDocuments(COLLECTION.recipes)).filter(
-    (row) => !row.data.hidden,
-  );
+  state.recipes = await allDocuments(COLLECTION.recipes, undefined, {
+    ne: ["hidden", true],
+  });
   $("recipe").replaceChildren();
   for (const row of state.recipes) {
     const option = document.createElement("option");
@@ -1649,9 +1736,14 @@ $("profileForm").onsubmit = (event) => {
     show(profile);
     await loadBoards();
     await loadLogs();
+    listen();
   });
 };
-$("tabLogs").onclick = () => showTab("logs");
+$("tabLogs").onclick = () =>
+  run(async () => {
+    showTab("logs");
+    if (state.newPost) await loadLogs();
+  });
 $("tabCharacters").onclick = () =>
   run(async () => {
     showTab("characters");
@@ -1689,39 +1781,15 @@ $("messageForm").onsubmit = async (event) => {
   button.disabled = false;
 };
 
-let checkingMessages = false;
-setInterval(() => {
-  if (
-    checkingMessages ||
-    !state.member ||
-    !state.profile ||
-    state.admission !== "approved" ||
-    document.hidden ||
-    !$("messagesView").hidden ||
-    $("tabMessages").textContent.includes("새 쪽지")
-  )
-    return;
-  const member = state.member;
-  checkingMessages = true;
-  run(async () => {
-    try {
-      const notice = await callRule("messageStatus");
-      if (state.member === member)
-        $("tabMessages").textContent = notice.unread
-          ? "쪽지 · 새 쪽지"
-          : "쪽지";
-    } finally {
-      checkingMessages = false;
-    }
-  });
-}, 5000);
-
 async function loadMessageRecipients() {
-  const profiles = await allDocuments(COLLECTION.profiles);
+  const profiles = await allDocuments(COLLECTION.profiles, undefined, {
+    all: [
+      { ne: [{ metadata: "id" }, state.member.id] },
+      { ne: ["acceptMessages", false] },
+    ],
+  });
   $("messageRecipients").replaceChildren();
-  for (const profile of profiles.filter(
-    (row) => row.id !== state.member.id && row.data.acceptMessages !== false,
-  )) {
+  for (const profile of profiles) {
     const option = document.createElement("option");
     option.value = profile.id;
     option.textContent = profile.data.nick;
@@ -1743,7 +1811,7 @@ async function loadMailbox({ more = false } = {}) {
     after: more ? state.messageCursor : null,
     size: 20,
   });
-  $("tabMessages").textContent = page.unread ? "쪽지 · 새 쪽지" : "쪽지";
+  showUnread(page.unread);
   if (!more) {
     $("messages").replaceChildren();
     $("messageDetail").hidden = true;
@@ -1757,9 +1825,7 @@ async function loadMailbox({ more = false } = {}) {
       run(async () => {
         const result = await callRule("readMessage", { id: row.id });
         const message = result.document;
-        $("tabMessages").textContent = result.unread
-          ? "쪽지 · 새 쪽지"
-          : "쪽지";
+        showUnread(result.unread);
         $("messageDetail").replaceChildren();
         const heading = document.createElement("h3");
         heading.textContent = `${await nickOf(message.data.from)} → ${await nickOf(message.data.to)}`;
@@ -1844,6 +1910,8 @@ $("logForm").onsubmit = (event) => {
       category: $("logCategory").value,
       secret: $("logSecret").checked,
     });
+    state.ownPosts.add(log.id);
+    if (state.newPost === log.id) showNewPost(null);
     $("logs").prepend(await logItem(log));
     $("logForm").reset?.();
     configureBoard();

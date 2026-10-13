@@ -36,6 +36,8 @@ import {
   contentPages,
   contentPage,
 } from "../_naru/modules/index.js";
+import { scope, canWrite } from "../_naru/rules/community-board.js";
+import { matches } from "./where.mjs";
 
 const P = "neo_avocado_";
 function fakeCtx({ now = Date.parse("2030-01-01T03:00:00Z"), roll = 0 } = {}) {
@@ -45,10 +47,19 @@ function fakeCtx({ now = Date.parse("2030-01-01T03:00:00Z"), roll = 0 } = {}) {
     if (!store.has(name)) store.set(name, new Map());
     return store.get(name);
   };
+  // What ctx.notify/broadcast and ctx.media.delete sent or queued.
+  const sent = [];
+  const released = [];
   const ctx = {
     member: { id: "m-1" },
     now,
     random: () => roll,
+    notify: (member, data) => sent.push({ member, data }),
+    broadcast: (topic, data) => sent.push({ topic, data }),
+    fail: (code, message, details) => {
+      throw Object.assign(new Error(message), { code, details });
+    },
+    media: { delete: async (id) => released.push(id) },
     get: async (name, id) => {
       const data = table(name).get(id);
       return data === undefined
@@ -58,10 +69,11 @@ function fakeCtx({ now = Date.parse("2030-01-01T03:00:00Z"), roll = 0 } = {}) {
     list: async (name, options = {}) => {
       const rows = [...table(name)]
         .map(([id, data]) => ({ id, data }))
-        .filter((row) =>
-          Object.entries(options.filter ?? {}).every(
-            ([key, value]) => row.data[key] === value,
-          ),
+        .filter(
+          (row) =>
+            Object.entries(options.filter ?? {}).every(
+              ([key, value]) => row.data[key] === value,
+            ) && matches(row, options.where),
         );
       const start = Number(options.after ?? 0);
       const end = start + (options.size ?? 50);
@@ -77,7 +89,7 @@ function fakeCtx({ now = Date.parse("2030-01-01T03:00:00Z"), roll = 0 } = {}) {
     add: async (name, data) => await ctx.set(name, `added-${added++}`, data),
     delete: async (name, id) => table(name).delete(id),
   };
-  return { ctx, table };
+  return { ctx, table, sent, released };
 }
 
 test("the daily reward is once per day in Korea", async () => {
@@ -405,7 +417,7 @@ test("deletion marks durable work, hides partial cleanup and preserves purchased
 });
 
 test("private mail checks parties for listing, reading and deletion and marks only recipient reads", async () => {
-  const { ctx, table } = fakeCtx();
+  const { ctx, table, sent: live } = fakeCtx();
   for (const id of ["m-1", "m-2", "m-3"])
     table(`${P}profiles`).set(id, { nick: id });
   table(`${P}wallets`).set("m-1", { balance: 10 });
@@ -415,6 +427,7 @@ test("private mail checks parties for listing, reading and deletion and marks on
     body: "private body",
   });
   assert.equal(sent.balance, 8);
+  assert.deepEqual(live, [{ member: "m-2", data: { unread: true } }]);
   const id = sent.ids[0];
   assert.equal(
     (await mailbox(ctx, { box: "sent" })).documents[0].data.preview,
@@ -437,6 +450,10 @@ test("private mail checks parties for listing, reading and deletion and marks on
   assert.equal((await messageStatus(ctx)).unread, true);
   assert.equal((await readMessage(ctx, { id })).document.data.readAt, ctx.now);
   assert.equal((await messageStatus(ctx)).unread, false);
+  // The receipt tells the recipient's other tabs; a second read sends nothing.
+  assert.deepEqual(live.at(-1), { member: "m-2", data: { unread: false } });
+  await readMessage(ctx, { id });
+  assert.equal(live.length, 2);
   assert.equal((await removeMessage(ctx, { id })).ok, true);
   ctx.member.id = "m-1";
   assert.equal((await readMessage(ctx, { id })).reason, "message_not_found");
@@ -1358,5 +1375,192 @@ test("content read levels and publication protect both metadata and selected bod
   assert.equal(
     (await contentPage(ctx, { id: "restricted" })).page.body,
     "Private",
+  );
+});
+
+test("new posts are broadcast by board and ID only when a base member could list and read them", async () => {
+  const { ctx, table, sent } = fakeCtx();
+  table(`${P}boards`).set("staff", {
+    name: "Staff",
+    kind: "text",
+    enabled: true,
+    listLevel: 5,
+    readLevel: 5,
+    writeLevel: 2,
+    commentLevel: 2,
+    secret: "optional",
+    categories: [],
+  });
+  table(`${P}boards`).set("free", {
+    name: "Free",
+    kind: "text",
+    enabled: true,
+    secret: "optional",
+    categories: [],
+  });
+  const add = async (data) =>
+    (
+      await communityData(ctx, {
+        collection: `${P}logs`,
+        operation: "add",
+        data: { text: "hello", ...data },
+      })
+    ).document;
+  const post = await add({ board: "free" });
+  assert.deepEqual(sent, [
+    { topic: `${P}logs`, data: { board: "free", id: post.id } },
+  ]);
+  await add({ board: "free", secret: true });
+  await add({ board: "staff" });
+  await communityData(ctx, {
+    collection: `${P}logs`,
+    operation: "set",
+    id: post.id,
+    data: { ...post.data, text: "edited" },
+  });
+  assert.equal(sent.length, 1);
+});
+
+test("the gate takes where predicates only for collections it returns whole, never reaching deleted rows", async () => {
+  const { ctx, table } = fakeCtx();
+  table(`${P}characters`).set("mine", { owner: "m-1", name: "Mine" });
+  table(`${P}characters`).set("theirs", { owner: "m-2", name: "Theirs" });
+  table(`${P}characters`).set("gone", {
+    owner: "m-1",
+    name: "Gone",
+    deleted: true,
+  });
+  const list = (collection, where) =>
+    communityData(ctx, {
+      collection: `${P}${collection}`,
+      operation: "list",
+      options: { where },
+    });
+  assert.deepEqual(
+    (await list("characters", { eq: ["owner", "m-1"] })).documents.map(
+      (row) => row.id,
+    ),
+    ["mine"],
+  );
+  // Logs are redacted for locked secrets, so a predicate could probe bodies.
+  assert.equal(
+    (await list("logs", { eq: ["text", "guess"] })).reason,
+    "invalid_input",
+  );
+  assert.equal(
+    (await list("inventory", { eq: ["item", "x"] })).reason,
+    "invalid_input",
+  );
+});
+
+test("the board rule shares the gate's helpers: levels, moderators, secrets and comment parents", async () => {
+  const { ctx, table } = fakeCtx();
+  const log = {
+    id: "log",
+    createdBy: "m-1",
+    data: {
+      owner: "m-1",
+      board: "default",
+      secret: true,
+      title: "Secret",
+      category: "",
+      text: "body",
+      image: "https://example.com/a.png",
+    },
+  };
+  table(`${P}boards`).set("default", { listLevel: 3, readLevel: 2 });
+  const list = { collection: `${P}logs`, operation: "list" };
+  assert.equal(
+    await scope(ctx, { ...list, filter: { board: "default" } }),
+    false,
+  );
+  ctx.member = null;
+  assert.equal(await scope(ctx, { ...list, filter: {} }), false);
+  assert.equal(
+    await canWrite(ctx, { collection: `${P}logs`, before: null, after: log }),
+    false,
+  );
+  ctx.member = { id: "m-1" };
+  table(`${P}boards`).set("default", { listLevel: 2, readLevel: 2 });
+  assert.deepEqual(
+    await scope(ctx, { ...list, filter: { board: "default" } }),
+    {
+      all: [
+        { eq: ["board", "default"] },
+        { ne: ["deleted", true] },
+        {
+          any: [
+            { ne: ["secret", true] },
+            { eq: ["owner", "m-1"] },
+            { eq: [{ metadata: "createdBy" }, "m-1"] },
+          ],
+        },
+      ],
+    },
+  );
+  table(`${P}boards`).set("default", {
+    writeLevel: 2,
+    secret: "required",
+    kind: "image",
+  });
+  const write = (before, after, operation = "update") =>
+    canWrite(ctx, { collection: `${P}logs`, before, after, operation });
+  assert.equal(await write(null, log, "create"), true);
+  assert.equal(
+    await write(log, { ...log, data: { ...log.data, owner: "other" } }),
+    false,
+  );
+  assert.equal(
+    await write(log, { ...log, data: { ...log.data, board: "other" } }),
+    false,
+  );
+  assert.equal(
+    await write(log, { ...log, data: { ...log.data, secret: false } }),
+    false,
+  );
+  assert.equal(await write(log, null, "delete"), false);
+  assert.equal(await write({ ...log, createdBy: "other" }, log), false);
+  const other = {
+    ...log,
+    createdBy: "other",
+    data: { ...log.data, owner: "other" },
+  };
+  table(`${P}members`).set("m-1", { role: "moderator", level: 10 });
+  assert.equal(await write(other, other), true);
+  table(`${P}members`).delete("m-1");
+  // Comments need a readable parent, the board's comment level and a fixed link.
+  table(`${P}logs`).set("log", { ...log.data, owner: "other" });
+  const comments = {
+    collection: `${P}comments`,
+    operation: "list",
+    filter: { logId: "log" },
+  };
+  assert.equal(await scope(ctx, comments), false);
+  table(`${P}logs`).set("log", log.data);
+  assert.deepEqual(await scope(ctx, comments), { eq: ["logId", "log"] });
+  const comment = {
+    id: "comment",
+    createdBy: "m-1",
+    data: { owner: "m-1", logId: "log", text: "hi", dice: false },
+  };
+  const commentWrite = (after) =>
+    canWrite(ctx, {
+      collection: `${P}comments`,
+      operation: "create",
+      before: null,
+      after,
+    });
+  table(`${P}boards`).set("default", { readLevel: 2, commentLevel: 3 });
+  assert.equal(await commentWrite(comment), false);
+  table(`${P}boards`).set("default", { readLevel: 2, commentLevel: 2 });
+  assert.equal(await commentWrite(comment), true);
+  assert.equal(
+    await canWrite(ctx, {
+      collection: `${P}comments`,
+      operation: "update",
+      before: comment,
+      after: { ...comment, data: { ...comment.data, logId: "elsewhere" } },
+    }),
+    false,
   );
 });

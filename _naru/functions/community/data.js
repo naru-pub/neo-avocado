@@ -16,6 +16,18 @@ import {
 
 export const readOnly = ["communityRead"];
 
+/** Collections whose list rows the gate returns unredacted, so `where` is safe. */
+const WHERE_KINDS = [
+  "profiles",
+  "characters",
+  "titles",
+  "couples",
+  "relations",
+  "wardrobe",
+  "recipes",
+  "emoticons",
+];
+
 /** The gate's reads, declared read-only: they cannot write and use the read budget. */
 export async function communityRead(ctx, args = {}) {
   if (!["get", "getMany", "list"].includes(args?.operation))
@@ -60,6 +72,13 @@ export async function communityData(
     };
     if (["wallets", "character_state", "settings"].includes(kind))
       return failure("access_denied");
+    if (options.where !== undefined) {
+      // A predicate can probe fields this gate redacts or hides (secret log
+      // bodies, deleted rows), so it is only for collections returned whole,
+      // and never reaches deleted rows.
+      if (!WHERE_KINDS.includes(kind)) return failure("invalid_input");
+      query.where = { all: [options.where, { ne: ["deleted", true] }] };
+    }
     if (kind === "inventory")
       query.filter = { ...query.filter, owner: ctx.member.id };
     if (kind === "logs") {
@@ -266,25 +285,36 @@ export async function communityData(
     };
     if (!value.text && !value.dice) return failure("invalid_input");
   }
-  return {
-    ok: true,
-    mediaCleanup: Boolean(
-      previous?.data.imageId &&
-      (data.imageId !== undefined
-        ? data.imageId !== previous.data.imageId
-        : value.image !== previous.data.image),
-    ),
-    document: ["logs", "characters"].includes(kind)
-      ? await saveImage(
-          ctx,
-          collection,
-          previous,
-          value,
-          data,
-          operation === "add" ? undefined : id,
-        )
-      : operation === "add"
-        ? await ctx.add(collection, value)
-        : await ctx.set(collection, id, value),
-  };
+  const document = ["logs", "characters"].includes(kind)
+    ? await saveImage(
+        ctx,
+        collection,
+        previous,
+        value,
+        data,
+        operation === "add" ? undefined : id,
+      )
+    : operation === "add"
+      ? await ctx.add(collection, value)
+      : await ctx.set(collection, id, value);
+  if (kind === "logs" && operation === "add") await announcePost(ctx, document);
+  return { ok: true, document };
+}
+
+/** Topic on which new posts are announced to open pages (app.js listens). */
+const POSTS_TOPIC = `${PREFIX}logs`;
+const BASE_ACCESS = { level: 2, role: "member" };
+
+/**
+ * Broadcasts reach anyone listening, visitors included, so only a post a
+ * base-level member could list and read is announced, by board and ID only.
+ */
+async function announcePost(ctx, { id, data: log }) {
+  if (log.secret) return;
+  const board = await boardOf(ctx, log.board);
+  if (
+    boardAllowed(board, BASE_ACCESS, "list") &&
+    boardAllowed(board, BASE_ACCESS, "read")
+  )
+    ctx.broadcast(POSTS_TOPIC, { board: log.board, id });
 }

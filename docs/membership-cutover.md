@@ -14,7 +14,8 @@ workflows and live acceptance still prevent deployment readiness.
    Create application metadata keyed by the site member ID with `role: "member"`.
    Do not infer these IDs from Naru account IDs or usernames. Preapprove staff
    separately, and grant `moderator` only where intended.
-4. Publish `_naru/rules/community-board.js`. On `neo_avocado_logs` and
+4. Publish `_naru/rules/community-board.js` together with
+   `_naru/modules/shared.js`, which it imports. On `neo_avocado_logs` and
    `neo_avocado_comments`, set **read to member, write to admin, and rules to
    community-board**. The rules must be enabled before opening member reads.
    Set **both read and write to admin on all other application collections**,
@@ -24,9 +25,19 @@ workflows and live acceptance still prevent deployment readiness.
    application maintenance window. Old pages used native collection requests
    and will fail after the permission change. Naru's control plane itself does
    not need to stop. Preserve database and payment/durable records.
-6. Use an owner sign-in granting the newly added collections. Re-sign in if
+6. Optional, recommended: make nicknames unique. Resolve profiles that share a
+   `nick` (Naru refuses the setting while duplicates exist), then set
+   `unique: ["nick"]` on `neo_avocado_profiles` in the database panel or its
+   collection PATCH. Matching is exact and case-sensitive. The page already
+   shows "이미 쓰는 닉네임입니다" on the resulting `CONFLICT`. Without the
+   setting, duplicate nicknames remain allowed.
+7. Use an owner sign-in granting the newly added collections. Re-sign in if
    an older owner grant lacks them.
-7. Verify approved/pending/banned member reads, mutations, private records,
+8. Verify live notices: a message to a second test member marks their 쪽지
+   tab without a reload, and a non-secret post on a level-2 board marks other
+   members' 로그 tab. The page no longer polls. It needs the Worker release
+   with live connections (SDK 1.1.0 `_live`).
+9. Verify approved/pending/banned member reads, mutations, private records,
    moderator limits, multi-page reads, active-session bans and rate limits
    against a real authorized test site before opening the community.
 

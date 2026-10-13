@@ -293,10 +293,6 @@ export async function useItem(ctx, { inventory, character, data = {} } = {}) {
       data,
       character,
     );
-    result.mediaCleanup = Boolean(
-      target.data.imageId &&
-      target.data.imageId !== result.document.data.imageId,
-    );
   } else return failure("not_usable");
   // The original personal-item creation form always consumes its ticket.
   if (item.data.reusable !== true || effect.type === "create")

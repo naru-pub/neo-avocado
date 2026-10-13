@@ -17,16 +17,21 @@ Site functions attach/release references in the same transaction as document
 changes. Removing one of several tracked references does not delete the file.
 Replacing a managed image with an external URL releases its old reference.
 
+Releasing the last reference deletes the ledger row. The same function calls
+`ctx.media.delete(id)` (SDK 1.1.0), so the upload is queued for deletion only
+if the call commits. A rolled-back call deletes nothing, and there is no
+browser-side deletion step to interrupt.
+
 Newly registered uploads have a ten-minute grace period so a concurrent tab's
 cleanup cannot remove an image while the post-save request is being submitted.
-A released last reference becomes eligible immediately. Claiming cleanup marks
-an asset `deleting`, and normal write functions refuse to attach it again.
-
-The browser deletes a claimed file using the SDK, then completes the ledger task.
-Failure or closing the tab leaves a durable task that can be retried on the next
-approved visit or through **파일 정리 다시 시도**. Work is bounded to five assets
-per attempt so recovery stays within function budgets. Pending upload registration
-is also kept in local storage by member ID and retried on return.
+Uploads that were never attached, and rows the earlier claim/complete flow left
+`pending` or `deleting`, are removed by `cleanupMedia`: the ledger row and the
+upload together, up to ten per call, for the caller's own uploads only. The
+page first runs the read-only `mediaCleanup` check, on each approved visit and
+from **파일 정리 다시 시도**, and calls `cleanupMedia` only when there is
+something to remove. Pending upload registration is also kept in local storage by
+member ID and retried on return. Attaching an asset in the `deleting` state is
+still refused.
 
 There remains a cross-service window: storage upload can succeed before ledger
 registration reaches the server. Local storage helps recover it; if local storage
@@ -48,9 +53,9 @@ failures retain the task for review/retry. The owner can still manage legacy fil
 separately through Naru's media library.
 
 Owner cascade recovery releases ledger references in the same revision-guarded
-batch as child/parent deletion. Normal member cascades remain resumable server
-functions; child batches are reduced to ten to fit ledger changes within the
-25-write function budget. Wallets, history, purchases and retained inventory are
+batch as child/parent deletion, and leaves the files for this recovery. Normal
+member cascades remain resumable server functions. They budget writes per
+child (a release can take two) to stay within the 25-write function limit. Wallets, history, purchases and retained inventory are
 preserved. Native post/comment reads and economy operations keep their existing
 paths.
 

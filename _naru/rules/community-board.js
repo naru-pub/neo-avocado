@@ -1,57 +1,19 @@
 // Publish as _naru/rules/community-board.js and enable it on logs/comments.
-const P = "neo_avocado_";
-const LOGS = `${P}logs`;
-const COMMENTS = `${P}comments`;
-const author = (doc) => doc?.createdBy ?? doc?.data.owner;
-async function access(ctx) {
-  const data = ctx.member
-    ? (await ctx.get(`${P}members`, ctx.member.id))?.data
-    : null;
-  return {
-    id: ctx.member?.id,
-    moderator: data?.role === "moderator",
-    level:
-      Number.isInteger(data?.level) && data.level >= 1 && data.level <= 10
-        ? data.level
-        : 2,
-  };
-}
-async function board(ctx, id) {
-  return (
-    (await ctx.get(`${P}boards`, id))?.data ??
-    (id === "default"
-      ? {
-          enabled: true,
-          listLevel: 2,
-          readLevel: 2,
-          writeLevel: 2,
-          commentLevel: 2,
-          secret: "optional",
-          kind: "image",
-          categories: [],
-        }
-      : null)
-  );
-}
-function allowed(board, actor, action) {
-  if (!actor.id || !board) return false;
-  if (actor.moderator)
-    return ["read", "list"].includes(action) || board.enabled !== false;
-  return (
-    board.enabled !== false && actor.level >= (board[`${action}Level`] ?? 2)
-  );
-}
-async function readable(ctx, log, actor) {
-  return (
-    log &&
-    !log.data.deleted &&
-    allowed(await board(ctx, log.data.board ?? "default"), actor, "read") &&
-    (!log.data.secret || author(log) === actor.id || actor.moderator)
-  );
-}
+// Member levels, roles, boards and secret visibility come from the helpers the
+// site functions use, so native reads and the function gate cannot drift.
+import {
+  PREFIX,
+  author,
+  boardOf,
+  boardAllowed,
+  communityAccess,
+  logReadable,
+} from "../modules/shared.js";
+const LOGS = `${PREFIX}logs`;
+const COMMENTS = `${PREFIX}comments`;
 export async function scope(ctx, { collection, operation, id, filter }) {
-  const actor = await access(ctx);
-  if (!actor.id) return false;
+  if (!ctx.member) return false;
+  const actor = await communityAccess(ctx);
   if (collection === COMMENTS) {
     const logId =
       operation === "get"
@@ -59,7 +21,7 @@ export async function scope(ctx, { collection, operation, id, filter }) {
         : filter.logId;
     if (
       typeof logId !== "string" ||
-      !(await readable(ctx, await ctx.get(LOGS, logId), actor))
+      !(await logReadable(ctx, await ctx.get(LOGS, logId), actor))
     )
       return false;
     return { eq: ["logId", logId] };
@@ -70,24 +32,24 @@ export async function scope(ctx, { collection, operation, id, filter }) {
       ? ((await ctx.get(LOGS, id))?.data.board ?? "default")
       : (filter.board ?? "default");
   if (typeof boardId !== "string") return false;
-  const target = await board(ctx, boardId);
+  const target = await boardOf(ctx, boardId);
   // Lists return complete documents, so listing must also permit body reads.
   if (
-    !allowed(target, actor, "read") ||
-    (operation === "list" && !allowed(target, actor, "list"))
+    !boardAllowed(target, actor, "read") ||
+    (operation === "list" && !boardAllowed(target, actor, "list"))
   )
     return false;
   return {
     all: [
       { eq: ["board", boardId] },
       { ne: ["deleted", true] },
-      actor.moderator
+      actor.role === "moderator"
         ? true
         : {
             any: [
               { ne: ["secret", true] },
-              { eq: ["owner", actor.id] },
-              { eq: [{ metadata: "createdBy" }, actor.id] },
+              { eq: ["owner", ctx.member.id] },
+              { eq: [{ metadata: "createdBy" }, ctx.member.id] },
             ],
           },
     ],
@@ -100,16 +62,17 @@ const image = (value) =>
     value.length <= 2048 &&
     /^https?:\/\/[^\s]+$/i.test(value));
 export async function canWrite(ctx, { collection, before, after, operation }) {
-  const actor = await access(ctx);
-  if (!actor.id || ![LOGS, COMMENTS].includes(collection)) return false;
+  if (!ctx.member || ![LOGS, COMMENTS].includes(collection)) return false;
+  const actor = await communityAccess(ctx);
+  const moderator = actor.role === "moderator";
   if (
     before &&
-    (before.data.deleted || (author(before) !== actor.id && !actor.moderator))
+    (before.data.deleted || (author(before) !== ctx.member.id && !moderator))
   )
     return false;
   if (
     after &&
-    (after.data.owner !== (before ? author(before) : actor.id) ||
+    (after.data.owner !== (before ? author(before) : ctx.member.id) ||
       (before && after.id !== before.id))
   )
     return false;
@@ -119,8 +82,12 @@ export async function canWrite(ctx, { collection, before, after, operation }) {
       return false;
     const log = await ctx.get(LOGS, logId);
     if (
-      !(await readable(ctx, log, actor)) ||
-      !allowed(await board(ctx, log.data.board ?? "default"), actor, "comment")
+      !(await logReadable(ctx, log, actor)) ||
+      !boardAllowed(
+        await boardOf(ctx, log.data.board ?? "default"),
+        actor,
+        "comment",
+      )
     )
       return false;
     if (!after) return operation === "delete";
@@ -133,8 +100,8 @@ export async function canWrite(ctx, { collection, before, after, operation }) {
   const boardId = before?.data.board ?? after?.data.board;
   if (typeof boardId !== "string" || (after && after.data.board !== boardId))
     return false;
-  const target = await board(ctx, boardId);
-  if (!allowed(target, actor, "write")) return false;
+  const target = await boardOf(ctx, boardId);
+  if (!boardAllowed(target, actor, "write")) return false;
   // Log deletion stays in a transactional function because it has child cleanup.
   if (!after) return false;
   const data = after.data;
@@ -142,19 +109,19 @@ export async function canWrite(ctx, { collection, before, after, operation }) {
     return false;
   if (
     typeof data.secret !== "boolean" ||
-    (target.secret === "required" && !data.secret) ||
-    (target.secret === "off" && data.secret && !before?.data.secret)
+    (target.data.secret === "required" && !data.secret) ||
+    (target.data.secret === "off" && data.secret && !before?.data.secret)
   )
     return false;
   if (
     !text(data.title, 120) ||
     !text(data.category, 40) ||
-    (data.category && !(target.categories ?? []).includes(data.category))
+    (data.category && !(target.data.categories ?? []).includes(data.category))
   )
     return false;
   if (!text(data.text, 2000) || !image(data.image)) return false;
   return (
-    (target.kind !== "image" || Boolean(data.image)) &&
+    (target.data.kind !== "image" || Boolean(data.image)) &&
     (Boolean(data.image) || Boolean(data.text.trim()))
   );
 }

@@ -107,10 +107,11 @@ reason; passing the current demo tests is not completion of the port.
 - QuickJS/SQLite tests verify third-party denial, recipient-only receipts and
   maximum-size twenty-recipient delivery using 22 writes. Chrome sends and
   reads between two synthetic members, replies, deletes, treats script-like
-  text as plain text, and detects a later message through live polling.
-- Original ajax/memo_call.php polls every five seconds; the port matches that
-  interval while visible, skipping open mailboxes and existing unread notices.
-  SDK call/monthly limits still apply. Comment/board alerts are not complete.
+  text as plain text, and shows a later message's live notice.
+- Original ajax/memo_call.php polls every five seconds. The port no longer
+  polls: `sendMessage` notifies recipients over `member.live()` (SDK 1.1.0)
+  and the page rereads the unread status only when the connection (re)opens.
+  Comment alerts are not complete; see "SDK 1.1.0 feature adoption".
 
 - Member approval/bans use protected member records. All public app functions
   now gate membership, and community data goes through a collection whitelist

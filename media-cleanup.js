@@ -1,24 +1,19 @@
 import { functionReference } from "./function-references.js";
 const ASSETS = "neo_avocado_media_assets";
 
-/** Retry only assets atomically claimed as unreferenced by the server. */
+/**
+ * Abandoned uploads (registered, never attached) are deleted by the server in
+ * one transaction with their ledger rows; a cheap read-only check comes first
+ * so an ordinary visit spends no write call.
+ */
 export async function retryMemberMedia(member) {
   const page = await member.call(functionReference("mediaCleanup"));
   if (!page.ok) throw new Error("미디어 정리 목록을 읽지 못했습니다.");
-  let completed = 0;
-  for (const file of page.files) {
-    const claim = await member.call(functionReference("claimMedia"), {
-      id: file.id,
-    });
-    if (!claim.ok) continue;
-    await member.media.delete(file.id);
-    const done = await member.call(functionReference("completeMedia"), {
-      id: file.id,
-    });
-    if (!done.ok) throw new Error("미디어 정리 기록을 저장하지 못했습니다.");
-    completed++;
-  }
-  return { completed, remaining: Boolean(page.nextCursor) };
+  if (!page.files.length)
+    return { completed: 0, remaining: Boolean(page.nextCursor) };
+  const done = await member.call(functionReference("cleanupMedia"));
+  if (!done.ok) throw new Error("미디어를 정리하지 못했습니다.");
+  return { completed: done.completed, remaining: done.remaining };
 }
 
 export async function retryOwnerMedia(owner, id) {

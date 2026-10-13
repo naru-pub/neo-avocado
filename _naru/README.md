@@ -15,3 +15,9 @@ Deploy the entire site together through GitHub or a template install. If editing
 individual files, save shared dependencies first. Naru validates and activates a
 revision after file changes; an invalid import leaves the prior revision running.
 This requires the Naru Worker and control plane with native import support.
+
+`rules/community-board.js` is a collection rule, not a callable function. It
+imports `modules/shared.js` for member access, boards and secret visibility, so
+the rule and the `communityData` gate share one implementation. Naru publishes
+rules with the function revision. Functions and shared modules cannot import a
+rule.

@@ -8,6 +8,7 @@ import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import * as boardRules from "../_naru/rules/community-board.js";
 import { FUNCTION_MODULES } from "../function-references.js";
+import { matches } from "./where.mjs";
 const modules = Object.fromEntries(
   await Promise.all(
     [...new Set(Object.values(FUNCTION_MODULES))].map(async (module) => [
@@ -113,7 +114,8 @@ const list = (name, options = {}, authorized = () => true) => {
       authorized(row) &&
       Object.entries(options.filter ?? {}).every(
         ([key, value]) => row.data[key] === value,
-      ),
+      ) &&
+      matches(row, options.where),
   );
   for (const [field, direction] of [...(options.sort ?? [])].reverse()) {
     const value = (row) =>
@@ -141,10 +143,35 @@ function permitted(predicate, row) {
     typeof field === "string" ? row.data[field] : row[field.metadata];
   return predicate.eq ? actual === value : actual !== value;
 }
+// Live messages and upload deletions a call makes leave only if it commits.
+let pending = { live: [], released: [] };
+const sockets = new Set();
+function deliver({ notify, broadcast, data }) {
+  for (const socket of sockets)
+    if (notify ? socket.member === notify : socket.topics.includes(broadcast))
+      socket.ws.send(
+        JSON.stringify(
+          notify
+            ? { type: "notice", data }
+            : { type: "topic", topic: broadcast, data },
+        ),
+      );
+}
 const ctx = {
   member: { id: ME },
   now: Date.now(),
   random: () => 0.5,
+  notify: (member, data) => pending.live.push({ notify: member, data }),
+  broadcast: (topic, data) => pending.live.push({ broadcast: topic, data }),
+  fail: (code, message, details) => {
+    throw Object.assign(new Error(message), { failCode: code, details });
+  },
+  media: {
+    delete: async (id) => {
+      pending.released.push(id);
+      return null;
+    },
+  },
   get: (name, id) => table(name).get(id) ?? null,
   getMany: (name, ids) => ids.map((id) => table(name).get(id) ?? null),
   list,
@@ -271,6 +298,11 @@ try {
       return route.fulfill({ headers, json: { success: true } });
     }
     let result;
+    if (parts[0] === "_live" && request.method() === "POST")
+      return route.fulfill({
+        headers,
+        json: { ticket: `ticket-${ctx.member.id}` },
+      });
     if (parts[0] === "_batch") {
       assert.equal(isOwner, true);
       const operations = request.postDataJSON().operations;
@@ -297,7 +329,11 @@ try {
       };
     } else if (["_call", "_read"].includes(parts[0])) {
       const key = `${ctx.member.id}:${Math.floor(Date.now() / 60000)}`;
-      const readonly = parts[0] === "_read";
+      // Read-only exports are declared by their modules (readOnly), as Naru reads them.
+      const [module, exported] = parts.slice(1).join("/").split(":");
+      const readonly =
+        parts[0] === "_read" ||
+        (modules[module]?.readOnly ?? []).includes(exported);
       const buckets = readonly ? memberReadBuckets : memberCallBuckets;
       const count = (buckets.get(key) ?? 0) + 1;
       buckets.set(key, count);
@@ -313,6 +349,7 @@ try {
           },
         });
       const snapshot = structuredClone(tables);
+      pending = { live: [], released: [] };
       try {
         let violation = false;
         const forbid = () => {
@@ -328,13 +365,23 @@ try {
           ](functionCtx, request.postDataJSON().args),
         };
         if (violation) throw new Error("read-only functions cannot write");
+        if (readonly && (pending.live.length || pending.released.length))
+          throw new Error("read-only functions cannot write");
+        for (const message of pending.live) deliver(message);
+        for (const id of pending.released) deletedMedia.add(id);
       } catch (error) {
         tables.clear();
         for (const [name, rows] of snapshot) tables.set(name, rows);
         return route.fulfill({
-          status: 400,
+          status: error.failCode === "CONFLICT" ? 409 : 400,
           headers,
-          json: { error: { code: "INVALID_REQUEST", message: error.message } },
+          json: {
+            error: {
+              code: error.failCode ?? "INVALID_REQUEST",
+              message: error.message,
+              ...(error.details ? { details: error.details } : {}),
+            },
+          },
         });
       }
     } else {
@@ -391,6 +438,20 @@ try {
       } else throw new Error(`Unexpected ${request.method()} ${url.pathname}`);
     }
     return route.fulfill({ headers, json: result });
+  });
+  // Live connections: tickets name the member; no server behind the socket.
+  await page.routeWebSocket(/\/_live\?/, (ws) => {
+    const url = new URL(ws.url());
+    const socket = {
+      ws,
+      member: url.searchParams.get("ticket").replace(/^ticket-/, ""),
+      topics: (url.searchParams.get("topics") ?? "").split(",").filter(Boolean),
+    };
+    sockets.add(socket);
+    ws.onMessage((message) => {
+      if (message === "ping") ws.send("pong");
+    });
+    ws.onClose(() => sockets.delete(socket));
   });
   await page.route("https://media.naru.pub/**", (route) =>
     route.fulfill({
@@ -751,10 +812,12 @@ try {
   write(`${P}messages`, "live-notice", {
     from: ME,
     to: "member-other",
-    body: "폴링 확인",
+    body: "실시간 알림 확인",
     sentAt: Date.now(),
     readAt: null,
   });
+  // What sendMessage's ctx.notify delivers after its commit; nothing is polled.
+  deliver({ notify: "member-other", data: { unread: true } });
   await page.waitForFunction(
     () =>
       document.querySelector("#tabMessages").textContent.includes("새 쪽지"),

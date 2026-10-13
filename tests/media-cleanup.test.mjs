@@ -3,19 +3,20 @@ import assert from "node:assert/strict";
 import {
   registerMedia,
   communityData,
-  claimMedia,
-  completeMedia,
+  cleanupMedia,
   mediaCleanup,
   outfit,
   removeOutfit,
 } from "../_naru/modules/index.js";
 import { retryMemberMedia, retryOwnerMedia } from "../media-cleanup.js";
+import { matches } from "./where.mjs";
 const P = "neo_avocado_";
 const ID = "0190f1a2-0000-7000-8000-000000000001";
 const URL = "https://media.naru.pub/image.png";
 function fixture() {
   const tables = new Map();
   let n = 0;
+  const released = [];
   const table = (name) => {
     if (!tables.has(name)) tables.set(name, new Map());
     return tables.get(name);
@@ -23,6 +24,11 @@ function fixture() {
   const ctx = {
     member: { id: "me" },
     now: 1,
+    fail: (code, message, details) => {
+      throw Object.assign(new Error(message), { code, details });
+    },
+    media: { delete: async (id) => released.push(id) },
+    broadcast: () => {},
     get: async (name, id) => structuredClone(table(name).get(id) ?? null),
     set: async (name, id, data) => {
       const doc = {
@@ -36,9 +42,11 @@ function fixture() {
     },
     add: async (name, data) => await ctx.set(name, `doc-${++n}`, data),
     delete: async (name, id) => table(name).delete(id),
-    list: async (name, { filter = {}, size = 50 } = {}) => {
-      const docs = [...table(name).values()].filter((doc) =>
-        Object.entries(filter).every(([k, v]) => doc.data[k] === v),
+    list: async (name, { filter = {}, where, size = 50 } = {}) => {
+      const docs = [...table(name).values()].filter(
+        (doc) =>
+          Object.entries(filter).every(([k, v]) => doc.data[k] === v) &&
+          matches(doc, where),
       );
       return {
         documents: structuredClone(docs.slice(0, size)),
@@ -54,34 +62,39 @@ function fixture() {
         data: { image: URL, imageId: ID, board: "default", text: "post" },
       })
     ).document;
-  return { ctx, table, post };
+  return { ctx, table, post, released };
 }
-test("IDs are attached atomically; shared media is queued only after the last post is removed", async () => {
-  const { ctx, post } = fixture();
+test("IDs are attached atomically; shared media is deleted with the last post that used it", async () => {
+  const { ctx, post, released } = fixture();
   assert.equal((await registerMedia(ctx, { id: ID, url: URL })).ok, true);
   const first = await post();
   const second = await post();
   assert.equal(first.data.imageId, ID);
-  assert.equal((await mediaCleanup(ctx)).files.length, 0);
   await communityData(ctx, {
     collection: P + "logs",
     operation: "delete",
     id: first.id,
   });
-  assert.equal((await mediaCleanup(ctx)).files.length, 0);
-  assert.equal((await claimMedia(ctx, { id: ID })).reason, "media_in_use");
+  assert.deepEqual((await ctx.get(P + "media_assets", ID)).data.refs, [
+    `${P}logs/${second.id}`,
+  ]);
+  assert.deepEqual(released, []);
   await communityData(ctx, {
     collection: P + "logs",
     operation: "delete",
     id: second.id,
   });
-  assert.equal((await mediaCleanup(ctx)).files.length, 1);
-  assert.equal((await claimMedia(ctx, { id: ID })).ok, true);
-  await assert.rejects(post, /unavailable/);
-  assert.equal((await completeMedia(ctx, { id: ID })).ok, true);
+  // The ledger row goes and the upload's deletion is queued in the same call.
+  assert.equal(await ctx.get(P + "media_assets", ID), null);
+  assert.deepEqual(released, [ID]);
+  await assert.rejects(post, (error) => {
+    assert.equal(error.code, "CONFLICT");
+    assert.equal(error.details.reason, "media_unavailable");
+    return true;
+  });
 });
-test("replacement and outfit removal queue old uploads; external and legacy URLs are never inferred", async () => {
-  const { ctx, post } = fixture();
+test("replacement and outfit removal delete old uploads; external and legacy URLs are never inferred", async () => {
+  const { ctx, post, released } = fixture();
   await registerMedia(ctx, { id: ID, url: URL });
   const doc = await post();
   await communityData(ctx, {
@@ -94,7 +107,7 @@ test("replacement and outfit removal queue old uploads; external and legacy URLs
       imageId: null,
     },
   });
-  assert.equal((await mediaCleanup(ctx)).files.length, 1);
+  assert.deepEqual(released, [ID]);
   await ctx.set(P + "characters", "hero", { owner: "me", name: "hero" });
   const other = "0190f1a2-0000-7000-8000-000000000002";
   await registerMedia(ctx, { id: other, url: URL });
@@ -107,42 +120,8 @@ test("replacement and outfit removal queue old uploads; external and legacy URLs
     })
   ).document;
   await removeOutfit(ctx, { id: clothing.id });
-  assert.equal((await mediaCleanup(ctx)).files.length, 2);
-});
-test("a failed media delete stays claimed and a later visit retries; another member cannot claim it", async () => {
-  const { ctx, post } = fixture();
-  await registerMedia(ctx, { id: ID, url: URL });
-  const doc = await post();
-  await communityData(ctx, {
-    collection: P + "logs",
-    operation: "delete",
-    id: doc.id,
-  });
-  ctx.member.id = "other";
-  assert.equal((await claimMedia(ctx, { id: ID })).reason, "not_owned");
-  ctx.member.id = "me";
-  let fail = true;
-  let deletes = 0;
-  const member = {
-    call: async (name, args) =>
-      name.endsWith("mediaCleanup")
-        ? await mediaCleanup(ctx)
-        : name.endsWith("claimMedia")
-          ? await claimMedia(ctx, args)
-          : await completeMedia(ctx, args),
-    media: {
-      delete: async () => {
-        deletes++;
-        if (fail) throw new Error("offline");
-      },
-    },
-  };
-  await assert.rejects(retryMemberMedia(member), /offline/);
-  assert.equal((await ctx.get(P + "media_assets", ID)).data.status, "deleting");
-  fail = false;
-  await retryMemberMedia(member);
-  assert.equal(await ctx.get(P + "media_assets", ID), null);
-  assert.equal(deletes, 2);
+  assert.deepEqual(released, [ID, other]);
+  assert.equal((await mediaCleanup(ctx)).files.length, 0);
 });
 test("owner recovery refuses referenced media and requires successful deletion before discarding durable work", async () => {
   const { ctx, post } = fixture();
@@ -171,10 +150,14 @@ test("owner recovery refuses referenced media and requires successful deletion b
     },
   };
   await assert.rejects(retryOwnerMedia(owner, ID), /사용 중/);
-  await communityData(ctx, {
-    collection: P + "logs",
-    operation: "delete",
-    id: doc.id,
+  // Owner recovery still handles rows released before transactional deletes.
+  const asset = await ctx.get(P + "media_assets", ID);
+  await ctx.set(P + "media_assets", ID, {
+    ...asset.data,
+    refs: [],
+    status: "pending",
+    cleanup: true,
+    cleanupAfter: 0,
   });
   await assert.rejects(retryOwnerMedia(owner, ID), /no grant/);
   assert.equal((await ctx.get(P + "media_assets", ID)).data.status, "deleting");
@@ -183,12 +166,42 @@ test("owner recovery refuses referenced media and requires successful deletion b
   assert.equal(await ctx.get(P + "media_assets", ID), null);
 });
 
-test("unattached new uploads have a grace period, so another tab cannot delete an in-progress post image", async () => {
-  const { ctx } = fixture();
+test("unattached uploads have a grace period, then only their uploader's cleanup deletes them", async () => {
+  const { ctx, released } = fixture();
   await registerMedia(ctx, { id: ID, url: URL });
+  const member = {
+    call: async (name) =>
+      name.endsWith(":mediaCleanup")
+        ? await mediaCleanup(ctx)
+        : await cleanupMedia(ctx),
+  };
   assert.equal((await mediaCleanup(ctx)).files.length, 0);
-  assert.equal((await claimMedia(ctx, { id: ID })).reason, "media_in_use");
+  assert.deepEqual(await retryMemberMedia(member), {
+    completed: 0,
+    remaining: false,
+  });
   ctx.now += 11 * 60_000;
+  ctx.member.id = "other";
+  assert.equal((await cleanupMedia(ctx)).completed, 0);
+  ctx.member.id = "me";
   assert.equal((await mediaCleanup(ctx)).files.length, 1);
-  assert.equal((await claimMedia(ctx, { id: ID })).ok, true);
+  assert.deepEqual(await retryMemberMedia(member), {
+    completed: 1,
+    remaining: false,
+  });
+  assert.equal(await ctx.get(P + "media_assets", ID), null);
+  assert.deepEqual(released, [ID]);
+});
+test("rows the old claim flow left as deleting are finished by the member's cleanup", async () => {
+  const { ctx, released } = fixture();
+  await ctx.set(P + "media_assets", ID, {
+    owner: "me",
+    url: URL,
+    refs: [],
+    status: "deleting",
+    cleanup: true,
+    cleanupAfter: 0,
+  });
+  assert.equal((await cleanupMedia(ctx)).completed, 1);
+  assert.deepEqual(released, [ID]);
 });

@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { SourceTextModule, SyntheticModule } from "node:vm";
 import { JSDOM } from "jsdom";
+import { matches } from "./where.mjs";
 const root = new URL("../", import.meta.url);
 
 const PROFILES = "neo_avocado_profiles";
@@ -68,10 +69,11 @@ function fakeDatabase(rows = {}) {
       ];
       const sorted = store
         .get(name)
-        .filter((row) =>
-          Object.entries(options.filter ?? {}).every(
-            ([field, value]) => row.data[field] === value,
-          ),
+        .filter(
+          (row) =>
+            Object.entries(options.filter ?? {}).every(
+              ([field, value]) => row.data[field] === value,
+            ) && matches(row, options.where),
         )
         .sort(
           (a, b) =>
@@ -141,6 +143,19 @@ function fakeDatabase(rows = {}) {
     },
     async signOut() {
       calls.push({ method: "signOut" });
+    },
+    // One live connection at a time; tests deliver messages and statuses.
+    live(options) {
+      calls.push({ method: "live", topics: options.topics });
+      const connection = {
+        options,
+        closed: false,
+        close() {
+          connection.closed = true;
+        },
+      };
+      database.live = connection;
+      return connection;
     },
     // 서버 함수는 나루에서 돈다. 여기서는 무엇을 불렀는지만 남기고, 테스트가
     // 정한 결과를 돌려준다.
@@ -226,7 +241,9 @@ async function page(database) {
   });
   const { window } = dom;
   window.confirm = () => true;
-  window.setInterval = () => 0;
+  window.setInterval = () => {
+    throw new Error("The page must not poll; it listens instead.");
+  };
   window.HTMLDialogElement.prototype.showModal = function () {
     this.open = true;
   };
@@ -920,4 +937,83 @@ test("post details and comment lists use native reads while deletion stays trans
   await settle();
   assert.equal(deletion.collection, LOGS);
   assert.equal(deletion.operation, "delete");
+});
+
+test("unread notices and new posts arrive over the live connection instead of a poll", async () => {
+  const database = fakeDatabase({ [PROFILES]: [me] });
+  const unread = { value: false };
+  database.answer = (name) =>
+    name === functionReference("messageStatus")
+      ? { ok: true, unread: unread.value }
+      : { ok: false, reason: "empty" };
+  const { $, settle } = await page(database);
+  await settle();
+  const live = database.live;
+  assert.deepEqual([...live.options.topics], [LOGS]);
+  const statusReads = () =>
+    database.calls.filter(
+      (call) => call.name === functionReference("messageStatus"),
+    ).length;
+  assert.equal(statusReads(), 0);
+  // Nothing is replayed, so every (re)open reads the status once.
+  unread.value = true;
+  live.options.onStatus("open");
+  await settle();
+  assert.equal(statusReads(), 1);
+  assert.equal($("tabMessages").textContent, "쪽지 · 새 쪽지");
+  live.options.onMessage({ type: "notice", data: { unread: false } });
+  assert.equal($("tabMessages").textContent, "쪽지");
+  live.options.onMessage({ type: "notice", data: { unread: true } });
+  assert.equal($("tabMessages").textContent, "쪽지 · 새 쪽지");
+  assert.equal(statusReads(), 1);
+  // Another board's post is ignored; this board's marks the tab until reloaded.
+  live.options.onMessage({
+    type: "topic",
+    topic: LOGS,
+    data: { board: "other", id: "x" },
+  });
+  assert.equal($("tabLogs").textContent, "로그");
+  live.options.onMessage({
+    type: "topic",
+    topic: LOGS,
+    data: { board: "default", id: "new" },
+  });
+  assert.equal($("tabLogs").textContent, "로그 · 새 글");
+  const logReads = () =>
+    database.calls.filter(
+      (call) => call.method === "list" && call.name === LOGS,
+    ).length;
+  const before = logReads();
+  $("tabLogs").onclick();
+  await settle();
+  assert.equal(logReads(), before + 1);
+  assert.equal($("tabLogs").textContent, "로그");
+  $("signOut").onclick();
+  await settle();
+  assert.equal(live.closed, true);
+});
+
+test("a function's ctx.fail reason and a duplicate nickname are shown as the page's own text", async () => {
+  const database = fakeDatabase({ [PROFILES]: [me] });
+  const failure = (code, details) =>
+    Object.assign(new Error("server text"), { code, details });
+  database.answer = (name) => {
+    if (name === functionReference("daily"))
+      throw failure("CONFLICT", { reason: "not_enough" });
+    if (name === functionReference("messageStatus"))
+      return { ok: true, unread: false };
+    return { ok: false, reason: "empty" };
+  };
+  const { $, settle, submit } = await page(database);
+  await settle();
+  $("daily").onclick();
+  await settle();
+  assert.equal($("status").textContent, "아보가 모자랍니다.");
+  database.member.call = async () => {
+    throw failure("CONFLICT", { unique: "nick" });
+  };
+  $("editProfile").onclick();
+  $("editorFields").querySelector('[name="nick"]').value = "taken";
+  await submit($("editorForm"));
+  assert.equal($("editorStatus").textContent, "이미 쓰는 닉네임입니다.");
 });

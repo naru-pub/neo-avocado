@@ -58,6 +58,8 @@ export async function sendMessage(ctx, { recipients, body } = {}) {
   );
   if (cost)
     await record(ctx, "message", { recipients, delta: -total, balance });
+  // Sent after the commit; a reason for the recipient's page to show the tab.
+  for (const to of recipients) ctx.notify(to, { unread: true });
   return { ok: true, ids, balance };
 }
 
@@ -103,16 +105,17 @@ export async function readMessage(ctx, { id } = {}) {
     (message.data.from !== ctx.member.id && message.data.to !== ctx.member.id)
   )
     return failure("message_not_found");
-  if (message.data.to === ctx.member.id && message.data.readAt === null)
+  const receipt =
+    message.data.to === ctx.member.id && message.data.readAt === null;
+  if (receipt)
     message = await ctx.set(MESSAGES, message.id, {
       ...message.data,
       readAt: ctx.now,
     });
-  return {
-    ok: true,
-    document: message,
-    unread: (await messageStatus(ctx)).unread,
-  };
+  const { unread } = await messageStatus(ctx);
+  // The member's other tabs clear their notice too.
+  if (receipt) ctx.notify(ctx.member.id, { unread });
+  return { ok: true, document: message, unread };
 }
 
 export async function removeMessage(ctx, { id } = {}) {
