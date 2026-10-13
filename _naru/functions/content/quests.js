@@ -1,9 +1,9 @@
 import { PREFIX, failure } from "../../modules/shared.js";
 
 /** Scheduled image quests; the reference defines no claim/reward endpoint. */
-export function quests(ctx, { type = "", after = null } = {}) {
+export async function quests(ctx, { type = "", after = null } = {}) {
   if (!["", "daily", "weekly"].includes(type)) return failure("invalid_input");
-  const page = ctx.list(`${PREFIX}quests`, {
+  const page = await ctx.list(`${PREFIX}quests`, {
     size: 50,
     after,
     ...(type ? { filter: { type } } : {}),

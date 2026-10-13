@@ -43,14 +43,14 @@ export const mediaId = (value) =>
   typeof value === "string" &&
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
-export function releaseMedia(ctx, collection, document) {
+export async function releaseMedia(ctx, collection, document) {
   const id = document?.data.imageId;
-  const asset = mediaId(id) ? ctx.get(MEDIA, id) : null;
+  const asset = mediaId(id) ? await ctx.get(MEDIA, id) : null;
   if (!asset) return;
   const refs = asset.data.refs.filter(
     (key) => key !== `${collection}/${document.id}`,
   );
-  ctx.set(MEDIA, id, {
+  await ctx.set(MEDIA, id, {
     ...asset.data,
     refs,
     status: refs.length ? "active" : "pending",
@@ -59,7 +59,7 @@ export function releaseMedia(ctx, collection, document) {
   });
 }
 
-export function saveImage(
+export async function saveImage(
   ctx,
   collection,
   before,
@@ -73,7 +73,7 @@ export function saveImage(
   const data = { ...value };
   if (typeof imageId === "string") imageId = imageId.toLowerCase();
   if (imageId) {
-    const asset = mediaId(imageId) ? ctx.get(MEDIA, imageId) : null;
+    const asset = mediaId(imageId) ? await ctx.get(MEDIA, imageId) : null;
     const preserving =
       before?.data.imageId === imageId && before.data.image === value.image;
     if (
@@ -86,17 +86,17 @@ export function saveImage(
     data.imageId = imageId;
   } else delete data.imageId;
   const document = id
-    ? ctx.set(collection, id, data)
-    : ctx.add(collection, data);
+    ? await ctx.set(collection, id, data)
+    : await ctx.add(collection, data);
   if (before?.data.imageId && before.data.imageId !== imageId)
-    releaseMedia(ctx, collection, before);
+    await releaseMedia(ctx, collection, before);
   if (imageId) {
-    const asset = ctx.get(MEDIA, imageId);
+    const asset = await ctx.get(MEDIA, imageId);
     const key = `${collection}/${document.id}`;
     if (!asset.data.refs.includes(key)) {
       if (asset.data.refs.length >= 50)
         throw new Error("Media reference limit reached.");
-      ctx.set(MEDIA, imageId, {
+      await ctx.set(MEDIA, imageId, {
         ...asset.data,
         refs: [...asset.data.refs, key],
         status: "active",
@@ -107,8 +107,8 @@ export function saveImage(
   return document;
 }
 
-export function communityAccess(ctx, id = ctx.member.id) {
-  const row = ctx.get(MEMBERS, id);
+export async function communityAccess(ctx, id = ctx.member.id) {
+  const row = await ctx.get(MEMBERS, id);
   return {
     level:
       Number.isInteger(row?.data.level) &&
@@ -144,8 +144,8 @@ export function author(row) {
   return row?.createdBy ?? row?.data.owner;
 }
 
-export function boardOf(ctx, id = "default") {
-  const found = typeof id === "string" ? ctx.get(BOARDS, id) : null;
+export async function boardOf(ctx, id = "default") {
+  const found = typeof id === "string" ? await ctx.get(BOARDS, id) : null;
   if (found) return found;
   return id === "default"
     ? {
@@ -178,70 +178,83 @@ export function boardAllowed(board, access, action) {
   );
 }
 
-export function logReadable(ctx, row, access) {
+export async function logReadable(ctx, row, access) {
   return (
     row &&
     !row.data.deleted &&
-    boardAllowed(boardOf(ctx, row.data.board ?? "default"), access, "read") &&
+    boardAllowed(
+      await boardOf(ctx, row.data.board ?? "default"),
+      access,
+      "read",
+    ) &&
     (!row.data.secret ||
       author(row) === ctx.member.id ||
       access.role === "moderator")
   );
 }
 
-export function deleteCommunityDocument(ctx, collection, kind, row) {
+export async function deleteCommunityDocument(ctx, collection, kind, row) {
   if (!["logs", "characters"].includes(kind)) {
-    ctx.delete(collection, row.id);
+    await ctx.delete(collection, row.id);
     return { ok: true, done: true };
   }
   if (!row.data.deleted)
-    ctx.set(collection, row.id, { ...row.data, deleted: true });
+    await ctx.set(collection, row.id, { ...row.data, deleted: true });
   let unfinished = false;
   let remaining = 10;
   let mediaChanged = Boolean(row.data.imageId);
-  const remove = (target, filter, detach = false) => {
+  const remove = async (target, filter, detach = false) => {
     if (remaining === 0) {
       unfinished = true;
       return;
     }
-    const page = ctx.list(target, { filter, size: Math.min(5, remaining) });
+    const page = await ctx.list(target, {
+      filter,
+      size: Math.min(5, remaining),
+    });
     unfinished ||= Boolean(page.nextCursor);
     for (const child of page.documents) {
       remaining--;
-      if (detach) ctx.set(target, child.id, { ...child.data, character: null });
+      if (detach)
+        await ctx.set(target, child.id, { ...child.data, character: null });
       else {
         if (child.data.imageId) mediaChanged = true;
-        releaseMedia(ctx, target, child);
-        ctx.delete(target, child.id);
+        await releaseMedia(ctx, target, child);
+        await ctx.delete(target, child.id);
       }
     }
   };
-  if (kind === "logs") remove(`${PREFIX}comments`, { logId: row.id });
+  if (kind === "logs") await remove(`${PREFIX}comments`, { logId: row.id });
   else {
-    remove(RELATIONS, { character: row.id });
-    remove(RELATIONS, { target: row.id });
-    remove(WARDROBE, { character: row.id });
-    remove(INVENTORY, { character: row.id }, true);
-    remove(`${PREFIX}couples`, { first: row.id });
-    remove(`${PREFIX}couples`, { second: row.id });
-    if (ctx.get(CHARACTER_STATE, row.id)) ctx.delete(CHARACTER_STATE, row.id);
-    const profile = ctx.get(PROFILES, author(row));
+    await remove(RELATIONS, { character: row.id });
+    await remove(RELATIONS, { target: row.id });
+    await remove(WARDROBE, { character: row.id });
+    await remove(INVENTORY, { character: row.id }, true);
+    await remove(`${PREFIX}couples`, { first: row.id });
+    await remove(`${PREFIX}couples`, { second: row.id });
+    if (await ctx.get(CHARACTER_STATE, row.id))
+      await ctx.delete(CHARACTER_STATE, row.id);
+    const profile = await ctx.get(PROFILES, author(row));
     if (profile?.data.mainCharacter === row.id)
-      ctx.set(PROFILES, profile.id, { ...profile.data, mainCharacter: null });
+      await ctx.set(PROFILES, profile.id, {
+        ...profile.data,
+        mainCharacter: null,
+      });
   }
   if (!unfinished) {
-    releaseMedia(ctx, collection, row);
-    ctx.delete(collection, row.id);
+    await releaseMedia(ctx, collection, row);
+    await ctx.delete(collection, row.id);
   }
   return { ok: true, done: !unfinished, mediaCleanup: mediaChanged };
 }
 
-export function record(ctx, kind, details, owner = ctx.member.id) {
-  ctx.add(HISTORY, { owner, kind, at: ctx.now, ...details });
+export async function record(ctx, kind, details, owner = ctx.member.id) {
+  await ctx.add(HISTORY, { owner, kind, at: ctx.now, ...details });
 }
 
-export function ownCharacter(ctx, id) {
-  const character = typeof id === "string" ? ctx.get(CHARACTERS, id) : null;
+export async function ownCharacter(ctx, id) {
+  const character =
+    typeof id === "string" ? await ctx.get(CHARACTERS, id) : null;
   return character &&
     (character.createdBy ?? character.data.owner) === ctx.member.id &&
     !character.data.deleted
@@ -276,11 +289,11 @@ export function amount(value, label) {
   return value;
 }
 
-export function weightedRows(ctx, collection, filter) {
+export async function weightedRows(ctx, collection, filter) {
   const rows = [];
   let after = null;
   do {
-    const page = ctx.list(collection, { size: 100, after, filter });
+    const page = await ctx.list(collection, { size: 100, after, filter });
     rows.push(...page.documents);
     after = page.nextCursor;
     if (rows.length > 2000)
@@ -296,18 +309,18 @@ export const GACHA_COST = 50;
 export const kstDay = (now) =>
   new Date(now + 9 * 3600 * 1000).toISOString().slice(0, 10);
 
-export function wallet(ctx) {
-  const found = ctx.get(WALLETS, ctx.member.id);
+export async function wallet(ctx) {
+  const found = await ctx.get(WALLETS, ctx.member.id);
   const current = found ? found.data : { balance: 0, lastDaily: null };
   amount(current.balance, "Balance");
   return current;
 }
 
-export function pay(ctx, current, amount, changes = {}) {
+export async function pay(ctx, current, amount, changes = {}) {
   const balance = current.balance - amount;
   if (!Number.isSafeInteger(balance) || balance < 0)
     throw new Error("Balance is outside its allowed range.");
-  ctx.set(WALLETS, ctx.member.id, {
+  await ctx.set(WALLETS, ctx.member.id, {
     ...current,
     ...changes,
     balance,
@@ -315,8 +328,8 @@ export function pay(ctx, current, amount, changes = {}) {
   return balance;
 }
 
-export function give(ctx, item, from, character = null) {
-  return ctx.add(INVENTORY, {
+export async function give(ctx, item, from, character = null) {
+  return await ctx.add(INVENTORY, {
     owner: ctx.member.id,
     item: item.id,
     name: item.data.name,
@@ -325,11 +338,9 @@ export function give(ctx, item, from, character = null) {
   });
 }
 
-export function draw(ctx, source = null) {
-  const table = weightedRows(
-    ctx,
-    GACHA,
-    source ? { source } : undefined,
+export async function draw(ctx, source = null) {
+  const table = (
+    await weightedRows(ctx, GACHA, source ? { source } : undefined)
   ).filter((row) => {
     if ((row.data.source ?? null) !== source) return false;
     if (
@@ -348,27 +359,29 @@ export function draw(ctx, source = null) {
     table.find((row) => (roll -= row.data.weight) < 0) ?? table.at(-1);
   if (won.data.item === null) return { configured: true, prize: null };
   const prize =
-    typeof won.data.item === "string" ? ctx.get(ITEMS, won.data.item) : null;
+    typeof won.data.item === "string"
+      ? await ctx.get(ITEMS, won.data.item)
+      : null;
   if (!prize)
     throw new Error(`뽑기의 아이템 ${won.data.item}이 상점에 없습니다.`);
   return { configured: true, prize };
 }
 
-export function ownedItem(ctx, id) {
-  const owned = typeof id === "string" ? ctx.get(INVENTORY, id) : null;
+export async function ownedItem(ctx, id) {
+  const owned = typeof id === "string" ? await ctx.get(INVENTORY, id) : null;
   return owned?.data.owner === ctx.member.id ? owned : null;
 }
 
-export function characterState(ctx, character, owner = ctx.member.id) {
-  const definitions = weightedRows(ctx, STAT_CONFIG);
+export async function characterState(ctx, character, owner = ctx.member.id) {
+  const definitions = await weightedRows(ctx, STAT_CONFIG);
   if (definitions.length > 20)
     throw new Error("At most 20 stats may be configured.");
-  const existing = ctx.get(CHARACTER_STATE, character);
+  const existing = await ctx.get(CHARACTER_STATE, character);
   const current = existing?.data ?? {
     owner,
     character,
     points: amount(
-      ctx.get(SETTINGS, "community")?.data.initialStatPoints ?? 0,
+      (await ctx.get(SETTINGS, "community"))?.data.initialStatPoints ?? 0,
       "Initial stat points",
     ),
     exp: 0,
@@ -401,11 +414,11 @@ export function characterState(ctx, character, owner = ctx.member.id) {
   return { existing, definitions, data: { ...current, stats } };
 }
 
-export function contentReadable(ctx, row) {
+export async function contentReadable(ctx, row) {
   return (
     row &&
     row.data.enabled !== false &&
     !row.data.deleted &&
-    communityAccess(ctx).level >= (row.data.readLevel ?? 2)
+    (await communityAccess(ctx)).level >= (row.data.readLevel ?? 2)
   );
 }

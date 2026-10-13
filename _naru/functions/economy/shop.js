@@ -19,25 +19,28 @@ import {
 } from "../../modules/shared.js";
 
 /** 하루 한 번, 한국 시간으로 날이 바뀌면 받는 출석 보상. */
-export function daily(ctx) {
-  const current = wallet(ctx);
+export async function daily(ctx) {
+  const current = await wallet(ctx);
   const today = kstDay(ctx.now);
   if (current.lastDaily === today) return { ok: false, reason: "already" };
-  const balance = pay(ctx, current, -DAILY_REWARD, { lastDaily: today });
-  record(ctx, "daily", { delta: DAILY_REWARD, balance });
+  const balance = await pay(ctx, current, -DAILY_REWARD, { lastDaily: today });
+  await record(ctx, "daily", { delta: DAILY_REWARD, balance });
   return { ok: true, balance };
 }
 
 /** 상점에서 하나 산다. 재고(stock)가 없으면 무제한이다. */
-export function buy(ctx, { item, character = null, materials = [] } = {}) {
-  const listing = typeof item === "string" ? ctx.get(ITEMS, item) : null;
+export async function buy(
+  ctx,
+  { item, character = null, materials = [] } = {},
+) {
+  const listing = typeof item === "string" ? await ctx.get(ITEMS, item) : null;
   if (!listing || listing.data.hidden) return { ok: false, reason: "no_item" };
   const { price = 0, stock } = listing.data;
   amount(price, "Price");
   if (stock !== undefined) amount(stock, "Stock");
   if (typeof stock === "number" && stock < 1)
     return { ok: false, reason: "sold_out" };
-  const current = wallet(ctx);
+  const current = await wallet(ctx);
   if (current.balance < price) return { ok: false, reason: "not_enough" };
   const requirements = listing.data.requirements ?? {};
   const needsCharacter =
@@ -47,9 +50,13 @@ export function buy(ctx, { item, character = null, materials = [] } = {}) {
     requirements.classes?.length ||
     requirements.exp ||
     requirements.title;
-  const ownedCharacter = needsCharacter ? ownCharacter(ctx, character) : null;
+  const ownedCharacter = needsCharacter
+    ? await ownCharacter(ctx, character)
+    : null;
   if (needsCharacter && !ownedCharacter) return failure("no_character");
-  const progression = ownedCharacter ? characterState(ctx, character) : null;
+  const progression = ownedCharacter
+    ? await characterState(ctx, character)
+    : null;
   if (requirements.approved && progression.data.approved !== true)
     return failure("not_approved");
   for (const [key, field] of [
@@ -76,7 +83,7 @@ export function buy(ctx, { item, character = null, materials = [] } = {}) {
   if (
     requirements.title &&
     (!progression.data.titles?.includes(requirements.title) ||
-      ctx.get(TITLES, requirements.title)?.data.deleted)
+      (await ctx.get(TITLES, requirements.title))?.data.deleted)
   )
     return failure("missing_title");
   const counts = {
@@ -116,7 +123,7 @@ export function buy(ctx, { item, character = null, materials = [] } = {}) {
     if (!count) throw new Error("Exchange count must be positive.");
     needed.set(exchange.item, { count, consume: exchange.consume === true });
   }
-  const supplied = materials.map((id) => ownedItem(ctx, id));
+  const supplied = await Promise.all(materials.map((id) => ownedItem(ctx, id)));
   if (
     supplied.some((row) => !row || (row.data.character ?? null) !== character)
   )
@@ -130,7 +137,7 @@ export function buy(ctx, { item, character = null, materials = [] } = {}) {
   )
     return failure("invalid_materials");
   const debit = requirements.consumeMoney === false ? 0 : price;
-  const balance = pay(
+  const balance = await pay(
     ctx,
     current,
     debit,
@@ -143,14 +150,14 @@ export function buy(ctx, { item, character = null, materials = [] } = {}) {
       next.titles = next.titles.filter((id) => id !== requirements.title);
       if (next.activeTitle === requirements.title) next.activeTitle = null;
     }
-    ctx.set(CHARACTER_STATE, character, next);
+    await ctx.set(CHARACTER_STATE, character, next);
   }
   for (const row of supplied)
-    if (needed.get(row.data.item).consume) ctx.delete(INVENTORY, row.id);
+    if (needed.get(row.data.item).consume) await ctx.delete(INVENTORY, row.id);
   if (typeof stock === "number")
-    ctx.set(ITEMS, listing.id, { ...listing.data, stock: stock - 1 });
-  const owned = give(ctx, listing, "shop", character);
-  record(ctx, "buy", {
+    await ctx.set(ITEMS, listing.id, { ...listing.data, stock: stock - 1 });
+  const owned = await give(ctx, listing, "shop", character);
+  await record(ctx, "buy", {
     character,
     item: listing.id,
     inventory: owned.id,
@@ -161,19 +168,19 @@ export function buy(ctx, { item, character = null, materials = [] } = {}) {
   return { ok: true, balance, owned };
 }
 
-export function gacha(ctx, args = {}) {
+export async function gacha(ctx, args = {}) {
   const { character = null } = args ?? {};
-  if (character && !ownCharacter(ctx, character))
+  if (character && !(await ownCharacter(ctx, character)))
     return failure("no_character");
-  const current = wallet(ctx);
+  const current = await wallet(ctx);
   if (current.balance < GACHA_COST) return failure("not_enough");
-  const result = draw(ctx);
+  const result = await draw(ctx);
   if (!result.configured) return failure("empty");
-  const balance = pay(ctx, current, GACHA_COST);
+  const balance = await pay(ctx, current, GACHA_COST);
   const owned = result.prize
-    ? give(ctx, result.prize, "gacha", character)
+    ? await give(ctx, result.prize, "gacha", character)
     : null;
-  record(ctx, "gacha", {
+  await record(ctx, "gacha", {
     character,
     item: result.prize?.id ?? null,
     delta: -GACHA_COST,

@@ -1,14 +1,14 @@
 import { MEDIA, mediaId, imageUrl, failure } from "../../modules/shared.js";
 
-export function registerMedia(ctx, { id, url } = {}) {
+export async function registerMedia(ctx, { id, url } = {}) {
   if (!mediaId(id)) return failure("invalid_input");
   id = id.toLowerCase();
-  const previous = ctx.get(MEDIA, id);
+  const previous = await ctx.get(MEDIA, id);
   if (previous)
     return previous.data.owner === ctx.member.id && previous.data.url === url
       ? { ok: true }
       : failure("not_owned");
-  ctx.set(MEDIA, id, {
+  await ctx.set(MEDIA, id, {
     owner: ctx.member.id,
     url: imageUrl(url),
     refs: [],
@@ -19,8 +19,8 @@ export function registerMedia(ctx, { id, url } = {}) {
   return { ok: true };
 }
 
-export function mediaCleanup(ctx) {
-  const page = ctx.list(MEDIA, {
+export async function mediaCleanup(ctx) {
+  const page = await ctx.list(MEDIA, {
     filter: { owner: ctx.member.id, cleanup: true },
     size: 5,
   });
@@ -33,19 +33,23 @@ export function mediaCleanup(ctx) {
   };
 }
 
-export function claimMedia(ctx, { id } = {}) {
+export async function claimMedia(ctx, { id } = {}) {
   if (mediaId(id)) id = id.toLowerCase();
-  const asset = mediaId(id) ? ctx.get(MEDIA, id) : null;
+  const asset = mediaId(id) ? await ctx.get(MEDIA, id) : null;
   if (!asset || asset.data.owner !== ctx.member.id) return failure("not_owned");
   if (asset.data.refs.length || (asset.data.cleanupAfter ?? 0) > ctx.now)
     return failure("media_in_use");
-  ctx.set(MEDIA, id, { ...asset.data, status: "deleting", cleanup: true });
+  await ctx.set(MEDIA, id, {
+    ...asset.data,
+    status: "deleting",
+    cleanup: true,
+  });
   return { ok: true };
 }
 
-export function completeMedia(ctx, { id } = {}) {
+export async function completeMedia(ctx, { id } = {}) {
   if (mediaId(id)) id = id.toLowerCase();
-  const asset = mediaId(id) ? ctx.get(MEDIA, id) : null;
+  const asset = mediaId(id) ? await ctx.get(MEDIA, id) : null;
   if (!asset) return { ok: true };
   if (
     asset.data.owner !== ctx.member.id ||
@@ -53,6 +57,6 @@ export function completeMedia(ctx, { id } = {}) {
     asset.data.refs.length
   )
     return failure("not_owned");
-  ctx.delete(MEDIA, id);
+  await ctx.delete(MEDIA, id);
   return { ok: true };
 }

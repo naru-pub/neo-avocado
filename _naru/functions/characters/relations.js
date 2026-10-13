@@ -9,7 +9,7 @@ import {
 } from "../../modules/shared.js";
 
 /** A relation belongs to the source character; the target's owner cannot edit it. */
-export function relation(
+export async function relation(
   ctx,
   {
     id,
@@ -22,9 +22,9 @@ export function relation(
     revision,
   } = {},
 ) {
-  if (!ownCharacter(ctx, character)) return failure("not_owned");
+  if (!(await ownCharacter(ctx, character))) return failure("not_owned");
   const targetCharacter =
-    typeof target === "string" ? ctx.get(CHARACTERS, target) : null;
+    typeof target === "string" ? await ctx.get(CHARACTERS, target) : null;
   if (
     typeof target !== "string" ||
     target === character ||
@@ -35,7 +35,7 @@ export function relation(
   if (!Number.isInteger(affinity) || affinity < -100 || affinity > 100)
     return failure("invalid_input");
   amount(order, "Relation order");
-  const previous = id ? ctx.get(RELATIONS, id) : null;
+  const previous = id ? await ctx.get(RELATIONS, id) : null;
   if (
     id &&
     (!previous ||
@@ -56,19 +56,19 @@ export function relation(
   return {
     ok: true,
     document: previous
-      ? ctx.set(RELATIONS, id, data)
-      : ctx.add(RELATIONS, data),
+      ? await ctx.set(RELATIONS, id, data)
+      : await ctx.add(RELATIONS, data),
   };
 }
 
-export function removeRelation(ctx, { id } = {}) {
-  const row = typeof id === "string" ? ctx.get(RELATIONS, id) : null;
+export async function removeRelation(ctx, { id } = {}) {
+  const row = typeof id === "string" ? await ctx.get(RELATIONS, id) : null;
   if (
     !row ||
     row.data.owner !== ctx.member.id ||
-    !ownCharacter(ctx, row.data.character)
+    !(await ownCharacter(ctx, row.data.character))
   )
     return failure("not_owned");
-  ctx.delete(RELATIONS, row.id);
+  await ctx.delete(RELATIONS, row.id);
   return { ok: true };
 }

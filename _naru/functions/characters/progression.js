@@ -11,16 +11,16 @@ import {
 } from "../../modules/shared.js";
 
 /** Public character progression is separate from member-editable profile fields. */
-export function characterStatus(ctx, { character } = {}) {
+export async function characterStatus(ctx, { character } = {}) {
   const profile =
-    typeof character === "string" ? ctx.get(CHARACTERS, character) : null;
+    typeof character === "string" ? await ctx.get(CHARACTERS, character) : null;
   if (!profile || profile.data.deleted) return failure("no_character");
-  const state = characterState(
+  const state = await characterState(
     ctx,
     character,
     profile.createdBy ?? profile.data.owner ?? null,
   );
-  const levels = weightedRows(ctx, LEVELS)
+  const levels = (await weightedRows(ctx, LEVELS))
     .filter((row) => {
       amount(row.data.exp, "Rank experience");
       return row.data.exp <= state.data.exp;
@@ -37,18 +37,18 @@ export function characterStatus(ctx, { character } = {}) {
   };
 }
 
-export function allocateStats(
+export async function allocateStats(
   ctx,
   { character, allocation, revision = null } = {},
 ) {
-  if (!ownCharacter(ctx, character)) return failure("not_owned");
+  if (!(await ownCharacter(ctx, character))) return failure("not_owned");
   if (
     !allocation ||
     Array.isArray(allocation) ||
     typeof allocation !== "object"
   )
     return failure("invalid_input");
-  const state = characterState(ctx, character);
+  const state = await characterState(ctx, character);
   if ((state.existing?.revision ?? null) !== revision)
     return failure("conflict");
   if (
@@ -76,27 +76,27 @@ export function allocateStats(
   }
   if (!Number.isSafeInteger(spent) || spent > state.data.points)
     return failure("not_enough_points");
-  const document = ctx.set(CHARACTER_STATE, character, {
+  const document = await ctx.set(CHARACTER_STATE, character, {
     ...state.data,
     stats,
   });
   return { ok: true, document };
 }
 
-export function equipTitle(ctx, { character, title = null } = {}) {
-  if (!ownCharacter(ctx, character)) return failure("not_owned");
-  const state = characterState(ctx, character);
+export async function equipTitle(ctx, { character, title = null } = {}) {
+  if (!(await ownCharacter(ctx, character))) return failure("not_owned");
+  const state = await characterState(ctx, character);
   if (
     title !== null &&
     (typeof title !== "string" ||
       !state.data.titles?.includes(title) ||
-      !ctx.get(TITLES, title) ||
-      ctx.get(TITLES, title)?.data.deleted)
+      !(await ctx.get(TITLES, title)) ||
+      (await ctx.get(TITLES, title))?.data.deleted)
   )
     return failure("missing_title");
   return {
     ok: true,
-    document: ctx.set(CHARACTER_STATE, character, {
+    document: await ctx.set(CHARACTER_STATE, character, {
       ...state.data,
       activeTitle: title,
     }),

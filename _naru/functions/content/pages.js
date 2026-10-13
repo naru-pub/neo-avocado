@@ -1,20 +1,23 @@
 import { PREFIX, failure, contentReadable } from "../../modules/shared.js";
 
-export function contentPages(ctx, { after = null } = {}) {
-  const page = ctx.list(`${PREFIX}content`, { size: 10, after });
+export async function contentPages(ctx, { after = null } = {}) {
+  const page = await ctx.list(`${PREFIX}content`, { size: 10, after });
+  const readable = await Promise.all(
+    page.documents.map((row) => contentReadable(ctx, row)),
+  );
   return {
     ok: true,
     ...page,
     documents: page.documents
-      .filter((row) => contentReadable(ctx, row))
+      .filter((row, index) => readable[index])
       .map((row) => ({ id: row.id, data: { name: row.data.name } })),
   };
 }
 
-export function contentPage(ctx, { id, mobile = false } = {}) {
+export async function contentPage(ctx, { id, mobile = false } = {}) {
   if (typeof id !== "string") return failure("invalid_input");
-  const row = ctx.get(`${PREFIX}content`, id);
-  if (!contentReadable(ctx, row)) return failure("document_not_found");
+  const row = await ctx.get(`${PREFIX}content`, id);
+  if (!(await contentReadable(ctx, row))) return failure("document_not_found");
   return {
     ok: true,
     page: {

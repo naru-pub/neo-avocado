@@ -22,10 +22,10 @@ import {
 } from "../../modules/shared.js";
 
 /** Selling consumes exactly one owned item; prices always come from the catalog. */
-export function sell(ctx, { inventory } = {}) {
-  const owned = ownedItem(ctx, inventory);
+export async function sell(ctx, { inventory } = {}) {
+  const owned = await ownedItem(ctx, inventory);
   if (!owned) return failure("not_owned");
-  const item = ctx.get(ITEMS, owned.data.item);
+  const item = await ctx.get(ITEMS, owned.data.item);
   if (
     !item ||
     item.data.sellPrice === undefined ||
@@ -33,9 +33,9 @@ export function sell(ctx, { inventory } = {}) {
   )
     return failure("not_sellable");
   const price = amount(item.data.sellPrice, "Sale price");
-  const balance = pay(ctx, wallet(ctx), -price);
-  ctx.delete(INVENTORY, owned.id);
-  record(ctx, "sell", {
+  const balance = await pay(ctx, await wallet(ctx), -price);
+  await ctx.delete(INVENTORY, owned.id);
+  await record(ctx, "sell", {
     character: owned.data.character ?? null,
     item: owned.data.item,
     inventory: owned.id,
@@ -46,24 +46,24 @@ export function sell(ctx, { inventory } = {}) {
 }
 
 /** The recipient must be an existing member profile, never a browser-supplied owner. */
-export function gift(
+export async function gift(
   ctx,
   { inventory, recipient, character = null, memo = "" } = {},
 ) {
-  const owned = ownedItem(ctx, inventory);
+  const owned = await ownedItem(ctx, inventory);
   if (!owned) return failure("not_owned");
   if (
     typeof recipient !== "string" ||
     recipient === ctx.member.id ||
-    !ctx.get(PROFILES, recipient)
+    !(await ctx.get(PROFILES, recipient))
   )
     return failure("no_recipient");
   if (typeof memo !== "string" || memo.length > 500)
     return failure("invalid_input");
-  const item = ctx.get(ITEMS, owned.data.item);
+  const item = await ctx.get(ITEMS, owned.data.item);
   if (!item || item.data.giftable === false) return failure("not_giftable");
   const target =
-    typeof character === "string" ? ctx.get(CHARACTERS, character) : null;
+    typeof character === "string" ? await ctx.get(CHARACTERS, character) : null;
   if (
     character &&
     (!target ||
@@ -72,7 +72,7 @@ export function gift(
   )
     return failure("no_character");
   if (owned.data.character && !target) return failure("no_character");
-  const transferred = ctx.set(INVENTORY, owned.id, {
+  const transferred = await ctx.set(INVENTORY, owned.id, {
     ...owned.data,
     owner: recipient,
     sender: ctx.member.id,
@@ -80,14 +80,14 @@ export function gift(
     receivedAt: ctx.now,
     character,
   });
-  record(ctx, "gift", {
+  await record(ctx, "gift", {
     item: owned.data.item,
     inventory: owned.id,
     recipient,
     character,
     memo,
   });
-  record(
+  await record(
     ctx,
     "giftReceived",
     {
@@ -103,10 +103,11 @@ export function gift(
 }
 
 /** Selected materials are checked against the owner's recipe, then consumed atomically. */
-export function craft(ctx, { recipe, materials, character = null } = {}) {
-  if (character && !ownCharacter(ctx, character))
+export async function craft(ctx, { recipe, materials, character = null } = {}) {
+  if (character && !(await ownCharacter(ctx, character)))
     return failure("no_character");
-  const row = typeof recipe === "string" ? ctx.get(RECIPES, recipe) : null;
+  const row =
+    typeof recipe === "string" ? await ctx.get(RECIPES, recipe) : null;
   if (!row || row.data.hidden) return failure("no_recipe");
   if (
     !Array.isArray(materials) ||
@@ -130,7 +131,7 @@ export function craft(ctx, { recipe, materials, character = null } = {}) {
     if (!count) throw new Error("Ingredient count must be positive.");
     required.set(ingredient.item, (required.get(ingredient.item) ?? 0) + count);
   }
-  const owned = materials.map((id) => ownedItem(ctx, id));
+  const owned = await Promise.all(materials.map((id) => ownedItem(ctx, id)));
   if (
     owned.some((item) => !item || (item.data.character ?? null) !== character)
   )
@@ -144,39 +145,49 @@ export function craft(ctx, { recipe, materials, character = null } = {}) {
   )
     return failure("invalid_materials");
   const prize =
-    typeof row.data.item === "string" ? ctx.get(ITEMS, row.data.item) : null;
+    typeof row.data.item === "string"
+      ? await ctx.get(ITEMS, row.data.item)
+      : null;
   if (!prize) throw new Error("Recipe output item is missing.");
   const cost = amount(row.data.cost ?? 0, "Crafting cost");
-  const current = wallet(ctx);
+  const current = await wallet(ctx);
   if (current.balance < cost) return failure("not_enough");
-  const balance = pay(ctx, current, cost);
-  for (const item of owned) ctx.delete(INVENTORY, item.id);
-  const output = give(ctx, prize, "craft", character);
-  record(ctx, "craft", { character, item: prize.id, delta: -cost, balance });
+  const balance = await pay(ctx, current, cost);
+  for (const item of owned) await ctx.delete(INVENTORY, item.id);
+  const output = await give(ctx, prize, "craft", character);
+  await record(ctx, "craft", {
+    character,
+    item: prize.id,
+    delta: -cost,
+    balance,
+  });
   return { ok: true, balance, owned: output };
 }
 
-export function assignInventory(ctx, { inventory, character = null } = {}) {
-  const owned = ownedItem(ctx, inventory);
+export async function assignInventory(
+  ctx,
+  { inventory, character = null } = {},
+) {
+  const owned = await ownedItem(ctx, inventory);
   if (!owned) return failure("not_owned");
-  if (character && !ownCharacter(ctx, character))
+  if (character && !(await ownCharacter(ctx, character)))
     return failure("no_character");
   return {
     ok: true,
-    document: ctx.set(INVENTORY, owned.id, { ...owned.data, character }),
+    document: await ctx.set(INVENTORY, owned.id, { ...owned.data, character }),
   };
 }
 
 /** Four built-in item actions mirror inventory/use_item.php. */
-export function useItem(ctx, { inventory, character, data = {} } = {}) {
-  const owned = ownedItem(ctx, inventory);
+export async function useItem(ctx, { inventory, character, data = {} } = {}) {
+  const owned = await ownedItem(ctx, inventory);
   if (!owned) return failure("not_owned");
-  const item = ctx.get(ITEMS, owned.data.item);
+  const item = await ctx.get(ITEMS, owned.data.item);
   if (!item?.data.effect || item.data.usable === false)
     return failure("not_usable");
   if (owned.data.character && owned.data.character !== character)
     return failure("wrong_character");
-  if (owned.data.character && !ownCharacter(ctx, character))
+  if (owned.data.character && !(await ownCharacter(ctx, character)))
     return failure("not_owned");
   const requirements = item.data.useRequirements ?? {};
   if (
@@ -186,8 +197,8 @@ export function useItem(ctx, { inventory, character, data = {} } = {}) {
     requirements.exp ||
     requirements.title
   ) {
-    if (!ownCharacter(ctx, character)) return failure("no_character");
-    const official = characterState(ctx, character).data;
+    if (!(await ownCharacter(ctx, character))) return failure("no_character");
+    const official = (await characterState(ctx, character)).data;
     if (requirements.approved && official.approved !== true)
       return failure("not_approved");
     for (const [key, field] of [
@@ -211,15 +222,15 @@ export function useItem(ctx, { inventory, character, data = {} } = {}) {
     if (
       requirements.title &&
       (!official.titles?.includes(requirements.title) ||
-        ctx.get(TITLES, requirements.title)?.data.deleted)
+        (await ctx.get(TITLES, requirements.title))?.data.deleted)
     )
       return failure("missing_title");
   }
   const effect = item.data.effect;
   let result = { ok: true, name: owned.data.name };
   if (effect.type === "restore") {
-    if (!ownCharacter(ctx, character)) return failure("not_owned");
-    const state = characterState(ctx, character);
+    if (!(await ownCharacter(ctx, character))) return failure("not_owned");
+    const state = await characterState(ctx, character);
     if (
       typeof effect.stat !== "string" ||
       !Object.hasOwn(state.data.stats, effect.stat)
@@ -231,18 +242,18 @@ export function useItem(ctx, { inventory, character, data = {} } = {}) {
     if (stat.current === stat.max) return failure("already_full");
     stat.damage = Math.max(0, stat.damage - recovery);
     stat.current = Math.max(0, stat.max - stat.damage);
-    result.document = ctx.set(CHARACTER_STATE, character, state.data);
+    result.document = await ctx.set(CHARACTER_STATE, character, state.data);
   } else if (effect.type === "draw") {
-    const outcome = draw(ctx, item.id);
+    const outcome = await draw(ctx, item.id);
     if (!outcome.configured) return failure("empty");
     result.owned = outcome.prize
-      ? give(ctx, outcome.prize, "item", owned.data.character ?? null)
+      ? await give(ctx, outcome.prize, "item", owned.data.character ?? null)
       : null;
   } else if (effect.type === "create") {
     const name = text(data.name, 80, true);
     const description = text(data.description ?? "", 2000);
     const image = data.image ? imageUrl(data.image) : null;
-    const personal = saveImage(
+    const personal = await saveImage(
       ctx,
       ITEMS,
       null,
@@ -256,14 +267,14 @@ export function useItem(ctx, { inventory, character, data = {} } = {}) {
       },
       data,
     );
-    result.owned = give(
+    result.owned = await give(
       ctx,
       personal,
       "personal",
       owned.data.character ?? null,
     );
   } else if (effect.type === "profile") {
-    const target = ownCharacter(ctx, character);
+    const target = await ownCharacter(ctx, character);
     if (!target) return failure("not_owned");
     if (data.revision !== target.revision) return failure("conflict");
     const profile = {
@@ -274,7 +285,7 @@ export function useItem(ctx, { inventory, character, data = {} } = {}) {
     };
     if (Object.hasOwn(data, "image"))
       profile.image = data.image ? imageUrl(data.image) : null;
-    result.document = saveImage(
+    result.document = await saveImage(
       ctx,
       CHARACTERS,
       target,
@@ -289,8 +300,8 @@ export function useItem(ctx, { inventory, character, data = {} } = {}) {
   } else return failure("not_usable");
   // The original personal-item creation form always consumes its ticket.
   if (item.data.reusable !== true || effect.type === "create")
-    ctx.delete(INVENTORY, owned.id);
-  record(ctx, "use", {
+    await ctx.delete(INVENTORY, owned.id);
+  await record(ctx, "use", {
     item: item.id,
     inventory: owned.id,
     character: character ?? null,

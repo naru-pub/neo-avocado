@@ -323,7 +323,7 @@ try {
           ? { ...ctx, add: forbid, set: forbid, delete: forbid }
           : ctx;
         result = {
-          result: modules[parts.slice(1).join("/").split(":")[0]][
+          result: await modules[parts.slice(1).join("/").split(":")[0]][
             parts.slice(1).join("/").split(":")[1]
           ](functionCtx, request.postDataJSON().args),
         };
@@ -350,7 +350,7 @@ try {
         after: url.searchParams.get("after"),
       };
       const predicate = native
-        ? boardRules.scope(ctx, {
+        ? await boardRules.scope(ctx, {
             collection: name,
             operation: id ? "get" : "list",
             id,

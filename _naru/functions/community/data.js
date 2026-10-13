@@ -15,11 +15,11 @@ import {
 } from "../../modules/shared.js";
 
 /** Native collection permissions must be admin/admin. This gate owns app authorization. */
-export function communityData(
+export async function communityData(
   ctx,
   { collection, operation, id, data, options = {} } = {},
 ) {
-  const access = communityAccess(ctx);
+  const access = await communityAccess(ctx);
   const kind =
     typeof collection === "string" && collection.startsWith(PREFIX)
       ? collection.slice(PREFIX.length)
@@ -37,9 +37,9 @@ export function communityData(
       return failure("invalid_input");
     return {
       ok: true,
-      documents: ctx
-        .getMany(collection, options.ids)
-        .map((row) => (row?.data.deleted ? null : row)),
+      documents: (await ctx.getMany(collection, options.ids)).map((row) =>
+        row?.data.deleted ? null : row,
+      ),
     };
   }
   if (operation === "list") {
@@ -55,50 +55,55 @@ export function communityData(
       query.filter = { ...query.filter, owner: ctx.member.id };
     if (kind === "logs") {
       const selected = options.board ?? query.filter?.board ?? "default";
-      const board = boardOf(ctx, selected);
+      const board = await boardOf(ctx, selected);
       if (!boardAllowed(board, access, "list")) return failure("access_denied");
       query.filter = { ...query.filter, board: selected };
     }
     if (kind === "comments") {
       const logId = query.filter?.logId;
       const log =
-        typeof logId === "string" ? ctx.get(`${PREFIX}logs`, logId) : null;
-      if (!logReadable(ctx, log, access)) return failure("document_not_found");
+        typeof logId === "string"
+          ? await ctx.get(`${PREFIX}logs`, logId)
+          : null;
+      if (!(await logReadable(ctx, log, access)))
+        return failure("document_not_found");
     }
-    const page = ctx.list(collection, query);
+    const page = await ctx.list(collection, query);
     let documents = page.documents.filter((row) => !row.data.deleted);
     if (kind === "boards") {
       documents = documents.filter((row) => boardAllowed(row, access, "list"));
-      if (!options.after && !ctx.get(BOARDS, "default"))
-        documents.unshift(boardOf(ctx));
+      if (!options.after && !(await ctx.get(BOARDS, "default")))
+        documents.unshift(await boardOf(ctx));
     }
     if (kind === "logs")
-      documents = documents.map((row) =>
-        logReadable(ctx, row, access)
-          ? {
-              ...row,
-              data: {
-                owner: author(row),
-                board: row.data.board,
-                title: row.data.title ?? "",
-                category: row.data.category ?? "",
-                image: row.data.image ?? null,
-                secret: row.data.secret === true,
-                text: (row.data.text ?? "").slice(0, 150),
-                truncated: (row.data.text ?? "").length > 150,
+      documents = await Promise.all(
+        documents.map(async (row) =>
+          (await logReadable(ctx, row, access))
+            ? {
+                ...row,
+                data: {
+                  owner: author(row),
+                  board: row.data.board,
+                  title: row.data.title ?? "",
+                  category: row.data.category ?? "",
+                  image: row.data.image ?? null,
+                  secret: row.data.secret === true,
+                  text: (row.data.text ?? "").slice(0, 150),
+                  truncated: (row.data.text ?? "").length > 150,
+                },
+              }
+            : {
+                id: row.id,
+                createdAt: row.createdAt,
+                createdBy: row.createdBy,
+                data: {
+                  owner: author(row),
+                  title: row.data.title ?? "비밀글",
+                  locked: true,
+                  secret: Boolean(row.data.secret),
+                },
               },
-            }
-          : {
-              id: row.id,
-              createdAt: row.createdAt,
-              createdBy: row.createdBy,
-              data: {
-                owner: author(row),
-                title: row.data.title ?? "비밀글",
-                locked: true,
-                secret: Boolean(row.data.secret),
-              },
-            },
+        ),
       );
     return {
       ok: true,
@@ -109,19 +114,20 @@ export function communityData(
   const previous =
     typeof id === "string"
       ? kind === "boards"
-        ? boardOf(ctx, id)
-        : ctx.get(collection, id)
+        ? await boardOf(ctx, id)
+        : await ctx.get(collection, id)
       : null;
   if (operation === "get") {
     if (!previous || previous.data.deleted)
       return failure("document_not_found");
     if (kind === "boards" && !boardAllowed(previous, access, "list"))
       return failure("access_denied");
-    if (kind === "logs" && !logReadable(ctx, previous, access))
+    if (kind === "logs" && !(await logReadable(ctx, previous, access)))
       return failure("access_denied");
     if (kind === "comments") {
-      const log = ctx.get(`${PREFIX}logs`, previous.data.logId);
-      if (!logReadable(ctx, log, access)) return failure("document_not_found");
+      const log = await ctx.get(`${PREFIX}logs`, previous.data.logId);
+      if (!(await logReadable(ctx, log, access)))
+        return failure("document_not_found");
     }
     if (
       (kind === "wallets" && id !== ctx.member.id) ||
@@ -168,12 +174,12 @@ export function communityData(
     return failure("conflict");
   if (options.condition?.absent && previous) return failure("conflict");
   if (operation === "delete")
-    return deleteCommunityDocument(ctx, collection, kind, previous);
+    return await deleteCommunityDocument(ctx, collection, kind, previous);
   if (previous?.data.deleted) return failure("document_not_found");
   if (
     kind === "logs" &&
     !boardAllowed(
-      boardOf(ctx, previous?.data.board ?? data?.board ?? "default"),
+      await boardOf(ctx, previous?.data.board ?? data?.board ?? "default"),
       access,
       "write",
     )
@@ -201,7 +207,7 @@ export function communityData(
   }
   if (kind === "logs") {
     const boardId = previous?.data.board ?? data.board ?? "default";
-    const board = boardOf(ctx, boardId);
+    const board = await boardOf(ctx, boardId);
     const secret =
       board.data.secret === "required" ||
       (Object.hasOwn(data, "secret")
@@ -232,11 +238,12 @@ export function communityData(
   if (kind === "comments") {
     const logId = previous?.data.logId ?? data.logId;
     const log =
-      typeof logId === "string" ? ctx.get(`${PREFIX}logs`, logId) : null;
-    if (!logReadable(ctx, log, access)) return failure("document_not_found");
+      typeof logId === "string" ? await ctx.get(`${PREFIX}logs`, logId) : null;
+    if (!(await logReadable(ctx, log, access)))
+      return failure("document_not_found");
     if (
       !boardAllowed(
-        boardOf(ctx, log.data.board ?? "default"),
+        await boardOf(ctx, log.data.board ?? "default"),
         access,
         "comment",
       )
@@ -259,7 +266,7 @@ export function communityData(
         : value.image !== previous.data.image),
     ),
     document: ["logs", "characters"].includes(kind)
-      ? saveImage(
+      ? await saveImage(
           ctx,
           collection,
           previous,
@@ -268,7 +275,7 @@ export function communityData(
           operation === "add" ? undefined : id,
         )
       : operation === "add"
-        ? ctx.add(collection, value)
-        : ctx.set(collection, id, value),
+        ? await ctx.add(collection, value)
+        : await ctx.set(collection, id, value),
   };
 }
