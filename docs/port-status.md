@@ -33,7 +33,7 @@ reproduce the existing demo. SDK additions require the owner's approval.
 | Quests                                            | `adm/quest*` and their callers                              | Reference admin fields implemented; scheduled member display and category pagination implemented; reference has no claim/reward endpoint                                                                |
 | Private messages and notifications                | `bbs/memo*`, `ajax/*call*`                                  | Private inbox/sent/read/reply/delete, receive preference, bulk costs and live unread notices implemented; board notifications pending                                                                   |
 | Community administration                          | `adm/admin.menu*.php`                                       | Owner member status/role controls and existing catalog/economy controls implemented; broader board moderation pending; owner cleanup recovery implemented                                               |
-| Navigation, content, themes and emoticons         | `adm/menu*`, `adm/content*`, `adm/design*`, `adm/emoticon*` | Emoticon owner CRUD, comment catalogue/picker and safe keyword rendering implemented; navigation, content and themes pending                                                                            |
+| Navigation, content, themes and emoticons         | `adm/menu*`, `adm/content*`, `adm/design*`, `adm/emoticon*` | Emoticon owner CRUD, comment catalogue/picker and safe keyword rendering implemented; managed desktop/mobile content implemented; navigation and themes pending                                         |
 | Existing data import                              | SQL schema and uploaded files                               | Pending: explicit ID/member mapping and media handling; never copy PHP credentials                                                                                                                      |
 | Browser and server acceptance                     | Naru release checklist                                      | 41 tests and synthetic Chrome pass; enforced budgets peak at 84 reads/120 and 10 mutations/30. Real deployment acceptance pending                                                                       |
 
@@ -193,3 +193,20 @@ reason; passing the current demo tests is not completion of the port.
   61 unit/page tests and current SDK QuickJS/SQLite checks pass.
 - Actual-SDK Chrome passes owner emoticon creation, picker insertion and saved
   comment image rendering. No SDK API change or live deployment was made.
+
+- Managed content ports adm/contentform.php's title, desktop/mobile HTML and
+  header/footer artwork. Owners also control publication and member read level.
+  Member lists omit bodies; direct reads enforce the same access and return only
+  the chosen body (mobile falls back to desktop). The client renders plain text
+  literally and HTML through DOMPurify's HTML profile without executable markup,
+  form controls or page-global style/id/name attributes. Body fields are capped
+  at 12,000 characters each so a selected body fits the function-result budget;
+  the actual QuickJS/SQLite suite verifies maximum-size Korean bodies and a
+  ten-record metadata list. 65 unit/page tests and Chrome desktop/mobile checks
+  pass. Add admin/admin `neo_avocado_content` and renew owner collection scope.
+  PHP includes/skin execution are platform-specific: convert their presentation
+  to static content/theme components during import. Navigation/public visitors,
+  reusable theme components and existing-data import are still unfinished.
+- DOMPurify assets and dual-license files are committed for static deployment;
+  `npm run vendor:content` refreshes from the locked package and CI runs
+  `npm run vendor:check` to detect stale assets. No SDK API was added.

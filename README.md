@@ -33,7 +33,7 @@ reproduce the existing demo. SDK additions require the owner's approval.
 | Quests                                            | `adm/quest*` and their callers                              | Reference admin fields implemented; scheduled member display and category pagination implemented; reference has no claim/reward endpoint                                                                |
 | Private messages and notifications                | `bbs/memo*`, `ajax/*call*`                                  | Private inbox/sent/read/reply/delete, receive preference, bulk costs and live unread notices implemented; board notifications pending                                                                   |
 | Community administration                          | `adm/admin.menu*.php`                                       | Owner member status/role controls and existing catalog/economy controls implemented; broader board moderation pending; owner cleanup recovery implemented                                               |
-| Navigation, content, themes and emoticons         | `adm/menu*`, `adm/content*`, `adm/design*`, `adm/emoticon*` | Emoticon owner CRUD, comment catalogue/picker and safe keyword rendering implemented; navigation, content and themes pending                                                                            |
+| Navigation, content, themes and emoticons         | `adm/menu*`, `adm/content*`, `adm/design*`, `adm/emoticon*` | Emoticon owner CRUD, comment catalogue/picker and safe keyword rendering implemented; managed desktop/mobile content implemented; navigation and themes pending                                         |
 | Existing data import                              | SQL schema and uploaded files                               | Pending: explicit ID/member mapping and media handling; never copy PHP credentials                                                                                                                      |
 | Browser and server acceptance                     | Naru release checklist                                      | 41 tests and synthetic Chrome pass; enforced budgets peak at 84 reads/120 and 10 mutations/30. Real deployment acceptance pending                                                                       |
 
@@ -191,11 +191,36 @@ reason; passing the current demo tests is not completion of the port.
   Definitions load lazily through the existing protected read gateway. Add
   admin/admin `neo_avocado_emoticons` and renew the owner collection grant.
   61 unit/page tests and current SDK QuickJS/SQLite checks pass.
+- Actual-SDK Chrome passes owner emoticon creation, picker insertion and saved
+  comment image rendering. No SDK API change or live deployment was made.
 
-## 이모티콘
+- Managed content ports adm/contentform.php's title, desktop/mobile HTML and
+  header/footer artwork. Owners also control publication and member read level.
+  Member lists omit bodies; direct reads enforce the same access and return only
+  the chosen body (mobile falls back to desktop). The client renders plain text
+  literally and HTML through DOMPurify's HTML profile without executable markup,
+  form controls or page-global style/id/name attributes. Body fields are capped
+  at 12,000 characters each so a selected body fits the function-result budget;
+  the actual QuickJS/SQLite suite verifies maximum-size Korean bodies and a
+  ten-record metadata list. 65 unit/page tests and Chrome desktop/mobile checks
+  pass. Add admin/admin `neo_avocado_content` and renew owner collection scope.
+  PHP includes/skin execution are platform-specific: convert their presentation
+  to static content/theme components during import. Navigation/public visitors,
+  reusable theme components and existing-data import are still unfinished.
+- DOMPurify assets and dual-license files are committed for static deployment;
+  `npm run vendor:content` refreshes from the locked package and CI runs
+  `npm run vendor:check` to detect stale assets. No SDK API was added.
 
-`neo_avocado_emoticons` 컬렉션을 읽기·쓰기 모두 **관리자만**으로 만들고 운영자로
-다시 로그인하여 권한을 승인하세요. 운영 화면 **이모티콘**에서 명령어와 HTTPS
-이미지 주소를 등록합니다. 댓글 입력란의 **이모티콘**을 펼쳐 명령어를 삽입하거나
-직접 입력하면 저장된 댓글에서 그림으로 표시됩니다. 댓글 수정 시에는 원래
-명령어가 유지됩니다. 명령어가 겹치면 긴 명령어부터 표시합니다.
+## 안내 페이지
+
+`neo_avocado_content` 컬렉션을 읽기·쓰기 모두 **관리자만**으로 만들고 운영자로
+다시 로그인하여 권한을 승인하세요. **내용 페이지**에서 제목, 본문 형식,
+기본·모바일 본문, 상단·하단 이미지, 공개 여부와 읽기 등급을 설정합니다.
+회원 화면 **안내**에서 선택해 읽습니다. 모바일 본문이 비어 있으면 기본 본문을
+표시합니다. 본문은 각각 최대 12,000자입니다.
+
+HTML은 [DOMPurify](https://github.com/cure53/DOMPurify)로 정리하여 표시합니다.
+스크립트·폼·전체 페이지에 영향을 주는 스타일/ID/이름은 표시하지 않습니다.
+원본의 PHP include와 skin 파일은 내용이나 정적 테마 구성요소로 옮겨야 합니다.
+`npm run vendor:content`로 잠긴 의존성에서 배포용 자산을 갱신하고,
+`npm run vendor:check`로 자산이 의존성과 일치하는지 검사합니다.

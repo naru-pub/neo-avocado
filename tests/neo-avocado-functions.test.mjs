@@ -33,6 +33,8 @@ import {
   join,
   communityData,
   quests,
+  contentPages,
+  contentPage,
 } from "../_naru/functions/neo-avocado.js";
 
 const P = "neo_avocado_";
@@ -1206,4 +1208,41 @@ test("quest reads enforce Korean start/end boundaries, categories and pagination
     quests(ctx, { type: "weekly", after: page.nextCursor }).documents.length,
     11,
   );
+});
+
+test("content read levels and publication protect both metadata and selected bodies", () => {
+  const { ctx, table } = fakeCtx();
+  table(`${P}content`).set("guide", {
+    name: "Guide",
+    body: "Desktop",
+    mobileBody: "Mobile",
+    enabled: true,
+    readLevel: 2,
+    format: "html",
+  });
+  table(`${P}content`).set("restricted", {
+    name: "Restricted",
+    body: "Private",
+    readLevel: 5,
+  });
+  table(`${P}content`).set("draft", {
+    name: "Draft",
+    body: "Secret",
+    enabled: false,
+  });
+  assert.deepEqual(contentPages(ctx).documents, [
+    { id: "guide", data: { name: "Guide" } },
+  ]);
+  assert.equal(contentPage(ctx, { id: "guide" }).page.body, "Desktop");
+  assert.equal(
+    contentPage(ctx, { id: "guide", mobile: true }).page.body,
+    "Mobile",
+  );
+  assert.equal(
+    contentPage(ctx, { id: "restricted" }).reason,
+    "document_not_found",
+  );
+  assert.equal(contentPage(ctx, { id: "draft" }).reason, "document_not_found");
+  table(`${P}members`).set("m-1", { level: 5 });
+  assert.equal(contentPage(ctx, { id: "restricted" }).page.body, "Private");
 });

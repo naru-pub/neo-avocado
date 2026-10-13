@@ -1,6 +1,44 @@
 // Pure forms/validation shared with tests. Only an SDK owner handle writes these.
 const P = "neo_avocado_";
 export const models = {
+  content: {
+    label: "내용 페이지",
+    help: "안내·소개 페이지를 만듭니다. 모바일 본문이 비어 있으면 기본 본문을 표시합니다. 읽기 등급은 회원 등급 기준입니다.",
+    fields: [
+      { key: "name", label: "제목", required: true, max: 120 },
+      { key: "enabled", label: "공개 중", type: "checkbox", default: true },
+      {
+        key: "readLevel",
+        label: "읽기 등급 (1~10)",
+        type: "number",
+        default: 2,
+      },
+      {
+        key: "format",
+        label: "본문 형식",
+        type: "choice",
+        options: [
+          ["html", "HTML"],
+          ["text", "일반 텍스트"],
+        ],
+      },
+      {
+        key: "body",
+        label: "본문",
+        type: "textarea",
+        required: true,
+        max: 12000,
+      },
+      {
+        key: "mobileBody",
+        label: "모바일 본문 (빈칸: 기본 본문)",
+        type: "textarea",
+        max: 12000,
+      },
+      { key: "headerImage", label: "상단 이미지 주소", type: "url", max: 2000 },
+      { key: "footerImage", label: "하단 이미지 주소", type: "url", max: 2000 },
+    ],
+  },
   emoticons: {
     label: "이모티콘",
     help: "댓글에서 입력한 명령어를 그림으로 표시합니다. 예: :웃음:. 이미지 주소는 HTTPS로 입력하세요.",
@@ -592,6 +630,8 @@ export function buildRecord(section, values, previous, references) {
     data.character = data.character || null;
     if (!previous) data.from = "admin";
   }
+  if (section === "content" && (data.readLevel < 1 || data.readLevel > 10))
+    throw new Error("읽기 등급은 1~10입니다.");
   if (section === "quests") {
     const date = (value) => {
       if (!value) return null;

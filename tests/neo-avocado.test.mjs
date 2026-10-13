@@ -282,12 +282,26 @@ async function page(database) {
   await emoticons.link(() => {
     throw new Error("unexpected emoticon dependency");
   });
+  const purifier = new SourceTextModule(
+    await readFile(new URL("vendor/purify.es.mjs", root), "utf8"),
+    { context },
+  );
+  await purifier.link(() => {
+    throw new Error("unexpected purifier dependency");
+  });
+  const renderer = new SourceTextModule(
+    await readFile(new URL("content-renderer.js", root), "utf8"),
+    { context },
+  );
+  await renderer.link(() => purifier);
   await app.link(async (specifier) =>
     specifier === "./media-cleanup.js"
       ? cleanup
       : specifier === "./emoticons.js"
         ? emoticons
-        : config,
+        : specifier === "./content-renderer.js"
+          ? renderer
+          : config,
   );
   await app.evaluate();
   const $ = (id) => window.document.getElementById(id);

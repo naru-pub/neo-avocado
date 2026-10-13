@@ -597,3 +597,16 @@ dialog {
   align-items: center;
   gap: 0.4rem;
 }
+
+.content-artwork,
+.content-body img {
+  max-width: 100%;
+  height: auto;
+}
+.content-body {
+  overflow-wrap: anywhere;
+  overflow-x: auto;
+}
+.plain-content {
+  white-space: pre-wrap;
+}

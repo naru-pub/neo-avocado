@@ -313,3 +313,30 @@ test("title ownership review searches all holders and retains equipped orphan re
   }));
   assert.equal(titleHoldings(many, [], references.titles, "c74").length, 1);
 });
+
+test("managed content validates body sizes, artwork and read levels", () => {
+  const values = {
+    id: "guide",
+    name: "Guide",
+    enabled: true,
+    readLevel: "2",
+    format: "html",
+    body: "<p>Guide</p>",
+    mobileBody: "",
+    headerImage: "",
+    footerImage: "",
+  };
+  assert.equal(
+    buildRecord("content", values, null, references).data.body,
+    "<p>Guide</p>",
+  );
+  for (const change of [
+    { readLevel: "0" },
+    { readLevel: "11" },
+    { body: "x".repeat(12001) },
+    { headerImage: "javascript:bad()" },
+  ])
+    assert.throws(() =>
+      buildRecord("content", { ...values, ...change }, null, references),
+    );
+});

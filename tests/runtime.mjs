@@ -468,6 +468,26 @@ try {
   assert.equal(mediaDone, true);
   for (let n = 1; n <= 11; n++)
     assert.equal(get(`${P}media_assets`, assetId(n)).data.cleanup, true);
+  for (let i = 0; i < 10; i++)
+    put(`${P}content`, `content-${i}`, {
+      name: "Guide",
+      enabled: true,
+      readLevel: 2,
+      format: "html",
+      body: "가".repeat(12000),
+      mobileBody: "나".repeat(12000),
+      headerImage: "",
+      footerImage: "",
+    });
+  assert.equal((await call("contentPages", {})).documents.length, 10);
+  assert.equal(
+    (await call("contentPage", { id: "content-0" })).page.body.length,
+    12000,
+  );
+  assert.equal(
+    (await call("contentPage", { id: "content-0", mobile: true })).page.body[0],
+    "나",
+  );
   console.log(
     "Actual Naru runner + QuickJS + SQLite checks passed, including rollback after partial writes.",
   );

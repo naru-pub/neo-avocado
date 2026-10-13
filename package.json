@@ -7,7 +7,9 @@
     "test:runtime": "node tests/runtime.mjs",
     "test:browser": "node tests/browser-smoke.mjs",
     "format": "prettier --write .",
-    "lint": "prettier --check ."
+    "lint": "prettier --check .",
+    "vendor:content": "node scripts/vendor-content.mjs",
+    "vendor:check": "node scripts/vendor-content.mjs --check"
   },
   "devDependencies": {
     "@jitl/quickjs-ng-wasmfile-release-sync": "0.32.0",
@@ -15,5 +17,8 @@
     "jsdom": "^30.0.1",
     "prettier": "^3.9.6",
     "quickjs-emscripten-core": "0.32.0"
+  },
+  "dependencies": {
+    "dompurify": "^3.4.17"
   }
 }

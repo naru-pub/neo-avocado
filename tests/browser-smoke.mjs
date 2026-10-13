@@ -156,6 +156,8 @@ const server = createServer(async (req, res) => {
       "/index.html": "index.html",
       "/app.js": "app.js",
       "/emoticons.js": "emoticons.js",
+      "/content-renderer.js": "content-renderer.js",
+      "/vendor/purify.es.mjs": "vendor/purify.es.mjs",
       "/admin.html": "admin.html",
       "/admin.js": "admin.js",
       "/admin-model.js": "admin-model.js",
@@ -176,7 +178,7 @@ const server = createServer(async (req, res) => {
     }
     res.setHeader(
       "Content-Type",
-      path.endsWith(".js")
+      path.endsWith(".js") || path.endsWith(".mjs")
         ? "text/javascript"
         : path.endsWith(".css")
           ? "text/css"
@@ -887,6 +889,20 @@ try {
     .fill("https://media.naru.pub/emoticon.png");
   await page.locator('#adminForm [type="submit"]').click();
   await page.locator("#adminForm").waitFor({ state: "hidden" });
+  await page.locator("#adminSection").selectOption("content");
+  await page.locator("#adminNew").click();
+  await page.locator('#adminFields [name="id"]').fill("guide");
+  await page.locator('#adminFields [name="name"]').fill("커뮤니티 안내");
+  await page
+    .locator('#adminFields [name="body"]')
+    .fill(
+      "<h3>Desktop guide</h3><strong>Welcome</strong><script>window.contentAttack=true</script>",
+    );
+  await page
+    .locator('#adminFields [name="mobileBody"]')
+    .fill("<p>Mobile guide</p>");
+  await page.locator('#adminForm [type="submit"]').click();
+  await page.locator("#adminForm").waitFor({ state: "hidden" });
   await page.locator("#adminSection").selectOption("quests");
   await page.locator("#adminNew").click();
   await page.locator('#adminFields [name="id"]').fill("daily-quest");
@@ -948,6 +964,19 @@ try {
   assert.equal(deletedMedia.has(memberCleanupId), true);
   assert.equal(table(`${P}media_assets`).has(memberCleanupId), false);
 
+  await page.locator("#tabContent").click();
+  await page
+    .locator("#contentBody h3")
+    .filter({ hasText: "Desktop guide" })
+    .waitFor();
+  assert.equal(await page.evaluate(() => window.contentAttack), undefined);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator("#refreshContent").click();
+  await page
+    .locator("#contentBody p")
+    .filter({ hasText: "Mobile guide" })
+    .waitFor();
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.locator("#tabQuests").click();
   await page
     .locator("#quests h3")

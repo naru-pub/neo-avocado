@@ -47,6 +47,7 @@
           캐릭터
         </button>
         <button id="tabShop" type="button" aria-pressed="false">상점</button>
+        <button id="tabContent" type="button" aria-pressed="false">안내</button>
         <button id="tabQuests" type="button" aria-pressed="false">
           퀘스트
         </button>
@@ -152,6 +153,11 @@
           <ol id="history"></ol>
           <button id="moreHistory" type="button" hidden>기록 더 보기</button>
         </details>
+      </section>
+      <section id="contentView" hidden>
+        <label>안내 페이지<select id="contentPage"></select></label>
+        <button id="refreshContent" type="button">새로고침</button>
+        <article id="contentBody" class="card"></article>
       </section>
       <section id="questsView" hidden>
         <h2>퀘스트</h2>

@@ -5,6 +5,7 @@ import {
   recoverPendingUploads,
 } from "./media-cleanup.js";
 import { emoticonContent } from "./emoticons.js";
+import { renderContent } from "./content-renderer.js";
 import { config } from "./config.js";
 
 // 아보카도 에디션의 뼈대만 나루 회원으로 다시 만든 것: 회원 로그인과 닉네임,
@@ -172,6 +173,8 @@ function clearPrivateViews() {
     "messageDetail",
     "history",
     "quests",
+    "contentBody",
+    "contentPage",
     "messageRecipients",
   ])
     $(id).replaceChildren();
@@ -807,6 +810,8 @@ async function callRule(name, args) {
     "history",
     "characterStatus",
     "quests",
+    "contentPages",
+    "contentPage",
   ].includes(name)
     ? "read"
     : "call";
@@ -1610,6 +1615,7 @@ function showTab(name) {
     ["tabShop", "shopView", "shop"],
     ["tabMessages", "messagesView", "messages"],
     ["tabQuests", "questsView", "quests"],
+    ["tabContent", "contentView", "content"],
   ]) {
     $(tab).setAttribute("aria-pressed", String(name === key));
     $(view).hidden = name !== key;
@@ -1975,3 +1981,44 @@ async function loadEmoticons() {
   state.emoticons = rows.filter((row) => !row.data.deleted);
   return state.emoticons;
 }
+
+async function loadContentBody() {
+  const id = $("contentPage").value;
+  if (!id) {
+    $("contentBody").textContent = "등록된 안내 페이지가 없습니다.";
+    return;
+  }
+  const member = state.member;
+  $("contentBody").replaceChildren();
+  const result = await callRule("contentPage", {
+    id,
+    mobile: window.innerWidth <= 700,
+  });
+  if (state.member !== member || $("contentPage").value !== id) return;
+  renderContent($("contentBody"), result.page);
+}
+async function loadContentPages() {
+  const previous = $("contentPage").value;
+  $("contentPage").replaceChildren();
+  let cursor = null;
+  do {
+    const page = await callRule("contentPages", { after: cursor });
+    for (const row of page.documents) {
+      const option = document.createElement("option");
+      option.value = row.id;
+      option.textContent = row.data.name;
+      $("contentPage").append(option);
+    }
+    cursor = page.nextCursor;
+  } while (cursor);
+  if ([...$("contentPage").options].some((option) => option.value === previous))
+    $("contentPage").value = previous;
+  await loadContentBody();
+}
+$("tabContent").onclick = () =>
+  run(async () => {
+    showTab("content");
+    await loadContentPages();
+  });
+$("contentPage").onchange = () => run(() => loadContentBody());
+$("refreshContent").onclick = () => run(() => loadContentPages());
