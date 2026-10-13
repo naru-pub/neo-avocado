@@ -21,21 +21,21 @@ reproduce the existing demo. SDK additions require the owner's approval.
 
 ## Requirements and evidence
 
-| Workflow                                          | Reference                                                   | Status                                                                                                                                                                                             |
-| ------------------------------------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Member login and profiles                         | `bbs/register*`, `mypage`                                   | Identity, profile, application approval/closed admission/bans implemented; upload authority remains unresolved; approved read budget implemented locally                                           |
-| Drawing logs and comments                         | `bbs/write*`, board skins                                   | Gateway CRUD, ownership/revisions, moderator edit/delete and resumable child cleanup implemented; board levels/categories/secrets/previews implemented; public/guest access and rich posts pending |
-| Character profiles                                | `mypage/character`, `adm/character_article*`                | Basic create/read/edit/delete and main character implemented; custom fields pending                                                                                                                |
-| Character relationships, couples, outfits, titles | `mypage/character`, `couple`, `adm/title*`                  | Relationships, wardrobe, owner-managed couples/title grants and member title selection implemented; bulk grants/revocation implemented; gallery review pending; title deletion cleanup implemented |
-| Stats, experience and ranks                       | `adm/status*`, `adm/exp*`, `adm/level*`                     | Allocation, recovery, official progression, rank display and owner administration implemented                                                                                                      |
-| Shop, attendance and gacha                        | `shop`, `extend/item.lib.php`                               | Member flows, private history, exchange costs and owner catalog/gacha/recipe forms implemented                                                                                                     |
-| Inventory use, sale, gift and crafting            | `inventory`, `adm/recipi*`                                  | Use eligibility, sale/gift/craft, character linking, owner inventory grants and validated catalog effects implemented                                                                              |
-| Quests                                            | `adm/quest*` and their callers                              | Reference admin fields implemented; scheduled member display and category pagination implemented; reference has no claim/reward endpoint                                                           |
-| Private messages and notifications                | `bbs/memo*`, `ajax/*call*`                                  | Private inbox/sent/read/reply/delete, receive preference, bulk costs and live unread notices implemented; board notifications pending                                                              |
-| Community administration                          | `adm/admin.menu*.php`                                       | Owner member status/role controls and existing catalog/economy controls implemented; broader board moderation pending; owner cleanup recovery implemented                                          |
-| Navigation, content, themes and emoticons         | `adm/menu*`, `adm/content*`, `adm/design*`, `adm/emoticon*` | Pending                                                                                                                                                                                            |
-| Existing data import                              | SQL schema and uploaded files                               | Pending: explicit ID/member mapping and media handling; never copy PHP credentials                                                                                                                 |
-| Browser and server acceptance                     | Naru release checklist                                      | 41 tests and synthetic Chrome pass; enforced budgets peak at 84 reads/120 and 10 mutations/30. Real deployment acceptance pending                                                                  |
+| Workflow                                          | Reference                                                   | Status                                                                                                                                                                                                  |
+| ------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Member login and profiles                         | `bbs/register*`, `mypage`                                   | Identity, profile, application approval/closed admission/bans implemented; upload authority remains unresolved; approved read budget implemented locally                                                |
+| Drawing logs and comments                         | `bbs/write*`, board skins                                   | Gateway CRUD, ownership/revisions, moderator edit/delete and resumable child cleanup implemented; board levels/categories/secrets/previews implemented; public/guest access and rich posts pending      |
+| Character profiles                                | `mypage/character`, `adm/character_article*`                | Basic create/read/edit/delete and main character implemented; custom fields pending                                                                                                                     |
+| Character relationships, couples, outfits, titles | `mypage/character`, `couple`, `adm/title*`                  | Relationships, wardrobe, owner-managed couples/title grants and member title selection implemented; bulk grants/revocation implemented; ownership gallery review and title deletion cleanup implemented |
+| Stats, experience and ranks                       | `adm/status*`, `adm/exp*`, `adm/level*`                     | Allocation, recovery, official progression, rank display and owner administration implemented                                                                                                           |
+| Shop, attendance and gacha                        | `shop`, `extend/item.lib.php`                               | Member flows, private history, exchange costs and owner catalog/gacha/recipe forms implemented                                                                                                          |
+| Inventory use, sale, gift and crafting            | `inventory`, `adm/recipi*`                                  | Use eligibility, sale/gift/craft, character linking, owner inventory grants and validated catalog effects implemented                                                                                   |
+| Quests                                            | `adm/quest*` and their callers                              | Reference admin fields implemented; scheduled member display and category pagination implemented; reference has no claim/reward endpoint                                                                |
+| Private messages and notifications                | `bbs/memo*`, `ajax/*call*`                                  | Private inbox/sent/read/reply/delete, receive preference, bulk costs and live unread notices implemented; board notifications pending                                                                   |
+| Community administration                          | `adm/admin.menu*.php`                                       | Owner member status/role controls and existing catalog/economy controls implemented; broader board moderation pending; owner cleanup recovery implemented                                               |
+| Navigation, content, themes and emoticons         | `adm/menu*`, `adm/content*`, `adm/design*`, `adm/emoticon*` | Pending                                                                                                                                                                                                 |
+| Existing data import                              | SQL schema and uploaded files                               | Pending: explicit ID/member mapping and media handling; never copy PHP credentials                                                                                                                      |
+| Browser and server acceptance                     | Naru release checklist                                      | 41 tests and synthetic Chrome pass; enforced budgets peak at 84 reads/120 and 10 mutations/30. Real deployment acceptance pending                                                                       |
 
 Naru replaces PHP hosting, account passwords, email verification and SQL server
 maintenance. These platform implementation details are not new application features.
@@ -171,14 +171,18 @@ reason; passing the current demo tests is not completion of the port.
   Reference adm/quest_form.php links quest.php, but that file/claim implementation
   is absent, so no invented reward/claim endpoint is introduced. 58 unit/page
   tests and the current SDK QuickJS/SQLite suite pass.
+- Actual-SDK Chrome verifies owner quest creation, image persistence, member
+  display and weekly filtering. Local acceptance passed; no live collection or
+  deployment has been changed.
 
-## 퀘스트
+- Owner title-ownership review matches adm/title_has_list.php: holder names,
+  title artwork, equipped status, character/title search and individual revoke.
+  Search covers all progression pages, with 50 results per displayed page.
+  Missing character/title definitions remain visible for cleanup. Revision-checked
+  revocation preserves unrelated grants and clears matching equipped selection.
+  59 unit/page checks pass; no additional SDK API is required.
 
-`neo_avocado_quests` 컬렉션을 읽기·쓰기 모두 **관리자만**으로 만들고 운영자로
-다시 로그인하여 권한을 승인하세요. 운영 화면 **퀘스트**에서 일일·주간 구분,
-세력, 이름, 시작·종료 시간과 이미지 주소를 설정합니다. 이미지는 한 줄에 하나,
-최대 20개입니다. 시간은 한국 시간이며 빈 시작/종료는 제한이 없습니다.
-
-회원 화면 **퀘스트**에는 지금 게시 기간에 해당하는 자료만 표시됩니다. 시작
-시각부터 표시하고 종료 시각에는 숨깁니다. 원본 저장소에는 보상 수령 기능이
-없어 자동 보상이나 수령 버튼은 추가하지 않았습니다.
+운영 화면 **타이틀 보유·착용 현황**에서 캐릭터·타이틀 이름이나 ID로 검색하고
+개별 지급을 **회수**할 수 있습니다. 타이틀 그림과 착용 상태를 함께 표시합니다.
+검색은 전체 보유 기록을 대상으로 하며 결과는 50개씩 표시합니다. 삭제된
+캐릭터나 타이틀의 남은 기록도 이 화면에서 회수할 수 있습니다.

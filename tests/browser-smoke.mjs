@@ -844,6 +844,24 @@ try {
     () => !document.querySelector('#titleGrantForm [type="submit"]').disabled,
   );
   await page.locator("#titleGrantCancel").click();
+  await page.locator("#adminSection").selectOption("title_holdings");
+  await page.locator("#holdingsSearch").fill("노랑");
+  await page.locator("#holdingsFind").click();
+  await page
+    .locator("#adminRows li")
+    .filter({ hasText: "노랑 · 우승자" })
+    .waitFor();
+  await page.getByRole("button", { name: "회수", exact: true }).click();
+  await page.waitForFunction(
+    () => document.querySelector("#adminRows").children.length === 0,
+  );
+  assert.equal(
+    table(`${P}character_state`)
+      .get("character-other")
+      .data.titles.includes("winner"),
+    false,
+  );
+  await page.locator("#adminSection").selectOption("titles");
   await page
     .locator("#adminRows li")
     .filter({ hasText: "우승자" })

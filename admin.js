@@ -8,6 +8,7 @@ import {
   buildRecord,
   fieldValue,
   walletWrites,
+  titleHoldings,
 } from "./admin-model.js";
 const $ = (id) => document.getElementById(id);
 let grantTitleId;
@@ -52,20 +53,80 @@ async function load({ more = false } = {}) {
   const model = models[section];
   $("adminHelp").textContent = model.help;
   $("adminNew").hidden = Boolean(model.readOnly);
-  const page = await owner.collection(model.collection).list({
-    size: 50,
-    after: more ? cursor : null,
-    ...(model.cleanup
-      ? {
-          filter:
-            model.cleanup === "media" ? { cleanup: true } : { deleted: true },
-        }
-      : {}),
-  });
+  $("holdingsSearchLabel").hidden = !model.holdings;
+  let page;
+  if (model.holdings) {
+    references.titles = await all("neo_avocado_titles");
+    references.characters = await all("neo_avocado_characters");
+    const rows = titleHoldings(
+      await all(model.collection),
+      references.characters,
+      references.titles,
+      $("holdingsSearch").value,
+    );
+    const start = more ? Number(cursor) : 0;
+    page = {
+      documents: rows.slice(start, start + 50),
+      nextCursor: start + 50 < rows.length ? String(start + 50) : null,
+    };
+  } else
+    page = await owner.collection(model.collection).list({
+      size: 50,
+      after: more ? cursor : null,
+      ...(model.cleanup
+        ? {
+            filter:
+              model.cleanup === "media" ? { cleanup: true } : { deleted: true },
+          }
+        : {}),
+    });
   if (requestedSection !== section || !owner) return;
   if (!more) $("adminRows").replaceChildren();
   for (const row of page.documents) {
     const li = document.createElement("li");
+    if (model.holdings) {
+      li.append(
+        `${row.character} · ${row.title}${row.active ? " · 착용 중" : ""} `,
+      );
+      if (typeof row.image === "string" && row.image.startsWith("https://")) {
+        const image = document.createElement("img");
+        image.src = row.image;
+        image.alt = row.title;
+        image.loading = "lazy";
+        image.className = "title-image";
+        li.prepend(image);
+      }
+      const revoke = document.createElement("button");
+      revoke.type = "button";
+      revoke.textContent = "회수";
+      revoke.onclick = () =>
+        run(async () => {
+          revoke.disabled = true;
+          try {
+            const previous = row.state;
+            await owner.collection("neo_avocado_character_state").set(
+              previous.id,
+              {
+                ...previous.data,
+                titles: (previous.data.titles ?? []).filter(
+                  (id) => id !== row.titleId,
+                ),
+                ...(previous.data.activeTitle === row.titleId
+                  ? { activeTitle: null }
+                  : {}),
+              },
+              { condition: { revision: previous.revision } },
+            );
+            $("adminStatus").textContent = "타이틀을 회수했습니다.";
+            await load();
+          } finally {
+            revoke.disabled = false;
+          }
+        });
+      li.append(revoke);
+      $("adminRows").append(li);
+      continue;
+    }
     if (model.cleanup) {
       li.append(`${row.data.name ?? row.data.title ?? row.id} · 삭제 정리 중 `);
       const resume = document.createElement("button");
@@ -548,5 +609,13 @@ $("titleGrantForm").onsubmit = async (event) => {
     controls.forEach((control) => {
       control.disabled = false;
     });
+  }
+};
+
+$("holdingsFind").onclick = () => run(() => load());
+$("holdingsSearch").onkeydown = (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    run(() => load());
   }
 };

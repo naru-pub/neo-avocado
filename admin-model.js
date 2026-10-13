@@ -394,6 +394,14 @@ models.media_cleanup = {
   readOnly: true,
   fields: [],
 };
+models.title_holdings = {
+  label: "타이틀 보유·착용 현황",
+  help: "캐릭터·타이틀 이름으로 검색하고 개별 지급을 회수합니다. 삭제된 정의나 캐릭터의 기록도 확인할 수 있습니다.",
+  collection: `${P}character_state`,
+  holdings: true,
+  readOnly: true,
+  fields: [],
+};
 for (const [name, model] of Object.entries(models))
   model.collection ??= `${P}${name}`;
 export const scopes = [
@@ -704,4 +712,35 @@ export function walletWrites(record, previous, note, at, historyId) {
       },
     },
   ];
+}
+
+export function titleHoldings(states, characters, titles, query = "") {
+  const needle = query.trim().toLocaleLowerCase();
+  return states
+    .flatMap((row) =>
+      [
+        ...new Set([
+          ...(row.data.titles ?? []),
+          ...(row.data.activeTitle ? [row.data.activeTitle] : []),
+        ]),
+      ].map((titleId) => {
+        const character = characters.find((value) => value.id === row.id);
+        const title = titles.find((value) => value.id === titleId);
+        return {
+          state: row,
+          titleId,
+          title: title?.data.name ?? `${titleId} (삭제된 타이틀)`,
+          character: character?.data.name ?? `${row.id} (삭제된 캐릭터)`,
+          image: title?.data.image,
+          active: row.data.activeTitle === titleId,
+        };
+      }),
+    )
+    .filter(
+      (row) =>
+        !needle ||
+        `${row.character} ${row.title} ${row.state.id} ${row.titleId}`
+          .toLocaleLowerCase()
+          .includes(needle),
+    );
 }

@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildRecord, scopes, models, walletWrites } from "../admin-model.js";
+import {
+  buildRecord,
+  scopes,
+  models,
+  walletWrites,
+  titleHoldings,
+} from "../admin-model.js";
 const references = {
   profiles: [
     { id: "member-a", data: { nick: "A" } },
@@ -267,4 +273,43 @@ test("quest forms validate Korean scheduling and multiline images", () => {
     assert.throws(() =>
       buildRecord("quests", { ...values, ...change }, null, references),
     );
+});
+
+test("title ownership review searches all holders and retains equipped orphan references", () => {
+  const rows = [
+    {
+      id: "hero",
+      revision: "r1",
+      data: { titles: ["winner", "winner"], activeTitle: "winner" },
+    },
+    { id: "missing", data: { titles: [], activeTitle: "gone" } },
+  ];
+  const holdings = titleHoldings(
+    rows,
+    references.characters,
+    references.titles,
+  );
+  assert.equal(holdings.length, 2);
+  assert.equal(holdings[0].active, true);
+  assert.equal(holdings[1].titleId, "gone");
+  assert.equal(
+    titleHoldings(rows, references.characters, references.titles, "Winner")
+      .length,
+    1,
+  );
+  assert.equal(
+    titleHoldings(rows, references.characters, references.titles, "Hero")
+      .length,
+    1,
+  );
+  assert.equal(
+    titleHoldings(rows, references.characters, references.titles, "nothing")
+      .length,
+    0,
+  );
+  const many = Array.from({ length: 75 }, (_, i) => ({
+    id: `c${i}`,
+    data: { titles: ["winner"] },
+  }));
+  assert.equal(titleHoldings(many, [], references.titles, "c74").length, 1);
 });
