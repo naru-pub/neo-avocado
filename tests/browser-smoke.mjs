@@ -314,7 +314,10 @@ try {
           ? { ...ctx, add: forbid, set: forbid, delete: forbid }
           : ctx;
         result = {
-          result: rules[parts[2]](functionCtx, request.postDataJSON().args),
+          result: rules[parts.slice(1).join("/").split(":")[1]](
+            functionCtx,
+            request.postDataJSON().args,
+          ),
         };
         if (violation) throw new Error("read-only functions cannot write");
       } catch (error) {

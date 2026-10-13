@@ -124,7 +124,7 @@ async function uploadManaged(file) {
   const uploaded = await member.media.upload(file);
   if (!uploaded.id) throw new Error("업로드한 파일 번호를 받지 못했습니다.");
   rememberUpload(member, uploaded);
-  const registered = await member.call(`${FUNCTIONS}/registerMedia`, {
+  const registered = await member.call(`${FUNCTIONS}:registerMedia`, {
     id: uploaded.id,
     url: uploaded.url,
   });
@@ -256,7 +256,7 @@ function communityCollection(collection) {
     const method = ["get", "getMany", "list"].includes(operation)
       ? "read"
       : "call";
-    const result = await state.member[method](`${FUNCTIONS}/communityData`, {
+    const result = await state.member[method](`${FUNCTIONS}:communityData`, {
       collection,
       operation,
       ...(id !== undefined ? { id } : {}),
@@ -815,7 +815,7 @@ async function callRule(name, args) {
   ].includes(name)
     ? "read"
     : "call";
-  const result = await state.member[method](`${FUNCTIONS}/${name}`, args);
+  const result = await state.member[method](`${FUNCTIONS}:${name}`, args);
   if (!result?.ok) {
     throw new Error(REASONS[result?.reason] ?? "요청을 처리하지 못했습니다.");
   }
@@ -1338,7 +1338,7 @@ async function loadInventory({ more = false } = {}) {
             { name: "memo", label: "메시지", multiline: true, max: 500 },
           ],
           async (data) => {
-            const result = await state.member.call(`${FUNCTIONS}/gift`, {
+            const result = await state.member.call(`${FUNCTIONS}:gift`, {
               inventory: owned.id,
               ...data,
               character: data.character || null,
@@ -1599,7 +1599,7 @@ $("craftForm").onsubmit = (event) => {
  */
 function spend(name, args, success) {
   return run(async () => {
-    const result = await state.member.call(`${FUNCTIONS}/${name}`, args);
+    const result = await state.member.call(`${FUNCTIONS}:${name}`, args);
     if (!result?.ok) {
       return say(REASONS[result?.reason] ?? "하지 못했습니다.");
     }

@@ -144,14 +144,14 @@ function fakeDatabase(rows = {}) {
     // 서버 함수는 나루에서 돈다. 여기서는 무엇을 불렀는지만 남기고, 테스트가
     // 정한 결과를 돌려준다.
     async read(name, args = null) {
-      if (name === "neo-avocado/communityData") gatewayReads.push(args);
+      if (name === "neo-avocado:communityData") gatewayReads.push(args);
       return this.call(name, args);
     },
     async call(name, args = null) {
-      if (name === "neo-avocado/registerMedia") return { ok: true };
-      if (name === "neo-avocado/mediaCleanup")
+      if (name === "neo-avocado:registerMedia") return { ok: true };
+      if (name === "neo-avocado:mediaCleanup")
         return { ok: true, files: [], nextCursor: null };
-      if (name === "neo-avocado/membership") {
+      if (name === "neo-avocado:membership") {
         const profile = await member
           .collection(PROFILES)
           .get(ME)
@@ -161,7 +161,7 @@ function fakeDatabase(rows = {}) {
           });
         return { ok: true, status: "approved", role: "member", profile };
       }
-      if (name === "neo-avocado/join")
+      if (name === "neo-avocado:join")
         return {
           ok: true,
           status: "approved",
@@ -169,7 +169,7 @@ function fakeDatabase(rows = {}) {
             .collection(PROFILES)
             .set(ME, { nick: args.nick }),
         };
-      if (name === "neo-avocado/communityData") {
+      if (name === "neo-avocado:communityData") {
         const handle = member.collection(args.collection);
         if (args.operation === "getMany")
           return {
@@ -211,7 +211,7 @@ function fakeDatabase(rows = {}) {
     gatewayReads,
     signedIn: true,
     answer: (name) =>
-      name === "neo-avocado/messageStatus"
+      name === "neo-avocado:messageStatus"
         ? { ok: true, unread: false }
         : { ok: false, reason: "empty" },
   };
@@ -462,7 +462,7 @@ test("the shop exposes later pages and crafts selected inventory through the ser
     database.calls.filter((call) => call.method === "call").at(-1),
     {
       method: "call",
-      name: "neo-avocado/craft",
+      name: "neo-avocado:craft",
       args: { recipe: "tree", materials: ["seed-1"] },
     },
   );
@@ -786,7 +786,7 @@ test("the shop reads the wallet, items and own inventory when opened, and spends
   // The page never writes money or items itself: it calls the function, and
   // shows what the function decided.
   database.answer = (name) =>
-    name === "neo-avocado/gacha"
+    name === "neo-avocado:gacha"
       ? { ok: true, balance: 70, owned: { data: { name: "황금 아보카도" } } }
       : { ok: false, reason: "already" };
   $("gacha").onclick();
@@ -794,10 +794,10 @@ test("the shop reads the wallet, items and own inventory when opened, and spends
   assert.deepEqual(
     database.calls
       .filter(
-        (call) => call.method === "call" && call.name === "neo-avocado/gacha",
+        (call) => call.method === "call" && call.name === "neo-avocado:gacha",
       )
       .at(0),
-    { method: "call", name: "neo-avocado/gacha", args: null },
+    { method: "call", name: "neo-avocado:gacha", args: null },
   );
   assert.match($("status").textContent, /황금 아보카도/);
   $("daily").onclick();
@@ -807,7 +807,7 @@ test("the shop reads the wallet, items and own inventory when opened, and spends
   for (let n = 0; n < 4; n += 1) await settle();
   assert.deepEqual(
     database.calls.filter((call) => call.method === "call").at(-1),
-    { method: "call", name: "neo-avocado/buy", args: { item: "potion" } },
+    { method: "call", name: "neo-avocado:buy", args: { item: "potion" } },
   );
   assert.equal(
     database.calls.some(
@@ -892,7 +892,7 @@ test("post details and comment lists use native reads while deletion stays trans
   let deletion;
   const originalCall = database.member.call;
   database.member.call = async (name, args) => {
-    if (name === "neo-avocado/communityData" && args.operation === "delete")
+    if (name === "neo-avocado:communityData" && args.operation === "delete")
       deletion = args;
     return originalCall.call(database.member, name, args);
   };

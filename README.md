@@ -224,3 +224,8 @@ HTML은 [DOMPurify](https://github.com/cure53/DOMPurify)로 정리하여 표시�
 원본의 PHP include와 skin 파일은 내용이나 정적 테마 구성요소로 옮겨야 합니다.
 `npm run vendor:content`로 잠긴 의존성에서 배포용 자산을 갱신하고,
 `npm run vendor:check`로 자산이 의존성과 일치하는지 검사합니다.
+
+서버 함수 호출은 SDK 1.1.0의 `member.call("neo-avocado:함수", 인자)` 또는
+`member.read("neo-avocado:함수", 인자)` 형식입니다. 하위 폴더가 있으면
+`member.read("community/boards:list")`는 `_naru/functions/community/boards.js`의
+`list`를 호출합니다. 파일 경로와 함수는 `:`로 구분합니다.

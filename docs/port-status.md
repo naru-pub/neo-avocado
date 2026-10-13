@@ -210,3 +210,11 @@ reason; passing the current demo tests is not completion of the port.
 - DOMPurify assets and dual-license files are committed for static deployment;
   `npm run vendor:content` refreshes from the locked package and CI runs
   `npm run vendor:check` to detect stale assets. No SDK API was added.
+
+- SDK 1.1.0 function names now use `<module/path>:<function>`. The port calls
+  `neo-avocado:<function>` throughout. Nested module paths map directly to
+  `_naru/functions/<module/path>.js`. The canonical HTTP endpoints use the same
+  colon separator; old slash-only function references are rejected. SDK 1.0.0
+  artifacts and guides are unchanged. Updated-SDK Chrome, 65 unit/page tests and
+  QuickJS/SQLite verification pass. Coordinate the 1.1.0 server/asset/app cutover;
+  nothing has been deployed.
