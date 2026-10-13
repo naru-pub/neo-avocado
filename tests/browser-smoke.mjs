@@ -155,6 +155,7 @@ const server = createServer(async (req, res) => {
       "/": "index.html",
       "/index.html": "index.html",
       "/app.js": "app.js",
+      "/emoticons.js": "emoticons.js",
       "/admin.html": "admin.html",
       "/admin.js": "admin.js",
       "/admin-model.js": "admin-model.js",
@@ -877,6 +878,15 @@ try {
       .data.titles.includes("winner"),
     false,
   );
+  await page.locator("#adminSection").selectOption("emoticons");
+  await page.locator("#adminNew").click();
+  await page.locator('#adminFields [name="id"]').fill("smile");
+  await page.locator('#adminFields [name="name"]').fill(":웃음:");
+  await page
+    .locator('#adminFields [name="image"]')
+    .fill("https://media.naru.pub/emoticon.png");
+  await page.locator('#adminForm [type="submit"]').click();
+  await page.locator("#adminForm").waitFor({ state: "hidden" });
   await page.locator("#adminSection").selectOption("quests");
   await page.locator("#adminNew").click();
   await page.locator('#adminFields [name="id"]').fill("daily-quest");
@@ -952,6 +962,17 @@ try {
     () => document.querySelector("#quests").children.length === 0,
   );
   await page.locator("#tabLogs").click();
+  const log = page.locator("#logs .log").first();
+  await log.locator(".comments > summary").click();
+  await log.locator(".comment-form details > summary").click();
+  await log.getByRole("button", { name: ":웃음:", exact: true }).click();
+  assert.equal(await log.locator(".comment-text").inputValue(), ":웃음:");
+  await log.locator('.comment-form button[type="submit"]').click();
+  await log.locator(".comment-list img.emoticon").waitFor();
+  assert.equal(
+    await log.locator(".comment-list img.emoticon").getAttribute("alt"),
+    ":웃음:",
+  );
   assert.deepEqual(errors, []);
   const screenshot =
     process.env.NARU_SCREENSHOT_PATH ?? "/tmp/neo-avocado-browser.png";

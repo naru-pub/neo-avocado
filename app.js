@@ -4,6 +4,7 @@ import {
   forgetUpload,
   recoverPendingUploads,
 } from "./media-cleanup.js";
+import { emoticonContent } from "./emoticons.js";
 import { config } from "./config.js";
 
 // 아보카도 에디션의 뼈대만 나루 회원으로 다시 만든 것: 회원 로그인과 닉네임,
@@ -28,6 +29,7 @@ const COLLECTION = {
   couples: `${PREFIX}couples`,
   settings: `${PREFIX}settings`,
   boards: `${PREFIX}boards`,
+  emoticons: `${PREFIX}emoticons`,
 };
 const FUNCTIONS = "neo-avocado";
 const SHOP_PAGE = 50;
@@ -90,6 +92,7 @@ const state = {
   admission: null,
   role: "member",
   level: 2,
+  emoticons: null,
   boards: [],
   board: "default",
 };
@@ -159,6 +162,7 @@ async function run(action) {
   }
 }
 function clearPrivateViews() {
+  state.emoticons = null;
   for (const id of [
     "logs",
     "characters",
@@ -598,6 +602,43 @@ async function logItem(log) {
   };
   item.querySelector(".more-comments").onclick = () => load(true);
   const form = item.querySelector(".comment-form");
+  const picker = document.createElement("details");
+  const summary = document.createElement("summary");
+  summary.textContent = "이모티콘";
+  const choices = document.createElement("div");
+  choices.className = "emoticon-choices";
+  picker.append(summary, choices);
+  form.prepend(picker);
+  picker.ontoggle = () => {
+    if (picker.open && !choices.childNodes.length)
+      run(async () => {
+        const definitions = await loadEmoticons();
+        for (const row of definitions) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.title = row.data.name;
+          button.setAttribute("aria-label", row.data.name);
+          button.append(
+            emoticonContent(document, row.data.name, [row]),
+            row.data.name,
+          );
+          button.onclick = () => {
+            const input = form.querySelector(".comment-text");
+            input.setRangeText(
+              row.data.name,
+              input.selectionStart,
+              input.selectionEnd,
+              "end",
+            );
+            input.focus();
+          };
+          choices.append(button);
+        }
+        if (!definitions.length)
+          choices.textContent = "등록된 이모티콘이 없습니다.";
+      });
+  };
+
   form.onsubmit = (event) => {
     event.preventDefault?.();
     run(async () => {
@@ -630,7 +671,9 @@ async function commentItem(comment) {
     dice.textContent = `🎲 ${first} + ${second} = ${first + second}`;
     item.append(dice, " ");
   }
-  item.append(comment.data.text ?? "");
+  item.append(
+    emoticonContent(document, comment.data.text ?? "", await loadEmoticons()),
+  );
   if (mine(comment) || state.role === "moderator") {
     const change = document.createElement("button");
     change.type = "button";
@@ -1923,3 +1966,12 @@ $("tabQuests").onclick = () =>
 $("questType").onchange = () => run(() => loadQuests());
 $("refreshQuests").onclick = () => run(() => loadQuests());
 $("moreQuests").onclick = () => run(() => loadQuests(true));
+
+async function loadEmoticons() {
+  if (state.emoticons !== null) return state.emoticons;
+  const member = state.member;
+  const rows = await allDocuments(COLLECTION.emoticons);
+  if (state.member !== member) return [];
+  state.emoticons = rows.filter((row) => !row.data.deleted);
+  return state.emoticons;
+}

@@ -33,7 +33,7 @@ reproduce the existing demo. SDK additions require the owner's approval.
 | Quests                                            | `adm/quest*` and their callers                              | Reference admin fields implemented; scheduled member display and category pagination implemented; reference has no claim/reward endpoint                                                                |
 | Private messages and notifications                | `bbs/memo*`, `ajax/*call*`                                  | Private inbox/sent/read/reply/delete, receive preference, bulk costs and live unread notices implemented; board notifications pending                                                                   |
 | Community administration                          | `adm/admin.menu*.php`                                       | Owner member status/role controls and existing catalog/economy controls implemented; broader board moderation pending; owner cleanup recovery implemented                                               |
-| Navigation, content, themes and emoticons         | `adm/menu*`, `adm/content*`, `adm/design*`, `adm/emoticon*` | Pending                                                                                                                                                                                                 |
+| Navigation, content, themes and emoticons         | `adm/menu*`, `adm/content*`, `adm/design*`, `adm/emoticon*` | Emoticon owner CRUD, comment catalogue/picker and safe keyword rendering implemented; navigation, content and themes pending                                                                            |
 | Existing data import                              | SQL schema and uploaded files                               | Pending: explicit ID/member mapping and media handling; never copy PHP credentials                                                                                                                      |
 | Browser and server acceptance                     | Naru release checklist                                      | 41 tests and synthetic Chrome pass; enforced budgets peak at 84 reads/120 and 10 mutations/30. Real deployment acceptance pending                                                                       |
 
@@ -183,3 +183,13 @@ reason; passing the current demo tests is not completion of the port.
   59 unit/page checks pass; no additional SDK API is required.
 - Actual-SDK Chrome verifies ownership search and individual revoke; formatting
   and 59 unit/page checks pass. No deployment has been made.
+
+- Emoticons preserve adm/emoticon_list.php's literal command keywords and images,
+  plus the board catalogue. Members can insert keywords at the comment cursor;
+  saved text remains editable. Rendering creates text/img nodes and never parses
+  comment HTML. Overlapping keywords choose the longest match deterministically.
+  Definitions load lazily through the existing protected read gateway. Add
+  admin/admin `neo_avocado_emoticons` and renew the owner collection grant.
+  61 unit/page tests and current SDK QuickJS/SQLite checks pass.
+- Actual-SDK Chrome passes owner emoticon creation, picker insertion and saved
+  comment image rendering. No SDK API change or live deployment was made.

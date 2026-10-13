@@ -179,6 +179,7 @@ export function join(ctx, { nick, acceptMessages = true } = {}) {
 }
 
 const READ_LIMITS = {
+  emoticons: 50,
   boards: 5,
   profiles: 100,
   characters: 10,

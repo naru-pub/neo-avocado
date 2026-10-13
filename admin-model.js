@@ -1,6 +1,20 @@
 // Pure forms/validation shared with tests. Only an SDK owner handle writes these.
 const P = "neo_avocado_";
 export const models = {
+  emoticons: {
+    label: "이모티콘",
+    help: "댓글에서 입력한 명령어를 그림으로 표시합니다. 예: :웃음:. 이미지 주소는 HTTPS로 입력하세요.",
+    fields: [
+      { key: "name", label: "명령어", required: true, max: 40 },
+      {
+        key: "image",
+        label: "이미지 주소",
+        type: "url",
+        required: true,
+        max: 2000,
+      },
+    ],
+  },
   quests: {
     label: "퀘스트",
     help: "일일·주간 구분, 세력, 게시 기간과 여러 이미지를 설정합니다. 시간은 한국 시간입니다. 빈 시작/종료 시간은 제한 없음입니다.",

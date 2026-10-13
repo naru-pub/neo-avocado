@@ -39,6 +39,7 @@ function fakeDatabase(rows = {}) {
       "neo_avocado_relations",
       "neo_avocado_wardrobe",
       "neo_avocado_boards",
+      "neo_avocado_emoticons",
     ].map((name) => [
       name,
       (rows[name] ?? []).map((row) => ({
@@ -274,8 +275,19 @@ async function page(database) {
   await cleanup.link(() => {
     throw new Error("unexpected cleanup dependency");
   });
+  const emoticons = new SourceTextModule(
+    await readFile(new URL("emoticons.js", root), "utf8"),
+    { context },
+  );
+  await emoticons.link(() => {
+    throw new Error("unexpected emoticon dependency");
+  });
   await app.link(async (specifier) =>
-    specifier === "./media-cleanup.js" ? cleanup : config,
+    specifier === "./media-cleanup.js"
+      ? cleanup
+      : specifier === "./emoticons.js"
+        ? emoticons
+        : config,
   );
   await app.evaluate();
   const $ = (id) => window.document.getElementById(id);
@@ -536,14 +548,19 @@ test("logs are read a page at a time, newest first, and comments only when opene
   comments.ontoggle();
   await settle();
   await settle();
-  assert.deepEqual(database.calls.at(-1), {
-    method: "list",
-    name: COMMENTS,
-    filter: { logId: "log-11" },
-    sort: [[{ metadata: "createdAt" }, "asc"]],
-    size: 50,
-    after: null,
-  });
+  assert.deepEqual(
+    database.calls
+      .filter((call) => call.method === "list" && call.name === COMMENTS)
+      .at(-1),
+    {
+      method: "list",
+      name: COMMENTS,
+      filter: { logId: "log-11" },
+      sort: [[{ metadata: "createdAt" }, "asc"]],
+      size: 50,
+      after: null,
+    },
+  );
   assert.match(items[0].querySelector(".comment-list").textContent, /멋져요/);
   $("moreLogs").onclick();
   await settle();
