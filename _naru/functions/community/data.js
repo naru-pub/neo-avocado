@@ -22,7 +22,12 @@ import {
   plainText,
   preview,
 } from "../../modules/shared.js";
-import { memberSheet, presentCharacter } from "../../modules/characters.js";
+import {
+  memberSheet,
+  presentCharacter,
+  fieldMedia,
+  moveFieldMedia,
+} from "../../modules/characters.js";
 import {
   speakerOf,
   rollDice,
@@ -331,6 +336,13 @@ export async function communityData(
       type: sheet.type,
       state: sheet.state,
       fields: sheet.fields,
+      fieldMedia: await fieldMedia(
+        ctx,
+        previous,
+        sheet.fields,
+        data.fieldMedia,
+        catalogue,
+      ),
     };
     if (data.image !== previous?.data.image)
       value.image = data.image ? imageUrl(data.image) : null;
@@ -459,6 +471,8 @@ export async function communityData(
     : operation === "add"
       ? await ctx.add(collection, value)
       : await ctx.set(collection, id, value);
+  if (kind === "characters")
+    await moveFieldMedia(ctx, collection, previous, document);
   if (guest && operation === "add")
     await ctx.set(GUEST_KEYS, guestKey(collection, document.id), {
       hash: guest.hash,

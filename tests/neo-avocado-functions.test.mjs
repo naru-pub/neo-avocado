@@ -2516,3 +2516,79 @@ test("in-post combination matches recipes by item, charges cost and consumes eve
   assert.equal(missed.data.actions[0].success, false);
   assert.equal(table(`${P}inventory`).has("i-herb-2"), false);
 });
+
+test("image fields keep managed uploads referenced and release them on change or deletion", async () => {
+  const { ctx, table, released } = roleplayWorld();
+  table(`${P}character_fields`).set("art", { label: "Art", type: "image" });
+  const U1 = "0190f1a2-0000-7000-8000-00000000000a";
+  const U2 = "0190f1a2-0000-7000-8000-00000000000b";
+  const THEIRS = "0190f1a2-0000-7000-8000-00000000000c";
+  for (const [id, owner] of [
+    [U1, "m-1"],
+    [U2, "m-1"],
+    [THEIRS, "m-2"],
+  ])
+    table(`${P}media_assets`).set(id, {
+      owner,
+      url: `https://media.naru.pub/${id}.png`,
+      refs: [],
+      status: "pending",
+      cleanup: true,
+    });
+  const url = (id) => `https://media.naru.pub/${id}.png`;
+  assert.equal(
+    await reasonOf(
+      gate(ctx, "characters", "add", {
+        data: {
+          name: "A",
+          fields: { art: url(THEIRS) },
+          fieldMedia: { art: THEIRS },
+        },
+      }),
+    ),
+    "media_unavailable",
+  );
+  const made = (
+    await gate(ctx, "characters", "add", {
+      data: { name: "A", fields: { art: url(U1) }, fieldMedia: { art: U1 } },
+    })
+  ).document;
+  assert.deepEqual(table(`${P}media_assets`).get(U1).refs, [
+    `${P}characters/${made.id}#art`,
+  ]);
+  assert.equal(table(`${P}media_assets`).get(U1).cleanup, false);
+  // Replacing the upload releases the old one, which nothing else holds.
+  await gate(ctx, "characters", "set", {
+    id: made.id,
+    data: {
+      ...table(`${P}characters`).get(made.id),
+      fields: { art: url(U2) },
+      fieldMedia: { art: U2 },
+    },
+  });
+  assert.deepEqual(released, [U1]);
+  // Typing another address keeps no upload for the field.
+  await gate(ctx, "characters", "set", {
+    id: made.id,
+    data: {
+      ...table(`${P}characters`).get(made.id),
+      fields: { art: "https://elsewhere.example/a.png" },
+    },
+  });
+  assert.deepEqual(released, [U1, U2]);
+  assert.deepEqual(table(`${P}characters`).get(made.id).fieldMedia, {});
+  // Deleting a character releases its field uploads.
+  table(`${P}media_assets`).set(U1, {
+    owner: "m-1",
+    url: url(U1),
+    refs: [],
+    status: "pending",
+  });
+  const again = (
+    await gate(ctx, "characters", "add", {
+      data: { name: "B", fields: { art: url(U1) }, fieldMedia: { art: U1 } },
+    })
+  ).document;
+  await gate(ctx, "characters", "delete", { id: again.id });
+  assert.deepEqual(released, [U1, U2, U1]);
+});

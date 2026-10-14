@@ -1518,11 +1518,19 @@ async function loadFieldCatalogue() {
   if (state.member !== member) return [];
   state.fieldCatalogue = rows;
   $("characterFields").replaceChildren(
-    ...rows.map((row) => {
+    ...rows.flatMap((row) => {
       const [label, input] = fieldInput(row, "");
       input.dataset.field = row.id;
       label.append(input);
-      return label;
+      if (row.data.type !== "image") return [label];
+      const upload = document.createElement("label");
+      upload.textContent = `${row.data.label ?? row.id} 파일 올리기`;
+      const file = document.createElement("input");
+      file.type = "file";
+      file.accept = "image/*";
+      file.dataset.fieldUpload = row.id;
+      upload.append(file);
+      return [label, upload];
     }),
   );
   return rows;
@@ -1643,7 +1651,14 @@ async function characterItem(character) {
             ["submitted", "신청 (수정 완료)"],
           ],
         });
-      for (const row of catalogue)
+      for (const row of catalogue) {
+        if (row.data.type === "image")
+          fields.push({
+            name: `upload:${row.id}`,
+            label: `${row.data.label ?? row.id} 파일 올리기 (선택)`,
+            type: "file",
+            accept: "image/*",
+          });
         fields.push({
           name: `field:${row.id}`,
           label: `${row.data.label ?? row.id}${row.data.required ? " (신청 시 필수)" : ""}`,
@@ -1659,13 +1674,25 @@ async function characterItem(character) {
               ? { multiline: true, max: 2000 }
               : { max: row.data.type === "text" ? 200 : 2000 }),
         });
+      }
       edit("캐릭터 수정", fields, async (values) => {
         if (!values.name) throw new Error("이름을 입력해 주세요.");
-        const data = { ...current.data, fields: {} };
+        const data = {
+          ...current.data,
+          fields: {},
+          fieldMedia: { ...current.data.fieldMedia },
+        };
         for (const [name, value] of Object.entries(values))
           if (name.startsWith("field:")) {
             if (value) data.fields[name.slice(6)] = value;
-          } else data[name] = value;
+          } else if (!name.startsWith("upload:")) data[name] = value;
+        // An uploaded file replaces the field's address with its own.
+        for (const [name, file] of Object.entries(values))
+          if (name.startsWith("upload:") && file) {
+            const uploaded = await uploadManaged(file);
+            data.fields[name.slice(7)] = uploaded.url;
+            data.fieldMedia[name.slice(7)] = uploaded.id;
+          }
         const saved = await communityCollection(COLLECTION.characters).set(
           character.id,
           data,
@@ -2872,6 +2899,16 @@ $("characterForm").onsubmit = (event) => {
         .map((input) => [input.dataset.field, input.value.trim()])
         .filter(([, value]) => value),
     );
+    const fieldMedia = {};
+    for (const input of $("characterFields").querySelectorAll(
+      "[data-field-upload]",
+    )) {
+      const chosen = input.files?.[0];
+      if (!chosen) continue;
+      const uploaded = await uploadManaged(chosen);
+      fields[input.dataset.fieldUpload] = uploaded.url;
+      fieldMedia[input.dataset.fieldUpload] = uploaded.id;
+    }
     const character = await communityCollection(COLLECTION.characters).add({
       name,
       side: $("characterSide").value.trim(),
@@ -2881,6 +2918,7 @@ $("characterForm").onsubmit = (event) => {
       type: $("characterType").value,
       state: $("characterState").value,
       ...(Object.keys(fields).length ? { fields } : {}),
+      ...(Object.keys(fieldMedia).length ? { fieldMedia } : {}),
     });
     state.speakers = null;
     $("characters").prepend(await characterItem(character));

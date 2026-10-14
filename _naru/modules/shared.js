@@ -130,15 +130,52 @@ export async function dropMedia(ctx, id) {
 export const RELEASE_WRITES = 2;
 
 export async function releaseMedia(ctx, collection, document) {
-  const id = document?.data.imageId;
+  await releaseRef(
+    ctx,
+    document?.data.imageId,
+    `${collection}/${document?.id}`,
+  );
+}
+
+/** Removes one reference from an upload, dropping it when none is left. */
+export async function releaseRef(ctx, id, key) {
   const asset = mediaId(id) ? await ctx.get(MEDIA, id) : null;
   if (!asset) return;
-  const refs = asset.data.refs.filter(
-    (key) => key !== `${collection}/${document.id}`,
-  );
+  const refs = asset.data.refs.filter((ref) => ref !== key);
   if (!refs.length) return await dropMedia(ctx, id);
   await ctx.set(MEDIA, id, { ...asset.data, refs, status: "active" });
 }
+
+/** Adds a reference to one of the caller's uploads (already checked). */
+export async function attachRef(ctx, id, key) {
+  const asset = await ctx.get(MEDIA, id);
+  if (asset.data.refs.includes(key)) return;
+  if (asset.data.refs.length >= 50)
+    fail(
+      ctx,
+      "INVALID_REQUEST",
+      "media_ref_limit",
+      "Media reference limit reached.",
+    );
+  await ctx.set(MEDIA, id, {
+    ...asset.data,
+    refs: [...asset.data.refs, key],
+    status: "active",
+    cleanup: false,
+  });
+}
+
+/** Image-field uploads a character may hold (adm/character_article's image fields). */
+export const MAX_FIELD_MEDIA = 3;
+
+/** The reference key of a character's image field: one per field. */
+export const fieldRef = (collection, id, code) => `${collection}/${id}#${code}`;
+
+/** Upload IDs a document holds in image fields. */
+export const fieldMediaOf = (data) =>
+  data?.fieldMedia && typeof data.fieldMedia === "object"
+    ? Object.entries(data.fieldMedia).filter(([, id]) => mediaId(id))
+    : [];
 
 export async function saveImage(
   ctx,
@@ -176,25 +213,7 @@ export async function saveImage(
     : await ctx.add(collection, data);
   if (before?.data.imageId && before.data.imageId !== imageId)
     await releaseMedia(ctx, collection, before);
-  if (imageId) {
-    const asset = await ctx.get(MEDIA, imageId);
-    const key = `${collection}/${document.id}`;
-    if (!asset.data.refs.includes(key)) {
-      if (asset.data.refs.length >= 50)
-        fail(
-          ctx,
-          "INVALID_REQUEST",
-          "media_ref_limit",
-          "Media reference limit reached.",
-        );
-      await ctx.set(MEDIA, imageId, {
-        ...asset.data,
-        refs: [...asset.data.refs, key],
-        status: "active",
-        cleanup: false,
-      });
-    }
-  }
+  if (imageId) await attachRef(ctx, imageId, `${collection}/${document.id}`);
   return document;
 }
 
@@ -298,7 +317,12 @@ export async function deleteCommunityDocument(ctx, collection, kind, row) {
   let remaining = 10;
   // 25 writes, less the marker, the parent's own release and delete, and the
   // character's state and profile fix-ups: what the children may spend.
-  let writes = 25 - 2 - RELEASE_WRITES - 2;
+  let writes =
+    25 -
+    2 -
+    RELEASE_WRITES -
+    2 -
+    fieldMediaOf(row.data).length * RELEASE_WRITES;
   const remove = async (target, filter, detach = false) => {
     if (remaining === 0) {
       unfinished = true;
@@ -349,6 +373,8 @@ export async function deleteCommunityDocument(ctx, collection, kind, row) {
   }
   if (!unfinished) {
     await releaseMedia(ctx, collection, row);
+    for (const [code, id] of fieldMediaOf(row.data))
+      await releaseRef(ctx, id, fieldRef(collection, row.id, code));
     await ctx.delete(collection, row.id);
     // A log has no character fix-ups, so its key fits in their two writes.
     await forgetGuestKey(ctx, collection, row);
