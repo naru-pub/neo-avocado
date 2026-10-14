@@ -10,10 +10,11 @@ for (const module of new Set(Object.values(FUNCTION_MODULES))) {
     const names = Object.keys(FUNCTION_MODULES)
       .filter((name) => FUNCTION_MODULES[name] === module)
       .sort();
-    const { readOnly = [], ...callable } = exports;
+    const { readOnly = [], visitors = [], ...callable } = exports;
     assert.deepEqual(Object.keys(callable).sort(), names);
     // What Naru runs read-only must be one of the module's own functions.
     assert.ok(readOnly.every((name) => names.includes(name)));
+    assert.ok(visitors.every((name) => names.includes(name)));
     assert.ok(names.every((name) => typeof exports[name] === "function"));
     assert.match(source, /from "\.\.\/\.\.\/modules\/shared\.js"/);
     for (const name of names)

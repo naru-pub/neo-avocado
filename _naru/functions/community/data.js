@@ -12,6 +12,8 @@ import {
   text,
   imageUrl,
   failure,
+  GUEST_KEYS,
+  guestKey,
 } from "../../modules/shared.js";
 import { memberSheet, presentCharacter } from "../../modules/characters.js";
 import {
@@ -24,6 +26,11 @@ import {
 } from "../../modules/roleplay.js";
 
 export const readOnly = ["communityRead"];
+// Visitors read public boards and post on boards open to level 1, as guests.
+export const visitors = ["communityRead", "communityData"];
+
+/** What a visitor may reach: public boards, their posts and authors' nicknames. */
+const GUEST_KINDS = ["boards", "logs", "comments", "profiles", "emoticons"];
 
 /** Collections whose list rows the gate returns unredacted, so `where` is safe. */
 const WHERE_KINDS = [
@@ -50,11 +57,13 @@ export async function communityData(
   { collection, operation, id, data, options = {} } = {},
 ) {
   const access = await communityAccess(ctx);
+  const visitor = !ctx.member;
   const kind =
     typeof collection === "string" && collection.startsWith(PREFIX)
       ? collection.slice(PREFIX.length)
       : "";
   if (!Object.hasOwn(READ_LIMITS, kind)) return failure("access_denied");
+  if (visitor && !GUEST_KINDS.includes(kind)) return failure("access_denied");
   if (operation === "getMany") {
     if (!["profiles", "items"].includes(kind)) return failure("access_denied");
     if (
@@ -68,7 +77,11 @@ export async function communityData(
     return {
       ok: true,
       documents: (await ctx.getMany(collection, options.ids)).map((row) =>
-        row?.data.deleted ? null : row,
+        row?.data.deleted
+          ? null
+          : visitor && row
+            ? { ...row, data: { nick: row.data.nick } }
+            : row,
       ),
     };
   }
@@ -79,7 +92,10 @@ export async function communityData(
       size: Math.min(options.size ?? READ_LIMITS[kind], READ_LIMITS[kind]),
       after: options.after ?? null,
     };
-    if (["wallets", "character_state", "settings"].includes(kind))
+    if (
+      ["wallets", "character_state", "settings"].includes(kind) ||
+      (visitor && kind === "profiles")
+    )
       return failure("access_denied");
     if (options.where !== undefined) {
       // A predicate can probe fields this gate redacts or hides (secret log
@@ -116,8 +132,10 @@ export async function communityData(
       documents = documents.filter((row) => row.data.visibility !== "admin");
     if (kind === "boards") {
       documents = documents.filter((row) => boardAllowed(row, access, "list"));
-      if (!options.after && !(await ctx.get(BOARDS, "default")))
-        documents.unshift(await boardOf(ctx));
+      if (!options.after && !(await ctx.get(BOARDS, "default"))) {
+        const fallback = await boardOf(ctx);
+        if (boardAllowed(fallback, access, "list")) documents.unshift(fallback);
+      }
     }
     if (kind === "logs")
       documents = await Promise.all(
@@ -127,6 +145,11 @@ export async function communityData(
                 ...row,
                 data: {
                   owner: author(row),
+                  ...(row.data.guest ? { guest: row.data.guest } : {}),
+                  ...(row.data.speaker ? { speaker: row.data.speaker } : {}),
+                  ...(row.data.dice
+                    ? { dice: true, rolls: row.data.rolls ?? null }
+                    : {}),
                   board: row.data.board,
                   title: row.data.title ?? "",
                   category: row.data.category ?? "",
@@ -206,10 +229,40 @@ export async function communityData(
     !["add", "set", "delete"].includes(operation)
   )
     return failure("access_denied");
+  if (visitor && !["logs", "comments"].includes(kind))
+    return failure("access_denied");
   if (kind === "profiles" && (operation !== "set" || id !== ctx.member.id))
     return failure("access_denied");
   if (operation !== "add" && !previous) return failure("document_not_found");
-  if (
+  // A guest proves a post is theirs with its password (bbs/password_check.php).
+  let guest = null;
+  if (visitor) {
+    const name = options.guest?.name;
+    const password = options.guest?.password;
+    if (
+      typeof password !== "string" ||
+      password.length < 4 ||
+      password.length > 64
+    )
+      return failure("guest_password");
+    if (previous) {
+      const key = previous.data.guest
+        ? await ctx.get(GUEST_KEYS, guestKey(collection, previous.id))
+        : null;
+      if (!key || !ctx.password.verify(password, key.data.hash))
+        return failure("guest_password");
+      guest = previous.data.guest;
+    } else {
+      if (typeof name !== "string" || !name.trim() || name.length > 20)
+        return failure("invalid_input");
+      guest = { name: name.trim(), hash: ctx.password.hash(password) };
+    }
+    if (data) {
+      data = { ...data };
+      delete data.imageId;
+      delete data.character;
+    }
+  } else if (
     previous &&
     author(previous) !== ctx.member.id &&
     !(access.role === "moderator" && ["logs", "comments"].includes(kind))
@@ -235,8 +288,9 @@ export async function communityData(
     return failure("access_denied");
   let value = {
     ...previous?.data,
-    owner: previous ? author(previous) : ctx.member.id,
+    owner: previous ? author(previous) : (ctx.member?.id ?? null),
   };
+  if (guest) value.guest = { name: guest.name };
   if (kind === "profiles")
     value = {
       ...value,
@@ -276,6 +330,8 @@ export async function communityData(
         : Boolean(previous?.data.secret));
     if (secret && board.data.secret === "off" && !previous?.data.secret)
       return failure("invalid_input");
+    // A guest could never read their secret post back, so they cannot write one.
+    if (secret && guest) return failure("guest_secret");
     value.board = boardId;
     value.secret = secret;
     value.title = text(data.title ?? previous?.data.title ?? "", 120);
@@ -306,7 +362,9 @@ export async function communityData(
         value.rolls = rollDice(ctx);
       }
     }
-    calls = await resolveCalls(ctx, value.text, previous?.data.text ?? "");
+    calls = guest
+      ? { text: value.text, recipients: [] }
+      : await resolveCalls(ctx, value.text, previous?.data.text ?? "");
     value.text = calls.text;
   }
   if (kind === "comments") {
@@ -326,14 +384,17 @@ export async function communityData(
     };
     const acting =
       !previous && (data.action === "explore" || data.item !== undefined);
-    if (acting && board.data.actions !== true) return failure("access_denied");
+    if (acting && (guest || board.data.actions !== true))
+      return failure("access_denied");
     if (
       (data.action !== undefined && data.action !== "explore") ||
       (data.item !== undefined && typeof data.item !== "string")
     )
       return failure("invalid_input");
     if (!value.text && !value.dice && !acting) return failure("invalid_input");
-    calls = await resolveCalls(ctx, value.text, previous?.data.text ?? "");
+    calls = guest
+      ? { text: value.text, recipients: [] }
+      : await resolveCalls(ctx, value.text, previous?.data.text ?? "");
     value.text = calls.text;
     if (!previous) {
       speaker = await speakerOf(ctx, data.character);
@@ -362,6 +423,10 @@ export async function communityData(
     : operation === "add"
       ? await ctx.add(collection, value)
       : await ctx.set(collection, id, value);
+  if (guest && operation === "add")
+    await ctx.set(GUEST_KEYS, guestKey(collection, document.id), {
+      hash: guest.hash,
+    });
   if (kind === "logs" && operation === "add") await announcePost(ctx, document);
   if (calls && ["logs", "comments"].includes(kind))
     await deliverCalls(ctx, {
@@ -371,6 +436,7 @@ export async function communityData(
       speaker,
       recipients: calls.recipients,
       notifyAuthor: kind === "comments" && operation === "add",
+      guest: guest?.name ?? null,
     });
   return {
     ok: true,

@@ -36,6 +36,7 @@ export const FUNCTION_MODULES = Object.freeze({
   quests: "content/quests",
   contentPages: "content/pages",
   contentPage: "content/pages",
+  site: "content/site",
 });
 export function functionReference(name) {
   const module = Object.hasOwn(FUNCTION_MODULES, name)

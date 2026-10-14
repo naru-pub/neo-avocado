@@ -151,7 +151,12 @@ const host = (operation, args) => {
   }
   throw new Error(`Unknown operation: ${operation}`);
 };
-async function call(name, args = null, member = ME, { owner = false } = {}) {
+async function call(
+  name,
+  args = null,
+  member = ME,
+  { owner = false, visitor = false } = {},
+) {
   const module = await newQuickJSWASMModuleFromVariant(
     newVariant(variant, {
       wasmMemory: () =>
@@ -175,6 +180,7 @@ async function call(name, args = null, member = ME, { owner = false } = {}) {
         args,
         member,
         owner,
+        visitor,
         now: Date.parse("2030-01-01T00:00:00Z"),
       },
       host,
@@ -790,6 +796,70 @@ try {
     (await call("contentPage", { id: "content-0", mobile: true })).page.body[0],
     "나",
   );
+  // Guests, through the real ctx.password (PBKDF2) and visitor flag.
+  const guest = (name, args) => call(name, args, null, { visitor: true });
+  put(`${P}boards`, "free", {
+    name: "Free",
+    kind: "text",
+    enabled: true,
+    listLevel: 1,
+    readLevel: 1,
+    writeLevel: 1,
+    commentLevel: 1,
+    secret: "optional",
+    categories: [],
+  });
+  const guestPost = await guest("communityData", {
+    collection: `${P}logs`,
+    operation: "add",
+    data: { board: "free", text: "hello", image: null },
+    options: { guest: { name: "Visitor", password: "pass1234" } },
+  });
+  const key = get(`${P}guest_keys`, `logs-${guestPost.document.id}`);
+  assert.match(key.data.hash, /^pbkdf2-sha256\$/);
+  assert.equal(JSON.stringify(guestPost.document).includes("pbkdf2"), false);
+  assert.equal(
+    (
+      await guest("communityData", {
+        collection: `${P}logs`,
+        operation: "set",
+        id: guestPost.document.id,
+        data: { text: "edited", image: null },
+        options: { guest: { password: "wrong" } },
+      })
+    ).reason,
+    "guest_password",
+  );
+  assert.equal(
+    (
+      await guest("communityData", {
+        collection: `${P}logs`,
+        operation: "set",
+        id: guestPost.document.id,
+        data: { text: "edited", image: null },
+        options: { guest: { password: "pass1234" } },
+      })
+    ).document.data.text,
+    "edited",
+  );
+  const listed = await guest("communityRead", {
+    collection: `${P}logs`,
+    operation: "list",
+    options: { board: "free" },
+  });
+  assert.deepEqual(listed.documents[0].data.guest, { name: "Visitor" });
+  assert.equal(
+    (
+      await guest("communityRead", {
+        collection: `${P}wallets`,
+        operation: "list",
+      })
+    ).reason,
+    "access_denied",
+  );
+  const frame = await guest("site");
+  assert.equal(frame.member, false);
+  assert.equal(frame.level, 1);
   console.log(
     "Actual Naru runner + QuickJS + SQLite checks passed, including rollback after partial writes.",
   );

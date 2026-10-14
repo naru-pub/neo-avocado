@@ -677,3 +677,84 @@ dialog {
 .review dl {
   margin: 0.5rem 0;
 }
+
+/* Visitors see public boards and pages; member-only controls stay hidden. */
+body.visitor .member-only,
+body:not(.visitor) .guest-only {
+  display: none !important;
+}
+body {
+  background-image: var(--site-background, none);
+  background-attachment: fixed;
+  background-size: cover;
+}
+body.font-serif {
+  font-family: "Batang", "바탕", "AppleMyungjo", serif;
+}
+body.font-mono {
+  font-family: ui-monospace, "D2Coding", monospace;
+}
+.top {
+  background-image: var(--site-header-background, none);
+  background-size: cover;
+}
+h1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#siteLogo {
+  max-height: 48px;
+  max-width: 240px;
+}
+.site-menu > ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0;
+  padding: 8px 0;
+  list-style: none;
+  border-bottom: 1px solid var(--line);
+}
+.site-menu li {
+  position: relative;
+}
+.site-menu a {
+  color: var(--avocado);
+  font-weight: bold;
+  text-decoration: none;
+}
+.site-menu li ul {
+  margin: 0;
+  padding: 0 0 0 8px;
+  list-style: none;
+  font-weight: normal;
+}
+.site-menu li ul a {
+  font-weight: normal;
+}
+.banners {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0;
+}
+.banners img,
+#introImages img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.intro {
+  max-width: min(800px, calc(100vw - 32px));
+  border: 1px solid var(--line);
+  background: var(--paper);
+  text-align: center;
+}
+#guestIdentity {
+  margin-bottom: 10px;
+}
+@media (max-width: 700px) {
+  .site-menu .desktop-only {
+    display: none;
+  }
+}

@@ -90,7 +90,7 @@ export const models = {
   },
   boards: {
     label: "게시판",
-    help: "등급은 회원 관리에서 설정합니다. 목록/본문/작성/댓글 권한을 따로 정합니다. 현재 비회원 공개/게스트 글쓰기는 아직 구현 중입니다.",
+    help: "등급은 회원 관리에서 설정합니다. 목록/본문/작성/댓글 권한을 따로 정합니다. 등급 1은 로그인하지 않은 손님입니다: 목록·본문을 1로 두면 누구나 읽고, 글쓰기·댓글을 1로 두면 손님이 이름과 비밀번호로 씁니다.",
     fields: [
       { key: "name", label: "게시판 이름", required: true, max: 120 },
       { key: "description", label: "설명", type: "textarea", max: 2000 },
@@ -493,6 +493,105 @@ export const models = {
     ],
   },
 };
+const schedule = [
+  {
+    key: "startsAt",
+    label: "시작 (한국 시간, 빈칸: 제한 없음)",
+    type: "datetime-local",
+    max: 19,
+  },
+  {
+    key: "endsAt",
+    label: "종료 (한국 시간, 빈칸: 제한 없음)",
+    type: "datetime-local",
+    max: 19,
+  },
+];
+models.design = {
+  label: "디자인",
+  help: "사이트 이름, 로고, 배경과 색을 정합니다. 이미지는 HTTPS 주소입니다. 회원과 손님 모두에게 적용됩니다.",
+  fixedId: "site",
+  fields: [
+    { key: "title", label: "사이트 이름", max: 60 },
+    { key: "logo", label: "로고 이미지", type: "url", max: 2000 },
+    { key: "background", label: "배경 이미지", type: "url", max: 2000 },
+    {
+      key: "headerBackground",
+      label: "상단 배경 이미지",
+      type: "url",
+      max: 2000,
+    },
+    {
+      key: "font",
+      label: "글꼴",
+      type: "choice",
+      options: [
+        ["sans", "고딕"],
+        ["serif", "명조"],
+        ["mono", "고정폭"],
+      ],
+    },
+    {
+      key: "colors.accent",
+      label: "강조색",
+      type: "color",
+      default: "#444444",
+    },
+    { key: "colors.muted", label: "보조색", type: "color", default: "#777777" },
+    { key: "colors.paper", label: "바탕색", type: "color", default: "#ffffff" },
+    { key: "colors.ink", label: "글자색", type: "color", default: "#333333" },
+    { key: "colors.line", label: "선 색", type: "color", default: "#dddddd" },
+    {
+      key: "colors.surface",
+      label: "상자 배경색",
+      type: "color",
+      default: "#f7f7f7",
+    },
+  ],
+};
+models.menus = {
+  label: "메뉴",
+  help: "상단 메뉴입니다. 연결은 board:게시판ID, content:내용페이지ID, tab:characters(캐릭터)·shop·quests·messages·calls, 또는 https:// 주소입니다. 상위 메뉴 ID를 적으면 하위 메뉴가 됩니다. 보기 등급 1은 손님에게도 보입니다.",
+  fields: [
+    { key: "name", label: "메뉴 이름", required: true, max: 40 },
+    { key: "link", label: "연결", required: true, max: 2000 },
+    { key: "parent", label: "상위 메뉴 ID (빈칸: 최상위)", max: 64 },
+    { key: "order", label: "순서", type: "number", default: 0 },
+    { key: "level", label: "보기 등급 (1~10)", type: "number", default: 1 },
+    { key: "enabled", label: "사용", type: "checkbox", default: true },
+    {
+      key: "mobile",
+      label: "모바일에서 사용",
+      type: "checkbox",
+      default: true,
+    },
+    { key: "newWindow", label: "새 창으로 열기", type: "checkbox" },
+  ],
+};
+models.banners = {
+  label: "메인 슬라이드·인트로",
+  help: "메인 화면 슬라이드와 첫 방문 인트로 화면의 이미지입니다. 기간 밖이거나 사용하지 않는 이미지는 표시되지 않습니다.",
+  fields: [
+    {
+      key: "place",
+      label: "위치",
+      type: "choice",
+      options: [
+        ["main", "메인 슬라이드"],
+        ["intro", "인트로"],
+      ],
+    },
+    { key: "image", label: "이미지", type: "url", required: true, max: 2000 },
+    { key: "mobileImage", label: "모바일 이미지", type: "url", max: 2000 },
+    { key: "alt", label: "대체 문구", max: 200 },
+    { key: "url", label: "링크 (HTTPS)", type: "url", max: 2000 },
+    { key: "newWindow", label: "새 창으로 열기", type: "checkbox" },
+    ...schedule,
+    { key: "order", label: "순서", type: "number", default: 0 },
+    { key: "level", label: "보기 등급 (1~10)", type: "number", default: 1 },
+    { key: "enabled", label: "사용", type: "checkbox", default: true },
+  ],
+};
 models.character_review = {
   label: "캐릭터 신청 심사",
   collection: `${P}characters`,
@@ -551,6 +650,16 @@ const nonnegative = (value) => {
     throw new Error("숫자는 0 이상의 정수여야 합니다.");
   return value;
 };
+/** A Korean local datetime-local value as milliseconds; null when blank, NaN when invalid. */
+function kstStamp(value) {
+  if (!value) return null;
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(value)) return NaN;
+  const stamp = Date.parse(`${value}+09:00`);
+  return Number.isFinite(stamp) &&
+    new Date(stamp + 9 * 3600000).toISOString().slice(0, value.length) === value
+    ? stamp
+    : NaN;
+}
 export function fieldValue(data, key) {
   return key.split(".").reduce((value, part) => value?.[part], data);
 }
@@ -673,6 +782,8 @@ export function buildRecord(section, values, previous, references) {
           new URL(value).password)
       )
         throw new Error("이미지는 인증 정보 없는 HTTPS 주소여야 합니다.");
+      if (field.type === "color" && !/^#[0-9a-fA-F]{6}$/.test(result))
+        throw new Error(`${field.label}을(를) 확인하세요.`);
       if (
         field.type === "date" &&
         value &&
@@ -747,6 +858,33 @@ export function buildRecord(section, values, previous, references) {
       throw new Error(
         "인증 정보 없는 HTTPS 이미지 주소를 최대 20개 입력하세요.",
       );
+  }
+  if (
+    ["menus", "banners"].includes(section) &&
+    (data.level < 1 || data.level > 10)
+  )
+    throw new Error("보기 등급은 1~10입니다.");
+  if (
+    section === "menus" &&
+    !/^(?:(?:board|content|tab):[\w-]{1,64}|https:\/\/[^\s@]+)$/.test(data.link)
+  )
+    throw new Error(
+      "연결은 board:ID, content:ID, tab:이름 또는 https:// 주소입니다.",
+    );
+  if (section === "menus") {
+    if (data.parent && !/^[a-zA-Z0-9_-]{1,64}$/.test(data.parent))
+      throw new Error("상위 메뉴 ID를 확인하세요.");
+    if (data.parent === id)
+      throw new Error("자기 자신은 상위 메뉴가 될 수 없습니다.");
+    data.parent = data.parent || null;
+  }
+  if (section === "banners") {
+    const start = kstStamp(data.startsAt),
+      end = kstStamp(data.endsAt);
+    if (Number.isNaN(start) || Number.isNaN(end))
+      throw new Error("기간을 확인하세요.");
+    if (start !== null && end !== null && start >= end)
+      throw new Error("종료는 시작보다 늦어야 합니다.");
   }
   if (section === "members" && (data.level < 1 || data.level > 10))
     throw new Error("회원 등급은 1~10입니다.");

@@ -8,7 +8,11 @@
   </head>
   <body>
     <header class="top">
-      <h1>네오 아보카도</h1>
+      <h1>
+        <img id="siteLogo" alt="" hidden /><span id="siteTitle"
+          >네오 아보카도</span
+        >
+      </h1>
       <a href="admin.html">운영</a>
       <div class="account">
         <span id="whoami"></span>
@@ -20,12 +24,18 @@
         </button>
       </div>
     </header>
+    <nav id="siteMenu" class="site-menu" aria-label="사이트 메뉴" hidden></nav>
     <p id="status" role="status"></p>
+    <div id="banners" class="banners" hidden></div>
+    <dialog id="intro" class="intro">
+      <div id="introImages"></div>
+      <button id="enterSite" type="button">입장하기</button>
+    </dialog>
 
     <section id="welcome" hidden>
       <p>
-        자캐 커뮤니티입니다. 회원만 볼 수 있어요. 나루 계정으로 회원 로그인해
-        주세요.
+        자캐 커뮤니티입니다. 공개 게시판과 안내는 손님도 볼 수 있어요. 캐릭터,
+        상점, 쪽지는 나루 계정으로 회원 로그인해 주세요.
       </p>
     </section>
 
@@ -43,18 +53,47 @@
     <main id="community" hidden>
       <nav class="tabs">
         <button id="tabLogs" type="button" aria-pressed="true">로그</button>
-        <button id="tabCharacters" type="button" aria-pressed="false">
+        <button
+          id="tabCharacters"
+          class="member-only"
+          type="button"
+          aria-pressed="false"
+        >
           캐릭터
         </button>
-        <button id="tabShop" type="button" aria-pressed="false">상점</button>
+        <button
+          id="tabShop"
+          class="member-only"
+          type="button"
+          aria-pressed="false"
+        >
+          상점
+        </button>
         <button id="tabContent" type="button" aria-pressed="false">안내</button>
-        <button id="tabQuests" type="button" aria-pressed="false">
+        <button
+          id="tabQuests"
+          class="member-only"
+          type="button"
+          aria-pressed="false"
+        >
           퀘스트
         </button>
-        <button id="tabMessages" type="button" aria-pressed="false">
+        <button
+          id="tabMessages"
+          class="member-only"
+          type="button"
+          aria-pressed="false"
+        >
           쪽지
         </button>
-        <button id="tabCalls" type="button" aria-pressed="false">알림</button>
+        <button
+          id="tabCalls"
+          class="member-only"
+          type="button"
+          aria-pressed="false"
+        >
+          알림
+        </button>
       </nav>
 
       <section id="logsView">
@@ -63,13 +102,34 @@
           <select id="board"></select
         ></label>
         <p id="boardDescription"></p>
+        <p id="noPublicBoards" hidden>손님에게 공개된 게시판이 없습니다.</p>
+        <fieldset id="guestIdentity" class="card" hidden>
+          <legend>손님으로 쓰기</legend>
+          <label>이름 <input id="guestName" maxlength="20" /></label>
+          <label
+            >비밀번호
+            <input
+              id="guestPassword"
+              type="password"
+              minlength="4"
+              maxlength="64"
+              autocomplete="new-password"
+          /></label>
+          <p class="hint">
+            글과 댓글을 고치거나 지울 때 이 비밀번호가 필요합니다.
+          </p>
+        </fieldset>
         <form id="logForm" class="card">
           <h2>로그 올리기</h2>
-          <label>
+          <label class="member-only">
             그림
             <input id="logImage" type="file" accept="image/*" required />
           </label>
-          <label
+          <label class="guest-only">
+            그림 주소 (HTTPS)
+            <input id="logImageUrl" type="url" maxlength="2000" />
+          </label>
+          <label class="member-only"
             >캐릭터
             <select id="logCharacter" class="speaker-choice">
               <option value="">닉네임으로</option>
@@ -80,7 +140,7 @@
             >분류
             <select id="logCategory"></select
           ></label>
-          <label
+          <label class="member-only"
             ><input id="logSecret" type="checkbox" /> 비밀글 (작성자와
             운영자만)</label
           >
@@ -88,7 +148,7 @@
             설명
             <textarea id="logText" maxlength="2000" rows="3"></textarea>
           </label>
-          <p class="hint">[[닉네임]]으로 회원을 호출합니다.</p>
+          <p class="hint member-only">[[닉네임]]으로 회원을 호출합니다.</p>
           <label><input id="logDice" type="checkbox" /> 주사위</label>
           <button type="submit">올리기</button>
         </form>
@@ -272,7 +332,7 @@
             </button>
             <form class="comment-form">
               <select
-                class="comment-character speaker-choice"
+                class="comment-character speaker-choice member-only"
                 aria-label="댓글을 쓸 캐릭터"
               >
                 <option value="">닉네임으로</option>

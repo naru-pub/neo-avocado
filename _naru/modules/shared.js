@@ -45,6 +45,15 @@ export const CALLS = `${PREFIX}calls`;
 
 export const EXPLORE = `${PREFIX}explore`;
 
+/** Guest posts' password hashes, kept apart so member reads of posts never see them. */
+export const GUEST_KEYS = `${PREFIX}guest_keys`;
+
+export const guestKey = (collection, id) =>
+  `${collection.slice(PREFIX.length)}-${id}`;
+
+/** A visitor's access: level 1, as GnuBoard gives a guest. */
+export const GUEST_ACCESS = Object.freeze({ level: 1, role: "guest" });
+
 export const mediaId = (value) =>
   typeof value === "string" &&
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -132,7 +141,8 @@ export async function saveImage(
   return document;
 }
 
-export async function communityAccess(ctx, id = ctx.member.id) {
+export async function communityAccess(ctx, id = ctx.member?.id) {
+  if (!id) return GUEST_ACCESS;
   const row = await ctx.get(MEMBERS, id);
   return {
     level:
@@ -222,6 +232,7 @@ export async function logReadable(ctx, row, access, viewer = ctx.member?.id) {
 export async function deleteCommunityDocument(ctx, collection, kind, row) {
   if (!["logs", "characters"].includes(kind)) {
     await ctx.delete(collection, row.id);
+    await forgetGuestKey(ctx, collection, row);
     return { ok: true, done: true };
   }
   if (!row.data.deleted)
@@ -244,7 +255,9 @@ export async function deleteCommunityDocument(ctx, collection, kind, row) {
     for (const child of page.documents) {
       const cost = detach
         ? 1
-        : 1 + (mediaId(child.data.imageId) ? RELEASE_WRITES : 0);
+        : 1 +
+          (mediaId(child.data.imageId) ? RELEASE_WRITES : 0) +
+          (child.data.guest ? 1 : 0);
       if (cost > writes) {
         unfinished = true;
         return;
@@ -256,6 +269,7 @@ export async function deleteCommunityDocument(ctx, collection, kind, row) {
       else {
         await releaseMedia(ctx, target, child);
         await ctx.delete(target, child.id);
+        await forgetGuestKey(ctx, target, child);
       }
     }
   };
@@ -279,8 +293,16 @@ export async function deleteCommunityDocument(ctx, collection, kind, row) {
   if (!unfinished) {
     await releaseMedia(ctx, collection, row);
     await ctx.delete(collection, row.id);
+    // A log has no character fix-ups, so its key fits in their two writes.
+    await forgetGuestKey(ctx, collection, row);
   }
   return { ok: true, done: !unfinished };
+}
+
+/** Deletes a guest post's password hash along with the post. */
+export async function forgetGuestKey(ctx, collection, row) {
+  if (row.data.guest)
+    await ctx.delete(GUEST_KEYS, guestKey(collection, row.id));
 }
 
 export async function record(ctx, kind, details, owner = ctx.member.id) {
@@ -340,6 +362,31 @@ export async function weightedRows(ctx, collection, filter) {
 export const DAILY_REWARD = 100;
 
 export const GACHA_COST = 50;
+
+/** A Korean local "YYYY-MM-DDTHH:mm[:ss]" as milliseconds; null if blank, NaN if malformed. */
+export function kstStamp(value) {
+  if (!value) return null;
+  if (
+    typeof value !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(value)
+  )
+    return NaN;
+  const stamp = Date.parse(`${value}+09:00`);
+  return Number.isFinite(stamp) &&
+    new Date(stamp + 9 * 3600000).toISOString().slice(0, value.length) === value
+    ? stamp
+    : NaN;
+}
+
+/** Whether `now` is inside a row's optional startsAt (inclusive) and endsAt (exclusive). */
+export function scheduled(data, now) {
+  const start = kstStamp(data.startsAt),
+    end = kstStamp(data.endsAt);
+  return (
+    (!data.startsAt || (Number.isFinite(start) && now >= start)) &&
+    (!data.endsAt || (Number.isFinite(end) && now < end))
+  );
+}
 
 export const kstDay = (now) =>
   new Date(now + 9 * 3600 * 1000).toISOString().slice(0, 10);

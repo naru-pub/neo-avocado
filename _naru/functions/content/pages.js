@@ -1,6 +1,8 @@
 import { PREFIX, failure, contentReadable } from "../../modules/shared.js";
 
 export const readOnly = ["contentPages", "contentPage"];
+// Pages whose read level is 1 are public, as GnuBoard's guest level.
+export const visitors = ["contentPages", "contentPage"];
 
 export async function contentPages(ctx, { after = null } = {}) {
   const page = await ctx.list(`${PREFIX}content`, { size: 10, after });

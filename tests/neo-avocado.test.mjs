@@ -162,6 +162,17 @@ function fakeDatabase(rows = {}) {
     // 서버 함수는 나루에서 돈다. 여기서는 무엇을 불렀는지만 남기고, 테스트가
     // 정한 결과를 돌려준다.
     async call(name, args = null) {
+      // The site frame is read on every load; tests that care set database.site.
+      if (name === functionReference("site"))
+        return {
+          ok: true,
+          level: 2,
+          member: true,
+          design: { title: "", font: "sans", colors: {} },
+          menus: [],
+          banners: [],
+          ...database.site,
+        };
       if (name === functionReference("communityRead")) {
         gatewayReads.push(args);
         name = functionReference("communityData");
@@ -222,10 +233,26 @@ function fakeDatabase(rows = {}) {
       return database.answer(name, args);
     },
   };
+  // A visitor's client: function calls only, recorded apart from members'.
+  const visitor = {
+    calls: [],
+    async call(name, args = null) {
+      if (name !== functionReference("site"))
+        visitor.calls.push(JSON.parse(JSON.stringify({ name, args })));
+      return member.call(name, args);
+    },
+    live(options) {
+      visitor.calls.push({ name: "live", args: { topics: options.topics } });
+      const connection = { options, close() {} };
+      database.live = connection;
+      return connection;
+    },
+  };
   const database = {
     calls,
     store,
     member,
+    visitor,
     gatewayReads,
     signedIn: true,
     answer: (name) =>
@@ -267,6 +294,8 @@ async function page(database) {
         collection: () => {
           throw new Error("visitor handles are not used");
         },
+        call: database.visitor.call,
+        live: database.visitor.live,
         members: {
           session: async () => (database.signedIn ? database.member : null),
           signIn: async () => database.calls.push({ method: "signIn" }),
@@ -498,16 +527,97 @@ test("the shop exposes later pages and crafts selected inventory through the ser
   );
 });
 
-test("signed out, the page asks nothing of the database and offers member sign-in", async () => {
+test("signed out, a visitor reads only public boards through the gate and may sign in", async () => {
   const database = fakeDatabase();
   database.signedIn = false;
-  const { $, settle } = await page(database);
+  const { $, settle, window } = await page(database);
   assert.equal($("welcome").hidden, false);
-  assert.equal($("community").hidden, true);
-  assert.equal(database.calls.length, 0);
+  assert.equal($("community").hidden, false);
+  assert.ok(window.document.body.classList.contains("visitor"));
+  // No board is open to guests: nothing but the board list is read.
+  assert.equal($("noPublicBoards").hidden, false);
+  assert.equal($("logForm").hidden, true);
+  assert.deepEqual(
+    database.visitor.calls.map((call) => call.args?.collection ?? call.name),
+    ["neo_avocado_boards"],
+  );
+  assert.equal(database.calls.length, 1); // the gate's own list of boards
   $("signIn").onclick();
   await settle();
-  assert.deepEqual(database.calls.at(0), { method: "signIn" });
+  assert.deepEqual(database.calls.at(-1), { method: "signIn" });
+});
+
+test("a guest posts with a name and password, and must give the password to edit or delete", async () => {
+  const database = fakeDatabase({
+    neo_avocado_boards: [
+      {
+        id: "free",
+        data: {
+          name: "자유",
+          kind: "text",
+          enabled: true,
+          secret: "optional",
+          listLevel: 1,
+          readLevel: 1,
+          writeLevel: 1,
+          commentLevel: 1,
+          categories: [],
+        },
+      },
+    ],
+    [LOGS]: [
+      {
+        id: "guest-post",
+        data: {
+          board: "free",
+          owner: null,
+          guest: { name: "길손" },
+          text: "안녕하세요",
+          title: "",
+          category: "",
+          secret: false,
+        },
+      },
+    ],
+  });
+  database.signedIn = false;
+  const { $, submit, settle } = await page(database);
+  const post = $("logs").querySelector(".log");
+  assert.equal(post.querySelector(".author").textContent, "길손 (손님)");
+  assert.equal(post.querySelector(".edit").hidden, false);
+  assert.equal($("logForm").hidden, false);
+  assert.equal($("guestIdentity").hidden, false);
+  // Without a name and password nothing is sent.
+  $("logText").value = "두 번째";
+  await submit($("logForm"));
+  await settle();
+  assert.match($("status").textContent, /비밀번호/);
+  $("guestName").value = "길손";
+  $("guestPassword").value = "secret1";
+  await submit($("logForm"));
+  await settle();
+  const posted = database.visitor.calls.find(
+    (call) => call.args?.operation === "add",
+  );
+  assert.deepEqual(posted.args.options, {
+    guest: { name: "길손", password: "secret1" },
+  });
+  assert.equal(posted.args.data.secret, false);
+  assert.equal(posted.args.data.character, undefined);
+  // Editing asks for the password and sends it with the revision.
+  post.querySelector(".edit").onclick();
+  $("editorFields").querySelector('[name="password"]').value = "secret1";
+  $("editorFields").querySelector('[name="text"]').value = "고침";
+  await submit($("editorForm"));
+  const edited = database.visitor.calls.find(
+    (call) => call.args?.operation === "set",
+  );
+  assert.deepEqual(edited.args.options, {
+    condition: { revision: "r1.1" },
+    guest: { password: "secret1" },
+  });
+  // A member's own collection handles are never touched by a visitor.
+  assert.ok(!database.calls.some((call) => call.method === "media.upload"));
 });
 
 test("a first visit sets a nickname under the member's own id, then reads the logs", async () => {

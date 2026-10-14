@@ -77,6 +77,9 @@ const REASONS = {
   explore_closed: "지금은 탐색할 수 없습니다.",
   explore_limit: "이 캐릭터는 오늘 탐색을 모두 했습니다.",
   not_usable_here: "이 아이템은 인벤토리에서 사용해 주세요.",
+  guest_password: "비밀번호를 확인해 주세요. (4~64자)",
+  guest_secret: "손님은 비밀글을 쓸 수 없습니다.",
+  guest_identity: "손님 이름과 4자 이상의 비밀번호를 입력해 주세요.",
 };
 const STATE_NAMES = {
   editing: "수정 중",
@@ -272,9 +275,13 @@ function postText(text, emoticons = []) {
 
 /** Who wrote a post: the character it was posted as, with title and outfit, then the nickname. */
 async function speakerLabel(row) {
+  const fragment = document.createDocumentFragment();
+  if (row.data.guest?.name) {
+    fragment.append(`${row.data.guest.name} (손님)`);
+    return fragment;
+  }
   const nick = await nickOf(row.createdBy ?? row.data.owner);
   const speaker = row.data.speaker;
-  const fragment = document.createDocumentFragment();
   if (!speaker?.name) {
     fragment.append(nick);
     return fragment;
@@ -434,20 +441,52 @@ async function nickOf(memberId) {
   return state.nicks.get(memberId);
 }
 
+/** Who calls site functions: the signed-in member, else the visitor's client. */
+const caller = () => state.member ?? state.naru;
+
+/** The name and password a visitor posts with (bbs/write.php's wr_name, wr_password). */
+function guestCredentials() {
+  const name = $("guestName").value.trim();
+  const password = $("guestPassword").value.trim();
+  if (!name || password.length < 4)
+    throw Object.assign(new Error(REASONS.guest_identity), {
+      details: { reason: "guest_identity" },
+    });
+  return { name, password };
+}
+
+/** Asks a visitor for a guest post's password, then runs `action` with it. */
+function withGuestPassword(title, action) {
+  edit(
+    title,
+    [
+      {
+        name: "password",
+        label: "글을 쓸 때 정한 비밀번호",
+        type: "password",
+        required: true,
+        max: 64,
+      },
+    ],
+    ({ password }) => action({ password }),
+  );
+}
+
 async function connect() {
   const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
   state.naru = createNaru(config.site ? { site: config.site } : undefined);
 }
 function communityCollection(collection) {
-  const nativeReads = [COLLECTION.logs, COLLECTION.comments].includes(
-    collection,
-  );
+  // Rules give members native reads; visitors read through the gate.
+  const nativeReads =
+    Boolean(state.member) &&
+    [COLLECTION.logs, COLLECTION.comments].includes(collection);
   const invoke = async (operation, id, data, options = {}) => {
     // Reads go through the gate's read-only export, on the read budget.
     const gate = ["get", "getMany", "list"].includes(operation)
       ? "communityRead"
       : "communityData";
-    const result = await state.member.call(functionReference(gate), {
+    const result = await caller().call(functionReference(gate), {
       collection,
       operation,
       ...(id !== undefined ? { id } : {}),
@@ -461,6 +500,7 @@ function communityCollection(collection) {
           : result.reason === "conflict"
             ? "CONFLICT"
             : [
+                  "guest_password",
                   "access_denied",
                   "not_owned",
                   "banned",
@@ -502,12 +542,14 @@ function communityCollection(collection) {
           }
         : page;
     },
-    add: async (data) => (await invoke("add", undefined, data)).document,
+    add: async (data, options) =>
+      (await invoke("add", undefined, data, options)).document,
     set: async (id, data, options) =>
       (await invoke("set", id, data, options)).document,
-    delete: async (id, options) => {
+    delete: async (id, options = {}) => {
       let result = await invoke("delete", id, undefined, options);
-      while (!result.done) result = await invoke("delete", id);
+      const { condition, ...rest } = options;
+      while (!result.done) result = await invoke("delete", id, undefined, rest);
     },
   };
 }
@@ -540,13 +582,16 @@ $("checkAdmission").onclick = () => run(start);
 function show(profile) {
   $("admissionPanel").hidden = true;
   const member = state.member;
+  document.body.classList.toggle("visitor", !member);
   $("signIn").hidden = Boolean(member);
   $("signOut").hidden = !member;
   $("retryMedia").hidden = !member;
   $("editProfile").hidden = !member || !profile;
   $("welcome").hidden = Boolean(member);
+  $("guestIdentity").hidden = Boolean(member);
   $("profileSetup").hidden = !member || Boolean(profile);
-  $("community").hidden = !member || !profile;
+  // Visitors see the public boards and pages (level 1).
+  $("community").hidden = member ? !profile : false;
   $("whoami").textContent = profile ? `${profile.data.nick} 님` : "";
   state.profile = profile ?? null;
 }
@@ -656,7 +701,8 @@ $("editProfile").onclick = () => {
 async function start() {
   await connect();
   state.member = await state.naru.members.session();
-  if (!state.member) return show();
+  await loadSite();
+  if (!state.member) return visit();
   const platform = await state.member.membership();
   state.admission = platform.status;
   if (platform.status !== "approved") {
@@ -675,6 +721,177 @@ async function start() {
     await loadLogs();
     listen();
   }
+}
+
+/** A visitor's view: public boards and pages at GnuBoard's guest level 1. */
+async function visit() {
+  state.role = "guest";
+  state.level = 1;
+  show();
+  showTab("logs");
+  await loadBoards();
+  await loadLogs();
+  if (state.boards.length) listen();
+}
+
+/* ------------------------------------------------------------- site --- */
+
+const SITE_COLORS = {
+  accent: "--avocado",
+  muted: "--pit",
+  paper: "--paper",
+  ink: "--ink",
+  line: "--line",
+  surface: "--surface",
+};
+/** Applies the owner's design, menus and banners (adm/design_form.php, menu_list.php). */
+async function loadSite() {
+  const site = await callRule("site");
+  const { design } = site;
+  const root = document.documentElement.style;
+  for (const [key, variable] of Object.entries(SITE_COLORS))
+    if (design.colors[key]) root.setProperty(variable, design.colors[key]);
+  if (design.background)
+    root.setProperty(
+      "--site-background",
+      `url("${encodeURI(design.background)}")`,
+    );
+  if (design.headerBackground)
+    root.setProperty(
+      "--site-header-background",
+      `url("${encodeURI(design.headerBackground)}")`,
+    );
+  document.body.classList.remove("font-serif", "font-mono");
+  if (design.font !== "sans")
+    document.body.classList.add(`font-${design.font}`);
+  if (design.title) {
+    $("siteTitle").textContent = design.title;
+    document.title = design.title;
+  }
+  $("siteLogo").hidden = !design.logo;
+  if (design.logo) {
+    $("siteLogo").src = design.logo;
+    $("siteLogo").alt = design.title || "";
+  }
+  renderMenus(site.menus);
+  renderBanners(site.banners);
+}
+function menuLink(menu) {
+  const link = document.createElement("a");
+  link.textContent = menu.name;
+  if (menu.link.startsWith("https://")) {
+    link.href = menu.link;
+    if (menu.newWindow) {
+      link.target = "_blank";
+      link.rel = "noopener";
+    }
+    return link;
+  }
+  link.href = `#${menu.link}`;
+  link.onclick = (event) => {
+    event.preventDefault();
+    run(() => follow(menu.link));
+  };
+  return link;
+}
+function renderMenus(menus) {
+  const nav = $("siteMenu");
+  nav.replaceChildren();
+  const top = menus.filter(
+    (menu) => !menu.parent || !menus.some((row) => row.id === menu.parent),
+  );
+  if (!top.length) return void (nav.hidden = true);
+  const list = document.createElement("ul");
+  for (const menu of top) {
+    const item = document.createElement("li");
+    if (!menu.mobile) item.className = "desktop-only";
+    item.append(menuLink(menu));
+    const children = menus.filter((row) => row.parent === menu.id);
+    if (children.length) {
+      const sub = document.createElement("ul");
+      for (const child of children) {
+        const entry = document.createElement("li");
+        if (!child.mobile) entry.className = "desktop-only";
+        entry.append(menuLink(child));
+        sub.append(entry);
+      }
+      item.append(sub);
+    }
+    list.append(item);
+  }
+  nav.append(list);
+  nav.hidden = false;
+}
+function bannerPicture(banner) {
+  const picture = document.createElement("picture");
+  if (banner.mobileImage) {
+    const source = document.createElement("source");
+    source.media = "(max-width: 700px)";
+    source.srcset = banner.mobileImage;
+    picture.append(source);
+  }
+  const image = document.createElement("img");
+  image.src = banner.image;
+  image.alt = banner.alt;
+  picture.append(image);
+  if (!banner.url) return picture;
+  const link = document.createElement("a");
+  link.href = banner.url;
+  if (banner.newWindow) {
+    link.target = "_blank";
+    link.rel = "noopener";
+  }
+  link.append(picture);
+  return link;
+}
+function renderBanners(banners) {
+  const main = banners.filter((banner) => banner.place === "main");
+  $("banners").replaceChildren(...main.map(bannerPicture));
+  $("banners").hidden = !main.length;
+  const intro = banners.filter((banner) => banner.place === "intro");
+  let entered = false;
+  try {
+    entered = sessionStorage.getItem("neo-avocado-entered") === "1";
+  } catch {
+    /* Without storage the intro shows on each load. */
+  }
+  if (!intro.length || entered || $("intro").open) return;
+  $("introImages").replaceChildren(...intro.map(bannerPicture));
+  $("intro").showModal?.();
+}
+$("enterSite").onclick = () => {
+  try {
+    sessionStorage.setItem("neo-avocado-entered", "1");
+  } catch {
+    /* The intro shows again next time. */
+  }
+  $("intro").close();
+};
+/** Opens what a menu entry names: a board, a content page or a member tab. */
+async function follow(link) {
+  const [kind, id] = link.split(":");
+  if (kind === "board") {
+    showTab("logs");
+    if (!state.boards.some((row) => row.id === id))
+      return say(REASONS.access_denied);
+    state.board = id;
+    $("board").value = id;
+    configureBoard();
+    return loadLogs();
+  }
+  if (kind === "content") {
+    showTab("content");
+    await loadContentPages();
+    if (![...$("contentPage").options].some((option) => option.value === id))
+      return say(REASONS.document_not_found);
+    $("contentPage").value = id;
+    return loadContentBody();
+  }
+  const tab = $(`tab${id.charAt(0).toUpperCase()}${id.slice(1)}`);
+  if (!tab) return;
+  if (!state.member && tab.classList.contains("member-only"))
+    return say("회원 로그인 후 이용할 수 있습니다.");
+  tab.click();
 }
 
 /* ------------------------------------------------------------- live --- */
@@ -706,6 +923,23 @@ async function refreshUnread() {
 function listen() {
   stopLive();
   const member = state.member;
+  if (!member) {
+    // Visitors hear new public posts too; they have no notices.
+    state.live = state.naru.live?.({
+      topics: [POSTS_TOPIC],
+      onMessage(message) {
+        if (
+          !state.member &&
+          message.type === "topic" &&
+          message.data?.board === state.board &&
+          typeof message.data.id === "string" &&
+          !state.ownPosts.has(message.data.id)
+        )
+          showNewPost(message.data.id);
+      },
+    });
+    return;
+  }
   if (!member?.live) return run(refreshUnread);
   state.live = member.live({
     topics: [POSTS_TOPIC],
@@ -741,6 +975,7 @@ function stopLive() {
 /* ------------------------------------------------------------- logs --- */
 
 async function loadLogs({ more = false } = {}) {
+  if (!state.member && !state.boards.length) return $("logs").replaceChildren();
   const page = await communityCollection(COLLECTION.logs).list({
     filter: { board: state.board },
     sort: [[{ metadata: "createdAt" }, "desc"]],
@@ -775,14 +1010,27 @@ async function logItem(log) {
   item.querySelector(".author").replaceChildren(await speakerLabel(log));
   item.querySelector("time").textContent = formatTime(log.createdAt);
   const remove = item.querySelector(".delete");
-  remove.hidden = !mine(log) && state.role !== "moderator";
+  const guestPost = !state.member && Boolean(log.data.guest);
+  remove.hidden = !mine(log) && state.role !== "moderator" && !guestPost;
   const change = item.querySelector(".edit");
   change.hidden =
-    Boolean(log.data.locked) || (!mine(log) && state.role !== "moderator");
+    Boolean(log.data.locked) ||
+    (!mine(log) && state.role !== "moderator" && !guestPost);
   const beginEdit = (current) =>
     edit(
       "로그 수정",
       [
+        ...(guestPost
+          ? [
+              {
+                name: "password",
+                label: "비밀번호",
+                type: "password",
+                required: true,
+                max: 64,
+              },
+            ]
+          : []),
         { name: "title", label: "제목", value: current.data.title, max: 120 },
         {
           name: "category",
@@ -797,12 +1045,16 @@ async function logItem(log) {
             ).map((name) => [name, name]),
           ],
         },
-        {
-          name: "secret",
-          label: "비밀글",
-          value: current.data.secret === true,
-          type: "checkbox",
-        },
+        ...(guestPost
+          ? []
+          : [
+              {
+                name: "secret",
+                label: "비밀글",
+                value: current.data.secret === true,
+                type: "checkbox",
+              },
+            ]),
         {
           name: "text",
           label: "설명",
@@ -811,11 +1063,14 @@ async function logItem(log) {
           max: 2000,
         },
       ],
-      async ({ text, title, category, secret }) => {
+      async ({ text, title, category, secret = false, password }) => {
         const saved = await communityCollection(COLLECTION.logs).set(
           log.id,
           { ...current.data, text, title, category, secret },
-          { condition: { revision: current.revision } },
+          {
+            condition: { revision: current.revision },
+            ...(guestPost ? { guest: { password } } : {}),
+          },
         );
         item.replaceWith(await logItem(saved));
       },
@@ -840,11 +1095,16 @@ async function logItem(log) {
     item.querySelector(".log-text").after(expand);
   }
   remove.onclick = () =>
-    run(async () => {
-      if (!confirm("이 로그를 지울까요?")) return;
-      await communityCollection(COLLECTION.logs).delete(log.id);
-      item.remove();
-    });
+    guestPost
+      ? withGuestPassword("로그 삭제", async (guest) => {
+          await communityCollection(COLLECTION.logs).delete(log.id, { guest });
+          item.remove();
+        })
+      : run(async () => {
+          if (!confirm("이 로그를 지울까요?")) return;
+          await communityCollection(COLLECTION.logs).delete(log.id);
+          item.remove();
+        });
   // 댓글은 펼쳤을 때 처음 읽는다.
   const comments = item.querySelector(".comments");
   comments.hidden = Boolean(log.data.locked);
@@ -912,9 +1172,15 @@ async function logItem(log) {
   const itemChoice = form.querySelector(".comment-item");
   wireSpeakerChoice(speakerChoice);
   wireItemChoice(itemChoice);
-  form.querySelector(".comment-actions").hidden = !state.boards.find(
+  const board = state.boards.find(
     (row) => row.id === (log.data.board ?? "default"),
-  )?.data.actions;
+  );
+  form.querySelector(".comment-actions").hidden =
+    !state.member || !board?.data.actions;
+  form.hidden =
+    board?.data.enabled === false ||
+    (state.role !== "moderator" &&
+      state.level < (board?.data.commentLevel ?? 2));
   form.onsubmit = (event) => {
     event.preventDefault?.();
     run(async () => {
@@ -924,14 +1190,18 @@ async function logItem(log) {
       const action = actionChoice.value;
       const used = itemChoice.value;
       if (!text && !dice && !action && !used) return;
-      const saved = await communityCollection(COLLECTION.comments).add({
-        logId: log.id,
-        text,
-        dice,
-        ...(character ? { character } : {}),
-        ...(action ? { action } : {}),
-        ...(used ? { item: used } : {}),
-      });
+      const guest = state.member ? null : guestCredentials();
+      const saved = await communityCollection(COLLECTION.comments).add(
+        {
+          logId: log.id,
+          text,
+          dice,
+          ...(character && !guest ? { character } : {}),
+          ...(action && !guest ? { action } : {}),
+          ...(used && !guest ? { item: used } : {}),
+        },
+        guest ? { guest } : {},
+      );
       item.querySelector(".comment-list").append(await commentItem(saved));
       form.querySelector(".comment-text").value = "";
       form.querySelector(".comment-dice").checked = false;
@@ -966,7 +1236,8 @@ async function commentItem(comment) {
     ? comment.data.actions
     : [])
     item.append(actionItem(action));
-  if (mine(comment) || state.role === "moderator") {
+  const guestComment = !state.member && Boolean(comment.data.guest);
+  if (mine(comment) || state.role === "moderator" || guestComment) {
     const change = document.createElement("button");
     change.type = "button";
     change.className = "edit";
@@ -975,6 +1246,17 @@ async function commentItem(comment) {
       edit(
         "댓글 수정",
         [
+          ...(guestComment
+            ? [
+                {
+                  name: "password",
+                  label: "비밀번호",
+                  type: "password",
+                  required: true,
+                  max: 64,
+                },
+              ]
+            : []),
           {
             name: "text",
             label: "댓글",
@@ -983,13 +1265,16 @@ async function commentItem(comment) {
             max: 500,
           },
         ],
-        async ({ text }) => {
+        async ({ text, password }) => {
           if (!text && !comment.data.dice)
             throw new Error("댓글을 입력해 주세요.");
           const saved = await communityCollection(COLLECTION.comments).set(
             comment.id,
             { ...comment.data, text },
-            { condition: { revision: comment.revision } },
+            {
+              condition: { revision: comment.revision },
+              ...(guestComment ? { guest: { password } } : {}),
+            },
           );
           item.replaceWith(await commentItem(saved));
         },
@@ -1000,10 +1285,17 @@ async function commentItem(comment) {
     remove.className = "delete";
     remove.textContent = "삭제";
     remove.onclick = () =>
-      run(async () => {
-        await communityCollection(COLLECTION.comments).delete(comment.id);
-        item.remove();
-      });
+      guestComment
+        ? withGuestPassword("댓글 삭제", async (guest) => {
+            await communityCollection(COLLECTION.comments).delete(comment.id, {
+              guest,
+            });
+            item.remove();
+          })
+        : run(async () => {
+            await communityCollection(COLLECTION.comments).delete(comment.id);
+            item.remove();
+          });
     item.append(" ", remove);
   }
   return item;
@@ -1228,7 +1520,7 @@ async function characterItem(character) {
 // Which functions only read is declared in their modules (readOnly), so Naru
 // gives them the read budget; the page calls them all the same way.
 async function callRule(name, args) {
-  const result = await state.member.call(functionReference(name), args);
+  const result = await caller().call(functionReference(name), args);
   if (!result?.ok) {
     throw new Error(REASONS[result?.reason] ?? "요청을 처리하지 못했습니다.");
   }
@@ -2064,9 +2356,9 @@ $("signOut").onclick = () =>
     state.shopLoaded = false;
     $("editor").close();
     clearPrivateViews();
-    show();
     await member.signOut();
     say("로그아웃했습니다.");
+    await visit();
   });
 $("profileForm").onsubmit = (event) => {
   event.preventDefault?.();
@@ -2286,23 +2578,30 @@ $("moreCalls").onclick = () => run(() => loadCalls({ more: true }));
 $("logForm").onsubmit = (event) => {
   event.preventDefault?.();
   run(async () => {
-    const file = $("logImage").files?.[0];
     const board = state.boards.find((row) => row.id === state.board);
-    if (!file && board?.data.kind !== "text") return say("그림을 골라 주세요.");
+    // Visitors cannot upload; they may link an HTTPS picture instead.
+    const guest = state.member ? null : guestCredentials();
+    const file = guest ? null : $("logImage").files?.[0];
+    const address = guest ? $("logImageUrl").value.trim() : "";
+    if (!file && !address && board?.data.kind !== "text")
+      return say("그림을 골라 주세요.");
     say("올리는 중…");
     const image = file ? await uploadManaged(file) : null;
-    const character = $("logCharacter").value;
-    const log = await communityCollection(COLLECTION.logs).add({
-      image: image?.url ?? null,
-      ...(image ? { imageId: image.id } : {}),
-      text: $("logText").value.trim(),
-      board: state.board,
-      title: $("logTitle").value.trim(),
-      category: $("logCategory").value,
-      secret: $("logSecret").checked,
-      ...(character ? { character } : {}),
-      ...($("logDice").checked ? { dice: true } : {}),
-    });
+    const character = guest ? "" : $("logCharacter").value;
+    const log = await communityCollection(COLLECTION.logs).add(
+      {
+        image: image?.url ?? (address || null),
+        ...(image ? { imageId: image.id } : {}),
+        text: $("logText").value.trim(),
+        board: state.board,
+        title: $("logTitle").value.trim(),
+        category: $("logCategory").value,
+        secret: guest ? false : $("logSecret").checked,
+        ...(character ? { character } : {}),
+        ...($("logDice").checked ? { dice: true } : {}),
+      },
+      guest ? { guest } : {},
+    );
     state.ownPosts.add(log.id);
     if (state.newPost === log.id) showNewPost(null);
     $("logs").prepend(await logItem(log));
@@ -2315,6 +2614,14 @@ $("logForm").onsubmit = (event) => {
 
 async function loadBoards() {
   state.boards = await allDocuments(COLLECTION.boards);
+  $("noPublicBoards").hidden = Boolean(state.member) || state.boards.length > 0;
+  $("logs").hidden = $("board").hidden = !state.boards.length;
+  if (!state.boards.length && !state.member) {
+    $("board").replaceChildren();
+    $("logForm").hidden = true;
+    $("moreLogs").hidden = true;
+    return;
+  }
   if (!state.boards.length)
     state.boards = [
       {
@@ -2345,7 +2652,8 @@ async function loadBoards() {
 function configureBoard() {
   const board = state.boards.find((row) => row.id === state.board);
   $("boardDescription").textContent = board?.data.description ?? "";
-  $("logImage").required = board?.data.kind !== "text";
+  $("logImage").required = Boolean(state.member) && board?.data.kind !== "text";
+  $("logImageUrl").required = !state.member && board?.data.kind !== "text";
   $("logForm").hidden =
     board?.data.enabled === false ||
     (state.role !== "moderator" && state.level < (board?.data.writeLevel ?? 2));
@@ -2356,6 +2664,8 @@ function configureBoard() {
     option.textContent = name || "분류 없음";
     $("logCategory").append(option);
   }
+  if (!state.member && board?.data.secret === "required")
+    $("logForm").hidden = true;
   $("logSecret").disabled = board?.data.secret !== "optional";
   $("logSecret").checked = board?.data.secret === "required";
 }

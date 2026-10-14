@@ -108,20 +108,29 @@ export async function resolveCalls(ctx, text, before = "") {
  */
 export async function deliverCalls(
   ctx,
-  { log, comment = null, text, speaker, recipients, notifyAuthor = false },
+  {
+    log,
+    comment = null,
+    text,
+    speaker,
+    recipients,
+    notifyAuthor = false,
+    guest = null,
+  },
 ) {
-  const me = await ctx.get(PROFILES, ctx.member.id);
+  const from = ctx.member?.id ?? null;
+  const me = from ? await ctx.get(PROFILES, from) : null;
   const preview = text.replace(/\[\[|\]\]/g, "").slice(0, 100);
   const sent = new Set();
   const send = async (to, kind) => {
-    if (sent.has(to) || to === ctx.member.id) return;
+    if (sent.has(to) || to === from) return;
     if (!(await logReadable(ctx, log, await communityAccess(ctx, to), to)))
       return;
     sent.add(to);
     await ctx.add(CALLS, {
       to,
-      from: ctx.member.id,
-      nick: me?.data.nick ?? "",
+      from,
+      nick: me?.data.nick ?? (guest ? `${guest} (손님)` : ""),
       speaker: speaker?.name ?? null,
       kind,
       board: log.data.board ?? "default",

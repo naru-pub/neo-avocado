@@ -38,6 +38,8 @@ import {
   callHistory,
   seeCalls,
   reviewCharacter,
+  site,
+  communityRead,
 } from "../_naru/modules/index.js";
 import { scope, canWrite } from "../_naru/rules/community-board.js";
 import { matches } from "./where.mjs";
@@ -63,12 +65,19 @@ function fakeCtx({ now = Date.parse("2030-01-01T03:00:00Z"), roll = 0 } = {}) {
       throw Object.assign(new Error(message), { code, details });
     },
     media: { delete: async (id) => released.push(id) },
+    // Stands in for PBKDF2: what matters here is that only a hash is stored.
+    password: {
+      hash: (text) => `hash:${[...text].reverse().join("")}`,
+      verify: (text, hash) => hash === `hash:${[...text].reverse().join("")}`,
+    },
     get: async (name, id) => {
       const data = table(name).get(id);
       return data === undefined
         ? null
         : { id, data: structuredClone(data), createdBy: null, revision: "r1" };
     },
+    getMany: async (name, ids) =>
+      Promise.all(ids.map((id) => ctx.get(name, id))),
     list: async (name, options = {}) => {
       const rows = [...table(name)]
         .map(([id, data]) => ({ id, data }))
@@ -2099,4 +2108,232 @@ test("call history shows readable posts newest first and is cleared once seen", 
   assert.deepEqual(sent, [{ member: "m-1", data: { calls: false } }]);
   assert.equal((await messageStatus(ctx)).calls, false);
   assert.equal((await callHistory(ctx, {})).documents[0].data.unread, false);
+});
+
+const PUBLIC_BOARD = {
+  name: "자유",
+  kind: "text",
+  enabled: true,
+  listLevel: 1,
+  readLevel: 1,
+  writeLevel: 1,
+  commentLevel: 1,
+  secret: "optional",
+  categories: [],
+  actions: true,
+};
+
+test("visitors read and post only on level-1 boards, as named guests with a password", async () => {
+  const { ctx, table, sent } = fakeCtx();
+  table(`${P}boards`).set("free", PUBLIC_BOARD);
+  table(`${P}boards`).set("members", { ...PUBLIC_BOARD, listLevel: 2 });
+  table(`${P}profiles`).set("m-1", { nick: "회원", acceptMessages: true });
+  table(`${P}wallets`).set("m-1", { balance: 10 });
+  const member = await communityData(ctx, {
+    collection: `${P}logs`,
+    operation: "add",
+    data: { board: "free", text: "회원 글", image: null },
+  });
+  ctx.member = null;
+  ctx.visitor = true;
+  const read = (args) => communityRead(ctx, args);
+  // Boards a guest may list; the members-only board and the default stay hidden.
+  const boards = await read({
+    collection: `${P}boards`,
+    operation: "list",
+  });
+  assert.deepEqual(
+    boards.documents.map((row) => row.id),
+    ["free"],
+  );
+  assert.equal(
+    (
+      await read({
+        collection: `${P}logs`,
+        operation: "list",
+        options: { board: "members" },
+      })
+    ).reason,
+    "access_denied",
+  );
+  // Nicknames reach visitors; nothing else from a profile does.
+  assert.deepEqual(
+    (
+      await read({
+        collection: `${P}profiles`,
+        operation: "getMany",
+        options: { ids: ["m-1"] },
+      })
+    ).documents[0].data,
+    { nick: "회원" },
+  );
+  for (const collection of ["wallets", "inventory", "characters", "messages"])
+    assert.equal(
+      (await read({ collection: `${P}${collection}`, operation: "list" }))
+        .reason,
+      "access_denied",
+    );
+  // A guest must name themselves and give a password; no secrets or actions.
+  const post = (data, guest) =>
+    communityData(ctx, {
+      collection: `${P}logs`,
+      operation: "add",
+      data: { board: "free", image: null, ...data },
+      options: guest ? { guest } : {},
+    });
+  assert.equal((await post({ text: "x" })).reason, "guest_password");
+  assert.equal(
+    (await post({ text: "x" }, { name: " ", password: "1234" })).reason,
+    "invalid_input",
+  );
+  assert.equal(
+    (
+      await post(
+        { text: "x", secret: true },
+        { name: "길손", password: "1234" },
+      )
+    ).reason,
+    "guest_secret",
+  );
+  const saved = (
+    await post(
+      { text: "[[회원]] 안녕", character: "c-1", dice: true },
+      { name: "길손", password: "1234" },
+    )
+  ).document;
+  assert.deepEqual(saved.data.guest, { name: "길손" });
+  assert.equal(saved.data.owner, null);
+  assert.equal(saved.data.character, undefined);
+  assert.equal(saved.data.text, "[[회원]] 안녕"); // guests do not call members
+  assert.equal(saved.data.rolls.length, 2);
+  // The hash lives apart from the post, which members read natively.
+  assert.equal(JSON.stringify(saved.data).includes("hash"), false);
+  assert.equal(
+    table(`${P}guest_keys`).get(`logs-${saved.id}`).hash,
+    "hash:4321",
+  );
+  // Editing needs the password; a member's post can never be a guest's.
+  const edit = (id, password, text = "고침") =>
+    communityData(ctx, {
+      collection: `${P}logs`,
+      operation: "set",
+      id,
+      data: { text, image: null },
+      options: { guest: { password } },
+    });
+  assert.equal((await edit(saved.id, "0000")).reason, "guest_password");
+  assert.equal(
+    (await edit(member.document.id, "1234")).reason,
+    "guest_password",
+  );
+  assert.equal((await edit(saved.id, "1234")).document.data.text, "고침");
+  assert.deepEqual(table(`${P}logs`).get(saved.id).guest, { name: "길손" });
+  // A guest comment tells the member author, as a guest.
+  sent.length = 0;
+  const comment = await communityData(ctx, {
+    collection: `${P}comments`,
+    operation: "add",
+    data: { logId: member.document.id, text: "좋아요", action: undefined },
+    options: { guest: { name: "길손", password: "abcd" } },
+  });
+  assert.equal(comment.ok, true);
+  assert.deepEqual(sent, [{ member: "m-1", data: { calls: true } }]);
+  const call = [...table(`${P}calls`).values()].at(-1);
+  assert.equal(call.from, null);
+  assert.equal(call.nick, "길손 (손님)");
+  assert.equal(
+    (
+      await communityData(ctx, {
+        collection: `${P}comments`,
+        operation: "add",
+        data: { logId: member.document.id, action: "explore" },
+        options: { guest: { name: "길손", password: "abcd" } },
+      })
+    ).reason,
+    "access_denied",
+  );
+  // Deleting the post removes its comments' and its own keys.
+  table(`${P}comments`).set("guest-comment", {
+    logId: saved.id,
+    text: "댓글",
+    owner: null,
+    guest: { name: "길손" },
+  });
+  table(`${P}guest_keys`).set("comments-guest-comment", { hash: "h" });
+  assert.equal(
+    (
+      await communityData(ctx, {
+        collection: `${P}logs`,
+        operation: "delete",
+        id: saved.id,
+        options: { guest: { password: "1234" } },
+      })
+    ).done,
+    true,
+  );
+  assert.equal(table(`${P}guest_keys`).has(`logs-${saved.id}`), false);
+  assert.equal(table(`${P}guest_keys`).has("comments-guest-comment"), false);
+});
+
+test("the site frame shows only safe design values and menus/banners a reader may see", async () => {
+  const { ctx, table } = fakeCtx({ now: Date.parse("2030-01-01T03:00:00Z") });
+  table(`${P}design`).set("site", {
+    title: "아보카도",
+    logo: "javascript:alert(1)",
+    background: "https://cdn.example/bg.png",
+    font: "comic",
+    colors: { accent: "#123456", ink: "red;}" },
+  });
+  table(`${P}menus`).set("a", { name: "공지", link: "board:notice", order: 2 });
+  table(`${P}menus`).set("b", {
+    name: "소개",
+    link: "content:about",
+    order: 1,
+  });
+  table(`${P}menus`).set("c", { name: "운영", link: "tab:shop", level: 2 });
+  table(`${P}menus`).set("d", { name: "나쁜", link: "javascript:alert(1)" });
+  table(`${P}menus`).set("e", {
+    name: "꺼짐",
+    link: "board:x",
+    enabled: false,
+  });
+  table(`${P}banners`).set("now", {
+    image: "https://cdn.example/1.png",
+    startsAt: "2030-01-01T11:00",
+    endsAt: "2030-01-01T13:00",
+  });
+  table(`${P}banners`).set("later", {
+    image: "https://cdn.example/2.png",
+    startsAt: "2030-01-01T13:00",
+  });
+  table(`${P}banners`).set("intro", {
+    image: "https://cdn.example/3.png",
+    place: "intro",
+  });
+  ctx.member = null;
+  const frame = await site(ctx);
+  assert.deepEqual(frame.design, {
+    title: "아보카도",
+    logo: null,
+    background: "https://cdn.example/bg.png",
+    headerBackground: null,
+    font: "sans",
+    colors: { accent: "#123456" },
+  });
+  assert.deepEqual(
+    frame.menus.map((menu) => menu.id),
+    ["b", "a"],
+  );
+  assert.deepEqual(
+    frame.banners.map((banner) => [banner.id, banner.place]),
+    [
+      ["intro", "intro"],
+      ["now", "main"],
+    ],
+  );
+  ctx.member = { id: "m-1" };
+  assert.deepEqual(
+    (await site(ctx)).menus.map((menu) => menu.id),
+    ["c", "b", "a"],
+  );
 });
