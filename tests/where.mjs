@@ -29,6 +29,8 @@ export function matches(row, where) {
   if (operator === "eq") return same(actual, value);
   if (operator === "ne") return !same(actual, value);
   if (operator === "in") return value.some((option) => same(actual, option));
+  if (operator === "has")
+    return Array.isArray(actual) && actual.some((item) => same(item, value));
   if (!Object.hasOwn(RANGE, operator))
     throw new Error(`Unknown operator ${operator}`);
   return (

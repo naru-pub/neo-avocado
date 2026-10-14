@@ -37,8 +37,6 @@ export const MEMBERS = `${PREFIX}members`;
 
 export const BOARDS = `${PREFIX}boards`;
 
-export const MEDIA = `${PREFIX}media_assets`;
-
 export const CHARACTER_FIELDS = `${PREFIX}character_fields`;
 
 export const CALLS = `${PREFIX}calls`;
@@ -81,140 +79,23 @@ export function preview(data) {
 export const MAX_TAGS = 5;
 const TAG = /#([0-9a-zA-Z가-힣_]{1,30})/g;
 
-/**
- * A log's hashtags (mmb autolink's #tag), also copied to tag0…tag4: `where`
- * cannot test array membership, so each tag needs a field of its own.
- */
+/** A log's hashtags (mmb autolink's #tag), at most five, searched with `has`. */
 export function tagFields(text) {
   const tags = [];
   for (const match of String(text ?? "").matchAll(TAG))
     if (!tags.includes(match[1]) && tags.length < MAX_TAGS) tags.push(match[1]);
-  const fields = { tags };
-  for (let index = 0; index < MAX_TAGS; index++)
-    fields[`tag${index}`] = tags[index] ?? null;
-  return fields;
+  return { tags };
 }
 
-/** A predicate matching logs with `tag`, over the tag0…tag4 fields. */
-export const tagWhere = (tag) => ({
-  any: Array.from({ length: MAX_TAGS }, (_, index) => ({
-    eq: [`tag${index}`, tag],
-  })),
-});
-
-/** Guest posts' password hashes, kept apart so member reads of posts never see them. */
-export const GUEST_KEYS = `${PREFIX}guest_keys`;
-
-export const guestKey = (collection, id) =>
-  `${collection.slice(PREFIX.length)}-${id}`;
+/** A predicate matching logs with `tag`. */
+export const tagWhere = (tag) => ({ has: ["tags", tag] });
 
 /** A visitor's access: level 1, as GnuBoard gives a guest. */
 export const GUEST_ACCESS = Object.freeze({ level: 1, role: "guest" });
 
-export const mediaId = (value) =>
-  typeof value === "string" &&
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
-
 /** Abort the call, rolling back its writes, with a reason the page maps to text. */
 export function fail(ctx, code, reason, message = reason) {
   ctx.fail(code, message, { reason });
-}
-
-/** Forget the ledger row and queue the upload's deletion in the same commit. */
-export async function dropMedia(ctx, id) {
-  await ctx.delete(MEDIA, id);
-  await ctx.media.delete(id);
-}
-
-/** Writes releaseMedia may make: a ledger update, or a drop (row + upload). */
-export const RELEASE_WRITES = 2;
-
-export async function releaseMedia(ctx, collection, document) {
-  await releaseRef(
-    ctx,
-    document?.data.imageId,
-    `${collection}/${document?.id}`,
-  );
-}
-
-/** Removes one reference from an upload, dropping it when none is left. */
-export async function releaseRef(ctx, id, key) {
-  const asset = mediaId(id) ? await ctx.get(MEDIA, id) : null;
-  if (!asset) return;
-  const refs = asset.data.refs.filter((ref) => ref !== key);
-  if (!refs.length) return await dropMedia(ctx, id);
-  await ctx.set(MEDIA, id, { ...asset.data, refs, status: "active" });
-}
-
-/** Adds a reference to one of the caller's uploads (already checked). */
-export async function attachRef(ctx, id, key) {
-  const asset = await ctx.get(MEDIA, id);
-  if (asset.data.refs.includes(key)) return;
-  if (asset.data.refs.length >= 50)
-    fail(
-      ctx,
-      "INVALID_REQUEST",
-      "media_ref_limit",
-      "Media reference limit reached.",
-    );
-  await ctx.set(MEDIA, id, {
-    ...asset.data,
-    refs: [...asset.data.refs, key],
-    status: "active",
-    cleanup: false,
-  });
-}
-
-/** Image-field uploads a character may hold (adm/character_article's image fields). */
-export const MAX_FIELD_MEDIA = 3;
-
-/** The reference key of a character's image field: one per field. */
-export const fieldRef = (collection, id, code) => `${collection}/${id}#${code}`;
-
-/** Upload IDs a document holds in image fields. */
-export const fieldMediaOf = (data) =>
-  data?.fieldMedia && typeof data.fieldMedia === "object"
-    ? Object.entries(data.fieldMedia).filter(([, id]) => mediaId(id))
-    : [];
-
-export async function saveImage(
-  ctx,
-  collection,
-  before,
-  value,
-  input,
-  id = before?.id,
-) {
-  let imageId =
-    value.image === before?.data.image ? before?.data.imageId : null;
-  if (Object.hasOwn(input, "imageId")) imageId = input.imageId;
-  const data = { ...value };
-  if (typeof imageId === "string") imageId = imageId.toLowerCase();
-  if (imageId) {
-    const asset = mediaId(imageId) ? await ctx.get(MEDIA, imageId) : null;
-    const preserving =
-      before?.data.imageId === imageId && before.data.image === value.image;
-    if (
-      !asset ||
-      asset.data.url !== value.image ||
-      asset.data.status === "deleting" ||
-      (!preserving && asset.data.owner !== ctx.member.id)
-    )
-      fail(
-        ctx,
-        "CONFLICT",
-        "media_unavailable",
-        "Media is unavailable or not owned.",
-      );
-    data.imageId = imageId;
-  } else delete data.imageId;
-  const document = id
-    ? await ctx.set(collection, id, data)
-    : await ctx.add(collection, data);
-  if (before?.data.imageId && before.data.imageId !== imageId)
-    await releaseMedia(ctx, collection, before);
-  if (imageId) await attachRef(ctx, imageId, `${collection}/${document.id}`);
-  return document;
 }
 
 export async function communityAccess(ctx, id = ctx.member?.id) {
@@ -305,24 +186,23 @@ export async function logReadable(ctx, row, access, viewer = ctx.member?.id) {
   );
 }
 
+/**
+ * Deletes a log with its comments, or a character with what hangs off it, in
+ * bounded batches: a call writes at most 25 times, so a large one is marked
+ * deleted and finished by calling again. Uploads the documents used go with
+ * them (managed uploads), so nothing else needs releasing.
+ */
 export async function deleteCommunityDocument(ctx, collection, kind, row) {
   if (!["logs", "characters"].includes(kind)) {
     await ctx.delete(collection, row.id);
-    await forgetGuestKey(ctx, collection, row);
     return { ok: true, done: true };
   }
   if (!row.data.deleted)
     await ctx.set(collection, row.id, { ...row.data, deleted: true });
   let unfinished = false;
-  let remaining = 10;
-  // 25 writes, less the marker, the parent's own release and delete, and the
-  // character's state and profile fix-ups: what the children may spend.
-  let writes =
-    25 -
-    2 -
-    RELEASE_WRITES -
-    2 -
-    fieldMediaOf(row.data).length * RELEASE_WRITES;
+  // 25 writes, less the marker, the parent's delete and the character's
+  // state and profile fix-ups: what the children may spend.
+  let remaining = 25 - 1 - 1 - 2;
   const remove = async (target, filter, detach = false) => {
     if (remaining === 0) {
       unfinished = true;
@@ -330,28 +210,14 @@ export async function deleteCommunityDocument(ctx, collection, kind, row) {
     }
     const page = await ctx.list(target, {
       filter,
-      size: Math.min(5, remaining),
+      size: Math.min(10, remaining),
     });
     unfinished ||= Boolean(page.nextCursor);
     for (const child of page.documents) {
-      const cost = detach
-        ? 1
-        : 1 +
-          (mediaId(child.data.imageId) ? RELEASE_WRITES : 0) +
-          (child.data.guest ? 1 : 0);
-      if (cost > writes) {
-        unfinished = true;
-        return;
-      }
       remaining--;
-      writes -= cost;
       if (detach)
         await ctx.set(target, child.id, { ...child.data, character: null });
-      else {
-        await releaseMedia(ctx, target, child);
-        await ctx.delete(target, child.id);
-        await forgetGuestKey(ctx, target, child);
-      }
+      else await ctx.delete(target, child.id);
     }
   };
   if (kind === "logs") await remove(`${PREFIX}comments`, { logId: row.id });
@@ -371,21 +237,8 @@ export async function deleteCommunityDocument(ctx, collection, kind, row) {
         mainCharacter: null,
       });
   }
-  if (!unfinished) {
-    await releaseMedia(ctx, collection, row);
-    for (const [code, id] of fieldMediaOf(row.data))
-      await releaseRef(ctx, id, fieldRef(collection, row.id, code));
-    await ctx.delete(collection, row.id);
-    // A log has no character fix-ups, so its key fits in their two writes.
-    await forgetGuestKey(ctx, collection, row);
-  }
+  if (!unfinished) await ctx.delete(collection, row.id);
   return { ok: true, done: !unfinished };
-}
-
-/** Deletes a guest post's password hash along with the post. */
-export async function forgetGuestKey(ctx, collection, row) {
-  if (row.data.guest)
-    await ctx.delete(GUEST_KEYS, guestKey(collection, row.id));
 }
 
 export async function record(ctx, kind, details, owner = ctx.member.id) {

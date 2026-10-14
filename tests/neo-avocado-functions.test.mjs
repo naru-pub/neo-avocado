@@ -44,6 +44,7 @@ import {
   moderatePost,
 } from "../_naru/modules/index.js";
 import { scope, canWrite } from "../_naru/rules/community-board.js";
+import * as characterRule from "../_naru/rules/characters.js";
 import { matches } from "./where.mjs";
 
 const P = "neo_avocado_";
@@ -57,6 +58,7 @@ function fakeCtx({ now = Date.parse("2030-01-01T03:00:00Z"), roll = 0 } = {}) {
   // What ctx.notify/broadcast and ctx.media.delete sent or queued.
   const sent = [];
   const released = [];
+  const secrets = new Map();
   const ctx = {
     member: { id: "m-1" },
     now,
@@ -67,6 +69,9 @@ function fakeCtx({ now = Date.parse("2030-01-01T03:00:00Z"), roll = 0 } = {}) {
       throw Object.assign(new Error(message), { code, details });
     },
     media: { delete: async (id) => released.push(id) },
+    // Document secrets (SDK 1.1.0), kept beside the documents as Naru does.
+    secretMatches: async (name, id, secret) =>
+      secrets.get(`${name}/${id}`) === secret,
     // Stands in for PBKDF2: what matters here is that only a hash is stored.
     password: {
       hash: (text) => `hash:${[...text].reverse().join("")}`,
@@ -102,7 +107,12 @@ function fakeCtx({ now = Date.parse("2030-01-01T03:00:00Z"), roll = 0 } = {}) {
       table(name).set(id, structuredClone(data));
       return { id, data, createdBy: null, revision: "r1" };
     },
-    add: async (name, data) => await ctx.set(name, `added-${added++}`, data),
+    add: async (name, data, options = {}) => {
+      const id = `added-${added++}`;
+      if (options.secret !== undefined)
+        secrets.set(`${name}/${id}`, options.secret);
+      return await ctx.set(name, id, data);
+    },
     delete: async (name, id) => table(name).delete(id),
   };
   return { ctx, table, sent, released };
@@ -406,7 +416,7 @@ test("deletion marks durable work, hides partial cleanup and preserves purchased
     ).reason,
     "document_not_found",
   );
-  assert.equal((await deleteLog()).done, false);
+  // Ten comments a call: the second finishes it.
   assert.equal((await deleteLog()).done, true);
   assert.equal(table(`${P}comments`).size, 0);
   assert.equal(table(`${P}logs`).size, 0);
@@ -2210,12 +2220,9 @@ test("visitors read and post only on level-1 boards, as named guests with a pass
   assert.equal(saved.data.character, undefined);
   assert.equal(saved.data.text, "[[회원]] 안녕"); // guests do not call members
   assert.equal(saved.data.rolls.length, 2);
-  // The hash lives apart from the post, which members read natively.
-  assert.equal(JSON.stringify(saved.data).includes("hash"), false);
-  assert.equal(
-    table(`${P}guest_keys`).get(`logs-${saved.id}`).hash,
-    "hash:4321",
-  );
+  // The password is the post's write secret: Naru keeps it, not the data.
+  assert.equal(JSON.stringify(saved.data).includes("1234"), false);
+  assert.equal(await ctx.secretMatches(`${P}logs`, saved.id, "1234"), true);
   // Editing needs the password; a member's post can never be a guest's.
   const edit = (id, password, text = "고침") =>
     communityData(ctx, {
@@ -2263,7 +2270,6 @@ test("visitors read and post only on level-1 boards, as named guests with a pass
     owner: null,
     guest: { name: "길손" },
   });
-  table(`${P}guest_keys`).set("comments-guest-comment", { hash: "h" });
   assert.equal(
     (
       await communityData(ctx, {
@@ -2275,8 +2281,8 @@ test("visitors read and post only on level-1 boards, as named guests with a pass
     ).done,
     true,
   );
-  assert.equal(table(`${P}guest_keys`).has(`logs-${saved.id}`), false);
-  assert.equal(table(`${P}guest_keys`).has("comments-guest-comment"), false);
+  assert.equal(table(`${P}logs`).has(saved.id), false);
+  assert.equal(table(`${P}comments`).has("guest-comment"), false);
 });
 
 test("the site frame shows only safe design values and menus/banners a reader may see", async () => {
@@ -2361,8 +2367,7 @@ test("logs are numbered per board, tagged for search, counted and moderated", as
     [1, 2, 3],
   );
   assert.deepEqual(first.data.tags, ["봄", "꽃"]);
-  assert.equal(first.data.tag1, "꽃");
-  assert.equal(first.data.tag4, null);
+  assert.equal(first.data.tag1, undefined); // tags are searched with has
   // Editing rewrites tags but keeps the number; members cannot pin.
   const edited = await communityData(ctx, {
     collection: `${P}logs`,
@@ -2517,78 +2522,41 @@ test("in-post combination matches recipes by item, charges cost and consumes eve
   assert.equal(table(`${P}inventory`).has("i-herb-2"), false);
 });
 
-test("image fields keep managed uploads referenced and release them on change or deletion", async () => {
-  const { ctx, table, released } = roleplayWorld();
-  table(`${P}character_fields`).set("art", { label: "Art", type: "image" });
-  const U1 = "0190f1a2-0000-7000-8000-00000000000a";
-  const U2 = "0190f1a2-0000-7000-8000-00000000000b";
-  const THEIRS = "0190f1a2-0000-7000-8000-00000000000c";
-  for (const [id, owner] of [
-    [U1, "m-1"],
-    [U2, "m-1"],
-    [THEIRS, "m-2"],
-  ])
-    table(`${P}media_assets`).set(id, {
-      owner,
-      url: `https://media.naru.pub/${id}.png`,
-      refs: [],
-      status: "pending",
-      cleanup: true,
-    });
-  const url = (id) => `https://media.naru.pub/${id}.png`;
+test("the characters rule shows members only the custom fields they may see", async () => {
+  const { ctx, table } = roleplayWorld();
+  const define = (code, visibility) =>
+    table(`${P}character_fields`).set(code, { label: code, visibility });
+  define("age", "public");
+  define("secret", "owner");
+  define("memo", "admin");
+  const sheet = {
+    id: "hero",
+    createdBy: null,
+    data: {
+      owner: "m-1",
+      name: "Hero",
+      fields: { age: "17", secret: "diary", memo: "staff note" },
+      fieldMedia: { art: "old" },
+    },
+  };
+  const present = (member) =>
+    characterRule.present(
+      { ...ctx, member: { id: member } },
+      { collection: `${P}characters`, document: sheet },
+    );
+  assert.deepEqual((await present("m-1")).fields, {
+    age: "17",
+    secret: "diary",
+  });
+  assert.deepEqual((await present("m-2")).fields, { age: "17" });
+  assert.equal((await present("m-2")).fieldMedia, undefined);
+  // Hidden fields cannot be queried; visitors read nothing.
+  assert.ok(!characterRule.queryable.includes("fields"));
   assert.equal(
-    await reasonOf(
-      gate(ctx, "characters", "add", {
-        data: {
-          name: "A",
-          fields: { art: url(THEIRS) },
-          fieldMedia: { art: THEIRS },
-        },
-      }),
+    await characterRule.scope(
+      { ...ctx, member: null },
+      { collection: `${P}characters` },
     ),
-    "media_unavailable",
+    false,
   );
-  const made = (
-    await gate(ctx, "characters", "add", {
-      data: { name: "A", fields: { art: url(U1) }, fieldMedia: { art: U1 } },
-    })
-  ).document;
-  assert.deepEqual(table(`${P}media_assets`).get(U1).refs, [
-    `${P}characters/${made.id}#art`,
-  ]);
-  assert.equal(table(`${P}media_assets`).get(U1).cleanup, false);
-  // Replacing the upload releases the old one, which nothing else holds.
-  await gate(ctx, "characters", "set", {
-    id: made.id,
-    data: {
-      ...table(`${P}characters`).get(made.id),
-      fields: { art: url(U2) },
-      fieldMedia: { art: U2 },
-    },
-  });
-  assert.deepEqual(released, [U1]);
-  // Typing another address keeps no upload for the field.
-  await gate(ctx, "characters", "set", {
-    id: made.id,
-    data: {
-      ...table(`${P}characters`).get(made.id),
-      fields: { art: "https://elsewhere.example/a.png" },
-    },
-  });
-  assert.deepEqual(released, [U1, U2]);
-  assert.deepEqual(table(`${P}characters`).get(made.id).fieldMedia, {});
-  // Deleting a character releases its field uploads.
-  table(`${P}media_assets`).set(U1, {
-    owner: "m-1",
-    url: url(U1),
-    refs: [],
-    status: "pending",
-  });
-  const again = (
-    await gate(ctx, "characters", "add", {
-      data: { name: "B", fields: { art: url(U1) }, fieldMedia: { art: U1 } },
-    })
-  ).document;
-  await gate(ctx, "characters", "delete", { id: again.id });
-  assert.deepEqual(released, [U1, U2, U1]);
 });

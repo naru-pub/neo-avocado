@@ -34,9 +34,6 @@
         <button id="editProfile" type="button" hidden>프로필 수정</button>
         <button id="signIn" type="button" hidden>회원 로그인</button>
         <button id="signOut" type="button" hidden>로그아웃</button>
-        <button id="retryMedia" type="button" hidden>
-          파일 정리 다시 시도
-        </button>
       </div>
     </header>
     <p id="status" role="status"></p>
@@ -162,9 +159,14 @@
             설명
             <textarea id="logText" maxlength="2000" rows="3"></textarea>
           </label>
+          <label id="logInlineImage" class="member-only" hidden
+            >본문에 그림 넣기
+            <input id="logInlineFile" type="file" accept="image/*"
+          /></label>
           <p id="logHtmlHint" class="hint" hidden>
             이 게시판은 HTML 본문을 씁니다. 스크립트·폼·스타일은 표시되지
-            않습니다. 그림은 HTTPS 주소의 &lt;img&gt;로 넣습니다.
+            않습니다. 올린 그림은 본문에서 쓰는 동안 남고, 지우면 함께
+            정리됩니다.
           </p>
           <p class="hint member-only">[[닉네임]]으로 회원을 호출합니다.</p>
           <label><input id="logDice" type="checkbox" /> 주사위</label>

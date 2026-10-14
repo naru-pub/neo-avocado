@@ -621,14 +621,6 @@ models.character_cleanup = {
   fields: [],
   help: "관계·옷장·커플을 정리하고 구매 아이템은 회원 인벤토리로 돌려놓습니다. 잔액과 활동 기록은 보존합니다.",
 };
-models.media_cleanup = {
-  label: "미디어 정리",
-  help: "참조가 없는 업로드를 삭제합니다. 나루에서 미디어 삭제 권한을 승인한 운영자 로그인이 필요합니다.",
-  collection: `${P}media_assets`,
-  cleanup: "media",
-  readOnly: true,
-  fields: [],
-};
 models.title_holdings = {
   label: "타이틀 보유·착용 현황",
   help: "캐릭터·타이틀 이름으로 검색하고 개별 지급을 회수합니다. 삭제된 정의나 캐릭터의 기록도 확인할 수 있습니다.",
@@ -651,7 +643,6 @@ export const scopes = [
     `${P}messages`,
     `${P}counters`,
     `${P}calls`,
-    `${P}guest_keys`,
   ]),
 ];
 
@@ -670,6 +661,8 @@ export const collectionSettings = {
     rules: "community-board",
   },
   [`${P}profiles`]: { read: "admin", write: "admin", unique: ["nick"] },
+  // Read natively by members; custom fields trimmed by the rule's present().
+  [`${P}characters`]: { read: "member", write: "admin", rules: "characters" },
 };
 
 const nonnegative = (value) => {

@@ -1,8 +1,6 @@
 import {
   CHARACTERS,
   WARDROBE,
-  releaseMedia,
-  saveImage,
   ownCharacter,
   text,
   imageUrl,
@@ -10,20 +8,14 @@ import {
 } from "../../modules/shared.js";
 import { presentCharacter } from "../../modules/characters.js";
 
-export async function outfit(ctx, { character, name, image, imageId } = {}) {
+export async function outfit(ctx, { character, name, image } = {}) {
   if (!(await ownCharacter(ctx, character))) return failure("not_owned");
-  const document = await saveImage(
-    ctx,
-    WARDROBE,
-    null,
-    {
-      owner: ctx.member.id,
-      character,
-      name: text(name, 80, true),
-      image: imageUrl(image),
-    },
-    { imageId },
-  );
+  const document = await ctx.add(WARDROBE, {
+    owner: ctx.member.id,
+    character,
+    name: text(name, 80, true),
+    image: imageUrl(image),
+  });
   return { ok: true, document };
 }
 
@@ -53,7 +45,6 @@ export async function removeOutfit(ctx, { id } = {}) {
   const character = await ownCharacter(ctx, clothing.data.character);
   if (!character) return failure("not_owned");
   if (character.data.outfit === clothing.id) return failure("outfit_in_use");
-  await releaseMedia(ctx, WARDROBE, clothing);
   await ctx.delete(WARDROBE, clothing.id);
   return { ok: true };
 }

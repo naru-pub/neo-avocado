@@ -1,5 +1,10 @@
 # What Naru SDK 1.1.0 could improve, from finishing the port
 
+> **Update 2026-10-15:** items 1–4 and 7 are now in SDK 1.1.0 (rule
+> `present`/`queryable`, document secrets for visitors and functions,
+> managed uploads, `has`, and the naru-dev emulator), and the port uses them;
+> see port-status.md, "SDK 1.1.0 features adopted". Items 5, 6 and 8 remain.
+
 Written 2026-10-14, after the last rows of the port (guests, board numbers and
 tags, HTML posts, combination, image fields, menus/design) were
 built on SDK 1.1.0 as it stands. Every item below is something the port had

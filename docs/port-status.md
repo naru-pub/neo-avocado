@@ -508,3 +508,46 @@ collection the code names is missing from the request.
 The AvocadoEdition importer was removed at the owner's request. Communities
 start fresh on Naru; there is no converter or loader for an existing
 GnuBoard database.
+
+## SDK 1.1.0 features adopted (2026-10-15)
+
+The port now uses the SDK features its feedback asked for (naru-pub
+`6e9292e0`, `452e7a25`, `d6b479b4`):
+
+- **Managed uploads replace the media ledger.** Every upload is
+  `upload(file, { managed: true })`; a document that names the upload's
+  address keeps it, and Naru deletes it once none does. Gone: the
+  `neo_avocado_media_assets` collection, `registerMedia`, `mediaCleanup`,
+  `cleanupMedia`, `saveImage`/`releaseMedia`, `imageId`/`fieldMedia` fields,
+  `media-cleanup.js` (client recovery and owner cleanup), the 미디어 정리 admin
+  section and the "파일 정리 다시 시도" button. Cascades no longer budget media
+  writes (20 children a call instead of 10). HTML boards gain "본문에 그림
+  넣기": an uploaded picture inside a post lives as long as the post uses it.
+- **Guest passwords are document secrets.** The gate stores a guest post with
+  `ctx.add(..., { secret })` and checks edits with `ctx.secretMatches`; the
+  `neo_avocado_guest_keys` collection is gone. Guest posting stays in the
+  function because posts take server-assigned numbers and notify authors.
+- **Characters are read natively.** `_naru/rules/characters.js` scopes
+  characters to members and trims custom fields with `present()` (public
+  ones, and owner-visible ones on the reader's own); members may query only
+  `queryable` fields. The collection is now member-read under that rule.
+- **Tags use `has`.** Logs keep `tags`; `tag0`…`tag4` are no longer written,
+  and tag search is `{ has: ["tags", tag] }` natively and in the gate.
+- **naru-dev replaces two imitations.** `tests/e2e.mjs` drives the real pages
+  in Chromium against a local Naru (real Worker, rules, functions, limits):
+  owner setup, two members, private profile fields, uploads, calls, the shop,
+  guests, and a post's picture deleted with it. `tests/runtime.mjs` (Naru's
+  runner over a hand-made host) and `tests/browser-smoke.mjs` (Naru's HTTP
+  protocol re-implemented) are removed, with their QuickJS and esbuild
+  dependencies. The fast unit tests keep their in-memory `ctx`.
+
+### Deploy steps
+
+1. Deploy Naru with the commits above first.
+2. Publish the site, then sign in to `admin.html`: the sign-in page offers to
+   change `neo_avocado_characters` to member read with the `characters` rule.
+3. Existing guest posts made with the old key collection can no longer be
+   edited by their guests; `neo_avocado_guest_keys` and
+   `neo_avocado_media_assets` may then be deleted in the control panel.
+   Uploads made before this change are not managed and stay in the media
+   library until the owner deletes them there.

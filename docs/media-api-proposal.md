@@ -1,3 +1,7 @@
+> **Superseded 2026-10-15:** uploads are now managed by Naru (SDK 1.1.0
+> `upload(file, { managed: true })`); the ledger described below was removed.
+> See port-status.md, "SDK 1.1.0 features adopted".
+
 # Managed media lifecycle
 
 The SDK media ID/deletion addition is approved and implemented in Naru SDK 1.1.0.

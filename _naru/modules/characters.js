@@ -4,16 +4,9 @@
 import {
   CHARACTER_FIELDS,
   CHARACTER_STATE,
-  MAX_FIELD_MEDIA,
-  MEDIA,
-  attachRef,
   author,
   fail,
-  fieldMediaOf,
-  fieldRef,
   imageUrl,
-  mediaId,
-  releaseRef,
   weightedRows,
 } from "./shared.js";
 
@@ -96,9 +89,6 @@ export async function presentCharacter(
 ) {
   if (!row || ctx.owner) return row;
   const { fields, fieldMedia, ...data } = row.data;
-  // Upload IDs matter only to the character's owner, who edits the sheet.
-  if (fieldMedia && ctx.member && author(row) === ctx.member.id)
-    data.fieldMedia = fieldMedia;
   if (list || !fields || typeof fields !== "object") return { ...row, data };
   const definitions = catalogue ?? (await fieldCatalogue(ctx));
   const visible = {};
@@ -224,63 +214,4 @@ export async function memberSheet(ctx, previous, data) {
   )
     fail(ctx, "INVALID_REQUEST", "missing_fields", "Required fields missing.");
   return { fields, type, state, catalogue };
-}
-
-/**
- * Which uploads back the character's image fields. A new upload must be the
- * caller's and match the field's address; an unchanged address keeps its
- * upload. Reads only: references move in `moveFieldMedia` after the save.
- */
-export async function fieldMedia(ctx, previous, fields, input, catalogue) {
-  if (
-    input !== undefined &&
-    (!input || typeof input !== "object" || Array.isArray(input))
-  )
-    fail(ctx, "INVALID_REQUEST", "invalid_field", "Invalid field uploads.");
-  const before = Object.fromEntries(fieldMediaOf(previous?.data));
-  const result = {};
-  for (const definition of catalogue) {
-    if (definition.type !== "image") continue;
-    const code = definition.code;
-    const value = fields[code] ?? null;
-    let id =
-      value && value === previous?.data.fields?.[code]
-        ? (before[code] ?? null)
-        : null;
-    if (input && Object.hasOwn(input, code)) {
-      id = typeof input[code] === "string" ? input[code].toLowerCase() : null;
-      // An old upload stays only while the field keeps its address.
-      if (id && id === before[code] && value !== previous?.data.fields?.[code])
-        id = null;
-      if (id && id !== before[code]) {
-        const asset = mediaId(id) ? await ctx.get(MEDIA, id) : null;
-        if (
-          !asset ||
-          asset.data.url !== value ||
-          asset.data.status === "deleting" ||
-          asset.data.owner !== ctx.member?.id
-        )
-          fail(ctx, "CONFLICT", "media_unavailable", "Media is unavailable.");
-      }
-    }
-    if (id && value) result[code] = id;
-  }
-  for (const code of Object.keys(input ?? {}))
-    if (!catalogue.some((row) => row.code === code && row.type === "image"))
-      fail(ctx, "INVALID_REQUEST", "invalid_field", `Unknown field ${code}.`);
-  if (Object.keys(result).length > MAX_FIELD_MEDIA)
-    fail(ctx, "INVALID_REQUEST", "field_media_limit", "Too many uploads.");
-  return result;
-}
-
-/** Moves image-field references from the previous sheet to the saved one. */
-export async function moveFieldMedia(ctx, collection, previous, saved) {
-  const before = Object.fromEntries(fieldMediaOf(previous?.data));
-  const after = Object.fromEntries(fieldMediaOf(saved.data));
-  for (const [code, id] of Object.entries(before))
-    if (after[code] !== id)
-      await releaseRef(ctx, id, fieldRef(collection, saved.id, code));
-  for (const [code, id] of Object.entries(after))
-    if (before[code] !== id)
-      await attachRef(ctx, id, fieldRef(collection, saved.id, code));
 }

@@ -1,9 +1,3 @@
-import {
-  retryMemberMedia,
-  rememberUpload,
-  forgetUpload,
-  recoverPendingUploads,
-} from "./media-cleanup.js";
 import { emoticonContent } from "./emoticons.js";
 import { renderContent, sanitizedFragment } from "./content-renderer.js";
 import { functionReference } from "./function-references.js";
@@ -68,8 +62,6 @@ const REASONS = {
   registration_closed: "현재 신규 가입을 받지 않습니다.",
   document_not_found: "자료를 찾을 수 없습니다.",
   access_denied: "권한이 없습니다.",
-  media_unavailable: "그림 파일을 쓸 수 없습니다. 다시 올려 주세요.",
-  media_ref_limit: "이 그림을 더 많은 곳에 쓸 수 없습니다.",
   nick_taken: "이미 쓰는 닉네임입니다.",
   invalid_field: "프로필 항목을 확인해 주세요.",
   missing_fields: "신청하려면 필수 프로필 항목을 모두 채워 주세요.",
@@ -149,28 +141,12 @@ function reasonOf(error) {
 function say(message) {
   $("status").textContent = message;
 }
-async function recoverMedia() {
-  const member = state.member;
-  if (!member || state.admission !== "approved") return;
-  try {
-    await recoverPendingUploads(member);
-    await retryMemberMedia(member);
-  } catch {
-    /* The durable queue or local pending record is retried on the next visit. */
-  }
-}
+/**
+ * A managed upload (SDK 1.1.0): Naru keeps it while a document names its
+ * address and deletes it once none does, so nothing else is recorded here.
+ */
 async function uploadManaged(file) {
-  const member = state.member;
-  const uploaded = await member.media.upload(file);
-  if (!uploaded.id) throw new Error("업로드한 파일 번호를 받지 못했습니다.");
-  rememberUpload(member, uploaded);
-  const registered = await member.call(functionReference("registerMedia"), {
-    id: uploaded.id,
-    url: uploaded.url,
-  });
-  if (!registered.ok) throw new Error("미디어 기록을 저장하지 못했습니다.");
-  forgetUpload(member, uploaded.id);
-  return uploaded;
+  return await state.member.media.upload(file, { managed: true });
 }
 
 async function run(action) {
@@ -178,7 +154,6 @@ async function run(action) {
     await action();
   } catch (error) {
     console.error(error);
-    await recoverMedia();
     if (error?.code === "AUTH_REQUIRED") {
       state.member = null;
       clearPrivateViews();
@@ -512,9 +487,12 @@ async function connect() {
 function communityCollection(collection) {
   // The board rule serves members and, where posts are world-readable,
   // visitors; a visitor falls back to the gate if they are not.
+  // Characters too, for members: the characters rule trims their custom
+  // fields to what the reader may see (SDK 1.1.0 present()).
   const nativeReads =
-    (Boolean(state.member) || state.visitorNative) &&
-    [COLLECTION.logs, COLLECTION.comments].includes(collection);
+    ((Boolean(state.member) || state.visitorNative) &&
+      [COLLECTION.logs, COLLECTION.comments].includes(collection)) ||
+    (Boolean(state.member) && collection === COLLECTION.characters);
   const reader = () => (state.member ?? state.naru).collection(collection);
   const native = async (read, fallback) => {
     try {
@@ -641,7 +619,6 @@ function showAdmission(status) {
         : REASONS.approval_required;
   $("admissionId").textContent = `가입 문의용 회원 번호: ${state.member.id}`;
   $("editProfile").hidden = true;
-  $("retryMedia").hidden = true;
 }
 $("checkAdmission").onclick = () => run(start);
 
@@ -651,7 +628,6 @@ function show(profile) {
   document.body.classList.toggle("visitor", !member);
   $("signIn").hidden = Boolean(member);
   $("signOut").hidden = !member;
-  $("retryMedia").hidden = !member;
   $("editProfile").hidden = !member || !profile;
   $("welcome").hidden = Boolean(member);
   $("guestIdentity").hidden = Boolean(member);
@@ -775,7 +751,6 @@ async function start() {
     show();
     return showAdmission(platform.status);
   }
-  await recoverMedia();
   const status = await callRule("membership");
   state.role = status.role;
   state.level = status.level ?? 2;
@@ -1068,18 +1043,8 @@ const LOG_SORT = [
   ["notice", "desc"],
   [{ metadata: "createdAt" }, "desc"],
 ];
-const TAG_FIELDS = 5;
-/** Members' native reads match a tag over tag0…tag4; the gate builds this itself. */
-const tagOptions = (tag) =>
-  state.member || state.visitorNative
-    ? {
-        where: {
-          any: Array.from({ length: TAG_FIELDS }, (_, index) => ({
-            eq: [`tag${index}`, tag],
-          })),
-        },
-      }
-    : { tag };
+/** A tag search, as members' native reads and the gate both take it. */
+const tagOptions = (tag) => ({ where: { has: ["tags", tag] } });
 
 async function loadLogs({ more = false } = {}) {
   if (!state.member && !state.boards.length) return $("logs").replaceChildren();
@@ -1727,11 +1692,8 @@ async function characterItem(character) {
       }
       edit("캐릭터 수정", fields, async (values) => {
         if (!values.name) throw new Error("이름을 입력해 주세요.");
-        const data = {
-          ...current.data,
-          fields: {},
-          fieldMedia: { ...current.data.fieldMedia },
-        };
+        const data = { ...current.data, fields: {} };
+        delete data.fieldMedia;
         for (const [name, value] of Object.entries(values))
           if (name.startsWith("field:")) {
             if (value) data.fields[name.slice(6)] = value;
@@ -1741,7 +1703,6 @@ async function characterItem(character) {
           if (name.startsWith("upload:") && file) {
             const uploaded = await uploadManaged(file);
             data.fields[name.slice(7)] = uploaded.url;
-            data.fieldMedia[name.slice(7)] = uploaded.id;
           }
         const saved = await communityCollection(COLLECTION.characters).set(
           character.id,
@@ -2064,7 +2025,6 @@ function wireCharacterDetails(item, character) {
           character: character.id,
           name,
           image,
-          ...(uploaded ? { imageId: uploaded.id } : {}),
         });
         await refresh();
       },
@@ -2474,7 +2434,6 @@ async function useInventory(owned) {
       if (file) {
         const uploaded = await uploadManaged(file);
         data.image = uploaded.url;
-        data.imageId = uploaded.id;
       }
       if (effect.type === "profile")
         data.revision = characters.find((row) => row.id === character).revision;
@@ -2595,14 +2554,6 @@ function showTab(name) {
 /* ------------------------------------------------------------ wiring --- */
 
 $("signIn").onclick = () => run(() => state.naru.members.signIn());
-$("retryMedia").onclick = () =>
-  run(async () => {
-    await recoverPendingUploads(state.member);
-    const result = await retryMemberMedia(state.member);
-    say(
-      `${result.completed}개 파일을 정리했습니다.${result.remaining ? " 다시 눌러 남은 파일을 정리하세요." : ""}`,
-    );
-  });
 $("signOut").onclick = () =>
   run(async () => {
     const member = state.member;
@@ -2848,7 +2799,6 @@ $("logForm").onsubmit = (event) => {
     const log = await communityCollection(COLLECTION.logs).add(
       {
         image: image?.url ?? (address || null),
-        ...(image ? { imageId: image.id } : {}),
         text: $("logText").value.trim(),
         board: state.board,
         title: $("logTitle").value.trim(),
@@ -2911,6 +2861,7 @@ function configureBoard() {
   $("boardDescription").textContent = board?.data.description ?? "";
   $("logText").maxLength = board?.data.html ? 12000 : 2000;
   $("logHtmlHint").hidden = !board?.data.html;
+  $("logInlineImage").hidden = !board?.data.html;
   $("logImage").required = Boolean(state.member) && board?.data.kind !== "text";
   $("logImageUrl").required = !state.member && board?.data.kind !== "text";
   $("logForm").hidden =
@@ -2929,6 +2880,24 @@ function configureBoard() {
   $("logSecret").checked = board?.data.secret === "required";
 }
 wireSpeakerChoice($("logCharacter"));
+// An uploaded picture goes into the HTML body at the cursor; the post's
+// address of it is what keeps the upload (managed uploads, SDK 1.1.0).
+$("logInlineFile").onchange = () =>
+  run(async () => {
+    const file = $("logInlineFile").files?.[0];
+    if (!file) return;
+    say("그림을 올리는 중…");
+    const uploaded = await uploadManaged(file);
+    const area = $("logText");
+    area.setRangeText(
+      `<img src="${uploaded.url}" alt="">`,
+      area.selectionStart,
+      area.selectionEnd,
+      "end",
+    );
+    $("logInlineFile").value = "";
+    say("그림을 넣었습니다.");
+  });
 $("board").onchange = () =>
   run(async () => {
     state.board = $("board").value;
@@ -2950,7 +2919,6 @@ $("characterForm").onsubmit = (event) => {
         .map((input) => [input.dataset.field, input.value.trim()])
         .filter(([, value]) => value),
     );
-    const fieldMedia = {};
     for (const input of $("characterFields").querySelectorAll(
       "[data-field-upload]",
     )) {
@@ -2958,18 +2926,15 @@ $("characterForm").onsubmit = (event) => {
       if (!chosen) continue;
       const uploaded = await uploadManaged(chosen);
       fields[input.dataset.fieldUpload] = uploaded.url;
-      fieldMedia[input.dataset.fieldUpload] = uploaded.id;
     }
     const character = await communityCollection(COLLECTION.characters).add({
       name,
       side: $("characterSide").value.trim(),
       profile: $("characterProfile").value.trim(),
       image,
-      ...(uploaded ? { imageId: uploaded.id } : {}),
       type: $("characterType").value,
       state: $("characterState").value,
       ...(Object.keys(fields).length ? { fields } : {}),
-      ...(Object.keys(fieldMedia).length ? { fieldMedia } : {}),
     });
     state.speakers = null;
     $("characters").prepend(await characterItem(character));

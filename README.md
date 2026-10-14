@@ -15,8 +15,10 @@
 새 컬렉션이 같은 방식으로 준비됩니다.
 
 - 검사: `npm test`, `npm run lint`
-- 실제 나루 실행기(QuickJS + SQLite): `NARU_REPO_PATH=… npm run test:runtime`
-- 실제 SDK와 Chrome: `NARU_SDK_PATH=… PLAYWRIGHT_MODULE=… npm run test:browser`
+- 로컬 나루(naru-dev)에서 실제 Chromium으로 전체 흐름:
+  `NARU_REPO_PATH=… PLAYWRIGHT_MODULE=… npm run test:e2e`
+- 직접 써 보기: 나루 저장소의 `control-plane/`에서
+  `pnpm naru-dev ~/Git/neo-avocado --site neo-avocado` 후 http://localhost:4000
 
 ## 손님과 공개 게시판
 
@@ -24,8 +26,8 @@
 1로 두면 누구나 읽고, 글쓰기·댓글 등급을 1로 두면 손님이 이름과 비밀번호로
 씁니다. 손님 글은 그 비밀번호로만 고치고 지웁니다. 손님은 비밀글, 캐릭터,
 탐색·아이템, 호출, 파일 올리기를 쓸 수 없고 그림은 HTTPS 주소로 넣습니다.
-비밀번호는 PBKDF2로 저장하며 글과 다른 `neo_avocado_guest_keys` 컬렉션에
-둡니다. 읽기 등급이 1인 안내 페이지도 공개됩니다.
+비밀번호는 나루가 글의 쓰기 비밀(secret)로 PBKDF2 해시만 보관하며, 아무도 읽을 수
+없습니다. 읽기 등급이 1인 안내 페이지도 공개됩니다.
 
 ## 게시판
 

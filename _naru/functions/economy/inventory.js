@@ -4,7 +4,6 @@ import {
   PROFILES,
   RECIPES,
   CHARACTERS,
-  saveImage,
   record,
   ownCharacter,
   text,
@@ -208,20 +207,14 @@ export async function useItem(ctx, { inventory, character, data = {} } = {}) {
     const name = text(data.name, 80, true);
     const description = text(data.description ?? "", 2000);
     const image = data.image ? imageUrl(data.image) : null;
-    const personal = await saveImage(
-      ctx,
-      ITEMS,
-      null,
-      {
-        name,
-        description,
-        image,
-        category: "personal",
-        hidden: true,
-        sellable: false,
-      },
-      data,
-    );
+    const personal = await ctx.add(ITEMS, {
+      name,
+      description,
+      image,
+      category: "personal",
+      hidden: true,
+      sellable: false,
+    });
     result.owned = await give(
       ctx,
       personal,
@@ -240,9 +233,10 @@ export async function useItem(ctx, { inventory, character, data = {} } = {}) {
     };
     if (Object.hasOwn(data, "image"))
       profile.image = data.image ? imageUrl(data.image) : null;
+    delete profile.imageId;
     result.document = await presentCharacter(
       ctx,
-      await saveImage(ctx, CHARACTERS, target, profile, data, character),
+      await ctx.set(CHARACTERS, character, profile),
     );
   } else return failure("not_usable");
   // The original personal-item creation form always consumes its ticket.

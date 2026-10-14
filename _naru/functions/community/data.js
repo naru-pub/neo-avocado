@@ -1,7 +1,6 @@
 import {
   PREFIX,
   BOARDS,
-  saveImage,
   communityAccess,
   READ_LIMITS,
   author,
@@ -12,8 +11,6 @@ import {
   text,
   imageUrl,
   failure,
-  GUEST_KEYS,
-  guestKey,
   nextNumber,
   tagFields,
   tagWhere,
@@ -22,12 +19,7 @@ import {
   plainText,
   preview,
 } from "../../modules/shared.js";
-import {
-  memberSheet,
-  presentCharacter,
-  fieldMedia,
-  moveFieldMedia,
-} from "../../modules/characters.js";
+import { memberSheet, presentCharacter } from "../../modules/characters.js";
 import {
   speakerOf,
   rollDice,
@@ -271,21 +263,22 @@ export async function communityData(
       password.length > 64
     )
       return failure("guest_password");
+    // The post keeps the password as its write secret (SDK 1.1.0): Naru
+    // stores a hash nobody can read and checks it here.
     if (previous) {
-      const key = previous.data.guest
-        ? await ctx.get(GUEST_KEYS, guestKey(collection, previous.id))
-        : null;
-      if (!key || !ctx.password.verify(password, key.data.hash))
+      if (
+        !previous.data.guest ||
+        !(await ctx.secretMatches(collection, previous.id, password))
+      )
         return failure("guest_password");
-      guest = previous.data.guest;
+      guest = { name: previous.data.guest.name, secret: password };
     } else {
       if (typeof name !== "string" || !name.trim() || name.length > 20)
         return failure("invalid_input");
-      guest = { name: name.trim(), hash: ctx.password.hash(password) };
+      guest = { name: name.trim(), secret: password };
     }
     if (data) {
       data = { ...data };
-      delete data.imageId;
       delete data.character;
     }
   } else if (
@@ -336,14 +329,8 @@ export async function communityData(
       type: sheet.type,
       state: sheet.state,
       fields: sheet.fields,
-      fieldMedia: await fieldMedia(
-        ctx,
-        previous,
-        sheet.fields,
-        data.fieldMedia,
-        catalogue,
-      ),
     };
+    delete value.fieldMedia;
     if (data.image !== previous?.data.image)
       value.image = data.image ? imageUrl(data.image) : null;
   }
@@ -459,24 +446,12 @@ export async function communityData(
     }
     parent = log;
   }
-  const document = ["logs", "characters"].includes(kind)
-    ? await saveImage(
-        ctx,
-        collection,
-        previous,
-        value,
-        data,
-        operation === "add" ? undefined : id,
-      )
-    : operation === "add"
-      ? await ctx.add(collection, value)
+  // Uploads are managed (SDK 1.1.0): a document that names one keeps it.
+  delete value.imageId;
+  const document =
+    operation === "add"
+      ? await ctx.add(collection, value, guest ? { secret: guest.secret } : {})
       : await ctx.set(collection, id, value);
-  if (kind === "characters")
-    await moveFieldMedia(ctx, collection, previous, document);
-  if (guest && operation === "add")
-    await ctx.set(GUEST_KEYS, guestKey(collection, document.id), {
-      hash: guest.hash,
-    });
   if (kind === "logs" && operation === "add") await announcePost(ctx, document);
   if (calls && ["logs", "comments"].includes(kind))
     await deliverCalls(ctx, {

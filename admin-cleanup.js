@@ -1,4 +1,3 @@
-import { retryOwnerMedia, releaseMediaReferences } from "./media-cleanup.js";
 const P = "neo_avocado_";
 export const cleanupTargets = (kind, id) => {
   if (kind === "logs")
@@ -13,15 +12,16 @@ export const cleanupTargets = (kind, id) => {
     { collection: `${P}couples`, filter: { second: id } },
   ];
 };
-/** One revision-guarded, bounded batch; retrying never discards money/history. */
+/**
+ * One revision-guarded, bounded batch; retrying never discards money/history.
+ * Uploads the deleted documents used go with them (managed uploads).
+ */
 export async function resumeCleanup(owner, kind, id) {
-  if (kind === "media") return retryOwnerMedia(owner, id);
   const collection = `${P}${kind}`;
   const parent = await owner.collection(collection).get(id);
   if (!parent.data.deleted)
     throw new Error("삭제 중인 자료만 정리할 수 있습니다.");
   const operations = [];
-  const mediaDocuments = [];
   let unfinished = false;
   const seen = new Set();
   for (const target of cleanupTargets(kind, id)) {
@@ -38,8 +38,6 @@ export async function resumeCleanup(owner, kind, id) {
       const key = `${target.collection}/${child.id}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      if (!target.detach)
-        mediaDocuments.push({ collection: target.collection, document: child });
       operations.push({
         collection: target.collection,
         ...(target.detach
@@ -98,8 +96,6 @@ export async function resumeCleanup(owner, kind, id) {
         }
       : { delete: { id, condition: { revision: parent.revision } } }),
   });
-  if (!unfinished) mediaDocuments.push({ collection, document: parent });
-  await releaseMediaReferences(owner, mediaDocuments, operations);
   await owner.batch(operations);
   return { done: !unfinished, processed: operations.length - 1 };
 }

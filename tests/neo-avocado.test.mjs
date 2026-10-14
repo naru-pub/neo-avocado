@@ -144,8 +144,12 @@ function fakeDatabase(rows = {}) {
     },
     collection,
     media: {
-      async upload(file) {
-        calls.push({ method: "media.upload", name: file.name });
+      async upload(file, options) {
+        calls.push({
+          method: "media.upload",
+          name: file.name,
+          ...(options ? { options } : {}),
+        });
         return {
           id: "0190f1a2-0000-7000-8000-000000000001",
           url: `https://media.naru.pub/${file.name}`,
@@ -194,9 +198,6 @@ function fakeDatabase(rows = {}) {
         gatewayReads.push(args);
         name = functionReference("communityData");
       }
-      if (name === functionReference("registerMedia")) return { ok: true };
-      if (name === functionReference("mediaCleanup"))
-        return { ok: true, files: [], nextCursor: null };
       if (name === functionReference("membership")) {
         const profile = await member
           .collection(PROFILES)
@@ -348,11 +349,6 @@ async function page(database) {
   await references.link(() => {
     throw new Error("unexpected reference dependency");
   });
-  const cleanup = new SourceTextModule(
-    await readFile(new URL("media-cleanup.js", root), "utf8"),
-    { context },
-  );
-  await cleanup.link(() => references);
   const emoticons = new SourceTextModule(
     await readFile(new URL("emoticons.js", root), "utf8"),
     { context },
@@ -373,15 +369,13 @@ async function page(database) {
   );
   await renderer.link(() => purifier);
   await app.link(async (specifier) =>
-    specifier === "./media-cleanup.js"
-      ? cleanup
-      : specifier === "./emoticons.js"
-        ? emoticons
-        : specifier === "./content-renderer.js"
-          ? renderer
-          : specifier === "./function-references.js"
-            ? references
-            : config,
+    specifier === "./emoticons.js"
+      ? emoticons
+      : specifier === "./content-renderer.js"
+        ? renderer
+        : specifier === "./function-references.js"
+          ? references
+          : config,
   );
   await app.evaluate();
   const $ = (id) => window.document.getElementById(id);
@@ -793,13 +787,12 @@ test("a log uploads its picture, then saves the stored URL", async () => {
     ["media.upload", "add"].includes(call.method),
   );
   assert.deepEqual(writes, [
-    { method: "media.upload", name: "log.png" },
+    { method: "media.upload", name: "log.png", options: { managed: true } },
     {
       method: "add",
       name: LOGS,
       data: {
         image: "https://media.naru.pub/log.png",
-        imageId: "0190f1a2-0000-7000-8000-000000000001",
         text: "첫 로그",
         board: "default",
         title: "",
@@ -1418,7 +1411,7 @@ test("log numbers, @N links, #tags, notices first and comment counts", async () 
     [LOGS]: [
       {
         id: "a",
-        data: { image: "a.png", text: "#봄 첫 글", number: 1, tag0: "봄" },
+        data: { image: "a.png", text: "#봄 첫 글", number: 1, tags: ["봄"] },
       },
       {
         id: "b",

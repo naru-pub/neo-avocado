@@ -1,4 +1,3 @@
-import { releaseMediaReferences } from "./media-cleanup.js";
 import { applyTitles, deleteTitle } from "./admin-titles.js";
 import { resumeCleanup } from "./admin-cleanup.js";
 import { config } from "./config.js";
@@ -84,12 +83,7 @@ async function load({ more = false } = {}) {
     page = await owner.collection(model.collection).list({
       size: 50,
       after: more ? cursor : null,
-      ...(model.cleanup
-        ? {
-            filter:
-              model.cleanup === "media" ? { cleanup: true } : { deleted: true },
-          }
-        : {}),
+      ...(model.cleanup ? { filter: { deleted: true } } : {}),
     });
   if (requestedSection !== section || !owner) return;
   if (!more) $("adminRows").replaceChildren();
@@ -196,35 +190,17 @@ async function load({ more = false } = {}) {
       run(async () => {
         if (!confirm("이 자료를 삭제할까요?")) return;
         if (section === "titles") {
-          await deleteTitle(
-            owner,
-            row.id,
-            ({ completed }) => {
-              $("adminStatus").textContent =
-                `${completed}명의 타이틀을 회수했습니다.`;
-            },
-            (title, operations) =>
-              releaseMediaReferences(
-                owner,
-                [{ collection: model.collection, document: title }],
-                operations,
-              ),
-          );
+          await deleteTitle(owner, row.id, ({ completed }) => {
+            $("adminStatus").textContent =
+              `${completed}명의 타이틀을 회수했습니다.`;
+          });
           await load();
           return;
         }
-        const operations = [
-          {
-            collection: model.collection,
-            delete: { id: row.id, condition: { revision: row.revision } },
-          },
-        ];
-        await releaseMediaReferences(
-          owner,
-          [{ collection: model.collection, document: row }],
-          operations,
-        );
-        await owner.batch(operations);
+        // Uploads the row used go with it (managed uploads).
+        await owner
+          .collection(model.collection)
+          .delete(row.id, { condition: { revision: row.revision } });
         await load();
       });
     li.append(edit, " ", remove);
@@ -598,29 +574,6 @@ $("adminForm").onsubmit = async (event) => {
         ),
       );
       saved = { ...record, ...results[0] };
-    } else if (
-      selected?.data.imageId &&
-      selected.data.image !== record.data.image
-    ) {
-      delete record.data.imageId;
-      const collection = models[section].collection;
-      const operations = [
-        {
-          collection,
-          set: {
-            id: record.id,
-            data: record.data,
-            condition: { revision: selected.revision },
-          },
-        },
-      ];
-      await releaseMediaReferences(
-        owner,
-        [{ collection, document: selected }],
-        operations,
-      );
-      const results = await owner.batch(operations);
-      saved = { ...record, ...results[0] };
     } else
       saved = await owner
         .collection(models[section].collection)
@@ -658,7 +611,6 @@ $("adminSignIn").onclick = () =>
     naru.auth.signIn({
       collections: scopes,
       settings: collectionSettings,
-      mediaDelete: true,
     }),
   );
 $("adminSignOut").onclick = () =>
