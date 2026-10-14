@@ -14,4 +14,5 @@ export * from "../functions/characters/review.js";
 export * from "../functions/content/quests.js";
 export * from "../functions/content/pages.js";
 export * from "../functions/content/site.js";
+export * from "../functions/content/home.js";
 export { DAILY_REWARD, GACHA_COST } from "./shared.js";

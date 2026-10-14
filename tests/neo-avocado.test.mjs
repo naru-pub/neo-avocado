@@ -12,6 +12,7 @@ const PROFILES = "neo_avocado_profiles";
 const CHARACTERS = "neo_avocado_characters";
 const LOGS = "neo_avocado_logs";
 const COMMENTS = "neo_avocado_comments";
+const BOARDS = "neo_avocado_boards";
 const ME = "member-me";
 
 // 회원 컬렉션을 흉내 내는 가짜 데이터베이스. 이 테스트들이 보는 것은 페이지가
@@ -175,6 +176,100 @@ function fakeDatabase(rows = {}) {
     // 서버 함수는 나루에서 돈다. 여기서는 무엇을 불렀는지만 남기고, 테스트가
     // 정한 결과를 돌려준다.
     async call(name, args = null) {
+      // Naru refuses a member it has not approved every call.
+      if (
+        database.signedIn &&
+        (database.platformStatus ?? "approved") !== "approved"
+      )
+        throw Object.assign(new Error("Membership is awaiting approval."), {
+          code: "ACCESS_DENIED",
+        });
+      // The first screen, put together from the same answers as its parts.
+      if (name === functionReference("home")) {
+        const signedIn = database.signedIn;
+        const { ok, ...site } = await member.call(functionReference("site"));
+        const standing = signedIn
+          ? await member.call(functionReference("membership"))
+          : null;
+        const home = {
+          ok: true,
+          site,
+          membership: standing && {
+            role: standing.role,
+            level: standing.level,
+            profile: standing.profile,
+          },
+          notice: null,
+          boards: [],
+          logs: null,
+          nicks: {},
+          counts: {},
+        };
+        if (standing && !standing.profile) return home;
+        if (standing) {
+          const { ok, ...notice } = database.answer(
+            functionReference("messageStatus"),
+          );
+          home.notice = notice;
+        }
+        // Read on the server, as the gate reads: previews trimmed to 150.
+        const read = async (collection, options) => {
+          const page = await (signedIn ? member : visitor).call(
+            functionReference("communityData"),
+            { collection, operation: "list", options },
+          );
+          return page.ok && collection === LOGS
+            ? {
+                ...page,
+                documents: page.documents.map((row) =>
+                  (row.data.text ?? "").length > 150
+                    ? {
+                        ...row,
+                        data: {
+                          ...row.data,
+                          text: row.data.text.slice(0, 150),
+                          truncated: true,
+                        },
+                      }
+                    : row,
+                ),
+              }
+            : page;
+        };
+        const boards = await read(BOARDS, { size: 100, after: null });
+        if (!boards.ok) return boards;
+        home.boards = boards.documents;
+        const board =
+          home.boards.find((row) => row.id === args?.board)?.id ??
+          home.boards[0]?.id ??
+          (standing ? "default" : null);
+        if (!board) return home;
+        const logs = await read(LOGS, {
+          filter: { board },
+          sort: [
+            ["notice", "desc"],
+            [{ metadata: "createdAt" }, "desc"],
+          ],
+          size: 10,
+          after: null,
+        });
+        if (!logs.ok) return logs;
+        home.logs = { board, ...logs };
+        for (const row of logs.documents) {
+          const id = row.createdBy ?? row.data.owner;
+          if (!id || Object.hasOwn(home.nicks, id)) continue;
+          // Server-side reads: not the page's, so not recorded.
+          const profile = store.get(PROFILES).find((row) => row.id === id);
+          home.nicks[id] = profile?.data.nick ?? "이름 없음";
+        }
+        if (logs.documents.length)
+          home.counts = (
+            await member.call(functionReference("commentCounts"), {
+              ids: logs.documents.map((row) => row.id),
+            })
+          ).counts;
+        return home;
+      }
       // The site frame is read on every load; tests that care set database.site.
       if (name === functionReference("site")) {
         if (database.unprepared)
@@ -261,7 +356,9 @@ function fakeDatabase(rows = {}) {
   const visitor = {
     calls: [],
     async call(name, args = null) {
-      if (name !== functionReference("site"))
+      if (
+        ![functionReference("site"), functionReference("home")].includes(name)
+      )
         visitor.calls.push(JSON.parse(JSON.stringify({ name, args })));
       return member.call(name, args);
     },
@@ -717,13 +814,13 @@ test("logs are read a page at a time, newest first, and comments only when opene
   // 자기 로그에만 삭제가 보인다.
   assert.equal(items[0].querySelector(".delete").hidden, false);
   assert.equal(items[1].querySelector(".delete").hidden, true);
-  // 같은 회원의 닉네임은 한 번만 묻는다.
+  // 첫 화면의 글쓴이 닉네임은 home()이 함께 가져온다: 따로 묻지 않는다.
   const profileGets = database.calls.filter(
     (call) => call.method === "get" && call.name === PROFILES,
   );
   assert.deepEqual(
     profileGets.map((call) => call.id),
-    [ME, "member-other"],
+    [ME],
   );
   assert.equal(
     database.calls.some((call) => call.name === COMMENTS),
