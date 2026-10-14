@@ -388,3 +388,38 @@ test("profile field definitions validate codes and options; explore misses store
   assert.ok(scopes.includes("neo_avocado_explore"));
   assert.equal(models.character_review.collection, "neo_avocado_characters");
 });
+
+test("owner sign-in asks for every collection the site uses, with its settings", async () => {
+  const { scopes, collectionSettings } = await import("../admin-model.js");
+  const { readdir, readFile } = await import("node:fs/promises");
+  const files = ["app.js", "admin.js"];
+  for (const dir of [
+    "_naru/modules",
+    "_naru/functions/community",
+    "_naru/functions/economy",
+    "_naru/functions/characters",
+    "_naru/functions/content",
+    "_naru/rules",
+  ])
+    for (const name of await readdir(new URL(`../${dir}`, import.meta.url)))
+      files.push(`${dir}/${name}`);
+  const used = new Set();
+  for (const file of files) {
+    const source = await readFile(
+      new URL(`../${file}`, import.meta.url),
+      "utf8",
+    );
+    for (const [, name] of source.matchAll(
+      /(?:PREFIX\}|neo_avocado_)([a-z_]+)/g,
+    ))
+      used.add(`neo_avocado_${name}`);
+  }
+  assert.deepEqual(
+    [...used].filter((name) => !scopes.includes(name)),
+    [],
+  );
+  assert.ok(
+    Object.keys(collectionSettings).every((name) => scopes.includes(name)),
+  );
+  assert.equal(collectionSettings.neo_avocado_logs.rules, "community-board");
+});

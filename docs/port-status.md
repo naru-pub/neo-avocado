@@ -460,20 +460,21 @@ The remaining rows were finished on 2026-10-14. Nothing has been deployed.
 
 ### Deploy steps
 
-1. Create, each with read and write set to **admin**:
-   `neo_avocado_guest_keys`, `neo_avocado_counters`, `neo_avocado_design`,
-   `neo_avocado_menus` and `neo_avocado_banners`.
-2. Sign in to `admin.html` again so the owner grant covers them (and
-   `neo_avocado_messages` for imports).
-3. Publish the site files together (new modules:
+1. Sign in to `admin.html`. The page now passes each collection's settings
+   with the owner sign-in (`collectionSettings` in `admin-model.js`, SDK 1.1.0
+   `signIn({ settings })`), so Naru's sign-in page creates every missing
+   collection — admin/admin, except logs and comments (world read, admin
+   write, `community-board` rule) and profiles (unique `nick`) — and offers to
+   correct existing ones that differ. Duplicate nicknames make that step
+   fail with the field named; resolve them first.
+2. Publish the site files together (new modules:
    `functions/community/boards.js`, `functions/content/site.js`).
-4. To open a board to visitors, set its list/read levels to 1; to let guests
-   write, set write/comment levels to 1. Set `neo_avocado_logs` and
-   `neo_avocado_comments` read access to **world**, keeping the
-   `community-board` rule: the rule gives visitors level 1 and hides secret
-   posts, and visitors then read posts natively. Left at member, visitors
-   are served through the `communityRead` gate instead (slower, uncached).
-5. Existing logs have no `number`; they show without one, and new logs start
+3. To open a board to visitors, set its list/read levels to 1; to let guests
+   write, set write/comment levels to 1. Logs and comments are world-read
+   under the `community-board` rule, which gives visitors level 1 and hides
+   secret posts; if an owner keeps them at member, visitors are served
+   through the `communityRead` gate instead (slower, uncached).
+4. Existing logs have no `number`; they show without one, and new logs start
    at 1 unless a counter document is set.
 
 ### Not ported, with reasons
@@ -502,3 +503,11 @@ menu sliding in from the right, as in `css/style.css`. Without owner menus
 the column shows the original's no-design menu (로그, 멤버목록, 상점, …).
 디자인 colours override the variables; their defaults are the original's.
 No AvocadoEdition image or font files are copied.
+
+## Collection setup
+
+Earlier sections tell the owner to create collections by hand; that is no
+longer needed. `admin.html` asks for every collection the site uses, with its
+settings, at owner sign-in, and Naru's sign-in page creates or corrects them
+on one click (see Deploy steps above). `tests/admin-model.test.mjs` fails if a
+collection the code names is missing from the request.

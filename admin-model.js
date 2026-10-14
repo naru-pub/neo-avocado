@@ -650,8 +650,28 @@ export const scopes = [
     // Written only when importing AvocadoEdition data (admin-import.js).
     `${P}messages`,
     `${P}counters`,
+    // Written only by site functions; listed so sign-in creates them.
+    `${P}calls`,
+    `${P}guest_keys`,
   ]),
 ];
+
+/**
+ * What each collection must be, sent with the owner's sign-in so Naru creates
+ * (or, on the owner's click, corrects) them: posts are world-readable through
+ * the community-board rule, which gives visitors level 1 and hides secrets;
+ * nicknames are unique; everything else stays admin-only, reached through
+ * site functions. Collections not listed here start admin/admin.
+ */
+export const collectionSettings = {
+  [`${P}logs`]: { read: "world", write: "admin", rules: "community-board" },
+  [`${P}comments`]: {
+    read: "world",
+    write: "admin",
+    rules: "community-board",
+  },
+  [`${P}profiles`]: { read: "admin", write: "admin", unique: ["nick"] },
+};
 
 const nonnegative = (value) => {
   if (!Number.isSafeInteger(value) || value < 0)

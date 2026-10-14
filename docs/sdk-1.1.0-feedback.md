@@ -133,3 +133,13 @@ declarations, `ctx.password`, `getMany`, `where`, unique fields, live notices
 after commit and transactional `ctx.media.delete` each removed a workaround
 cleanly; the guest board, comment counts and in-post combination were built
 on them without SDK changes.
+
+## Changed in the SDK during the port
+
+- **Collection settings at owner sign-in.** Installing the port meant
+  creating some 30 collections by hand with the right access, rules and
+  unique fields, and a site's owner token cannot change them. SDK 1.1.0's
+  `auth.signIn` now takes `settings` (read, write, rules, unique per
+  collection); Naru's sign-in page creates missing collections that way and,
+  on the owner's click, corrects existing ones, marking widened access.
+  `admin.html` uses it (naru-pub `97701a29`).

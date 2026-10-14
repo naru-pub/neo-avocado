@@ -4,6 +4,16 @@
 자캐 커뮤니티)을 나루 SDK 1.1.0으로 옮긴 사이트입니다. 기능별 이식 현황과
 근거, 배포 순서는 [docs/port-status.md](docs/port-status.md)에 있습니다.
 
+## 처음 설치하기
+
+사이트 파일을 올린 뒤 `admin.html`에서 **운영자 로그인**을 누르세요. 나루의
+로그인 화면이 이 사이트에 필요한 컬렉션을 모두 보여 주고, 한 번 누르면 알맞은
+권한으로 만듭니다: 로그·댓글은 `community-board` 규칙과 함께 누구나 읽기(규칙이
+게시판 등급과 비밀글을 지킵니다), 프로필은 닉네임 중복 금지, 나머지는 읽기·쓰기
+모두 관리자만입니다. 이미 있는 컬렉션의 설정이 다르면 같은 화면에서 바꿀 항목을
+보여 줍니다. 기능을 추가한 새 버전을 올린 뒤에도 운영자로 다시 로그인하면
+새 컬렉션이 같은 방식으로 준비됩니다.
+
 - 검사: `npm test`, `npm run lint`
 - 실제 나루 실행기(QuickJS + SQLite): `NARU_REPO_PATH=… npm run test:runtime`
 - 실제 SDK와 Chrome: `NARU_SDK_PATH=… PLAYWRIGHT_MODULE=… npm run test:browser`
@@ -32,9 +42,6 @@ HTML 글을 쓰며, 스크립트·폼·스타일은 표시하지 않습니다. �
 상단 메뉴(2단계까지)를, **메인 슬라이드·인트로**에서 기간이 있는 배너와 첫
 방문 인트로를 정합니다. 메뉴 연결은 `board:게시판ID`, `content:내용페이지ID`,
 `tab:characters`(또는 shop·quests·messages·calls), `https://` 주소입니다.
-`neo_avocado_design`, `neo_avocado_menus`, `neo_avocado_banners`,
-`neo_avocado_counters`, `neo_avocado_guest_keys` 컬렉션을 읽기·쓰기 모두
-**관리자만**으로 만든 뒤 운영자로 다시 로그인하세요.
 
 ## 기존 AvocadoEdition 자료 가져오기
 
@@ -60,16 +67,13 @@ HTML 글을 쓰며, 스크립트·폼·스타일은 표시하지 않습니다. �
 쌓입니다. 캐릭터에는 운영자가 정한 추가 프로필 항목과 수정 중 → 신청 → 승인
 상태가 있고, 운영 화면의 **캐릭터 신청 심사**에서 승인합니다.
 
-`neo_avocado_character_fields`, `neo_avocado_explore`, `neo_avocado_calls`
-컬렉션을 읽기·쓰기 모두 **관리자만**으로 만들고 운영자로 다시 로그인하세요.
 **기본 설정**의 하루 탐색 횟수(0이면 탐색 끔), **탐색 표**, 게시판의 **댓글
 행동 허용**을 설정합니다. 자세한 내용은
 [port-status.md](docs/port-status.md)의 "Roleplay core"를 참고하세요.
 
 ## 안내 페이지
 
-`neo_avocado_content` 컬렉션을 읽기·쓰기 모두 **관리자만**으로 만들고 운영자로
-다시 로그인하여 권한을 승인하세요. **내용 페이지**에서 제목, 본문 형식,
+**내용 페이지**에서 제목, 본문 형식,
 기본·모바일 본문, 상단·하단 이미지, 공개 여부와 읽기 등급을 설정합니다.
 회원 화면 **안내**에서 선택해 읽습니다. 모바일 본문이 비어 있으면 기본 본문을
 표시합니다. 본문은 각각 최대 12,000자입니다.
