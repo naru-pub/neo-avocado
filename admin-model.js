@@ -647,10 +647,9 @@ export const scopes = [
     `${P}comments`,
     `${P}relations`,
     `${P}wardrobe`,
-    // Written only when importing AvocadoEdition data (admin-import.js).
+    // Written only by site functions; listed so sign-in creates them.
     `${P}messages`,
     `${P}counters`,
-    // Written only by site functions; listed so sign-in creates them.
     `${P}calls`,
     `${P}guest_keys`,
   ]),

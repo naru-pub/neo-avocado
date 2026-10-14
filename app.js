@@ -304,12 +304,10 @@ function postText(text, emoticons = []) {
 /** Who wrote a post: the character it was posted as, with title and outfit, then the nickname. */
 async function speakerLabel(row) {
   const fragment = document.createDocumentFragment();
-  // Guests sign with a name; imported posts keep an unmapped member's old one.
+  // Guests sign with a name of their own.
   const nick = row.data.guest?.name
     ? `${row.data.guest.name} (손님)`
-    : row.data.importedAuthor?.name && !row.data.owner
-      ? `${row.data.importedAuthor.name} (이전 회원)`
-      : await nickOf(row.createdBy ?? row.data.owner);
+    : await nickOf(row.createdBy ?? row.data.owner);
   const speaker = row.data.speaker;
   if (!speaker?.name) {
     fragment.append(nick);
@@ -1213,12 +1211,7 @@ async function logItem(log) {
   item.querySelector(".log-title").textContent =
     `${log.data.secret ? "🔒 " : ""}${log.data.title ?? ""}${log.data.category ? ` · ${log.data.category}` : ""}`;
   item.querySelector(".author").replaceChildren(await speakerLabel(log));
-  // Imported posts keep their original time; Naru stamps the import's.
-  item.querySelector("time").textContent = formatTime(
-    Number.isFinite(log.data.postedAt)
-      ? new Date(log.data.postedAt).toISOString()
-      : log.createdAt,
-  );
+  item.querySelector("time").textContent = formatTime(log.createdAt);
   const remove = item.querySelector(".delete");
   const guestPost = !state.member && Boolean(log.data.guest);
   remove.hidden = !mine(log) && state.role !== "moderator" && !guestPost;

@@ -171,10 +171,6 @@ export async function communityData(
                   notice: row.data.notice === true,
                   tags: row.data.tags ?? [],
                   ...(row.data.guest ? { guest: row.data.guest } : {}),
-                  ...(row.data.importedAuthor
-                    ? { importedAuthor: row.data.importedAuthor }
-                    : {}),
-                  ...(row.data.postedAt ? { postedAt: row.data.postedAt } : {}),
                   ...(row.data.speaker ? { speaker: row.data.speaker } : {}),
                   ...(row.data.dice
                     ? { dice: true, rolls: row.data.rolls ?? null }

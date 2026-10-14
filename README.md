@@ -43,21 +43,6 @@ HTML 글을 쓰며, 스크립트·폼·스타일은 표시하지 않습니다. �
 방문 인트로를 정합니다. 메뉴 연결은 `board:게시판ID`, `content:내용페이지ID`,
 `tab:characters`(또는 shop·quests·messages·calls), `https://` 주소입니다.
 
-## 기존 AvocadoEdition 자료 가져오기
-
-1. 기존 DB를 `mysqldump`로 내보냅니다.
-2. 회원 번호 대응표 `members.json`을 만듭니다: `{ "옛 mb_id": "나루 회원
-번호" }`. 나루 회원 번호는 회원이 이 사이트에 로그인하면 가입 대기 화면에
-   보입니다. 대응표에 없는 회원의 글은 옛 닉네임으로 남고 주인이 없습니다.
-3. 옛 `data/` 폴더를 HTTPS로 올려 둔 주소를 `--media-base`로 줍니다.
-4. `node scripts/avocado-import.mjs dump.sql --members members.json
---media-base https://files.example.com --out import.json`
-5. 운영 화면 맨 아래 **AvocadoEdition 가져오기**에서 `import.json`을
-   고릅니다. 이미 있는 문서는 건너뛰므로 중간에 멈추면 다시 가져오면 됩니다.
-
-비밀번호, 이메일, IP 같은 PHP 계정 정보는 읽지 않습니다. 아이템 효과는 다시
-설정해야 합니다(변환기가 경고로 알려 줍니다).
-
 ## 롤플레이 (캐릭터로 쓰기·탐색·호출)
 
 로그와 댓글을 내 캐릭터로 쓰면 이름, 표시 중인 타이틀, 입은 의상이 함께

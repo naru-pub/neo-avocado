@@ -203,7 +203,6 @@ const server = createServer(async (req, res) => {
       "/admin.js": "admin.js",
       "/admin-model.js": "admin-model.js",
       "/admin-cleanup.js": "admin-cleanup.js",
-      "/admin-import.js": "admin-import.js",
       "/media-cleanup.js": "media-cleanup.js",
       "/admin-titles.js": "admin-titles.js",
       "/style.css": "style.css",

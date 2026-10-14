@@ -36,7 +36,6 @@ reproduce the existing demo. SDK additions require the owner's approval.
 | Private messages and notifications                | `bbs/memo*`, `ajax/*call*`                                                               | Implemented: mailbox, receive preference, costs, live unread notices, new-post notices, `[[nick]]` calls and comment notices (also from guests)                                                               |
 | Community administration                          | `adm/admin.menu*.php`                                                                    | Implemented: member status/roles, catalog/economy, cleanup recovery; moderators pin notices and move posts between boards                                                                                     |
 | Navigation, content, themes and emoticons         | `adm/menu*`, `adm/content*`, `adm/design*`, `adm/banner*`, `adm/intro*`, `adm/emoticon*` | Implemented: two-level menus, main slides and intro, design (title, logo, backgrounds, font, colors as CSS variables), content pages, emoticons                                                               |
-| Existing data import                              | SQL schema and uploaded files                                                            | Implemented: `scripts/avocado-import.mjs` (dump → documents, explicit member mapping, files rewritten onto a media base) and a resumable owner loader in `admin.html`                                         |
 | Browser and server acceptance                     | Naru release checklist                                                                   | 111 unit/page tests, actual-runner QuickJS/SQLite checks and real-SDK Chrome (member, owner and guest) pass; Chrome peaks at 10/30 mutations and 85/120 reads. Live deployment acceptance is the owner's step |
 
 Naru replaces PHP hosting, account passwords, email verification and SQL server
@@ -449,14 +448,6 @@ The remaining rows were finished on 2026-10-14. Nothing has been deployed.
   (`neo_avocado_design`, fixed ID `site`), 메뉴 (`neo_avocado_menus`; links are
   `board:ID`, `content:ID`, `tab:name` or HTTPS), 메인 슬라이드·인트로
   (`neo_avocado_banners`, scheduled in Korean time).
-- **Import.** `scripts/avocado-import.mjs` reads a mysqldump and writes
-  `import.json`; `admin.html → AvocadoEdition 가져오기` loads it in batches of
-  25, creating only absent documents, so a stopped import resumes. Members
-  are mapped explicitly (`mb_id` → Naru member ID); content of unmapped
-  members keeps their old nickname (`importedAuthor`) and belongs to nobody.
-  Passwords, e-mail and IP addresses are never read. Naru stamps
-  `createdAt` at import, so posts are written oldest first and keep the
-  original time in `postedAt`. Item effects need setting again.
 
 ### Deploy steps
 
@@ -511,3 +502,9 @@ longer needed. `admin.html` asks for every collection the site uses, with its
 settings, at owner sign-in, and Naru's sign-in page creates or corrects them
 on one click (see Deploy steps above). `tests/admin-model.test.mjs` fails if a
 collection the code names is missing from the request.
+
+## Data import (removed)
+
+The AvocadoEdition importer was removed at the owner's request. Communities
+start fresh on Naru; there is no converter or loader for an existing
+GnuBoard database.

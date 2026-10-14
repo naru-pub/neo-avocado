@@ -1,7 +1,7 @@
 # What Naru SDK 1.1.0 could improve, from finishing the port
 
 Written 2026-10-14, after the last rows of the port (guests, board numbers and
-tags, HTML posts, combination, image fields, menus/design, data import) were
+tags, HTML posts, combination, image fields, menus/design) were
 built on SDK 1.1.0 as it stands. Every item below is something the port had
 to work around; the workaround is named so it can be deleted when the SDK
 grows the feature. Ordered by how much app code or risk each would remove.
@@ -61,34 +61,24 @@ predicate of five `eq`s can find them (`tagFields`, `tagWhere` in
 **Suggestion:** `{ has: [field, value] }` for arrays of scalars (and an index
 for it).
 
-## 5. Import cannot keep authorship or time
+## 5. Function-written documents have no author
 
-There is no import API (#10); the importer uses ordinary owner batches. Owner
-writes cannot set `createdBy` or `createdAt`, so imported posts carry
-`owner`/`postedAt` in their data, are written oldest first to keep their
-order, and every author check in the app reads `createdBy ?? data.owner`
-(`author()`). Functions have the same problem: documents they write have no
-`createdBy`, which is why `owner` is in the data everywhere and the board rule
-checks both.
+Documents a function writes have no `createdBy`, which is why `owner` is in
+the data everywhere, every author check reads `createdBy ?? data.owner`
+(`author()`) and the board rule checks both.
 
-Also: `admin.batch` has no documented maximum (the importer guesses 25), and
-`{ absent: true }` fails the whole batch when one document exists, so a
-resumable import must `getMany` every chunk first.
-
-**Suggestion:** let owner batches (and an explicit `ctx.add(..., { as:
-memberId })` in functions) set `createdBy`, allow `createdAt` on owner
-imports, document the batch limit, and add a skip-if-present condition that
-reports what it skipped.
+**Suggestion:** an explicit `ctx.add(..., { as: memberId })` (and the same on
+`set`) that records the member as `createdBy`. Owner batches also have no
+documented maximum size.
 
 ## 6. Storage quota against a real community
 
 10,000 documents / 10 MiB per site (#2) is below an AvocadoEdition community
 of a few years: every comment, message, history row, inventory item and call
-is a document. An import will hit `QUOTA_EXCEEDED` partway (it resumes, but
-cannot finish).
+is a document.
 
 **Suggestion:** a quota that scales with plan, a way to check remaining
-space before an import, and counting by bytes rather than documents.
+space, and counting by bytes rather than documents.
 
 ## 7. A local emulator
 
