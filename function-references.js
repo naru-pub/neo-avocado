@@ -12,6 +12,8 @@ export const FUNCTION_MODULES = Object.freeze({
   readMessage: "community/messages",
   removeMessage: "community/messages",
   messageStatus: "community/messages",
+  commentCounts: "community/boards",
+  moderatePost: "community/boards",
   callHistory: "community/calls",
   seeCalls: "community/calls",
   daily: "economy/shop",

@@ -115,6 +115,7 @@ const state = {
   emoticons: null,
   boards: [],
   board: "default",
+  tag: null,
   live: null,
   newPost: null,
   ownPosts: new Set(),
@@ -257,17 +258,41 @@ function diceText(row) {
   return `🎲 ${first} + ${second} = ${first + second}`;
 }
 
-const CALL_PART = /(\[\[[^[\]\r\n]{1,20}\]\])/;
-/** Text with [[nick]] calls marked, as autolink() did; the rest stays text. */
+const POST_PART =
+  /(\[\[[^[\]\r\n]{1,20}\]\]|@[0-9]{1,9}|#[0-9a-zA-Z가-힣_]{1,30})/;
+/**
+ * Text with autolink()'s marks: [[nick]] calls, @N links to a log on the same
+ * board and #tag searches. The rest stays text (and emoticons).
+ */
 function postText(text, emoticons = []) {
   const fragment = document.createDocumentFragment();
-  for (const part of String(text ?? "").split(CALL_PART)) {
+  for (const part of String(text ?? "").split(POST_PART)) {
     if (!part) continue;
-    if (CALL_PART.test(part) && part.startsWith("[[")) {
+    if (part.startsWith("[[") && POST_PART.test(part)) {
       const call = document.createElement("span");
       call.className = "member-call";
       call.textContent = part.slice(2, -2);
       fragment.append(call);
+    } else if (/^@[0-9]+$/.test(part)) {
+      const link = document.createElement("a");
+      link.className = "log-link";
+      link.href = `#log-${part.slice(1)}`;
+      link.textContent = part;
+      link.onclick = (event) => {
+        event.preventDefault();
+        run(() => openLogNumber(Number(part.slice(1))));
+      };
+      fragment.append(link);
+    } else if (/^#[0-9a-zA-Z가-힣_]+$/.test(part)) {
+      const link = document.createElement("a");
+      link.className = "hash-tag";
+      link.href = `#tag-${encodeURIComponent(part.slice(1))}`;
+      link.textContent = part;
+      link.onclick = (event) => {
+        event.preventDefault();
+        run(() => searchTag(part.slice(1)));
+      };
+      fragment.append(link);
     } else fragment.append(emoticonContent(document, part, emoticons));
   }
   return fragment;
@@ -974,26 +999,134 @@ function stopLive() {
 
 /* ------------------------------------------------------------- logs --- */
 
+const LOG_SORT = [
+  ["notice", "desc"],
+  [{ metadata: "createdAt" }, "desc"],
+];
+const TAG_FIELDS = 5;
+/** Members' native reads match a tag over tag0…tag4; the gate builds this itself. */
+const tagOptions = (tag) =>
+  state.member
+    ? {
+        where: {
+          any: Array.from({ length: TAG_FIELDS }, (_, index) => ({
+            eq: [`tag${index}`, tag],
+          })),
+        },
+      }
+    : { tag };
+
 async function loadLogs({ more = false } = {}) {
   if (!state.member && !state.boards.length) return $("logs").replaceChildren();
-  const page = await communityCollection(COLLECTION.logs).list({
+  const logs = communityCollection(COLLECTION.logs);
+  const page = await logs.list({
     filter: { board: state.board },
-    sort: [[{ metadata: "createdAt" }, "desc"]],
+    // Notices (bo_notice) sort first: true above false and unset.
+    sort: LOG_SORT,
     size: LOG_PAGE,
     after: more ? state.logCursor : null,
+    ...(state.tag ? tagOptions(state.tag) : {}),
   });
   await preloadNicks(page.documents);
   if (!more) {
     $("logs").replaceChildren();
     showNewPost(null);
   }
-  for (const log of page.documents) $("logs").append(await logItem(log));
+  $("tagFilter").hidden = !state.tag;
+  $("tagName").textContent = state.tag ? `#${state.tag} 태그가 달린 로그` : "";
+  const shown = [];
+  for (const log of page.documents) {
+    const item = await logItem(log);
+    if (log.data.notice) item.classList.add("notice");
+    $("logs").append(item);
+    shown.push([log.id, item]);
+  }
   state.logCursor = page.nextCursor;
   $("moreLogs").hidden = !page.nextCursor;
+  await showCommentCounts(shown);
 }
+
+/** Fills each log's "댓글 (n)" from one read-only count call. */
+async function showCommentCounts(entries) {
+  const ids = entries.map(([id]) => id).filter(Boolean);
+  if (!ids.length) return;
+  // Counts are a decoration: a page without them is still a page.
+  const counts = await callRule("commentCounts", {
+    ids: ids.slice(0, 20),
+  }).then(
+    (result) => result.counts ?? {},
+    () => ({}),
+  );
+  for (const [id, item] of entries)
+    if (typeof counts[id] === "number")
+      item.querySelector(".comments summary").textContent =
+        `댓글 (${counts[id]})`;
+}
+
+/** Shows log No. `number` of the current board, as the skin's log link (?log=N&single=Y). */
+async function openLogNumber(number) {
+  const page = await communityCollection(COLLECTION.logs).list({
+    filter: { board: state.board, number },
+    size: 1,
+  });
+  const log = page.documents[0];
+  if (!log) return say(REASONS.document_not_found);
+  await preloadNicks([log]);
+  $("logFocus").replaceChildren(await logItem(log));
+  $("logFocusPanel").hidden = false;
+  $("logFocusPanel").scrollIntoView?.();
+}
+$("closeFocus").onclick = () => {
+  $("logFocus").replaceChildren();
+  $("logFocusPanel").hidden = true;
+};
+
+/** Lists the current board's logs with `tag` (mmb's hash search). */
+async function searchTag(tag) {
+  showTab("logs");
+  state.tag = tag;
+  await loadLogs();
+}
+$("clearTag").onclick = () =>
+  run(async () => {
+    state.tag = null;
+    await loadLogs();
+  });
 
 async function logItem(log) {
   const item = $("logTemplate").content.firstElementChild.cloneNode(true);
+  item.dataset.id = log.id;
+  item.querySelector(".log-number").textContent =
+    `${log.data.notice ? "공지 · " : ""}${log.data.number ? `No. ${log.data.number}` : ""}`;
+  const pin = item.querySelector(".pin");
+  const move = item.querySelector(".move");
+  pin.hidden = move.hidden = state.role !== "moderator" || log.data.locked;
+  pin.textContent = log.data.notice ? "공지 해제" : "공지로";
+  pin.onclick = () =>
+    run(async () => {
+      const { document: saved } = await callRule("moderatePost", {
+        id: log.id,
+        notice: !log.data.notice,
+      });
+      item.replaceWith(await logItem(saved));
+      await loadLogs();
+    });
+  move.onclick = () =>
+    edit(
+      "다른 게시판으로 이동",
+      [
+        {
+          name: "board",
+          label: "게시판",
+          value: log.data.board ?? "default",
+          options: state.boards.map((row) => [row.id, row.data.name]),
+        },
+      ],
+      async ({ board }) => {
+        await callRule("moderatePost", { id: log.id, board });
+        item.remove();
+      },
+    );
   const image = item.querySelector(".log-image");
   if (log.data.image && !log.data.locked) image.src = log.data.image;
   else image.remove();
@@ -2673,6 +2806,7 @@ wireSpeakerChoice($("logCharacter"));
 $("board").onchange = () =>
   run(async () => {
     state.board = $("board").value;
+    state.tag = null;
     configureBoard();
     await loadLogs();
   });

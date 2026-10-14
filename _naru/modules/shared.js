@@ -45,6 +45,43 @@ export const CALLS = `${PREFIX}calls`;
 
 export const EXPLORE = `${PREFIX}explore`;
 
+/** Each board's next log number (wr_num), one document per board. */
+export const COUNTERS = `${PREFIX}counters`;
+
+/** Takes the board's next log number, as GnuBoard's wr_num. */
+export async function nextNumber(ctx, board) {
+  const counter = await ctx.get(COUNTERS, board);
+  const number = Number.isSafeInteger(counter?.data.next)
+    ? counter.data.next
+    : 1;
+  await ctx.set(COUNTERS, board, { next: number + 1 });
+  return number;
+}
+
+export const MAX_TAGS = 5;
+const TAG = /#([0-9a-zA-Z가-힣_]{1,30})/g;
+
+/**
+ * A log's hashtags (mmb autolink's #tag), also copied to tag0…tag4: `where`
+ * cannot test array membership, so each tag needs a field of its own.
+ */
+export function tagFields(text) {
+  const tags = [];
+  for (const match of String(text ?? "").matchAll(TAG))
+    if (!tags.includes(match[1]) && tags.length < MAX_TAGS) tags.push(match[1]);
+  const fields = { tags };
+  for (let index = 0; index < MAX_TAGS; index++)
+    fields[`tag${index}`] = tags[index] ?? null;
+  return fields;
+}
+
+/** A predicate matching logs with `tag`, over the tag0…tag4 fields. */
+export const tagWhere = (tag) => ({
+  any: Array.from({ length: MAX_TAGS }, (_, index) => ({
+    eq: [`tag${index}`, tag],
+  })),
+});
+
 /** Guest posts' password hashes, kept apart so member reads of posts never see them. */
 export const GUEST_KEYS = `${PREFIX}guest_keys`;
 

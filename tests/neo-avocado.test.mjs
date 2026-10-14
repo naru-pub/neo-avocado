@@ -66,9 +66,22 @@ function fakeDatabase(rows = {}) {
     },
     async list(options = {}) {
       calls.push({ method: "list", name, ...options });
-      const [[{ metadata }, direction]] = options.sort ?? [
-        [{ metadata: "id" }, "asc"],
-      ];
+      const keys = options.sort ?? [[{ metadata: "id" }, "asc"]];
+      // Missing values sort lowest, then strings, numbers and booleans.
+      const rank = (value) =>
+        value === undefined || value === null
+          ? [0, 0]
+          : [{ string: 1, number: 2, boolean: 3 }[typeof value] ?? 0, value];
+      const compare = (a, b) => {
+        for (const [key, direction] of keys) {
+          const [x, y] = [a, b].map((row) =>
+            rank(typeof key === "string" ? row.data[key] : row[key.metadata]),
+          );
+          const order = x[0] - y[0] || (x[1] < y[1] ? -1 : x[1] > y[1] ? 1 : 0);
+          if (order) return direction === "desc" ? -order : order;
+        }
+        return 0;
+      };
       const sorted = store
         .get(name)
         .filter(
@@ -77,11 +90,7 @@ function fakeDatabase(rows = {}) {
               ([field, value]) => row.data[field] === value,
             ) && matches(row, options.where),
         )
-        .sort(
-          (a, b) =>
-            (a[metadata] < b[metadata] ? -1 : 1) *
-            (direction === "desc" ? -1 : 1),
-        );
+        .sort(compare);
       const start = options.after ? Number(options.after) : 0;
       const documents = sorted.slice(start, start + (options.size ?? 50));
       const end = start + documents.length;
@@ -173,6 +182,14 @@ function fakeDatabase(rows = {}) {
           banners: [],
           ...database.site,
         };
+      if (name === functionReference("commentCounts")) {
+        const counts = {};
+        for (const id of args.ids)
+          counts[id] = store
+            .get(COMMENTS)
+            .filter((row) => row.data.logId === id).length;
+        return { ok: true, counts };
+      }
       if (name === functionReference("communityRead")) {
         gatewayReads.push(args);
         name = functionReference("communityData");
@@ -668,7 +685,10 @@ test("logs are read a page at a time, newest first, and comments only when opene
       method: "list",
       name: LOGS,
       filter: { board: "default" },
-      sort: [[{ metadata: "createdAt" }, "desc"]],
+      sort: [
+        ["notice", "desc"],
+        [{ metadata: "createdAt" }, "desc"],
+      ],
       size: 10,
       after: null,
     },
@@ -1378,4 +1398,53 @@ test("calls arrive as live notices and the history marks them seen", async () =>
   await settle();
   await settle();
   assert.equal($("callDetail").querySelector(".member-call").textContent, "나");
+});
+
+test("log numbers, @N links, #tags, notices first and comment counts", async () => {
+  const database = fakeDatabase({
+    [PROFILES]: [me],
+    [LOGS]: [
+      {
+        id: "a",
+        data: { image: "a.png", text: "#봄 첫 글", number: 1, tag0: "봄" },
+      },
+      {
+        id: "b",
+        data: { image: "b.png", text: "공지", number: 2, notice: true },
+      },
+      { id: "c", data: { image: "c.png", text: "@1 보세요", number: 3 } },
+    ],
+    [COMMENTS]: [{ id: "x", data: { logId: "c", text: "!", dice: false } }],
+  });
+  const { $, settle } = await page(database);
+  await settle();
+  const items = [...$("logs").querySelectorAll(".log")];
+  assert.deepEqual(
+    items.map((item) => item.querySelector(".log-number").textContent),
+    ["공지 · No. 2", "No. 3", "No. 1"],
+  );
+  assert.ok(items[0].classList.contains("notice"));
+  assert.equal(
+    items[1].querySelector(".comments summary").textContent,
+    "댓글 (1)",
+  );
+  items[1].querySelector(".log-link").onclick({ preventDefault() {} });
+  await settle();
+  await settle();
+  assert.equal($("logFocusPanel").hidden, false);
+  assert.match($("logFocus").textContent, /첫 글/);
+  assert.deepEqual(
+    database.calls.filter((call) => call.method === "list").at(-1).filter,
+    { board: "default", number: 1 },
+  );
+  items[2].querySelector(".hash-tag").onclick({ preventDefault() {} });
+  await settle();
+  await settle();
+  assert.equal($("tagFilter").hidden, false);
+  assert.deepEqual(
+    [...$("logs").querySelectorAll(".log-text")].map((row) => row.textContent),
+    ["#봄 첫 글"],
+  );
+  // Members are not moderators: no pin or move.
+  assert.equal(items[0].querySelector(".pin").hidden, true);
 });

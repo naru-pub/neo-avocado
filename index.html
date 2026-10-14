@@ -152,6 +152,14 @@
           <label><input id="logDice" type="checkbox" /> 주사위</label>
           <button type="submit">올리기</button>
         </form>
+        <p id="tagFilter" hidden>
+          <span id="tagName"></span>
+          <button id="clearTag" type="button">태그 검색 끝내기</button>
+        </p>
+        <div id="logFocusPanel" hidden>
+          <button id="closeFocus" type="button">로그 링크 닫기</button>
+          <ol id="logFocus" class="logs"></ol>
+        </div>
         <ol id="logs" class="logs"></ol>
         <button id="moreLogs" type="button" hidden>로그 더 보기</button>
       </section>
@@ -313,6 +321,7 @@
     <template id="logTemplate">
       <li class="log card">
         <div class="log-picture">
+          <p class="log-number"></p>
           <h3 class="log-title"></h3>
           <img class="log-image" alt="" />
           <p class="log-text"></p>
@@ -323,6 +332,8 @@
             <span class="author"></span> · <time></time>
             <button class="delete" type="button" hidden>삭제</button>
             <button class="edit" type="button" hidden>수정</button>
+            <button class="pin" type="button" hidden>공지</button>
+            <button class="move" type="button" hidden>이동</button>
           </p>
           <details class="comments">
             <summary>댓글</summary>

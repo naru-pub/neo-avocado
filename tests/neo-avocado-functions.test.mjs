@@ -40,6 +40,8 @@ import {
   reviewCharacter,
   site,
   communityRead,
+  commentCounts,
+  moderatePost,
 } from "../_naru/modules/index.js";
 import { scope, canWrite } from "../_naru/rules/community-board.js";
 import { matches } from "./where.mjs";
@@ -76,6 +78,8 @@ function fakeCtx({ now = Date.parse("2030-01-01T03:00:00Z"), roll = 0 } = {}) {
         ? null
         : { id, data: structuredClone(data), createdBy: null, revision: "r1" };
     },
+    count: async (name, options = {}) =>
+      (await ctx.list(name, { ...options, size: 1e9 })).documents.length,
     getMany: async (name, ids) =>
       Promise.all(ids.map((id) => ctx.get(name, id))),
     list: async (name, options = {}) => {
@@ -2335,5 +2339,81 @@ test("the site frame shows only safe design values and menus/banners a reader ma
   assert.deepEqual(
     (await site(ctx)).menus.map((menu) => menu.id),
     ["c", "b", "a"],
+  );
+});
+
+test("logs are numbered per board, tagged for search, counted and moderated", async () => {
+  const { ctx, table } = fakeCtx();
+  table(`${P}boards`).set("free", PUBLIC_BOARD);
+  const add = async (data) =>
+    (
+      await communityData(ctx, {
+        collection: `${P}logs`,
+        operation: "add",
+        data: { board: "free", image: null, ...data },
+      })
+    ).document;
+  const first = await add({ text: "#봄 #꽃 #봄 산책" });
+  const second = await add({ text: "두 번째 @1", secret: true });
+  const third = await add({ text: "다른 #꽃" });
+  assert.deepEqual(
+    [first, second, third].map((log) => log.data.number),
+    [1, 2, 3],
+  );
+  assert.deepEqual(first.data.tags, ["봄", "꽃"]);
+  assert.equal(first.data.tag1, "꽃");
+  assert.equal(first.data.tag4, null);
+  // Editing rewrites tags but keeps the number; members cannot pin.
+  const edited = await communityData(ctx, {
+    collection: `${P}logs`,
+    operation: "set",
+    id: first.id,
+    data: { text: "#여름", image: null, notice: true, number: 99 },
+  });
+  assert.deepEqual(edited.document.data.tags, ["여름"]);
+  assert.equal(edited.document.data.number, 1);
+  assert.equal(edited.document.data.notice, undefined);
+  // The gate's tag search never matches a secret post.
+  await add({ text: "#꽃 비밀", secret: true });
+  ctx.member = { id: "m-2" };
+  const tagged = await communityRead(ctx, {
+    collection: `${P}logs`,
+    operation: "list",
+    options: { board: "free", tag: "꽃" },
+  });
+  assert.deepEqual(
+    tagged.documents.map((row) => row.id),
+    [third.id],
+  );
+  // Counts only for readable logs.
+  for (const n of [1, 2])
+    table(`${P}comments`).set(`c-${n}`, { logId: third.id, text: "c" });
+  table(`${P}comments`).set("c-3", { logId: second.id, text: "c" });
+  assert.deepEqual(
+    (await commentCounts(ctx, { ids: [third.id, second.id, "missing"] }))
+      .counts,
+    { [third.id]: 2 },
+  );
+  // Only moderators (and the owner) pin and move, and a move renumbers.
+  assert.equal(
+    (await moderatePost(ctx, { id: third.id, notice: true })).reason,
+    "access_denied",
+  );
+  table(`${P}members`).set("m-2", { role: "moderator" });
+  table(`${P}boards`).set("other", { ...PUBLIC_BOARD, name: "다른" });
+  assert.equal(
+    (await moderatePost(ctx, { id: third.id, notice: true })).document.data
+      .notice,
+    true,
+  );
+  const moved = await moderatePost(ctx, { id: third.id, board: "other" });
+  assert.equal(moved.document.data.board, "other");
+  assert.equal(moved.document.data.number, 1);
+  ctx.member = null;
+  ctx.owner = true;
+  assert.equal(
+    (await moderatePost(ctx, { id: third.id, notice: false })).document.data
+      .notice,
+    false,
   );
 });

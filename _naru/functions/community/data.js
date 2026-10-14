@@ -14,6 +14,9 @@ import {
   failure,
   GUEST_KEYS,
   guestKey,
+  nextNumber,
+  tagFields,
+  tagWhere,
 } from "../../modules/shared.js";
 import { memberSheet, presentCharacter } from "../../modules/characters.js";
 import {
@@ -111,6 +114,15 @@ export async function communityData(
       const board = await boardOf(ctx, selected);
       if (!boardAllowed(board, access, "list")) return failure("access_denied");
       query.filter = { ...query.filter, board: selected };
+      // Tag search builds its own predicate; it never matches secret posts,
+      // whose tags come from bodies the caller may not read.
+      if (options.tag !== undefined) {
+        if (typeof options.tag !== "string" || options.tag.length > 30)
+          return failure("invalid_input");
+        query.where = {
+          all: [tagWhere(options.tag), { ne: ["secret", true] }],
+        };
+      }
     }
     if (kind === "comments") {
       const logId = query.filter?.logId;
@@ -145,6 +157,9 @@ export async function communityData(
                 ...row,
                 data: {
                   owner: author(row),
+                  number: row.data.number ?? null,
+                  notice: row.data.notice === true,
+                  tags: row.data.tags ?? [],
                   ...(row.data.guest ? { guest: row.data.guest } : {}),
                   ...(row.data.speaker ? { speaker: row.data.speaker } : {}),
                   ...(row.data.dice
@@ -165,6 +180,7 @@ export async function communityData(
                 createdBy: row.createdBy,
                 data: {
                   owner: author(row),
+                  number: row.data.number ?? null,
                   title: row.data.title ?? "비밀글",
                   locked: true,
                   secret: Boolean(row.data.secret),
@@ -366,6 +382,8 @@ export async function communityData(
       ? { text: value.text, recipients: [] }
       : await resolveCalls(ctx, value.text, previous?.data.text ?? "");
     value.text = calls.text;
+    Object.assign(value, tagFields(value.text));
+    if (!previous) value.number = await nextNumber(ctx, boardId);
   }
   if (kind === "comments") {
     const logId = previous?.data.logId ?? data.logId;

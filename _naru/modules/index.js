@@ -3,6 +3,7 @@ export * from "../functions/community/data.js";
 export * from "../functions/community/media.js";
 export * from "../functions/community/messages.js";
 export * from "../functions/community/calls.js";
+export * from "../functions/community/boards.js";
 export * from "../functions/economy/shop.js";
 export * from "../functions/economy/inventory.js";
 export * from "../functions/economy/history.js";
