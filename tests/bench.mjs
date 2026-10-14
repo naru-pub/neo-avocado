@@ -21,6 +21,8 @@ const site = resolve(
 );
 const EDGE_MS = Number(process.env.EDGE_MS ?? 300);
 const CONTROL_MS = Number(process.env.CONTROL_MS ?? 1000);
+// Set to model every SDK request (with a token or not) served from one place.
+const API_MS = process.env.API_MS ? Number(process.env.API_MS) : null;
 const RUNS = Number(process.env.RUNS ?? 3);
 const port = Number(process.env.BENCH_PORT ?? 4400);
 const origin = `http://localhost:${port}`;
@@ -64,7 +66,10 @@ async function person() {
     if (!meter.slow) return route.continue();
     meter.pending++;
     meter[control ? "control" : "edge"]++;
-    await sleep(control ? CONTROL_MS : EDGE_MS);
+    const api = new URL(request.url()).pathname.startsWith("/api/");
+    await sleep(
+      API_MS !== null && api ? API_MS : control ? CONTROL_MS : EDGE_MS,
+    );
     try {
       await route.continue();
     } finally {
