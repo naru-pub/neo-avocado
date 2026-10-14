@@ -352,7 +352,13 @@ function actionItem(action) {
     picture.className = "action-image";
     line.append(picture);
   }
-  if (action.type === "explore")
+  if (action.type === "combine")
+    line.append(
+      action.success
+        ? `${action.materials.join(", ")}을(를) 조합해 ${action.name}을(를) 제작했습니다!`
+        : `${action.materials.join(", ")}을(를) 조합했지만 제작에 실패하였습니다.`,
+    );
+  else if (action.type === "explore")
     line.append(
       action.item
         ? `탐색하여 ${action.name}을(를) 획득했습니다!`
@@ -1317,8 +1323,25 @@ async function logItem(log) {
   const speakerChoice = form.querySelector(".comment-character");
   const actionChoice = form.querySelector(".comment-action");
   const itemChoice = form.querySelector(".comment-item");
+  const materialsChoice = form.querySelector(".comment-materials");
   wireSpeakerChoice(speakerChoice);
   wireItemChoice(itemChoice);
+  // Combination takes up to three of the inventory's items (make_1…make_3).
+  actionChoice.onchange = () =>
+    run(async () => {
+      materialsChoice.hidden = actionChoice.value !== "combine";
+      if (materialsChoice.hidden || materialsChoice.dataset.loaded) return;
+      materialsChoice.dataset.loaded = "1";
+      state.postItems ??= await allDocuments(COLLECTION.inventory, {
+        owner: state.member.id,
+      });
+      for (const row of state.postItems) {
+        const option = document.createElement("option");
+        option.value = row.id;
+        option.textContent = row.data.name ?? row.data.item;
+        materialsChoice.append(option);
+      }
+    });
   const board = state.boards.find(
     (row) => row.id === (log.data.board ?? "default"),
   );
@@ -1336,6 +1359,11 @@ async function logItem(log) {
       const character = speakerChoice.value;
       const action = actionChoice.value;
       const used = itemChoice.value;
+      const materials = [...materialsChoice.selectedOptions].map(
+        (option) => option.value,
+      );
+      if (action === "combine" && (!materials.length || materials.length > 3))
+        return say("조합 재료를 1~3개 선택해 주세요.");
       if (!text && !dice && !action && !used) return;
       const guest = state.member ? null : guestCredentials();
       const saved = await communityCollection(COLLECTION.comments).add(
@@ -1345,6 +1373,7 @@ async function logItem(log) {
           dice,
           ...(character && !guest ? { character } : {}),
           ...(action && !guest ? { action } : {}),
+          ...(action === "combine" && !guest ? { materials } : {}),
           ...(used && !guest ? { item: used } : {}),
         },
         guest ? { guest } : {},
@@ -1359,6 +1388,9 @@ async function logItem(log) {
         state.shopLoaded = false;
         itemChoice.replaceChildren(itemChoice.options[0]);
         delete itemChoice.dataset.loaded;
+        materialsChoice.replaceChildren();
+        materialsChoice.hidden = true;
+        delete materialsChoice.dataset.loaded;
       }
     });
   };

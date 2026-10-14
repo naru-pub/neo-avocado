@@ -11,7 +11,11 @@ import {
   SETTINGS,
   TITLES,
   WARDROBE,
+  RECIPES,
   amount,
+  pay,
+  wallet,
+  weightedRows,
   author,
   characterState,
   communityAccess,
@@ -258,4 +262,81 @@ export async function useInPost(ctx, inventory, speaker) {
     effect: effect ?? "post",
   });
   return used;
+}
+
+/** At most this many materials go into one combination, as make_1…make_3. */
+export const MAX_MATERIALS = 3;
+
+/**
+ * Combination (조합, action H): one to three of the speaking character's items
+ * matched against the recipes by item, ignoring order. A match makes the
+ * recipe's item for the character and charges its cost; a miss still uses up
+ * the materials, as the original did. Reusable items are never consumed.
+ */
+export async function combineInPost(ctx, materials, speaker) {
+  if (!speaker)
+    fail(ctx, "INVALID_REQUEST", "no_character", "Combine as a character.");
+  if (
+    !Array.isArray(materials) ||
+    !materials.length ||
+    materials.length > MAX_MATERIALS ||
+    materials.some((id) => typeof id !== "string") ||
+    new Set(materials).size !== materials.length
+  )
+    fail(ctx, "INVALID_REQUEST", "invalid_materials", "Choose 1–3 materials.");
+  const owned = await Promise.all(materials.map((id) => ownedItem(ctx, id)));
+  if (
+    owned.some(
+      (row) =>
+        !row ||
+        ((row.data.character ?? null) !== null &&
+          row.data.character !== speaker.character),
+    )
+  )
+    fail(ctx, "ACCESS_DENIED", "not_owned", "Use the character's own items.");
+  const key = owned
+    .map((row) => row.data.item)
+    .sort()
+    .join("||");
+  const recipe = (await weightedRows(ctx, RECIPES)).find((row) => {
+    if (row.data.hidden || !Array.isArray(row.data.ingredients)) return false;
+    const needed = [];
+    for (const ingredient of row.data.ingredients)
+      for (let n = 0; n < (ingredient.count ?? 0) && needed.length < 4; n++)
+        needed.push(ingredient.item);
+    return needed.sort().join("||") === key;
+  });
+  const prize =
+    typeof recipe?.data.item === "string"
+      ? await ctx.get(ITEMS, recipe.data.item)
+      : null;
+  let balance = null;
+  if (prize) {
+    const cost = amount(recipe.data.cost ?? 0, "Crafting cost");
+    const current = await wallet(ctx);
+    if (current.balance < cost)
+      fail(ctx, "CONFLICT", "not_enough", "Not enough to combine.");
+    if (cost) balance = await pay(ctx, current, cost);
+    await give(ctx, prize, "craft", speaker.character);
+  }
+  const catalogue = await ctx.getMany(
+    ITEMS,
+    owned.map((row) => row.data.item),
+  );
+  for (const [index, row] of owned.entries())
+    if (catalogue[index]?.data.reusable !== true)
+      await ctx.delete(INVENTORY, row.id);
+  await record(ctx, "craft", {
+    character: speaker.character,
+    item: prize?.id ?? null,
+    ...(balance !== null ? { balance } : {}),
+  });
+  return {
+    type: "combine",
+    success: Boolean(prize),
+    item: prize?.id ?? null,
+    name: prize?.data.name ?? null,
+    image: https(prize?.data.image),
+    materials: owned.map((row) => row.data.name ?? row.data.item),
+  };
 }

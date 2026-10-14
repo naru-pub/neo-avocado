@@ -30,6 +30,7 @@ import {
   deliverCalls,
   explore,
   useInPost,
+  combineInPost,
 } from "../../modules/roleplay.js";
 
 export const readOnly = ["communityRead"];
@@ -414,11 +415,13 @@ export async function communityData(
       dice: previous?.data.dice ?? data.dice === true,
     };
     const acting =
-      !previous && (data.action === "explore" || data.item !== undefined);
+      !previous &&
+      (["explore", "combine"].includes(data.action) || data.item !== undefined);
     if (acting && (guest || board.data.actions !== true))
       return failure("access_denied");
     if (
-      (data.action !== undefined && data.action !== "explore") ||
+      (data.action !== undefined &&
+        !["explore", "combine"].includes(data.action)) ||
       (data.item !== undefined && typeof data.item !== "string")
     )
       return failure("invalid_input");
@@ -436,6 +439,8 @@ export async function communityData(
       if (value.dice) value.rolls = rollDice(ctx);
       const actions = [];
       if (data.action === "explore") actions.push(await explore(ctx, speaker));
+      if (data.action === "combine")
+        actions.push(await combineInPost(ctx, data.materials, speaker));
       if (data.item !== undefined)
         actions.push(await useInPost(ctx, data.item, speaker));
       if (actions.length) value.actions = actions;

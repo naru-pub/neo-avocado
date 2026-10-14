@@ -2455,3 +2455,64 @@ test("HTML boards store longer rich bodies, tag their text and preview it plainl
     }),
   );
 });
+
+test("in-post combination matches recipes by item, charges cost and consumes even on a miss", async () => {
+  const { ctx, table } = roleplayWorld();
+  table(`${P}items`).set("herb", { name: "Herb" });
+  table(`${P}items`).set("water", { name: "Water" });
+  table(`${P}items`).set("pot", { name: "Pot", reusable: true });
+  table(`${P}items`).set("potion", { name: "Potion" });
+  table(`${P}recipes`).set("brew", {
+    name: "Brew",
+    item: "potion",
+    cost: 5,
+    ingredients: [
+      { item: "water", count: 1 },
+      { item: "herb", count: 1 },
+      { item: "pot", count: 1 },
+    ],
+  });
+  table(`${P}wallets`).set("m-1", { balance: 5 });
+  const own = (id, item, extra = {}) =>
+    table(`${P}inventory`).set(id, {
+      owner: "m-1",
+      item,
+      name: item,
+      ...extra,
+    });
+  own("i-herb", "herb");
+  own("i-water", "water", { character: "hero" });
+  own("i-pot", "pot");
+  own("i-other", "herb", { character: "someone-else" });
+  const combine = (materials, character = "hero") =>
+    gate(ctx, "comments", "add", {
+      data: {
+        logId: "thread",
+        text: "",
+        action: "combine",
+        materials,
+        character,
+      },
+    });
+  assert.equal(await reasonOf(combine(["i-herb"], null)), "no_character");
+  assert.equal(await reasonOf(combine(["i-other"])), "not_owned");
+  assert.equal(
+    await reasonOf(combine(["i-herb", "i-herb"])),
+    "invalid_materials",
+  );
+  const made = (await combine(["i-pot", "i-herb", "i-water"])).document;
+  assert.equal(made.data.actions[0].success, true);
+  assert.equal(made.data.actions[0].name, "Potion");
+  assert.equal(table(`${P}wallets`).get("m-1").balance, 0);
+  assert.equal(table(`${P}inventory`).has("i-herb"), false);
+  assert.equal(table(`${P}inventory`).has("i-pot"), true); // reusable
+  assert.ok(
+    [...table(`${P}inventory`).values()].some(
+      (row) => row.item === "potion" && row.character === "hero",
+    ),
+  );
+  own("i-herb-2", "herb");
+  const missed = (await combine(["i-herb-2", "i-pot"])).document;
+  assert.equal(missed.data.actions[0].success, false);
+  assert.equal(table(`${P}inventory`).has("i-herb-2"), false);
+});
