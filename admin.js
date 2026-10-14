@@ -2,6 +2,7 @@ import { releaseMediaReferences } from "./media-cleanup.js";
 import { applyTitles, deleteTitle } from "./admin-titles.js";
 import { resumeCleanup } from "./admin-cleanup.js";
 import { config } from "./config.js";
+import { functionReference } from "./function-references.js";
 import {
   models,
   scopes,
@@ -18,6 +19,7 @@ let naru,
   cursor = null,
   selected = null;
 let references = {
+  fields: [],
   characters: [],
   titles: [],
   stats: [],
@@ -69,6 +71,14 @@ async function load({ more = false } = {}) {
       documents: rows.slice(start, start + 50),
       nextCursor: start + 50 < rows.length ? String(start + 50) : null,
     };
+  } else if (model.review) {
+    references.fields = await all("neo_avocado_character_fields");
+    page = await owner.collection(model.collection).list({
+      size: 50,
+      after: more ? cursor : null,
+      sort: [[{ metadata: "createdAt" }, "desc"]],
+      where: { ne: ["deleted", true] },
+    });
   } else
     page = await owner.collection(model.collection).list({
       size: 50,
@@ -124,6 +134,11 @@ async function load({ more = false } = {}) {
           }
         });
       li.append(revoke);
+      $("adminRows").append(li);
+      continue;
+    }
+    if (model.review) {
+      li.append(reviewRow(row));
       $("adminRows").append(li);
       continue;
     }
@@ -240,6 +255,101 @@ async function load({ more = false } = {}) {
   }
   cursor = page.nextCursor;
   $("adminMore").hidden = !cursor;
+}
+const STATES = {
+  editing: "수정 중",
+  submitted: "신청(수정 완료)",
+  approved: "승인",
+};
+const TYPES = [
+  ["main", "메인"],
+  ["sub", "서브"],
+  ["npc", "NPC"],
+];
+/** One application: its sheet with every field, the decision and admin-only values. */
+function reviewRow(row) {
+  const form = document.createElement("form");
+  form.className = "review";
+  const nick =
+    references.profiles.find(
+      (profile) => profile.id === (row.createdBy ?? row.data.owner),
+    )?.data.nick ?? "알 수 없는 회원";
+  const heading = document.createElement("strong");
+  heading.textContent = `${row.data.name} · ${nick} · ${STATES[row.data.state] ?? "상태 없음(이전 캐릭터)"}`;
+  const sheet = document.createElement("dl");
+  const definitions = references.fields
+    .filter((field) => !field.data.deleted)
+    .sort((a, b) => (a.data.order ?? 0) - (b.data.order ?? 0));
+  const adminInputs = [];
+  for (const field of definitions) {
+    const term = document.createElement("dt");
+    term.textContent = `${field.data.label ?? field.id}${field.data.visibility === "admin" ? " (운영자만)" : field.data.visibility === "owner" ? " (오너+운영자)" : ""}`;
+    const detail = document.createElement("dd");
+    const value = row.data.fields?.[field.id] ?? "";
+    if (field.data.visibility === "admin") {
+      const input = document.createElement("input");
+      input.name = field.id;
+      input.value = value;
+      input.maxLength = 2000;
+      input.setAttribute("aria-label", field.data.label ?? field.id);
+      adminInputs.push(input);
+      detail.append(input);
+    } else detail.textContent = value || "—";
+    sheet.append(term, detail);
+  }
+  const type = document.createElement("select");
+  type.setAttribute("aria-label", "캐릭터 종류");
+  for (const [value, label] of TYPES) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    type.append(option);
+  }
+  type.value = row.data.type ?? "main";
+  const decide = (state) =>
+    run(async () => {
+      for (const control of form.querySelectorAll("button,input,select"))
+        control.disabled = true;
+      try {
+        const result = await owner.call(functionReference("reviewCharacter"), {
+          character: row.id,
+          revision: row.revision,
+          type: type.value,
+          ...(state ? { state } : {}),
+          fields: Object.fromEntries(
+            adminInputs.map((input) => [input.name, input.value]),
+          ),
+        });
+        if (!result?.ok)
+          throw new Error(
+            result?.reason === "conflict"
+              ? "다른 곳에서 바뀌었습니다. 다시 불러온 뒤 처리하세요."
+              : "처리하지 못했습니다.",
+          );
+        $("adminStatus").textContent = state
+          ? `${row.data.name}: ${STATES[state]}`
+          : "저장했습니다.";
+        await load();
+      } finally {
+        for (const control of form.querySelectorAll("button,input,select"))
+          control.disabled = false;
+      }
+    });
+  const buttons = [
+    ["approved", "승인"],
+    ["editing", "수정 요청"],
+    ["submitted", "신청 상태로"],
+    [null, "종류·운영자 항목 저장"],
+  ].map(([state, label]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = label;
+    button.onclick = () => decide(state);
+    return button;
+  });
+  form.onsubmit = (event) => event.preventDefault();
+  form.append(heading, " ", type, sheet, ...buttons);
+  return form;
 }
 async function openForm(row = null) {
   const requestedSection = section;

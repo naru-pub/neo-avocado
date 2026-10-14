@@ -13,6 +13,15 @@ import {
   imageUrl,
   failure,
 } from "../../modules/shared.js";
+import { memberSheet, presentCharacter } from "../../modules/characters.js";
+import {
+  speakerOf,
+  rollDice,
+  resolveCalls,
+  deliverCalls,
+  explore,
+  useInPost,
+} from "../../modules/roleplay.js";
 
 export const readOnly = ["communityRead"];
 
@@ -98,6 +107,13 @@ export async function communityData(
     }
     const page = await ctx.list(collection, query);
     let documents = page.documents.filter((row) => !row.data.deleted);
+    if (kind === "characters")
+      documents = await Promise.all(
+        documents.map((row) => presentCharacter(ctx, row, { list: true })),
+      );
+    // Admin-only definitions describe values members never see.
+    if (kind === "character_fields")
+      documents = documents.filter((row) => row.data.visibility !== "admin");
     if (kind === "boards") {
       documents = documents.filter((row) => boardAllowed(row, access, "list"));
       if (!options.after && !(await ctx.get(BOARDS, "default")))
@@ -175,6 +191,10 @@ export async function communityData(
             },
           }
         : failure("access_denied");
+    if (kind === "characters")
+      return { ok: true, document: await presentCharacter(ctx, previous) };
+    if (kind === "character_fields" && previous.data.visibility === "admin")
+      return failure("access_denied");
     if (kind === "character_state") {
       const { purchases, ...publicState } = previous.data;
       return { ok: true, document: { ...previous, data: publicState } };
@@ -222,20 +242,33 @@ export async function communityData(
       ...value,
       nick: text(data.nick, 20, true),
       acceptMessages: data.acceptMessages !== false,
+      commentAlerts: data.commentAlerts !== false,
     };
+  let catalogue = null;
   if (kind === "characters") {
+    const sheet = await memberSheet(ctx, previous, data);
+    catalogue = sheet.catalogue;
     value = {
       ...value,
       name: text(data.name, 40, true),
       side: text(data.side ?? "", 40),
       profile: text(data.profile ?? "", 4000),
+      type: sheet.type,
+      state: sheet.state,
+      fields: sheet.fields,
     };
     if (data.image !== previous?.data.image)
       value.image = data.image ? imageUrl(data.image) : null;
   }
+  // Posting as a character, dice and calls (skin/board/mmb). The speaker and
+  // the dice are fixed when a post is made; edits keep them.
+  let speaker = previous?.data.speaker ?? null;
+  let calls = null;
+  let board = null;
+  let parent = null;
   if (kind === "logs") {
     const boardId = previous?.data.board ?? data.board ?? "default";
-    const board = await boardOf(ctx, boardId);
+    board = await boardOf(ctx, boardId);
     const secret =
       board.data.secret === "required" ||
       (Object.hasOwn(data, "secret")
@@ -262,6 +295,19 @@ export async function communityData(
     if (board.data.kind === "image" && !value.image)
       return failure("invalid_input");
     if (!value.image && !value.text) return failure("invalid_input");
+    if (!previous) {
+      speaker = await speakerOf(ctx, data.character);
+      if (speaker) {
+        value.character = speaker.character;
+        value.speaker = speaker;
+      }
+      if (data.dice === true) {
+        value.dice = true;
+        value.rolls = rollDice(ctx);
+      }
+    }
+    calls = await resolveCalls(ctx, value.text, previous?.data.text ?? "");
+    value.text = calls.text;
   }
   if (kind === "comments") {
     const logId = previous?.data.logId ?? data.logId;
@@ -269,13 +315,8 @@ export async function communityData(
       typeof logId === "string" ? await ctx.get(`${PREFIX}logs`, logId) : null;
     if (!(await logReadable(ctx, log, access)))
       return failure("document_not_found");
-    if (
-      !boardAllowed(
-        await boardOf(ctx, log.data.board ?? "default"),
-        access,
-        "comment",
-      )
-    )
+    board = await boardOf(ctx, log.data.board ?? "default");
+    if (!boardAllowed(board, access, "comment"))
       return failure("access_denied");
     value = {
       ...value,
@@ -283,7 +324,31 @@ export async function communityData(
       text: text(data.text ?? "", 500),
       dice: previous?.data.dice ?? data.dice === true,
     };
-    if (!value.text && !value.dice) return failure("invalid_input");
+    const acting =
+      !previous && (data.action === "explore" || data.item !== undefined);
+    if (acting && board.data.actions !== true) return failure("access_denied");
+    if (
+      (data.action !== undefined && data.action !== "explore") ||
+      (data.item !== undefined && typeof data.item !== "string")
+    )
+      return failure("invalid_input");
+    if (!value.text && !value.dice && !acting) return failure("invalid_input");
+    calls = await resolveCalls(ctx, value.text, previous?.data.text ?? "");
+    value.text = calls.text;
+    if (!previous) {
+      speaker = await speakerOf(ctx, data.character);
+      if (speaker) {
+        value.character = speaker.character;
+        value.speaker = speaker;
+      }
+      if (value.dice) value.rolls = rollDice(ctx);
+      const actions = [];
+      if (data.action === "explore") actions.push(await explore(ctx, speaker));
+      if (data.item !== undefined)
+        actions.push(await useInPost(ctx, data.item, speaker));
+      if (actions.length) value.actions = actions;
+    }
+    parent = log;
   }
   const document = ["logs", "characters"].includes(kind)
     ? await saveImage(
@@ -298,7 +363,22 @@ export async function communityData(
       ? await ctx.add(collection, value)
       : await ctx.set(collection, id, value);
   if (kind === "logs" && operation === "add") await announcePost(ctx, document);
-  return { ok: true, document };
+  if (calls && ["logs", "comments"].includes(kind))
+    await deliverCalls(ctx, {
+      log: kind === "logs" ? document : parent,
+      comment: kind === "comments" ? document : null,
+      text: document.data.text,
+      speaker,
+      recipients: calls.recipients,
+      notifyAuthor: kind === "comments" && operation === "add",
+    });
+  return {
+    ok: true,
+    document:
+      kind === "characters"
+        ? await presentCharacter(ctx, document, { catalogue })
+        : document,
+  };
 }
 
 /** Topic on which new posts are announced to open pages (app.js listens). */

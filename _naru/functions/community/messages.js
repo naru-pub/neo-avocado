@@ -9,6 +9,7 @@ import {
   wallet,
   pay,
 } from "../../modules/shared.js";
+import { callsUnread } from "../../modules/roleplay.js";
 
 export const readOnly = ["mailbox", "messageStatus"];
 
@@ -129,10 +130,15 @@ export async function removeMessage(ctx, { id } = {}) {
   return { ok: true };
 }
 
+/** Unread mail, and calls/comment notices since the member last looked. */
 export async function messageStatus(ctx) {
   const page = await ctx.list(MESSAGES, {
     filter: { to: ctx.member.id, readAt: null },
     size: 1,
   });
-  return { ok: true, unread: page.documents.length > 0 };
+  return {
+    ok: true,
+    unread: page.documents.length > 0,
+    calls: await callsUnread(ctx),
+  };
 }

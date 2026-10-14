@@ -54,6 +54,7 @@
         <button id="tabMessages" type="button" aria-pressed="false">
           쪽지
         </button>
+        <button id="tabCalls" type="button" aria-pressed="false">알림</button>
       </nav>
 
       <section id="logsView">
@@ -68,6 +69,12 @@
             그림
             <input id="logImage" type="file" accept="image/*" required />
           </label>
+          <label
+            >캐릭터
+            <select id="logCharacter" class="speaker-choice">
+              <option value="">닉네임으로</option>
+            </select></label
+          >
           <label>제목 <input id="logTitle" maxlength="120" /></label>
           <label
             >분류
@@ -81,6 +88,8 @@
             설명
             <textarea id="logText" maxlength="2000" rows="3"></textarea>
           </label>
+          <p class="hint">[[닉네임]]으로 회원을 호출합니다.</p>
+          <label><input id="logDice" type="checkbox" /> 주사위</label>
           <button type="submit">올리기</button>
         </form>
         <ol id="logs" class="logs"></ol>
@@ -89,6 +98,14 @@
 
       <section id="charactersView" hidden>
         <h2 class="section-heading">멤버 목록</h2>
+        <label
+          >보기
+          <select id="characterFilter">
+            <option value="">전체</option>
+            <option value="applicants">신청자 (신청·수정 중)</option>
+            <option value="approved">승인된 캐릭터</option>
+          </select></label
+        >
         <form id="characterForm" class="card">
           <h2>캐릭터 등록</h2>
           <label>
@@ -111,6 +128,21 @@
             두상
             <input id="characterImage" type="file" accept="image/*" />
           </label>
+          <label
+            >종류
+            <select id="characterType">
+              <option value="main">메인</option>
+              <option value="sub">서브</option>
+            </select></label
+          >
+          <div id="characterFields"></div>
+          <label
+            >상태
+            <select id="characterState">
+              <option value="editing">수정 중</option>
+              <option value="submitted">신청 (수정 완료)</option>
+            </select></label
+          >
           <button type="submit">등록</button>
         </form>
         <ul id="characters" class="characters"></ul>
@@ -203,6 +235,13 @@
         <button id="moreMessages" type="button" hidden>쪽지 더 보기</button>
         <article id="messageDetail" class="card" hidden></article>
       </section>
+      <section id="callsView" hidden>
+        <h2>호출·댓글 알림</h2>
+        <button id="refreshCalls" type="button">새로고침</button>
+        <ul id="calls"></ul>
+        <button id="moreCalls" type="button" hidden>알림 더 보기</button>
+        <ol id="callDetail" class="logs"></ol>
+      </section>
     </main>
     <section id="admissionPanel" class="card" hidden>
       <h2 id="admissionTitle"></h2>
@@ -217,6 +256,7 @@
           <h3 class="log-title"></h3>
           <img class="log-image" alt="" />
           <p class="log-text"></p>
+          <p class="log-dice" hidden></p>
         </div>
         <div class="log-discussion">
           <p class="meta">
@@ -231,10 +271,25 @@
               댓글 더 보기
             </button>
             <form class="comment-form">
+              <select
+                class="comment-character speaker-choice"
+                aria-label="댓글을 쓸 캐릭터"
+              >
+                <option value="">닉네임으로</option>
+              </select>
               <input class="comment-text" maxlength="500" placeholder="댓글" />
               <label class="dice-option">
                 <input class="comment-dice" type="checkbox" /> 주사위
               </label>
+              <span class="comment-actions" hidden>
+                <select class="comment-action" aria-label="행동">
+                  <option value="">일반 행동</option>
+                  <option value="explore">탐색</option>
+                </select>
+                <select class="comment-item" aria-label="사용할 아이템">
+                  <option value="">사용할 아이템 없음</option>
+                </select>
+              </span>
               <button type="submit">달기</button>
             </form>
           </details>
@@ -247,6 +302,7 @@
         <img class="character-image" alt="" />
         <div>
           <h3 class="character-name"></h3>
+          <p class="character-state"></p>
           <p class="character-side"></p>
           <p class="meta">
             <span class="author"></span>
@@ -259,6 +315,7 @@
           <details class="character-details">
             <summary>프로필 · 능력치·관계·의상</summary>
             <p class="character-profile"></p>
+            <dl class="character-fields"></dl>
             <div class="profile-sections">
               <section class="profile-section">
                 <h4>능력치</h4>

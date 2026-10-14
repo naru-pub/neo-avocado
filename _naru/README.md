@@ -2,7 +2,9 @@
 
 `functions/` contains callable entry points grouped by community, economy,
 characters and content. `modules/shared.js` contains shared validation,
-authorization and transaction helpers. These are ordinary JavaScript modules:
+authorization and transaction helpers; `modules/characters.js` holds character
+sheets (custom fields, visibility, application state) and `modules/roleplay.js`
+posting as a character, dice, exploration, in-post items and calls. These are ordinary JavaScript modules:
 Naru SDK 1.1.0 loads their static relative imports directly. No generated runtime
 files or bundling step is needed.
 

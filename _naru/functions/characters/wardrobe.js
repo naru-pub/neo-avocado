@@ -8,6 +8,7 @@ import {
   imageUrl,
   failure,
 } from "../../modules/shared.js";
+import { presentCharacter } from "../../modules/characters.js";
 
 export async function outfit(ctx, { character, name, image, imageId } = {}) {
   if (!(await ownCharacter(ctx, character))) return failure("not_owned");
@@ -42,7 +43,7 @@ export async function wear(ctx, { character, outfit } = {}) {
     ...owned.data,
     outfit: clothing?.id ?? null,
   });
-  return { ok: true, document };
+  return { ok: true, document: await presentCharacter(ctx, document) };
 }
 
 export async function removeOutfit(ctx, { id } = {}) {

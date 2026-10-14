@@ -39,6 +39,12 @@ export const BOARDS = `${PREFIX}boards`;
 
 export const MEDIA = `${PREFIX}media_assets`;
 
+export const CHARACTER_FIELDS = `${PREFIX}character_fields`;
+
+export const CALLS = `${PREFIX}calls`;
+
+export const EXPLORE = `${PREFIX}explore`;
+
 export const mediaId = (value) =>
   typeof value === "string" &&
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -157,6 +163,7 @@ export const READ_LIMITS = {
   couples: 100,
   settings: 1,
   gacha: 100,
+  character_fields: 50,
 };
 
 export function author(row) {
@@ -180,6 +187,7 @@ export async function boardOf(ctx, id = "default") {
           secret: "optional",
           categories: [],
           enabled: true,
+          actions: true,
         },
       }
     : null;
@@ -197,7 +205,8 @@ export function boardAllowed(board, access, action) {
   );
 }
 
-export async function logReadable(ctx, row, access) {
+/** Whether `viewer` (by default the caller) with `access` may read the post. */
+export async function logReadable(ctx, row, access, viewer = ctx.member?.id) {
   return (
     row &&
     !row.data.deleted &&
@@ -206,9 +215,7 @@ export async function logReadable(ctx, row, access) {
       access,
       "read",
     ) &&
-    (!row.data.secret ||
-      author(row) === ctx.member.id ||
-      access.role === "moderator")
+    (!row.data.secret || author(row) === viewer || access.role === "moderator")
   );
 }
 
@@ -366,9 +373,9 @@ export async function give(ctx, item, from, character = null) {
   });
 }
 
-export async function draw(ctx, source = null) {
+export async function draw(ctx, source = null, collection = GACHA) {
   const table = (
-    await weightedRows(ctx, GACHA, source ? { source } : undefined)
+    await weightedRows(ctx, collection, source ? { source } : undefined)
   ).filter((row) => {
     if ((row.data.source ?? null) !== source) return false;
     if (
@@ -440,6 +447,65 @@ export async function characterState(ctx, character, owner = ctx.member.id) {
     stats[key] = { allocated, max, damage, current: Math.max(0, max - damage) };
   }
   return { existing, definitions, data: { ...current, stats } };
+}
+
+/** Why `character` may not use `item` under its catalog conditions, or null. */
+export async function useRestriction(ctx, item, character) {
+  const requirements = item.data.useRequirements ?? {};
+  if (
+    !requirements.approved &&
+    !requirements.sides?.length &&
+    !requirements.classes?.length &&
+    !requirements.exp &&
+    !requirements.title
+  )
+    return null;
+  if (!(await ownCharacter(ctx, character))) return "no_character";
+  const official = (await characterState(ctx, character)).data;
+  if (requirements.approved && official.approved !== true)
+    return "not_approved";
+  for (const [key, field] of [
+    ["sides", "side"],
+    ["classes", "class"],
+  ]) {
+    if (
+      requirements[key] !== undefined &&
+      (!Array.isArray(requirements[key]) ||
+        requirements[key].some((value) => typeof value !== "string"))
+    )
+      throw new Error("Use restrictions must be lists of identifiers.");
+    if (
+      requirements[key]?.length &&
+      !requirements[key].includes(official[field])
+    )
+      return "restricted_character";
+  }
+  if (official.exp < amount(requirements.exp ?? 0, "Use experience"))
+    return "not_enough_exp";
+  if (
+    requirements.title &&
+    (!official.titles?.includes(requirements.title) ||
+      (await ctx.get(TITLES, requirements.title))?.data.deleted)
+  )
+    return "missing_title";
+  return null;
+}
+
+/** Applies a recovery effect to an owned character; null when already full. */
+export async function restoreStat(ctx, effect, character) {
+  const state = await characterState(ctx, character);
+  if (
+    typeof effect.stat !== "string" ||
+    !Object.hasOwn(state.data.stats, effect.stat)
+  )
+    throw new Error("Recovery stat does not exist.");
+  const recovery = amount(effect.amount, "Recovery amount");
+  if (!recovery) throw new Error("Recovery amount must be positive.");
+  const stat = state.data.stats[effect.stat];
+  if (stat.current === stat.max) return null;
+  stat.damage = Math.max(0, stat.damage - recovery);
+  stat.current = Math.max(0, stat.max - stat.damage);
+  return await ctx.set(CHARACTER_STATE, character, state.data);
 }
 
 export async function contentReadable(ctx, row) {

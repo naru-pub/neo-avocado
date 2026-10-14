@@ -21,21 +21,22 @@ reproduce the existing demo. SDK additions require the owner's approval.
 
 ## Requirements and evidence
 
-| Workflow                                          | Reference                                                   | Status                                                                                                                                                                                                  |
-| ------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Member login and profiles                         | `bbs/register*`, `mypage`                                   | Identity, profile, application approval/closed admission/bans implemented; upload authority remains unresolved; approved read budget implemented locally                                                |
-| Drawing logs and comments                         | `bbs/write*`, board skins                                   | Gateway CRUD, ownership/revisions, moderator edit/delete and resumable child cleanup implemented; board levels/categories/secrets/previews implemented; public/guest access and rich posts pending      |
-| Character profiles                                | `mypage/character`, `adm/character_article*`                | Basic create/read/edit/delete and main character implemented; custom fields pending                                                                                                                     |
-| Character relationships, couples, outfits, titles | `mypage/character`, `couple`, `adm/title*`                  | Relationships, wardrobe, owner-managed couples/title grants and member title selection implemented; bulk grants/revocation implemented; ownership gallery review and title deletion cleanup implemented |
-| Stats, experience and ranks                       | `adm/status*`, `adm/exp*`, `adm/level*`                     | Allocation, recovery, official progression, rank display and owner administration implemented                                                                                                           |
-| Shop, attendance and gacha                        | `shop`, `extend/item.lib.php`                               | Member flows, private history, exchange costs and owner catalog/gacha/recipe forms implemented                                                                                                          |
-| Inventory use, sale, gift and crafting            | `inventory`, `adm/recipi*`                                  | Use eligibility, sale/gift/craft, character linking, owner inventory grants and validated catalog effects implemented                                                                                   |
-| Quests                                            | `adm/quest*` and their callers                              | Reference admin fields implemented; scheduled member display and category pagination implemented; reference has no claim/reward endpoint                                                                |
-| Private messages and notifications                | `bbs/memo*`, `ajax/*call*`                                  | Private inbox/sent/read/reply/delete, receive preference, bulk costs, live unread notices and new-post notices implemented; comment notifications pending                                               |
-| Community administration                          | `adm/admin.menu*.php`                                       | Owner member status/role controls and existing catalog/economy controls implemented; broader board moderation pending; owner cleanup recovery implemented                                               |
-| Navigation, content, themes and emoticons         | `adm/menu*`, `adm/content*`, `adm/design*`, `adm/emoticon*` | Emoticon owner CRUD, comment catalogue/picker and safe keyword rendering implemented; managed desktop/mobile content implemented; navigation and themes pending                                         |
-| Existing data import                              | SQL schema and uploaded files                               | Pending: explicit ID/member mapping and media handling; never copy PHP credentials                                                                                                                      |
-| Browser and server acceptance                     | Naru release checklist                                      | 41 tests and synthetic Chrome pass; enforced budgets peak at 84 reads/120 and 10 mutations/30. Real deployment acceptance pending                                                                       |
+| Workflow                                          | Reference                                                   | Status                                                                                                                                                                                                                                                                 |
+| ------------------------------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Member login and profiles                         | `bbs/register*`, `mypage`                                   | Identity, profile, application approval/closed admission/bans implemented; upload authority remains unresolved; approved read budget implemented locally                                                                                                               |
+| Drawing logs and comments                         | `bbs/write*`, board skins                                   | Gateway CRUD, ownership/revisions, moderator edit/delete and resumable child cleanup implemented; board levels/categories/secrets/previews implemented; posting as a character, server dice and [[nick]] calls implemented; public/guest access and rich posts pending |
+| In-post roleplay actions                          | `skin/board/mmb/*`, `extend/mmb.lib.php`                    | Dice, exploration with a Korean-day limit counted on request, explore drop table and item use logged into the comment implemented; in-post combination (action H) deferred                                                                                             |
+| Character profiles                                | `mypage/character`, `adm/character_article*`                | Create/read/edit/delete, main character, owner-defined custom fields with public/owner/admin visibility, editing → submitted → approved review, public applicant list and main/sub/NPC implemented; managed uploads for image fields pending                           |
+| Character relationships, couples, outfits, titles | `mypage/character`, `couple`, `adm/title*`                  | Relationships, wardrobe, owner-managed couples/title grants and member title selection implemented; bulk grants/revocation implemented; ownership gallery review and title deletion cleanup implemented                                                                |
+| Stats, experience and ranks                       | `adm/status*`, `adm/exp*`, `adm/level*`                     | Allocation, recovery, official progression, rank display and owner administration implemented                                                                                                                                                                          |
+| Shop, attendance and gacha                        | `shop`, `extend/item.lib.php`                               | Member flows, private history, exchange costs and owner catalog/gacha/recipe forms implemented                                                                                                                                                                         |
+| Inventory use, sale, gift and crafting            | `inventory`, `adm/recipi*`                                  | Use eligibility, sale/gift/craft, character linking, owner inventory grants and validated catalog effects implemented                                                                                                                                                  |
+| Quests                                            | `adm/quest*` and their callers                              | Reference admin fields implemented; scheduled member display and category pagination implemented; reference has no claim/reward endpoint                                                                                                                               |
+| Private messages and notifications                | `bbs/memo*`, `ajax/*call*`                                  | Private inbox/sent/read/reply/delete, receive preference, bulk costs, live unread notices, new-post notices, [[nick]] calls and comment notices with call history implemented                                                                                          |
+| Community administration                          | `adm/admin.menu*.php`                                       | Owner member status/role controls and existing catalog/economy controls implemented; broader board moderation pending; owner cleanup recovery implemented                                                                                                              |
+| Navigation, content, themes and emoticons         | `adm/menu*`, `adm/content*`, `adm/design*`, `adm/emoticon*` | Emoticon owner CRUD, comment catalogue/picker and safe keyword rendering implemented; managed desktop/mobile content implemented; navigation and themes pending                                                                                                        |
+| Existing data import                              | SQL schema and uploaded files                               | Pending: explicit ID/member mapping and media handling; never copy PHP credentials                                                                                                                                                                                     |
+| Browser and server acceptance                     | Naru release checklist                                      | 98 unit/page tests, actual-runner QuickJS/SQLite checks and synthetic Chrome pass; Chrome peaks at 10 mutations/30 and 81 reads/120. Real deployment acceptance pending                                                                                                |
 
 Naru replaces PHP hosting, account passwords, email verification and SQL server
 maintenance. These platform implementation details are not new application features.
@@ -111,7 +112,7 @@ reason; passing the current demo tests is not completion of the port.
 - Original ajax/memo_call.php polls every five seconds. The port no longer
   polls: `sendMessage` notifies recipients over `member.live()` (SDK 1.1.0)
   and the page rereads the unread status only when the connection (re)opens.
-  Comment alerts are not complete; see "SDK 1.1.0 feature adoption".
+  Comment alerts and calls were added later; see "Roleplay core".
 
 - Member approval/bans use protected member records. All public app functions
   now gate membership, and community data goes through a collection whitelist
@@ -297,6 +298,110 @@ Uses the 1.1.0 features that remove earlier workarounds. Nothing has been deploy
   mutations and 79/120 reads. The smoke fixture now classifies read-only calls
   by each module's `readOnly`; it had been counting them as mutations since the
   `readOnly` change.
-- Left deliberately: nothing periodic (no scheduled jobs). No comment or reply
-  notifications, which would need a per-member opt-out. No broadcast payload
+- Left deliberately: nothing periodic (no scheduled jobs). Comment notices and
+  calls came later with a per-member opt-out (see "Roleplay core"). No broadcast payload
   beyond board and ID. Owner-side media recovery keeps its batch/consent path.
+
+## Roleplay core
+
+Ports the mmb log board (`skin/board/mmb/*`, `write_update.inc.php`,
+`extend/mmb.lib.php`), character sheets (`mypage/character/*`,
+`adm/character_article*`), the applicant list (`member/ready.php`) and board
+calls (`ajax/board_call.php`). Nothing has been deployed.
+
+- **Posting as a character.** Log and comment `add` take `character`, one of
+  the caller's own non-deleted characters, validated in the gate. The post
+  stores a `speaker` snapshot: name, type, displayed title (name and HTTPS
+  image) and portrait (worn outfit, else the character image), as the original
+  stored `ch_id`, `ti_id` and `ma_id` with each post. Edits keep the speaker;
+  a forged `speaker` or a new `character` in an edit is ignored. Without a
+  character the post shows the nickname, as before. Native member reads
+  return the snapshot, so rendering costs no extra reads.
+- **Dice.** `dice: true` on a log or comment `add` stores `rolls` from
+  `ctx.random()`; edits keep both, so dice cannot be rerolled or forged.
+  Comments posted before this change still derive their roll from the ID.
+- **Exploration (탐색).** A comment `add` with `action: "explore"` on a board
+  whose `actions` flag is on (the built-in default board has it on) draws one
+  row from the new `neo_avocado_explore` weighted table (a row without an item
+  is a miss) into the speaking character's inventory. Only approved characters
+  may explore, up to `settings/community.exploreLimit` times per Korean day
+  (0, the default, turns exploration off). The count lives in
+  `character_state.explore = { day, count }` and is compared with `kstDay(now)`
+  on each request; nothing resets it on a schedule.
+- **Items in a post.** A comment `add` with `item` (an owned inventory ID) uses
+  it as the speaker: a recovery item heals the speaking character, a draw
+  ticket rolls its own table into the item's character (or the speaker), and
+  an item without an effect is logged as used with its description. Personal
+  item and profile tickets need their forms and are refused (`not_usable_here`).
+  Catalog use conditions apply as in the inventory. Non-reusable items are
+  consumed. Each outcome is stored on the comment in `actions` and rendered as
+  the original's action logs. Explore, item, dice, calls and the comment are
+  one transaction; a later failure (for example `explore_limit`) rolls back
+  the item too. The runtime check runs all of them in one call within limits.
+- **Custom profile fields.** The owner defines fields in `neo_avocado_character_fields`
+  (ID = code, `[a-z][a-z0-9_]{0,31}`): label, type text/textarea/select/url/image,
+  select options, help, order, visibility public/owner/admin and "required to
+  submit". Values live in the character's `fields` object (top-level queries
+  cannot reach inside it). The gate returns, for one character, only public
+  values plus owner-visible values to the character's owner; lists omit custom
+  values altogether, which also keeps a page within the function result limit.
+  Members cannot read admin-visibility definitions or write admin values; their
+  edits keep them. Values are validated by type (select must match an option,
+  url/image must be HTTPS) and capped at 6,000 characters together. `wear` and
+  the profile ticket return redacted characters too.
+- **Application flow.** Characters carry `state` (editing, submitted, approved)
+  and `type` (main, sub, npc). Members choose editing or submitted and main or
+  sub; submitting requires every required field they can fill. An approved
+  character stays approved and an NPC stays an NPC when the member edits.
+  Characters saved before this change count as approved when their official
+  record is. The owner's `reviewCharacter` (owner-only; `admin.call`) sets
+  state, type and admin-only fields, and keeps `character_state.approved` in
+  step, so shop/item conditions and bulk title grants agree with the sheet.
+  `admin.html` has a "캐릭터 신청 심사" section for it. The member tab filters
+  applicants (editing or submitted) or approved characters with a gate `where`.
+  Approving through the older character_state form changes only the official
+  record; its help text points to the review section.
+- **Calls and comment notices.** `[[nick]]` in a log or comment calls that
+  member (at most five per post, only newly added names on edit). A nickname
+  nobody uses becomes `[[???]]`, as in the original. A comment notifies the
+  post's author unless their profile turns `commentAlerts` off (profile
+  editor). A member who cannot read the post (secret, level, deleted) is not
+  told. Each delivery adds a row to the new admin/admin `neo_avocado_calls`
+  collection and sends `ctx.notify(member, { calls: true })` after commit.
+  `messageStatus` now also returns `calls`, so a (re)opened live connection
+  costs no extra read. The 알림 tab reads `callHistory` (read-only, newest
+  first, hiding posts no longer readable) and calls `seeCalls`, which stores
+  `profile.callsSeenAt` and clears the member's other tabs. Calls resolve
+  nicknames exactly; enable the `unique: ["nick"]` profile constraint to avoid
+  ambiguity.
+
+### Deploy steps
+
+1. Before publishing, create `neo_avocado_character_fields`,
+   `neo_avocado_explore` and `neo_avocado_calls`, each with read and write set
+   to **admin**. The updated `messageStatus`, character saves and comment
+   actions read them, so publishing first would break those calls.
+2. Sign in to `admin.html` again so the owner grant covers the first two (the
+   calls collection is only written by functions).
+3. Publish the site files together: the new `_naru/modules/characters.js`,
+   `_naru/modules/roleplay.js`, `_naru/functions/community/calls.js` and
+   `_naru/functions/characters/review.js` are imported or called by the
+   updated entry points.
+4. Optionally set a stored `default` board's (or any board's) "댓글 행동 허용"
+   and `기본 설정 → 캐릭터별 하루 탐색 횟수`, and fill the explore table.
+5. Existing characters have no `state`; they are shown without one and treated
+   as approved if their official record is. Backfill `state` (and `type: "main"`)
+   if the applicant filter should list them.
+
+### Deferred
+
+- Image fields take HTTPS addresses; managed uploads would need a media
+  reference per field.
+- In-post combination (action H), and the attack/defence/upgrade log types the
+  skin's comments mention, which its update code does not implement. Crafting
+  remains in the inventory.
+- Pruning old call rows, and deleting a call row. Calls of deleted posts are
+  hidden, not removed.
+- Guest posting (visitor calls are being added to the SDK separately).
+- Theme-specific fields (`ar_theme`) and form sizes (`ar_size`), which are
+  presentation details of PHP themes.

@@ -42,6 +42,8 @@ function fakeDatabase(rows = {}) {
       "neo_avocado_wardrobe",
       "neo_avocado_boards",
       "neo_avocado_emoticons",
+      "neo_avocado_character_fields",
+      "neo_avocado_inventory",
     ].map((name) => [
       name,
       (rows[name] ?? []).map((row) => ({
@@ -426,7 +428,10 @@ test("profile and character edits use their original revisions and preserve extr
   $("tabCharacters").onclick();
   await settle();
   await settle();
+  // An edit reads the full sheet first: lists carry no custom values.
   $("characters").querySelector(".edit").onclick();
+  await settle();
+  await settle();
   $("editorFields").querySelector('[name="name"]').value = "새 캐릭터";
   await submit($("editorForm"));
   assert.equal(
@@ -713,7 +718,14 @@ test("characters are read when their tab is first opened, and registered by memb
   assert.deepEqual(database.calls.at(-1), {
     method: "add",
     name: CHARACTERS,
-    data: { name: "카도", side: "갈색단", profile: "", image: null },
+    data: {
+      name: "카도",
+      side: "갈색단",
+      profile: "",
+      image: null,
+      type: "main",
+      state: "editing",
+    },
   });
   assert.equal(
     $("characters").querySelector(".character-name").textContent,
@@ -1016,4 +1028,244 @@ test("a function's ctx.fail reason and a duplicate nickname are shown as the pag
   $("editorFields").querySelector('[name="nick"]').value = "taken";
   await submit($("editorForm"));
   assert.equal($("editorStatus").textContent, "이미 쓰는 닉네임입니다.");
+});
+
+test("posts speak as a chosen character, show server dice, calls and actions", async () => {
+  const hero = {
+    id: "hero",
+    createdBy: ME,
+    data: { name: "히어로", image: "https://media.naru.pub/hero.png" },
+  };
+  const database = fakeDatabase({
+    [PROFILES]: [me, { id: "member-other", data: { nick: "남" } }],
+    [CHARACTERS]: [hero, { id: "theirs", data: { name: "남의 것" } }],
+    [LOGS]: [
+      {
+        id: "log-0",
+        createdBy: "member-other",
+        data: {
+          image: "https://media.naru.pub/0.png",
+          text: "[[나]] 와 주세요",
+          dice: true,
+          rolls: [6, 5],
+          speaker: {
+            character: "theirs",
+            name: "남의 것",
+            title: "용사",
+            titleImage: "javascript:alert(1)",
+            portrait: "https://media.naru.pub/outfit.png",
+          },
+        },
+      },
+    ],
+    [COMMENTS]: [
+      {
+        id: "c-1",
+        createdBy: ME,
+        data: {
+          logId: "log-0",
+          text: "탐색!",
+          dice: true,
+          rolls: [2, 3],
+          speaker: { character: "hero", name: "히어로" },
+          actions: [
+            { type: "explore", item: "herb", name: "약초", remaining: 0 },
+            {
+              type: "use",
+              item: "box",
+              name: "상자",
+              effect: "draw",
+              prize: { item: "gem", name: "보석" },
+            },
+          ],
+        },
+      },
+    ],
+    neo_avocado_inventory: [
+      { id: "inv-1", data: { owner: ME, item: "letter", name: "편지" } },
+    ],
+  });
+  const { $, settle, submit } = await page(database);
+  const log = $("logs").querySelector(".log");
+  assert.equal(log.querySelector(".speaker-name").textContent, "남의 것");
+  assert.match(
+    log.querySelector(".author").textContent,
+    /용사.*남의 것 \(남\)/,
+  );
+  // Only HTTPS images from a post's snapshot are shown.
+  assert.equal(log.querySelector(".speaker-title img"), null);
+  assert.equal(
+    log.querySelector(".speaker-portrait").src,
+    "https://media.naru.pub/outfit.png",
+  );
+  assert.equal(log.querySelector(".member-call").textContent, "나");
+  assert.equal(log.querySelector(".log-dice").textContent, "🎲 6 + 5 = 11");
+  const comments = log.querySelector(".comments");
+  comments.open = true;
+  comments.ontoggle();
+  await settle();
+  await settle();
+  const comment = log.querySelector(".comment");
+  assert.match(comment.textContent, /히어로 \(나\)/);
+  assert.match(comment.textContent, /🎲 2 \+ 3 = 5/);
+  assert.deepEqual(
+    [...comment.querySelectorAll(".post-action")].map((row) => row.textContent),
+    [
+      "탐색하여 약초을(를) 획득했습니다! (오늘 남은 탐색 0회)",
+      "상자을(를) 사용해서 보석을(를) 획득했습니다!",
+    ],
+  );
+  // The default board allows actions; choices are read on first use.
+  const form = log.querySelector(".comment-form");
+  assert.equal(form.querySelector(".comment-actions").hidden, false);
+  assert.equal(
+    database.calls.some((call) => call.name === CHARACTERS),
+    false,
+  );
+  form.querySelector(".comment-character").onfocus();
+  form.querySelector(".comment-item").onfocus();
+  await settle();
+  await settle();
+  assert.deepEqual(
+    [...form.querySelector(".comment-character").options].map(
+      (option) => option.value,
+    ),
+    ["", "hero"],
+  );
+  form.querySelector(".comment-character").value = "hero";
+  form.querySelector(".comment-action").value = "explore";
+  form.querySelector(".comment-item").value = "inv-1";
+  form.querySelector(".comment-text").value = "[[남]] 같이 가요";
+  submit(form);
+  await settle();
+  await settle();
+  assert.deepEqual(
+    database.calls.filter((call) => call.method === "add").at(-1).data,
+    {
+      logId: "log-0",
+      text: "[[남]] 같이 가요",
+      dice: false,
+      character: "hero",
+      action: "explore",
+      item: "inv-1",
+    },
+  );
+  // A log can be posted as a character with dice.
+  $("logCharacter").onfocus();
+  await settle();
+  await settle();
+  $("logCharacter").value = "hero";
+  $("logDice").checked = true;
+  $("logText").value = "글";
+  Object.defineProperty($("logImage"), "files", {
+    value: [new log.ownerDocument.defaultView.File(["png"], "a.png")],
+  });
+  submit($("logForm"));
+  await settle();
+  await settle();
+  const added = database.calls.filter((call) => call.method === "add").at(-1);
+  assert.equal(added.name, LOGS);
+  assert.equal(added.data.character, "hero");
+  assert.equal(added.data.dice, true);
+});
+
+test("custom fields render on the form, and the applicant filter queries by state", async () => {
+  const database = fakeDatabase({
+    [PROFILES]: [me],
+    neo_avocado_character_fields: [
+      { id: "age", data: { label: "나이", type: "text", order: 2 } },
+      {
+        id: "gender",
+        data: {
+          label: "성별",
+          type: "select",
+          options: ["여", "남"],
+          order: 1,
+        },
+      },
+    ],
+  });
+  const { $, settle, submit } = await page(database);
+  $("tabCharacters").onclick();
+  await settle();
+  await settle();
+  const inputs = [...$("characterFields").querySelectorAll("[data-field]")];
+  assert.deepEqual(
+    inputs.map((input) => input.dataset.field),
+    ["gender", "age"],
+  );
+  $("characterName").value = "카도";
+  inputs[0].value = "여";
+  $("characterState").value = "submitted";
+  submit($("characterForm"));
+  await settle();
+  await settle();
+  assert.deepEqual(database.calls.at(-1).data.fields, { gender: "여" });
+  assert.equal(database.calls.at(-1).data.state, "submitted");
+  $("characterFilter").value = "applicants";
+  $("characterFilter").onchange();
+  await settle();
+  await settle();
+  assert.deepEqual(
+    database.calls.filter((call) => call.name === CHARACTERS).at(-1).where,
+    { in: ["state", ["editing", "submitted"]] },
+  );
+});
+
+test("calls arrive as live notices and the history marks them seen", async () => {
+  const database = fakeDatabase({
+    [PROFILES]: [me],
+    [LOGS]: [
+      {
+        id: "log-9",
+        createdBy: "member-other",
+        data: { image: "https://media.naru.pub/9.png", text: "[[나]]" },
+      },
+    ],
+  });
+  database.answer = (name) =>
+    name === functionReference("messageStatus")
+      ? { ok: true, unread: false, calls: true }
+      : name === functionReference("callHistory")
+        ? {
+            ok: true,
+            unread: true,
+            nextCursor: null,
+            documents: [
+              {
+                id: "call-1",
+                data: {
+                  kind: "call",
+                  nick: "남",
+                  speaker: "남의 것",
+                  logId: "log-9",
+                  preview: "나",
+                  at: Date.parse("2030-01-01T00:00:00Z"),
+                  unread: true,
+                },
+              },
+            ],
+          }
+        : { ok: true };
+  const { $, settle } = await page(database);
+  await settle();
+  database.live.options.onStatus("open");
+  await settle();
+  assert.equal($("tabCalls").textContent, "알림 · 새 알림");
+  database.live.options.onMessage({ type: "notice", data: { calls: false } });
+  assert.equal($("tabCalls").textContent, "알림");
+  database.live.options.onMessage({ type: "notice", data: { calls: true } });
+  $("tabCalls").onclick();
+  await settle();
+  await settle();
+  assert.match($("calls").textContent, /남 \(남의 것\)님이 호출했습니다/);
+  assert.equal(
+    database.calls.some((call) => call.name === functionReference("seeCalls")),
+    true,
+  );
+  assert.equal($("tabCalls").textContent, "알림");
+  $("calls").querySelector("button").onclick();
+  await settle();
+  await settle();
+  assert.equal($("callDetail").querySelector(".member-call").textContent, "나");
 });

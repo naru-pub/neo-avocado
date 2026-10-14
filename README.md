@@ -212,6 +212,21 @@ reason; passing the current demo tests is not completion of the port.
   `npm run vendor:content` refreshes from the locked package and CI runs
   `npm run vendor:check` to detect stale assets. No SDK API was added.
 
+## 롤플레이 (캐릭터로 쓰기·탐색·호출)
+
+로그와 댓글을 내 캐릭터로 쓰면 이름, 표시 중인 타이틀, 입은 의상이 함께
+남습니다. 주사위는 서버가 굴리고 수정해도 바뀌지 않습니다. 댓글에서
+탐색(승인된 캐릭터, 한국 시간 기준 하루 횟수)과 아이템 사용을 할 수 있고,
+`[[닉네임]]`으로 회원을 호출합니다. 호출과 내 글의 댓글은 **알림** 탭에
+쌓입니다. 캐릭터에는 운영자가 정한 추가 프로필 항목과 수정 중 → 신청 → 승인
+상태가 있고, 운영 화면의 **캐릭터 신청 심사**에서 승인합니다.
+
+`neo_avocado_character_fields`, `neo_avocado_explore`, `neo_avocado_calls`
+컬렉션을 읽기·쓰기 모두 **관리자만**으로 만들고 운영자로 다시 로그인하세요.
+**기본 설정**의 하루 탐색 횟수(0이면 탐색 끔), **탐색 표**, 게시판의 **댓글
+행동 허용**을 설정합니다. 자세한 내용은
+[port-status.md](docs/port-status.md)의 "Roleplay core"를 참고하세요.
+
 ## 안내 페이지
 
 `neo_avocado_content` 컬렉션을 읽기·쓰기 모두 **관리자만**으로 만들고 운영자로

@@ -35,6 +35,9 @@ import {
   quests,
   contentPages,
   contentPage,
+  callHistory,
+  seeCalls,
+  reviewCharacter,
 } from "../_naru/modules/index.js";
 import { scope, canWrite } from "../_naru/rules/community-board.js";
 import { matches } from "./where.mjs";
@@ -1563,4 +1566,537 @@ test("the board rule shares the gate's helpers: levels, moderators, secrets and 
     }),
     false,
   );
+});
+
+/* ------------------------------------------------------- roleplay core --- */
+
+const gate = (ctx, collection, operation, rest = {}) =>
+  communityData(ctx, { collection: `${P}${collection}`, operation, ...rest });
+const reasonOf = async (promise) => {
+  try {
+    const result = await promise;
+    return result.ok ? "ok" : result.reason;
+  } catch (error) {
+    return error.details?.reason ?? error.message;
+  }
+};
+/** Two members with profiles, one character each, the first with title and outfit. */
+function roleplayWorld(options) {
+  const world = fakeCtx(options);
+  const { table } = world;
+  table(`${P}profiles`).set("m-1", { owner: "m-1", nick: "아보" });
+  table(`${P}profiles`).set("m-2", { owner: "m-2", nick: "카도" });
+  table(`${P}characters`).set("hero", {
+    owner: "m-1",
+    name: "Hero",
+    image: "https://example.com/hero.png",
+    outfit: "coat",
+  });
+  table(`${P}characters`).set("rival", { owner: "m-2", name: "Rival" });
+  table(`${P}characters`).set("gone", {
+    owner: "m-1",
+    name: "Gone",
+    deleted: true,
+  });
+  table(`${P}wardrobe`).set("coat", {
+    owner: "m-1",
+    character: "hero",
+    image: "https://example.com/coat.png",
+  });
+  table(`${P}titles`).set("brave", {
+    name: "Brave",
+    image: "https://example.com/brave.png",
+  });
+  table(`${P}character_state`).set("hero", {
+    owner: "m-1",
+    character: "hero",
+    points: 0,
+    exp: 0,
+    stats: {},
+    titles: ["brave"],
+    activeTitle: "brave",
+    approved: true,
+  });
+  table(`${P}logs`).set("thread", {
+    owner: "m-2",
+    board: "default",
+    title: "",
+    category: "",
+    secret: false,
+    image: "https://example.com/log.png",
+    text: "Scene",
+  });
+  return world;
+}
+
+test("logs and comments speak as the member's own live character, fixed at posting", async () => {
+  const { ctx } = roleplayWorld();
+  const log = (
+    await gate(ctx, "logs", "add", {
+      data: {
+        image: "https://example.com/a.png",
+        text: "As Hero",
+        character: "hero",
+      },
+    })
+  ).document;
+  assert.deepEqual(log.data.speaker, {
+    character: "hero",
+    name: "Hero",
+    type: "main",
+    title: "Brave",
+    titleImage: "https://example.com/brave.png",
+    portrait: "https://example.com/coat.png",
+  });
+  for (const character of ["rival", "gone", "missing", 7])
+    assert.equal(
+      await reasonOf(
+        gate(ctx, "comments", "add", {
+          data: { logId: "thread", text: "hi", character },
+        }),
+      ),
+      "not_owned",
+    );
+  const comment = (
+    await gate(ctx, "comments", "add", {
+      data: { logId: "thread", text: "hi", character: "hero" },
+    })
+  ).document;
+  assert.equal(comment.data.speaker.name, "Hero");
+  // An edit cannot swap the speaker or forge one.
+  const edited = (
+    await gate(ctx, "comments", "set", {
+      id: comment.id,
+      data: {
+        ...comment.data,
+        text: "edited",
+        character: "rival",
+        speaker: { name: "Forged" },
+      },
+    })
+  ).document;
+  assert.equal(edited.data.speaker.name, "Hero");
+  assert.equal(edited.data.character, "hero");
+  // Without a character the post speaks as the nickname.
+  const plain = (
+    await gate(ctx, "comments", "add", { data: { logId: "thread", text: "x" } })
+  ).document;
+  assert.equal(plain.data.speaker, undefined);
+});
+
+test("dice are rolled by the server once and cannot be rerolled or forged by edits", async () => {
+  const { ctx } = roleplayWorld({ roll: 0.99 });
+  const comment = (
+    await gate(ctx, "comments", "add", {
+      data: { logId: "thread", text: "", dice: true, rolls: [1, 1] },
+    })
+  ).document;
+  assert.deepEqual(comment.data.rolls, [6, 6]);
+  ctx.random = () => 0;
+  const edited = (
+    await gate(ctx, "comments", "set", {
+      id: comment.id,
+      data: { ...comment.data, text: "now", dice: false, rolls: [1, 1] },
+    })
+  ).document;
+  assert.deepEqual(edited.data.rolls, [6, 6]);
+  assert.equal(edited.data.dice, true);
+  const log = (
+    await gate(ctx, "logs", "add", {
+      data: { image: "https://example.com/a.png", text: "", dice: true },
+    })
+  ).document;
+  assert.deepEqual(log.data.rolls, [1, 1]);
+  ctx.random = () => 0.5;
+  const kept = (
+    await gate(ctx, "logs", "set", {
+      id: log.id,
+      data: { ...log.data, text: "t", dice: true, rolls: [6, 6] },
+    })
+  ).document;
+  assert.deepEqual(kept.data.rolls, [1, 1]);
+});
+
+test("custom profile fields validate types and hide owner/admin values from other members", async () => {
+  const { ctx, table } = roleplayWorld();
+  const define = (code, data) =>
+    table(`${P}character_fields`).set(code, { label: code, ...data });
+  define("age", { type: "text", order: 1, required: true });
+  define("gender", { type: "select", options: ["F", "M"], order: 2 });
+  define("secret", { type: "textarea", visibility: "owner", order: 3 });
+  define("memo", { type: "text", visibility: "admin", order: 4 });
+  define("theme", { type: "url", order: 5 });
+  const add = (data) =>
+    gate(ctx, "characters", "add", { data: { name: "New", ...data } });
+  for (const fields of [
+    { gender: "X" },
+    { memo: "self-approved" },
+    { unknown: "x" },
+    { theme: "javascript:alert(1)" },
+    { age: "1\n2" },
+    { age: 3 },
+    [],
+  ])
+    assert.equal(await reasonOf(add({ fields })), "invalid_field");
+  assert.equal(
+    await reasonOf(add({ fields: { secret: "가".repeat(2001) } })),
+    "invalid_field",
+  );
+  assert.equal(
+    await reasonOf(add({ state: "submitted", fields: { gender: "F" } })),
+    "missing_fields",
+  );
+  assert.equal(await reasonOf(add({ state: "approved" })), "invalid_input");
+  assert.equal(await reasonOf(add({ type: "npc" })), "invalid_input");
+  const created = (
+    await add({
+      type: "sub",
+      state: "submitted",
+      fields: { age: " 17 ", gender: "F", secret: "hidden past" },
+    })
+  ).document;
+  assert.deepEqual(created.data.fields, {
+    age: "17",
+    gender: "F",
+    secret: "hidden past",
+  });
+  assert.equal(created.data.state, "submitted");
+  assert.equal(created.data.type, "sub");
+  // The site owner keeps an admin-only memo the member never sees or erases.
+  table(`${P}characters`).set(created.id, {
+    ...table(`${P}characters`).get(created.id),
+    fields: { ...created.data.fields, memo: "check age" },
+  });
+  const own = (await gate(ctx, "characters", "get", { id: created.id }))
+    .document;
+  assert.deepEqual(Object.keys(own.data.fields), ["age", "gender", "secret"]);
+  await gate(ctx, "characters", "set", {
+    id: created.id,
+    data: { ...own.data, fields: { gender: "M" } },
+  });
+  assert.deepEqual(table(`${P}characters`).get(created.id).fields, {
+    age: "17",
+    gender: "M",
+    secret: "hidden past",
+    memo: "check age",
+  });
+  ctx.member = { id: "m-2" };
+  const other = (await gate(ctx, "characters", "get", { id: created.id }))
+    .document;
+  assert.deepEqual(other.data.fields, { age: "17", gender: "M" });
+  // Lists carry no custom values at all; field definitions hide admin-only ones.
+  const listed = (await gate(ctx, "characters", "list")).documents;
+  assert.ok(listed.every((row) => row.data.fields === undefined));
+  assert.deepEqual(
+    (await gate(ctx, "character_fields", "list")).documents.map(
+      (row) => row.id,
+    ),
+    ["age", "gender", "secret", "theme"],
+  );
+  assert.equal(
+    (await gate(ctx, "character_fields", "get", { id: "memo" })).reason,
+    "access_denied",
+  );
+});
+
+test("the owner's review moves editing → submitted → approved with the official record", async () => {
+  const { ctx, table } = roleplayWorld();
+  table(`${P}character_fields`).set("memo", {
+    label: "Memo",
+    type: "text",
+    visibility: "admin",
+  });
+  const created = (
+    await gate(ctx, "characters", "add", {
+      data: { name: "Applicant", state: "submitted" },
+    })
+  ).document;
+  assert.equal(
+    await reasonOf(
+      reviewCharacter(ctx, { character: created.id, state: "approved" }),
+    ),
+    "Only the site owner reviews.",
+  );
+  const owner = { ...ctx, member: null, owner: true };
+  assert.equal(
+    (
+      await reviewCharacter(owner, {
+        character: created.id,
+        state: "approved",
+        type: "npc",
+        fields: { memo: "ok" },
+      })
+    ).document.data.state,
+    "approved",
+  );
+  assert.equal(table(`${P}character_state`).get(created.id).approved, true);
+  assert.equal(table(`${P}character_state`).get(created.id).owner, "m-1");
+  assert.equal(
+    (
+      await reviewCharacter(owner, {
+        character: created.id,
+        fields: { age: "1" },
+      })
+    ).reason,
+    "invalid_input",
+  );
+  // The member's later edit cannot leave approval or the NPC type.
+  const own = (await gate(ctx, "characters", "get", { id: created.id }))
+    .document;
+  const saved = (
+    await gate(ctx, "characters", "set", {
+      id: created.id,
+      data: { ...own.data, state: "editing", type: "main" },
+    })
+  ).document;
+  assert.equal(saved.data.state, "approved");
+  assert.equal(saved.data.type, "npc");
+  assert.equal(table(`${P}characters`).get(created.id).fields.memo, "ok");
+  await reviewCharacter(owner, { character: created.id, state: "editing" });
+  assert.equal(table(`${P}character_state`).get(created.id).approved, false);
+  // A character saved before states existed counts as approved if official.
+  table(`${P}characters`).set("legacy", { owner: "m-1", name: "Legacy" });
+  table(`${P}character_state`).set("legacy", {
+    owner: "m-1",
+    approved: true,
+    points: 0,
+    exp: 0,
+    stats: {},
+  });
+  assert.equal(
+    (
+      await gate(ctx, "characters", "set", {
+        id: "legacy",
+        data: { name: "Legacy" },
+      })
+    ).document.data.state,
+    "approved",
+  );
+  // The public applicant list is a where on state.
+  assert.deepEqual(
+    (
+      await gate(ctx, "characters", "list", {
+        options: { where: { in: ["state", ["editing", "submitted"]] } },
+      })
+    ).documents.map((row) => row.id),
+    [created.id],
+  );
+});
+
+test("exploration is limited per character per Korean day and drops configured items", async () => {
+  const { ctx, table } = roleplayWorld({ roll: 0.1 });
+  const explore = (data = {}) =>
+    gate(ctx, "comments", "add", {
+      data: {
+        logId: "thread",
+        text: "",
+        character: "hero",
+        action: "explore",
+        ...data,
+      },
+    });
+  assert.equal(await reasonOf(explore()), "explore_closed");
+  table(`${P}settings`).set("community", { exploreLimit: 2 });
+  table(`${P}items`).set("herb", {
+    name: "Herb",
+    image: "https://example.com/herb.png",
+  });
+  table(`${P}explore`).set("found", { item: "herb", weight: 1 });
+  table(`${P}explore`).set("miss", { item: null, weight: 3 });
+  assert.equal(
+    await reasonOf(explore({ character: undefined })),
+    "no_character",
+  );
+  const first = (await explore()).document;
+  assert.deepEqual(first.data.actions, [
+    {
+      type: "explore",
+      item: "herb",
+      name: "Herb",
+      image: "https://example.com/herb.png",
+      remaining: 1,
+    },
+  ]);
+  const drops = [...table(`${P}inventory`).values()];
+  assert.deepEqual(
+    drops.map((row) => [row.item, row.character, row.from]),
+    [["herb", "hero", "explore"]],
+  );
+  ctx.random = () => 0.9;
+  assert.equal((await explore()).document.data.actions[0].item, null);
+  assert.equal(await reasonOf(explore()), "explore_limit");
+  // 2030-01-01 15:00 UTC is midnight in Korea: a new day, counted on request.
+  ctx.now = Date.parse("2030-01-01T15:00:00Z");
+  assert.equal((await explore()).document.data.actions[0].remaining, 1);
+  assert.deepEqual(table(`${P}character_state`).get("hero").explore, {
+    day: "2030-01-02",
+    count: 1,
+  });
+  table(`${P}character_state`).set("hero", {
+    ...table(`${P}character_state`).get("hero"),
+    approved: false,
+  });
+  assert.equal(await reasonOf(explore()), "not_approved");
+  // Actions belong to boards that allow them.
+  table(`${P}boards`).set("default", { name: "Plain", secret: "optional" });
+  assert.equal(await reasonOf(explore()), "access_denied");
+});
+
+test("items used in a post are consumed, logged and checked against the speaker", async () => {
+  const { ctx, table } = roleplayWorld();
+  table(`${P}items`).set("letter", { name: "Letter", description: "A note" });
+  table(`${P}items`).set("box", { name: "Box", effect: { type: "draw" } });
+  table(`${P}items`).set("prize", { name: "Prize" });
+  table(`${P}items`).set("ticket", {
+    name: "Ticket",
+    effect: { type: "create" },
+  });
+  table(`${P}gacha`).set("in-box", { source: "box", item: "prize", weight: 1 });
+  const own = (id, item, extra = {}) =>
+    table(`${P}inventory`).set(id, {
+      owner: "m-1",
+      item,
+      name: item,
+      ...extra,
+    });
+  own("i-letter", "letter");
+  own("i-box", "box", { character: "hero" });
+  own("i-ticket", "ticket");
+  table(`${P}inventory`).set("i-theirs", { owner: "m-2", item: "letter" });
+  const use = (item, character = "hero") =>
+    gate(ctx, "comments", "add", {
+      data: { logId: "thread", text: "uses", item, character },
+    });
+  assert.equal(await reasonOf(use("i-theirs")), "not_owned");
+  assert.equal(await reasonOf(use("i-ticket")), "not_usable_here");
+  assert.equal(await reasonOf(use("i-box", null)), "wrong_character");
+  const letter = (await use("i-letter")).document;
+  assert.deepEqual(letter.data.actions, [
+    {
+      type: "use",
+      item: "letter",
+      name: "letter",
+      image: null,
+      effect: null,
+      description: "A note",
+    },
+  ]);
+  assert.equal(table(`${P}inventory`).has("i-letter"), false);
+  const box = (await use("i-box")).document;
+  assert.deepEqual(box.data.actions[0].prize, { item: "prize", name: "Prize" });
+  assert.equal(
+    [...table(`${P}inventory`).values()].some(
+      (row) => row.item === "prize" && row.character === "hero",
+    ),
+    true,
+  );
+  assert.equal(table(`${P}inventory`).has("i-ticket"), true);
+});
+
+test("[[nick]] calls and comment notices reach members who can read the post", async () => {
+  const { ctx, table, sent } = roleplayWorld();
+  table(`${P}profiles`).set("m-3", { owner: "m-3", nick: "세번째" });
+  const comment = (
+    await gate(ctx, "comments", "add", {
+      data: {
+        logId: "thread",
+        text: "[[세번째]] [[없는사람]] [[아보]] 안녕",
+        character: "hero",
+      },
+    })
+  ).document;
+  assert.equal(comment.data.text, "[[세번째]] [[???]] [[아보]] 안녕");
+  assert.deepEqual(
+    sent.filter((row) => row.member),
+    [
+      { member: "m-3", data: { calls: true } },
+      { member: "m-2", data: { calls: true } },
+    ],
+  );
+  const rows = [...table(`${P}calls`).values()];
+  assert.deepEqual(
+    rows.map((row) => [row.to, row.kind, row.speaker, row.logId]),
+    [
+      ["m-3", "call", "Hero", "thread"],
+      ["m-2", "comment", "Hero", "thread"],
+    ],
+  );
+  assert.equal(rows[0].preview, "세번째 ??? 아보 안녕");
+  // Editing calls only the newly named members.
+  sent.length = 0;
+  await gate(ctx, "comments", "set", {
+    id: comment.id,
+    data: { ...comment.data, text: `${comment.data.text} [[카도]]` },
+  });
+  assert.deepEqual(
+    sent.map((row) => row.member),
+    ["m-2"],
+  );
+  // A secret post calls nobody who cannot read it, and authors may opt out.
+  sent.length = 0;
+  table(`${P}logs`).set("hidden", {
+    owner: "m-1",
+    board: "default",
+    secret: true,
+    text: "",
+    image: "https://example.com/x.png",
+  });
+  await gate(ctx, "comments", "add", {
+    data: { logId: "hidden", text: "[[카도]]" },
+  });
+  table(`${P}profiles`).set("m-2", {
+    ...table(`${P}profiles`).get("m-2"),
+    commentAlerts: false,
+  });
+  await gate(ctx, "comments", "add", { data: { logId: "thread", text: "hi" } });
+  assert.deepEqual(sent, []);
+  // A log body may call too.
+  await gate(ctx, "logs", "add", {
+    data: { image: "https://example.com/a.png", text: "[[카도]] 보세요" },
+  });
+  assert.deepEqual(
+    sent.filter((row) => row.member),
+    [{ member: "m-2", data: { calls: true } }],
+  );
+});
+
+test("call history shows readable posts newest first and is cleared once seen", async () => {
+  const { ctx, table, sent } = roleplayWorld();
+  ctx.member = { id: "m-2" };
+  await gate(ctx, "comments", "add", {
+    data: { logId: "thread", text: "[[아보]] 여기요" },
+  });
+  table(`${P}logs`).set("later-secret", {
+    owner: "m-2",
+    board: "default",
+    secret: false,
+    text: "x",
+    image: "https://example.com/x.png",
+  });
+  await gate(ctx, "comments", "add", {
+    data: { logId: "later-secret", text: "[[아보]]" },
+  });
+  table(`${P}logs`).set("later-secret", {
+    ...table(`${P}logs`).get("later-secret"),
+    secret: true,
+  });
+  ctx.member = { id: "m-1" };
+  assert.equal((await messageStatus(ctx)).calls, true);
+  const history = await callHistory(ctx, {});
+  assert.equal(history.unread, true);
+  assert.deepEqual(
+    history.documents.map((row) => [
+      row.data.logId,
+      row.data.nick,
+      row.data.unread,
+    ]),
+    [["thread", "카도", true]],
+  );
+  assert.equal((await callHistory(ctx, { size: 50 })).reason, "invalid_input");
+  sent.length = 0;
+  ctx.now += 1000;
+  assert.equal((await seeCalls(ctx)).ok, true);
+  assert.deepEqual(sent, [{ member: "m-1", data: { calls: false } }]);
+  assert.equal((await messageStatus(ctx)).calls, false);
+  assert.equal((await callHistory(ctx, {})).documents[0].data.unread, false);
 });

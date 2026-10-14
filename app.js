@@ -32,6 +32,7 @@ const COLLECTION = {
   settings: `${PREFIX}settings`,
   boards: `${PREFIX}boards`,
   emoticons: `${PREFIX}emoticons`,
+  characterFields: `${PREFIX}character_fields`,
 };
 const SHOP_PAGE = 50;
 const REASONS = {
@@ -55,7 +56,7 @@ const REASONS = {
   already_full: "이미 전부 회복되었습니다.",
   wrong_character: "이 아이템을 가진 캐릭터를 선택해 주세요.",
   not_enough_points: "배분할 능력치 포인트가 모자랍니다.",
-  not_approved: "승인된 캐릭터만 살 수 있습니다.",
+  not_approved: "승인된 캐릭터만 할 수 있습니다.",
   restricted_character: "이 캐릭터의 세력·종족은 구매할 수 없습니다.",
   not_enough_exp: "경험치가 모자랍니다.",
   missing_title: "필요한 타이틀이 없습니다.",
@@ -70,7 +71,19 @@ const REASONS = {
   media_unavailable: "그림 파일을 쓸 수 없습니다. 다시 올려 주세요.",
   media_ref_limit: "이 그림을 더 많은 곳에 쓸 수 없습니다.",
   nick_taken: "이미 쓰는 닉네임입니다.",
+  invalid_field: "프로필 항목을 확인해 주세요.",
+  missing_fields: "신청하려면 필수 프로필 항목을 모두 채워 주세요.",
+  fields_too_long: "추가 프로필 항목은 합쳐서 6,000자까지입니다.",
+  explore_closed: "지금은 탐색할 수 없습니다.",
+  explore_limit: "이 캐릭터는 오늘 탐색을 모두 했습니다.",
+  not_usable_here: "이 아이템은 인벤토리에서 사용해 주세요.",
 };
+const STATE_NAMES = {
+  editing: "수정 중",
+  submitted: "신청",
+  approved: "승인",
+};
+const TYPE_NAMES = { main: "메인", sub: "서브", npc: "NPC" };
 const LOG_PAGE = 10;
 const CHARACTER_PAGE = 20;
 const COMMENT_PAGE = 50;
@@ -102,6 +115,12 @@ const state = {
   live: null,
   newPost: null,
   ownPosts: new Set(),
+  // The member's characters for posting, and items for in-post use: read on
+  // first use, forgotten when they may have changed.
+  speakers: null,
+  postItems: null,
+  fieldCatalogue: null,
+  callCursor: null,
 };
 
 const MESSAGES = {
@@ -193,8 +212,14 @@ function clearPrivateViews() {
     "contentBody",
     "contentPage",
     "messageRecipients",
+    "calls",
+    "callDetail",
   ])
     $(id).replaceChildren();
+  state.speakers = null;
+  state.postItems = null;
+  state.fieldCatalogue = null;
+  $("tabCalls").textContent = "알림";
   $("messageDetail").hidden = true;
   $("messageBody").value = "";
   $("tabMessages").textContent = "쪽지";
@@ -218,6 +243,144 @@ export function diceOf(id) {
     return (hash % 6) + 1;
   };
   return [roll(2166136261), roll(3141592653)];
+}
+
+/** A post's dice: rolled by the server since the roleplay port, else from its ID. */
+function diceText(row) {
+  const [first, second] =
+    Array.isArray(row.data.rolls) && row.data.rolls.length === 2
+      ? row.data.rolls
+      : diceOf(row.id);
+  return `🎲 ${first} + ${second} = ${first + second}`;
+}
+
+const CALL_PART = /(\[\[[^[\]\r\n]{1,20}\]\])/;
+/** Text with [[nick]] calls marked, as autolink() did; the rest stays text. */
+function postText(text, emoticons = []) {
+  const fragment = document.createDocumentFragment();
+  for (const part of String(text ?? "").split(CALL_PART)) {
+    if (!part) continue;
+    if (CALL_PART.test(part) && part.startsWith("[[")) {
+      const call = document.createElement("span");
+      call.className = "member-call";
+      call.textContent = part.slice(2, -2);
+      fragment.append(call);
+    } else fragment.append(emoticonContent(document, part, emoticons));
+  }
+  return fragment;
+}
+
+/** Who wrote a post: the character it was posted as, with title and outfit, then the nickname. */
+async function speakerLabel(row) {
+  const nick = await nickOf(row.createdBy ?? row.data.owner);
+  const speaker = row.data.speaker;
+  const fragment = document.createDocumentFragment();
+  if (!speaker?.name) {
+    fragment.append(nick);
+    return fragment;
+  }
+  if (speaker.portrait?.startsWith("https://")) {
+    const portrait = document.createElement("img");
+    portrait.className = "speaker-portrait";
+    portrait.src = speaker.portrait;
+    portrait.alt = "";
+    portrait.loading = "lazy";
+    fragment.append(portrait);
+  }
+  if (speaker.title) {
+    const title = document.createElement("span");
+    title.className = "speaker-title";
+    if (speaker.titleImage?.startsWith("https://")) {
+      const image = document.createElement("img");
+      image.className = "title-image";
+      image.src = speaker.titleImage;
+      image.alt = "";
+      title.append(image);
+    }
+    title.append(speaker.title);
+    fragment.append(title, " ");
+  }
+  const name = document.createElement("span");
+  name.className = "speaker-name";
+  name.textContent = speaker.name;
+  fragment.append(name, ` (${nick})`);
+  return fragment;
+}
+
+/** What an in-post action did, as the mmb skin's action logs (log.S, log.item). */
+function actionItem(action) {
+  const line = document.createElement("p");
+  line.className = "post-action";
+  const image =
+    action.type === "use" && action.prize ? null : (action.image ?? null);
+  if (image?.startsWith("https://")) {
+    const picture = document.createElement("img");
+    picture.src = image;
+    picture.alt = "";
+    picture.className = "action-image";
+    line.append(picture);
+  }
+  if (action.type === "explore")
+    line.append(
+      action.item
+        ? `탐색하여 ${action.name}을(를) 획득했습니다!`
+        : "탐색했지만 아무것도 얻지 못했습니다.",
+      typeof action.remaining === "number"
+        ? ` (오늘 남은 탐색 ${action.remaining}회)`
+        : "",
+    );
+  else if (action.effect === "draw")
+    line.append(
+      action.prize
+        ? `${action.name}을(를) 사용해서 ${action.prize.name}을(를) 획득했습니다!`
+        : `${action.name}을(를) 사용했지만 아무것도 획득하지 못했습니다…`,
+    );
+  else
+    line.append(
+      `${action.name}을(를) 사용했습니다!`,
+      action.effect === "restore"
+        ? ` (${action.stat} +${action.amount})`
+        : action.description
+          ? ` (${action.description})`
+          : "",
+    );
+  return line;
+}
+
+/** Fills a "post as" select with the member's characters the first time it is used. */
+function wireSpeakerChoice(select) {
+  const fill = () =>
+    run(async () => {
+      if (select.dataset.loaded) return;
+      select.dataset.loaded = "1";
+      state.speakers ??= await ownCharacters();
+      for (const row of state.speakers) {
+        const option = document.createElement("option");
+        option.value = row.id;
+        option.textContent = row.data.name;
+        select.append(option);
+      }
+    });
+  select.onfocus = fill;
+  select.onpointerdown = fill;
+}
+
+/** Fills an in-post item select with the member's own inventory. */
+function wireItemChoice(select) {
+  select.onfocus = select.onpointerdown = () =>
+    run(async () => {
+      if (select.dataset.loaded) return;
+      select.dataset.loaded = "1";
+      state.postItems ??= await allDocuments(COLLECTION.inventory, {
+        owner: state.member.id,
+      });
+      for (const row of state.postItems) {
+        const option = document.createElement("option");
+        option.value = row.id;
+        option.textContent = row.data.name ?? row.data.item;
+        select.append(option);
+      }
+    });
 }
 
 const mine = (document) =>
@@ -468,12 +631,18 @@ $("editProfile").onclick = () => {
         type: "checkbox",
         value: profile.data.acceptMessages !== false,
       },
+      {
+        name: "commentAlerts",
+        label: "내 글에 달린 댓글 알림 받기",
+        type: "checkbox",
+        value: profile.data.commentAlerts !== false,
+      },
     ],
-    async ({ nick, acceptMessages }) => {
+    async ({ nick, acceptMessages, commentAlerts }) => {
       if (!nick) throw new Error("닉네임을 입력해 주세요.");
       const saved = await communityCollection(COLLECTION.profiles).set(
         state.member.id,
-        { ...profile.data, nick, acceptMessages },
+        { ...profile.data, nick, acceptMessages, commentAlerts },
         { condition: { revision: profile.revision } },
       );
       state.nicks.set(state.member.id, Promise.resolve(nick));
@@ -515,6 +684,9 @@ const POSTS_TOPIC = COLLECTION.logs;
 function showUnread(unread) {
   $("tabMessages").textContent = unread ? "쪽지 · 새 쪽지" : "쪽지";
 }
+function showCalls(unread) {
+  $("tabCalls").textContent = unread ? "알림 · 새 알림" : "알림";
+}
 function showNewPost(id) {
   state.newPost = id;
   $("tabLogs").textContent = id ? "로그 · 새 글" : "로그";
@@ -522,7 +694,9 @@ function showNewPost(id) {
 async function refreshUnread() {
   const member = state.member;
   const notice = await callRule("messageStatus");
-  if (state.member === member) showUnread(notice.unread);
+  if (state.member !== member) return;
+  showUnread(notice.unread);
+  showCalls(notice.calls === true);
 }
 /**
  * Instead of polling, functions notify the member of new messages and
@@ -542,6 +716,8 @@ function listen() {
         typeof message.data?.unread === "boolean"
       )
         showUnread(message.data.unread);
+      if (message.type === "notice" && typeof message.data?.calls === "boolean")
+        showCalls(message.data.calls);
       if (
         message.type === "topic" &&
         message.topic === POSTS_TOPIC &&
@@ -586,14 +762,17 @@ async function logItem(log) {
   const image = item.querySelector(".log-image");
   if (log.data.image && !log.data.locked) image.src = log.data.image;
   else image.remove();
-  item.querySelector(".log-text").textContent = log.data.locked
-    ? "비밀글입니다. 본문을 볼 수 없습니다."
-    : (log.data.text ?? "");
+  if (log.data.locked)
+    item.querySelector(".log-text").textContent =
+      "비밀글입니다. 본문을 볼 수 없습니다.";
+  else item.querySelector(".log-text").append(postText(log.data.text));
+  if (log.data.dice && !log.data.locked) {
+    item.querySelector(".log-dice").hidden = false;
+    item.querySelector(".log-dice").textContent = diceText(log);
+  }
   item.querySelector(".log-title").textContent =
     `${log.data.secret ? "🔒 " : ""}${log.data.title ?? ""}${log.data.category ? ` · ${log.data.category}` : ""}`;
-  item.querySelector(".author").textContent = await nickOf(
-    log.createdBy ?? log.data.owner,
-  );
+  item.querySelector(".author").replaceChildren(await speakerLabel(log));
   item.querySelector("time").textContent = formatTime(log.createdAt);
   const remove = item.querySelector(".delete");
   remove.hidden = !mine(log) && state.role !== "moderator";
@@ -728,20 +907,42 @@ async function logItem(log) {
       });
   };
 
+  const speakerChoice = form.querySelector(".comment-character");
+  const actionChoice = form.querySelector(".comment-action");
+  const itemChoice = form.querySelector(".comment-item");
+  wireSpeakerChoice(speakerChoice);
+  wireItemChoice(itemChoice);
+  form.querySelector(".comment-actions").hidden = !state.boards.find(
+    (row) => row.id === (log.data.board ?? "default"),
+  )?.data.actions;
   form.onsubmit = (event) => {
     event.preventDefault?.();
     run(async () => {
       const text = form.querySelector(".comment-text").value.trim();
       const dice = form.querySelector(".comment-dice").checked;
-      if (!text && !dice) return;
+      const character = speakerChoice.value;
+      const action = actionChoice.value;
+      const used = itemChoice.value;
+      if (!text && !dice && !action && !used) return;
       const saved = await communityCollection(COLLECTION.comments).add({
         logId: log.id,
         text,
         dice,
+        ...(character ? { character } : {}),
+        ...(action ? { action } : {}),
+        ...(used ? { item: used } : {}),
       });
       item.querySelector(".comment-list").append(await commentItem(saved));
       form.querySelector(".comment-text").value = "";
       form.querySelector(".comment-dice").checked = false;
+      actionChoice.value = "";
+      if (used || action) {
+        // The inventory changed: read it again when next needed.
+        state.postItems = null;
+        state.shopLoaded = false;
+        itemChoice.replaceChildren(itemChoice.options[0]);
+        delete itemChoice.dataset.loaded;
+      }
     });
   };
   return item;
@@ -751,18 +952,20 @@ async function commentItem(comment) {
   const item = document.createElement("li");
   item.className = "comment";
   const author = document.createElement("strong");
-  author.textContent = await nickOf(comment.createdBy ?? comment.data.owner);
+  author.className = "author";
+  author.append(await speakerLabel(comment));
   item.append(author, " ");
   if (comment.data.dice) {
-    const [first, second] = diceOf(comment.id);
     const dice = document.createElement("span");
     dice.className = "dice";
-    dice.textContent = `🎲 ${first} + ${second} = ${first + second}`;
+    dice.textContent = diceText(comment);
     item.append(dice, " ");
   }
-  item.append(
-    emoticonContent(document, comment.data.text ?? "", await loadEmoticons()),
-  );
+  item.append(postText(comment.data.text ?? "", await loadEmoticons()));
+  for (const action of Array.isArray(comment.data.actions)
+    ? comment.data.actions
+    : [])
+    item.append(actionItem(action));
   if (mine(comment) || state.role === "moderator") {
     const change = document.createElement("button");
     change.type = "button";
@@ -808,11 +1011,19 @@ async function commentItem(comment) {
 
 /* ------------------------------------------------------- characters --- */
 
+const CHARACTER_FILTERS = {
+  // member/ready.php: characters not yet approved, in either state.
+  applicants: { in: ["state", ["editing", "submitted"]] },
+  approved: { eq: ["state", "approved"] },
+};
 async function loadCharacters({ more = false } = {}) {
+  await loadFieldCatalogue();
+  const where = CHARACTER_FILTERS[$("characterFilter").value];
   const page = await communityCollection(COLLECTION.characters).list({
     sort: [[{ metadata: "createdAt" }, "desc"]],
     size: CHARACTER_PAGE,
     after: more ? state.characterCursor : null,
+    ...(where ? { where } : {}),
   });
   await preloadNicks(page.documents);
   if (!more) $("characters").replaceChildren();
@@ -823,6 +1034,79 @@ async function loadCharacters({ more = false } = {}) {
   $("moreCharacters").hidden = !page.nextCursor;
 }
 
+/** The owner's custom profile fields (adm/character_article_list.php), read once. */
+async function loadFieldCatalogue() {
+  if (state.fieldCatalogue) return state.fieldCatalogue;
+  const member = state.member;
+  const rows = (await allDocuments(COLLECTION.characterFields))
+    .filter((row) => /^[a-z][a-z0-9_]{0,31}$/.test(row.id))
+    .sort(
+      (a, b) =>
+        (a.data.order ?? 0) - (b.data.order ?? 0) || (a.id < b.id ? -1 : 1),
+    );
+  if (state.member !== member) return [];
+  state.fieldCatalogue = rows;
+  $("characterFields").replaceChildren(
+    ...rows.map((row) => {
+      const [label, input] = fieldInput(row, "");
+      input.dataset.field = row.id;
+      label.append(input);
+      return label;
+    }),
+  );
+  return rows;
+}
+/** A label and control for one custom field definition. */
+function fieldInput(row, value) {
+  const label = document.createElement("label");
+  label.textContent = `${row.data.label ?? row.id}${row.data.required ? " (신청 시 필수)" : ""}${row.data.visibility === "owner" ? " · 오너와 운영자만 봄" : ""}`;
+  if (row.data.help) label.title = row.data.help;
+  const type = row.data.type ?? "text";
+  const input = document.createElement(
+    type === "select" ? "select" : type === "textarea" ? "textarea" : "input",
+  );
+  if (type === "select")
+    for (const option of ["", ...(row.data.options ?? [])]) {
+      const element = document.createElement("option");
+      element.value = option;
+      element.textContent = option || "선택 안 함";
+      input.append(element);
+    }
+  else {
+    input.maxLength = type === "textarea" ? 2000 : type === "text" ? 200 : 2000;
+    if (type === "url" || type === "image") input.type = "url";
+    if (type === "image" || type === "url") input.placeholder = "https://";
+  }
+  input.value = value ?? "";
+  return [label, input];
+}
+/** Custom values of a character the gate let the caller see, in catalogue order. */
+function renderFields(list, character) {
+  list.replaceChildren();
+  for (const row of state.fieldCatalogue ?? []) {
+    const value = character.data.fields?.[row.id];
+    if (typeof value !== "string" || !value) continue;
+    const term = document.createElement("dt");
+    term.textContent = row.data.label ?? row.id;
+    const detail = document.createElement("dd");
+    if (row.data.type === "image" && value.startsWith("https://")) {
+      const image = document.createElement("img");
+      image.src = value;
+      image.alt = row.data.label ?? row.id;
+      image.loading = "lazy";
+      image.className = "field-image";
+      detail.append(image);
+    } else if (row.data.type === "url" && value.startsWith("https://")) {
+      const link = document.createElement("a");
+      link.href = value;
+      link.textContent = value;
+      link.rel = "noopener noreferrer";
+      detail.append(link);
+    } else detail.textContent = value;
+    list.append(term, detail);
+  }
+}
+
 async function characterItem(character) {
   const item = $("characterTemplate").content.firstElementChild.cloneNode(true);
   const image = item.querySelector(".character-image");
@@ -830,6 +1114,12 @@ async function characterItem(character) {
   else image.remove();
   item.querySelector(".character-name").textContent = character.data.name;
   item.querySelector(".character-side").textContent = character.data.side ?? "";
+  item.querySelector(".character-state").textContent = [
+    TYPE_NAMES[character.data.type],
+    STATE_NAMES[character.data.state],
+  ]
+    .filter(Boolean)
+    .join(" · ");
   item.querySelector(".character-profile").textContent =
     character.data.profile ?? "";
   item.querySelector(".author").textContent =
@@ -838,40 +1128,87 @@ async function characterItem(character) {
   remove.hidden = !mine(character);
   const change = item.querySelector(".edit");
   change.hidden = !mine(character);
+  // Lists carry no custom values, so an edit starts from the full sheet.
   change.onclick = () =>
-    edit(
-      "캐릭터 수정",
-      [
+    run(async () => {
+      const catalogue = await loadFieldCatalogue();
+      const current = await communityCollection(COLLECTION.characters).get(
+        character.id,
+      );
+      const fields = [
         {
           name: "name",
           label: "이름",
-          value: character.data.name,
+          value: current.data.name,
           required: true,
           max: 40,
         },
-        { name: "side", label: "소속", value: character.data.side, max: 40 },
+        { name: "side", label: "소속", value: current.data.side, max: 40 },
         {
           name: "profile",
           label: "프로필",
-          value: character.data.profile,
+          value: current.data.profile,
           multiline: true,
           max: 4000,
         },
-      ],
-      async (data) => {
-        if (!data.name) throw new Error("이름을 입력해 주세요.");
+      ];
+      if (current.data.type !== "npc")
+        fields.push({
+          name: "type",
+          label: "종류",
+          value: current.data.type ?? "main",
+          options: [
+            ["main", "메인"],
+            ["sub", "서브"],
+          ],
+        });
+      if (current.data.state !== "approved")
+        fields.push({
+          name: "state",
+          label: "상태",
+          value: current.data.state ?? "editing",
+          options: [
+            ["editing", "수정 중"],
+            ["submitted", "신청 (수정 완료)"],
+          ],
+        });
+      for (const row of catalogue)
+        fields.push({
+          name: `field:${row.id}`,
+          label: `${row.data.label ?? row.id}${row.data.required ? " (신청 시 필수)" : ""}`,
+          value: current.data.fields?.[row.id] ?? "",
+          ...(row.data.type === "select"
+            ? {
+                options: [
+                  ["", "선택 안 함"],
+                  ...(row.data.options ?? []).map((option) => [option, option]),
+                ],
+              }
+            : row.data.type === "textarea"
+              ? { multiline: true, max: 2000 }
+              : { max: row.data.type === "text" ? 200 : 2000 }),
+        });
+      edit("캐릭터 수정", fields, async (values) => {
+        if (!values.name) throw new Error("이름을 입력해 주세요.");
+        const data = { ...current.data, fields: {} };
+        for (const [name, value] of Object.entries(values))
+          if (name.startsWith("field:")) {
+            if (value) data.fields[name.slice(6)] = value;
+          } else data[name] = value;
         const saved = await communityCollection(COLLECTION.characters).set(
           character.id,
-          { ...character.data, ...data },
-          { condition: { revision: character.revision } },
+          data,
+          { condition: { revision: current.revision } },
         );
+        state.speakers = null;
         item.replaceWith(await characterItem(saved));
-      },
-    );
+      });
+    });
   remove.onclick = () =>
     run(async () => {
       if (!confirm(`${character.data.name}을(를) 지울까요?`)) return;
       await communityCollection(COLLECTION.characters).delete(character.id);
+      state.speakers = null;
       item.remove();
     });
   const main = item.querySelector(".main-character");
@@ -908,6 +1245,12 @@ function wireCharacterDetails(item, character) {
     button.hidden = !mine(character);
   let loaded = false;
   const refresh = async () => {
+    await loadFieldCatalogue();
+    if (state.fieldCatalogue.length)
+      renderFields(
+        item.querySelector(".character-fields"),
+        await communityCollection(COLLECTION.characters).get(character.id),
+      );
     const status = await callRule("characterStatus", {
       character: character.id,
     });
@@ -1694,6 +2037,7 @@ function showTab(name) {
     ["tabMessages", "messagesView", "messages"],
     ["tabQuests", "questsView", "quests"],
     ["tabContent", "contentView", "content"],
+    ["tabCalls", "callsView", "calls"],
   ]) {
     $(tab).setAttribute("aria-pressed", String(name === key));
     $(view).hidden = name !== key;
@@ -1892,6 +2236,52 @@ $("moreInventory").onclick = () => run(() => loadInventory({ more: true }));
 $("moreItems").onclick = () => run(() => loadItems({ more: true }));
 $("moreLogs").onclick = () => run(() => loadLogs({ more: true }));
 $("moreCharacters").onclick = () => run(() => loadCharacters({ more: true }));
+$("characterFilter").onchange = () => run(() => loadCharacters());
+
+/* ------------------------------------------------------------ calls --- */
+
+/** ajax/board_call.php's alarm list: calls and comment notices, newest first. */
+async function loadCalls({ more = false } = {}) {
+  const member = state.member;
+  const page = await callRule("callHistory", {
+    after: more ? state.callCursor : null,
+    size: 20,
+  });
+  if (state.member !== member) return;
+  if (!more) {
+    $("calls").replaceChildren();
+    $("callDetail").replaceChildren();
+  }
+  for (const row of page.documents) {
+    const li = document.createElement("li");
+    li.className = row.data.unread ? "call unread" : "call";
+    li.textContent = `${row.data.unread ? "[새 알림] " : ""}${row.data.nick || "이름 없음"}${row.data.speaker ? ` (${row.data.speaker})` : ""}님이 ${row.data.kind === "comment" ? "내 글에 댓글을 남겼습니다" : "호출했습니다"} · ${formatTime(row.data.at)} · ${row.data.preview} `;
+    const open = document.createElement("button");
+    open.type = "button";
+    open.textContent = "글 보기";
+    open.onclick = () =>
+      run(async () => {
+        const log = await communityCollection(COLLECTION.logs).get(
+          row.data.logId,
+        );
+        $("callDetail").replaceChildren(await logItem(log));
+      });
+    li.append(open);
+    $("calls").append(li);
+  }
+  state.callCursor = page.nextCursor;
+  $("moreCalls").hidden = !page.nextCursor;
+  // Opening the list is looking at it, as the original's close_call.php.
+  if (page.unread) await callRule("seeCalls");
+  showCalls(false);
+}
+$("tabCalls").onclick = () =>
+  run(async () => {
+    showTab("calls");
+    await loadCalls();
+  });
+$("refreshCalls").onclick = () => run(() => loadCalls());
+$("moreCalls").onclick = () => run(() => loadCalls({ more: true }));
 
 $("logForm").onsubmit = (event) => {
   event.preventDefault?.();
@@ -1901,6 +2291,7 @@ $("logForm").onsubmit = (event) => {
     if (!file && board?.data.kind !== "text") return say("그림을 골라 주세요.");
     say("올리는 중…");
     const image = file ? await uploadManaged(file) : null;
+    const character = $("logCharacter").value;
     const log = await communityCollection(COLLECTION.logs).add({
       image: image?.url ?? null,
       ...(image ? { imageId: image.id } : {}),
@@ -1909,11 +2300,14 @@ $("logForm").onsubmit = (event) => {
       title: $("logTitle").value.trim(),
       category: $("logCategory").value,
       secret: $("logSecret").checked,
+      ...(character ? { character } : {}),
+      ...($("logDice").checked ? { dice: true } : {}),
     });
     state.ownPosts.add(log.id);
     if (state.newPost === log.id) showNewPost(null);
     $("logs").prepend(await logItem(log));
     $("logForm").reset?.();
+    $("logCharacter").value = character;
     configureBoard();
     say("로그를 올렸습니다.");
   });
@@ -1932,6 +2326,7 @@ async function loadBoards() {
           secret: "optional",
           categories: [],
           writeLevel: 2,
+          actions: true,
         },
       },
     ];
@@ -1964,6 +2359,7 @@ function configureBoard() {
   $("logSecret").disabled = board?.data.secret !== "optional";
   $("logSecret").checked = board?.data.secret === "required";
 }
+wireSpeakerChoice($("logCharacter"));
 $("board").onchange = () =>
   run(async () => {
     state.board = $("board").value;
@@ -1979,13 +2375,22 @@ $("characterForm").onsubmit = (event) => {
     const file = $("characterImage").files?.[0];
     const uploaded = file ? await uploadManaged(file) : null;
     const image = uploaded?.url ?? null;
+    const fields = Object.fromEntries(
+      [...$("characterFields").querySelectorAll("[data-field]")]
+        .map((input) => [input.dataset.field, input.value.trim()])
+        .filter(([, value]) => value),
+    );
     const character = await communityCollection(COLLECTION.characters).add({
       name,
       side: $("characterSide").value.trim(),
       profile: $("characterProfile").value.trim(),
       image,
       ...(uploaded ? { imageId: uploaded.id } : {}),
+      type: $("characterType").value,
+      state: $("characterState").value,
+      ...(Object.keys(fields).length ? { fields } : {}),
     });
+    state.speakers = null;
     $("characters").prepend(await characterItem(character));
     $("characterForm").reset?.();
     say(`${name}을(를) 등록했습니다.`);

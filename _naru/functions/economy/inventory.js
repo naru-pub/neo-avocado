@@ -4,8 +4,6 @@ import {
   PROFILES,
   RECIPES,
   CHARACTERS,
-  CHARACTER_STATE,
-  TITLES,
   saveImage,
   record,
   ownCharacter,
@@ -18,8 +16,10 @@ import {
   give,
   draw,
   ownedItem,
-  characterState,
+  useRestriction,
+  restoreStat,
 } from "../../modules/shared.js";
+import { presentCharacter } from "../../modules/characters.js";
 
 /** Selling consumes exactly one owned item; prices always come from the catalog. */
 export async function sell(ctx, { inventory } = {}) {
@@ -189,60 +189,15 @@ export async function useItem(ctx, { inventory, character, data = {} } = {}) {
     return failure("wrong_character");
   if (owned.data.character && !(await ownCharacter(ctx, character)))
     return failure("not_owned");
-  const requirements = item.data.useRequirements ?? {};
-  if (
-    requirements.approved ||
-    requirements.sides?.length ||
-    requirements.classes?.length ||
-    requirements.exp ||
-    requirements.title
-  ) {
-    if (!(await ownCharacter(ctx, character))) return failure("no_character");
-    const official = (await characterState(ctx, character)).data;
-    if (requirements.approved && official.approved !== true)
-      return failure("not_approved");
-    for (const [key, field] of [
-      ["sides", "side"],
-      ["classes", "class"],
-    ]) {
-      if (
-        requirements[key] !== undefined &&
-        (!Array.isArray(requirements[key]) ||
-          requirements[key].some((value) => typeof value !== "string"))
-      )
-        throw new Error("Use restrictions must be lists of identifiers.");
-      if (
-        requirements[key]?.length &&
-        !requirements[key].includes(official[field])
-      )
-        return failure("restricted_character");
-    }
-    if (official.exp < amount(requirements.exp ?? 0, "Use experience"))
-      return failure("not_enough_exp");
-    if (
-      requirements.title &&
-      (!official.titles?.includes(requirements.title) ||
-        (await ctx.get(TITLES, requirements.title))?.data.deleted)
-    )
-      return failure("missing_title");
-  }
+  const restricted = await useRestriction(ctx, item, character);
+  if (restricted) return failure(restricted);
   const effect = item.data.effect;
   let result = { ok: true, name: owned.data.name };
   if (effect.type === "restore") {
     if (!(await ownCharacter(ctx, character))) return failure("not_owned");
-    const state = await characterState(ctx, character);
-    if (
-      typeof effect.stat !== "string" ||
-      !Object.hasOwn(state.data.stats, effect.stat)
-    )
-      throw new Error("Recovery stat does not exist.");
-    const recovery = amount(effect.amount, "Recovery amount");
-    if (!recovery) throw new Error("Recovery amount must be positive.");
-    const stat = state.data.stats[effect.stat];
-    if (stat.current === stat.max) return failure("already_full");
-    stat.damage = Math.max(0, stat.damage - recovery);
-    stat.current = Math.max(0, stat.max - stat.damage);
-    result.document = await ctx.set(CHARACTER_STATE, character, state.data);
+    const restored = await restoreStat(ctx, effect, character);
+    if (!restored) return failure("already_full");
+    result.document = restored;
   } else if (effect.type === "draw") {
     const outcome = await draw(ctx, item.id);
     if (!outcome.configured) return failure("empty");
@@ -285,13 +240,9 @@ export async function useItem(ctx, { inventory, character, data = {} } = {}) {
     };
     if (Object.hasOwn(data, "image"))
       profile.image = data.image ? imageUrl(data.image) : null;
-    result.document = await saveImage(
+    result.document = await presentCharacter(
       ctx,
-      CHARACTERS,
-      target,
-      profile,
-      data,
-      character,
+      await saveImage(ctx, CHARACTERS, target, profile, data, character),
     );
   } else return failure("not_usable");
   // The original personal-item creation form always consumes its ticket.

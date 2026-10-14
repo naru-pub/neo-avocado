@@ -340,3 +340,51 @@ test("managed content validates body sizes, artwork and read levels", () => {
       buildRecord("content", { ...values, ...change }, null, references),
     );
 });
+
+test("profile field definitions validate codes and options; explore misses store null", () => {
+  const field = (values) =>
+    buildRecord(
+      "character_fields",
+      {
+        label: "성별",
+        type: "select",
+        options: "여성, 남성",
+        help: "",
+        order: "2",
+        visibility: "owner",
+        required: true,
+        ...values,
+      },
+      null,
+      references,
+    );
+  assert.deepEqual(field({ id: "gender" }).data, {
+    label: "성별",
+    type: "select",
+    options: ["여성", "남성"],
+    help: "",
+    order: 2,
+    visibility: "owner",
+    required: true,
+  });
+  for (const id of ["Gender", "1st", "constructor", "has-dash"])
+    assert.throws(() => field({ id }));
+  assert.throws(() => field({ id: "gender", options: "" }));
+  assert.throws(() => field({ id: "gender", visibility: "everyone" }));
+  assert.deepEqual(
+    field({ id: "age", type: "text", options: "ignored" }).data.options,
+    [],
+  );
+  assert.equal(
+    buildRecord(
+      "explore",
+      { id: "miss", item: "", weight: "3" },
+      null,
+      references,
+    ).data.item,
+    null,
+  );
+  assert.ok(scopes.includes("neo_avocado_character_fields"));
+  assert.ok(scopes.includes("neo_avocado_explore"));
+  assert.equal(models.character_review.collection, "neo_avocado_characters");
+});

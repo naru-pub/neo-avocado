@@ -1,0 +1,252 @@
+// Roleplay on log boards, after skin/board/mmb and its write_update.inc.php:
+// posting as a character, server-rolled dice, exploration (탐색), items used
+// in a post, and [[nick]] calls with comment notices.
+import {
+  CALLS,
+  CHARACTER_STATE,
+  EXPLORE,
+  INVENTORY,
+  ITEMS,
+  PROFILES,
+  SETTINGS,
+  TITLES,
+  WARDROBE,
+  amount,
+  author,
+  characterState,
+  communityAccess,
+  draw,
+  fail,
+  give,
+  kstDay,
+  logReadable,
+  ownCharacter,
+  ownedItem,
+  record,
+  restoreStat,
+  useRestriction,
+} from "./shared.js";
+
+const https = (value) =>
+  typeof value === "string" && value.startsWith("https://") ? value : null;
+
+/**
+ * Who a post speaks as: one of the caller's own, non-deleted characters, with
+ * its displayed title and worn outfit at the time of posting (as the original
+ * stored ch_id, ti_id and ma_id with each post). Null posts as the nickname.
+ */
+export async function speakerOf(ctx, id) {
+  if (id === undefined || id === null) return null;
+  const character = await ownCharacter(ctx, id);
+  if (!character)
+    fail(ctx, "ACCESS_DENIED", "not_owned", "Not your character.");
+  const state = await ctx.get(CHARACTER_STATE, character.id);
+  const titleId = state?.data.activeTitle;
+  const title =
+    typeof titleId === "string" && state.data.titles?.includes(titleId)
+      ? await ctx.get(TITLES, titleId)
+      : null;
+  const outfit =
+    typeof character.data.outfit === "string"
+      ? await ctx.get(WARDROBE, character.data.outfit)
+      : null;
+  const worn = outfit?.data.character === character.id ? outfit : null;
+  return {
+    character: character.id,
+    name: character.data.name,
+    type: character.data.type ?? "main",
+    title: title && !title.data.deleted ? title.data.name : null,
+    titleImage: title && !title.data.deleted ? https(title.data.image) : null,
+    portrait: https(worn?.data.image) ?? https(character.data.image),
+  };
+}
+
+/** Two six-sided dice from the server's random source, fixed once posted. */
+export function rollDice(ctx) {
+  return [0, 1].map(() => 1 + Math.floor(ctx.random() * 6));
+}
+
+const CALL = /\[\[([^[\]\r\n]{1,20})\]\]/g;
+export const MAX_CALLS = 5;
+
+/** The distinct nicknames a text calls, in order, at most MAX_CALLS. */
+export function calledNicks(text) {
+  const nicks = [];
+  for (const match of String(text ?? "").matchAll(CALL)) {
+    const nick = match[1].trim();
+    if (nick && !nicks.includes(nick)) nicks.push(nick);
+  }
+  return nicks.slice(0, MAX_CALLS);
+}
+
+/**
+ * Members newly called by `text` (not already called by `before`). Like the
+ * original, a nickname no member uses is blurred to [[???]] in the saved text.
+ */
+export async function resolveCalls(ctx, text, before = "") {
+  const already = calledNicks(before);
+  const recipients = [];
+  let saved = text;
+  for (const nick of calledNicks(text)) {
+    if (already.includes(nick)) continue;
+    const found = (await ctx.list(PROFILES, { filter: { nick }, size: 1 }))
+      .documents[0];
+    if (!found) saved = saved.split(`[[${nick}]]`).join("[[???]]");
+    else if (
+      found.id !== ctx.member.id &&
+      !recipients.some((row) => row.id === found.id)
+    )
+      recipients.push({ id: found.id, nick });
+  }
+  return { text: saved, recipients };
+}
+
+/**
+ * Records and sends calls and the comment notice after a post is saved. A
+ * member who could not read the post is not told about it; the post's author
+ * may turn comment notices off (profile.commentAlerts).
+ */
+export async function deliverCalls(
+  ctx,
+  { log, comment = null, text, speaker, recipients, notifyAuthor = false },
+) {
+  const me = await ctx.get(PROFILES, ctx.member.id);
+  const preview = text.replace(/\[\[|\]\]/g, "").slice(0, 100);
+  const sent = new Set();
+  const send = async (to, kind) => {
+    if (sent.has(to) || to === ctx.member.id) return;
+    if (!(await logReadable(ctx, log, await communityAccess(ctx, to), to)))
+      return;
+    sent.add(to);
+    await ctx.add(CALLS, {
+      to,
+      from: ctx.member.id,
+      nick: me?.data.nick ?? "",
+      speaker: speaker?.name ?? null,
+      kind,
+      board: log.data.board ?? "default",
+      logId: log.id,
+      commentId: comment?.id ?? null,
+      preview,
+      at: ctx.now,
+    });
+    ctx.notify(to, { calls: true });
+  };
+  for (const recipient of recipients) await send(recipient.id, "call");
+  const owner = author(log);
+  if (notifyAuthor && owner && !sent.has(owner)) {
+    const profile = await ctx.get(PROFILES, owner);
+    if (profile && profile.data.commentAlerts !== false)
+      await send(owner, "comment");
+  }
+  return [...sent];
+}
+
+/** Whether the member has calls newer than they last looked (profile.callsSeenAt). */
+export async function callsUnread(ctx) {
+  const profile = await ctx.get(PROFILES, ctx.member.id);
+  const seen = Number.isFinite(profile?.data.callsSeenAt)
+    ? profile.data.callsSeenAt
+    : 0;
+  const page = await ctx.list(CALLS, {
+    filter: { to: ctx.member.id },
+    where: { gt: ["at", seen] },
+    size: 1,
+  });
+  return page.documents.length > 0;
+}
+
+/**
+ * Exploration (탐색): an approved character, up to the configured number of
+ * times a Korean day, counted on request rather than reset by a job. A drop is
+ * drawn from the explore table by weight; a miss is a row without an item.
+ */
+export async function explore(ctx, speaker) {
+  if (!speaker)
+    fail(ctx, "INVALID_REQUEST", "no_character", "Explore as a character.");
+  const limit = amount(
+    (await ctx.get(SETTINGS, "community"))?.data.exploreLimit ?? 0,
+    "Explore limit",
+  );
+  if (!limit) fail(ctx, "CONFLICT", "explore_closed", "Exploration is off.");
+  const state = await characterState(ctx, speaker.character);
+  if (state.data.approved !== true)
+    fail(ctx, "CONFLICT", "not_approved", "Only approved characters explore.");
+  const today = kstDay(ctx.now);
+  const used =
+    state.data.explore?.day === today
+      ? amount(state.data.explore.count, "Explore count")
+      : 0;
+  if (used >= limit)
+    fail(ctx, "CONFLICT", "explore_limit", "No explorations left today.");
+  const outcome = await draw(ctx, null, EXPLORE);
+  const prize = outcome.prize;
+  if (prize) await give(ctx, prize, "explore", speaker.character);
+  await ctx.set(CHARACTER_STATE, speaker.character, {
+    ...state.data,
+    explore: { day: today, count: used + 1 },
+  });
+  await record(ctx, "explore", {
+    character: speaker.character,
+    item: prize?.id ?? null,
+  });
+  return {
+    type: "explore",
+    item: prize?.id ?? null,
+    name: prize?.data.name ?? null,
+    image: https(prize?.data.image),
+    remaining: limit - used - 1,
+  };
+}
+
+/**
+ * An item used in a post (wr_item_log): recovery heals the speaking character,
+ * a draw ticket rolls its own table, an item without an effect is shown as
+ * used. Forms (personal items, profile tickets) stay in the inventory.
+ */
+export async function useInPost(ctx, inventory, speaker) {
+  const owned = await ownedItem(ctx, inventory);
+  if (!owned) fail(ctx, "ACCESS_DENIED", "not_owned", "Not your item.");
+  const item = await ctx.get(ITEMS, owned.data.item);
+  if (!item || item.data.usable === false)
+    fail(ctx, "CONFLICT", "not_usable", "This item cannot be used.");
+  const character = speaker?.character ?? null;
+  if (owned.data.character && owned.data.character !== character)
+    fail(ctx, "CONFLICT", "wrong_character", "Use it as its character.");
+  const restricted = await useRestriction(ctx, item, character);
+  if (restricted) fail(ctx, "CONFLICT", restricted, restricted);
+  const effect = item.data.effect?.type ?? null;
+  const used = {
+    type: "use",
+    item: item.id,
+    name: owned.data.name,
+    image: https(item.data.image),
+    effect,
+  };
+  if (effect === "restore") {
+    if (!character)
+      fail(ctx, "INVALID_REQUEST", "no_character", "Use it as a character.");
+    if (!(await restoreStat(ctx, item.data.effect, character)))
+      fail(ctx, "CONFLICT", "already_full", "Already full.");
+    used.stat = item.data.effect.stat;
+    used.amount = item.data.effect.amount;
+  } else if (effect === "draw") {
+    const outcome = await draw(ctx, item.id);
+    if (!outcome.configured) fail(ctx, "CONFLICT", "empty", "Nothing to draw.");
+    if (outcome.prize)
+      await give(ctx, outcome.prize, "item", owned.data.character ?? character);
+    used.prize = outcome.prize
+      ? { item: outcome.prize.id, name: outcome.prize.data.name }
+      : null;
+  } else if (effect)
+    fail(ctx, "CONFLICT", "not_usable_here", "Use this item from inventory.");
+  else used.description = String(item.data.description ?? "").slice(0, 200);
+  if (item.data.reusable !== true) await ctx.delete(INVENTORY, owned.id);
+  await record(ctx, "use", {
+    item: item.id,
+    inventory: owned.id,
+    character,
+    effect: effect ?? "post",
+  });
+  return used;
+}

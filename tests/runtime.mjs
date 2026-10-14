@@ -151,7 +151,7 @@ const host = (operation, args) => {
   }
   throw new Error(`Unknown operation: ${operation}`);
 };
-async function call(name, args = null, member = ME) {
+async function call(name, args = null, member = ME, { owner = false } = {}) {
   const module = await newQuickJSWASMModuleFromVariant(
     newVariant(variant, {
       wasmMemory: () =>
@@ -174,6 +174,7 @@ async function call(name, args = null, member = ME) {
         name,
         args,
         member,
+        owner,
         now: Date.parse("2030-01-01T00:00:00Z"),
       },
       host,
@@ -637,6 +638,138 @@ try {
     assert.equal(get(`${P}media_assets`, assetId(n)), null);
     assert.ok(released.includes(assetId(n)));
   }
+  // Roleplay core: a character sheet with hidden fields, the owner's review,
+  // then one comment that speaks as the character, rolls dice, explores, uses
+  // an item and calls a member, all in one transaction.
+  put(`${P}character_fields`, "age", { label: "Age", type: "text", order: 1 });
+  put(`${P}character_fields`, "past", {
+    label: "Past",
+    type: "textarea",
+    visibility: "owner",
+  });
+  put(`${P}character_fields`, "memo", {
+    label: "Memo",
+    type: "text",
+    visibility: "admin",
+  });
+  const sheet = await call("communityData", {
+    collection: `${P}characters`,
+    operation: "add",
+    data: {
+      name: "Speaker",
+      state: "submitted",
+      type: "sub",
+      fields: { age: "17", past: "secret" },
+    },
+  });
+  const rpHero = sheet.document.id;
+  assert.equal(sheet.document.createdBy, null);
+  assert.deepEqual(
+    (
+      await call(
+        "communityRead",
+        { collection: `${P}characters`, operation: "get", id: rpHero },
+        "other-member",
+      )
+    ).document.data.fields,
+    { age: "17" },
+  );
+  await assert.rejects(
+    call("reviewCharacter", { character: rpHero, state: "approved" }),
+  );
+  const reviewed = await call(
+    "reviewCharacter",
+    { character: rpHero, state: "approved", fields: { memo: "ok" } },
+    null,
+    { owner: true },
+  );
+  assert.equal(reviewed.document.data.fields.memo, "ok");
+  assert.equal(get(`${P}character_state`, rpHero).data.approved, true);
+  assert.equal(get(`${P}character_state`, rpHero).data.owner, ME);
+  put(`${P}profiles`, "caller-target", { nick: "Target" }, "caller-target");
+  put(`${P}logs`, "rp-thread", {
+    owner: "other-member",
+    board: "default",
+    secret: false,
+    title: "",
+    category: "",
+    text: "Scene",
+    image: "https://example.com/scene.png",
+  });
+  put(`${P}settings`, "community", { initialStatPoints: 10, exploreLimit: 1 });
+  put(`${P}items`, "herb", { name: "Herb" });
+  put(`${P}explore`, "herb-row", { item: "herb", weight: 1 });
+  put(`${P}items`, "letter", { name: "Letter", description: "Note" });
+  put(`${P}inventory`, "rp-letter", {
+    owner: ME,
+    item: "letter",
+    name: "Letter",
+  });
+  sent.length = 0;
+  const acted = await call("communityData", {
+    collection: `${P}comments`,
+    operation: "add",
+    data: {
+      logId: "rp-thread",
+      text: "[[Target]] look",
+      character: rpHero,
+      dice: true,
+      action: "explore",
+      item: "rp-letter",
+    },
+  });
+  assert.ok(counts.writes <= MAX_WRITES);
+  assert.equal(acted.document.data.speaker.name, "Speaker");
+  assert.deepEqual(acted.document.data.rolls, [4, 4]);
+  assert.deepEqual(
+    acted.document.data.actions.map((action) => [action.type, action.item]),
+    [
+      ["explore", "herb"],
+      ["use", "letter"],
+    ],
+  );
+  assert.equal(get(`${P}inventory`, "rp-letter"), null);
+  assert.deepEqual(
+    sent.map((message) => message.notify),
+    ["caller-target", "other-member"],
+  );
+  // The day's exploration is spent: the whole call rolls back, item included.
+  put(`${P}inventory`, "rp-letter-2", {
+    owner: ME,
+    item: "letter",
+    name: "Letter",
+  });
+  sent.length = 0;
+  await assert.rejects(
+    call("communityData", {
+      collection: `${P}comments`,
+      operation: "add",
+      data: {
+        logId: "rp-thread",
+        text: "[[Target]] again",
+        character: rpHero,
+        item: "rp-letter-2",
+        action: "explore",
+      },
+    }),
+    (error) => error.details?.reason === "explore_limit",
+  );
+  assert.ok(get(`${P}inventory`, "rp-letter-2"));
+  assert.deepEqual(sent, []);
+  assert.equal(
+    (await call("messageStatus", null, "caller-target")).calls,
+    true,
+  );
+  const history = await call("callHistory", {}, "caller-target");
+  assert.deepEqual(
+    history.documents.map((row) => [row.data.kind, row.data.speaker]),
+    [["call", "Speaker"]],
+  );
+  await call("seeCalls", null, "caller-target");
+  assert.equal(
+    (await call("messageStatus", null, "caller-target")).calls,
+    false,
+  );
   for (let i = 0; i < 10; i++)
     put(`${P}content`, `content-${i}`, {
       name: "Guide",

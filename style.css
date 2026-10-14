@@ -610,3 +610,70 @@ dialog {
 .plain-content {
   white-space: pre-wrap;
 }
+
+/* Roleplay: posting as a character, calls, dice and in-post actions. */
+.speaker-portrait {
+  width: 2rem;
+  height: 2rem;
+  object-fit: cover;
+  border-radius: 50%;
+  vertical-align: middle;
+  margin-right: 0.25rem;
+}
+.speaker-title {
+  font-size: 0.85em;
+  color: var(--pit);
+  margin-right: 0.25rem;
+}
+.speaker-name {
+  font-weight: bold;
+}
+.member-call {
+  font-weight: bold;
+  color: var(--avocado);
+}
+.member-call::before {
+  content: "@";
+}
+.log-dice {
+  font-weight: bold;
+  color: var(--avocado);
+}
+.post-action {
+  margin: 0.25rem 0;
+  padding: 0.25rem 0.5rem;
+  background: var(--surface);
+  border-left: 3px solid var(--line);
+}
+.action-image,
+.field-image {
+  max-width: 2.5rem;
+  max-height: 2.5rem;
+  vertical-align: middle;
+  margin-right: 0.25rem;
+}
+.field-image {
+  max-width: 100%;
+  max-height: 20rem;
+}
+.character-fields dt {
+  font-weight: bold;
+}
+.character-fields dd {
+  margin: 0 0 0.5rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.character-state {
+  color: var(--pit);
+}
+.hint {
+  font-size: 0.85em;
+  color: var(--pit);
+}
+.call.unread {
+  font-weight: bold;
+}
+.review dl {
+  margin: 0.5rem 0;
+}

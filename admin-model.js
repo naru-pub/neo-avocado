@@ -110,6 +110,11 @@ export const models = {
       { key: "commentLevel", label: "댓글 등급", type: "number", default: 2 },
       { key: "categories", label: "분류 (쉼표로 구분)", type: "tokens" },
       {
+        key: "actions",
+        label: "댓글 행동 허용 (탐색·아이템 사용)",
+        type: "checkbox",
+      },
+      {
         key: "secret",
         label: "비밀글",
         type: "choice",
@@ -368,9 +373,69 @@ export const models = {
       { key: "description", label: "설명", type: "textarea", max: 2000 },
     ],
   },
+  character_fields: {
+    label: "캐릭터 프로필 항목",
+    help: "캐릭터 프로필에 추가할 항목입니다. ID(고유코드)는 영문 소문자로 시작하는 영문 소문자·숫자·밑줄입니다. 공개 범위: 전체 공개, 오너+운영자, 운영자만(회원은 보거나 입력할 수 없고 신청 심사에서 입력). 최대 50개, 한 캐릭터의 추가 항목은 합쳐서 6,000자까지입니다.",
+    fields: [
+      { key: "label", label: "항목명", required: true, max: 40 },
+      {
+        key: "type",
+        label: "항목 타입",
+        type: "choice",
+        options: [
+          ["text", "한 줄 텍스트"],
+          ["textarea", "텍스트"],
+          ["select", "단일 선택"],
+          ["url", "링크 (HTTPS)"],
+          ["image", "이미지 주소 (HTTPS)"],
+        ],
+      },
+      {
+        key: "options",
+        label: "선택지 (단일 선택, 쉼표로 구분)",
+        type: "tokens",
+      },
+      { key: "help", label: "도움말", max: 200 },
+      {
+        key: "order",
+        label: "순서 (작을수록 먼저)",
+        type: "number",
+        default: 0,
+      },
+      {
+        key: "visibility",
+        label: "공개 범위",
+        type: "choice",
+        options: [
+          ["public", "전체 공개"],
+          ["owner", "오너+운영자 공개"],
+          ["admin", "운영자만"],
+        ],
+      },
+      { key: "required", label: "신청할 때 필수", type: "checkbox" },
+    ],
+  },
+  explore: {
+    label: "탐색 표",
+    help: "승인된 캐릭터가 댓글에서 탐색하면 무게에 비례해 하나를 뽑아 캐릭터 인벤토리에 넣습니다. 결과 아이템을 고르지 않으면 꽝입니다. 하루 횟수는 기본 설정에서 정합니다.",
+    fields: [
+      {
+        key: "item",
+        label: "결과 아이템 (빈칸: 꽝)",
+        type: "item",
+        optional: true,
+      },
+      {
+        key: "weight",
+        label: "무게 (0: 나오지 않음)",
+        type: "decimal",
+        default: 1,
+      },
+    ],
+  },
   character_state: {
     label: "캐릭터 승인·경험치·능력치·타이틀",
-    help: "공식 세력·종족은 회원이 적은 프로필과 별도로 관리합니다. 포인트는 기본 능력치 외에 배분할 총 포인트입니다.",
+    help: "공식 세력·종족은 회원이 적은 프로필과 별도로 관리합니다. 포인트는 기본 능력치 외에 배분할 총 포인트입니다. 승인은 ‘캐릭터 신청 심사’에서 바꾸면 신청 상태와 함께 바뀝니다.",
     characterKey: true,
     fields: [
       { key: "approved", label: "승인", type: "checkbox" },
@@ -419,8 +484,22 @@ export const models = {
         type: "number",
         default: 0,
       },
+      {
+        key: "exploreLimit",
+        label: "캐릭터별 하루 탐색 횟수 (0: 탐색 끄기, 한국 시간 기준)",
+        type: "number",
+        default: 0,
+      },
     ],
   },
+};
+models.character_review = {
+  label: "캐릭터 신청 심사",
+  collection: `${P}characters`,
+  review: true,
+  readOnly: true,
+  fields: [],
+  help: "신청(수정 완료)·수정 중인 캐릭터를 승인하거나 수정을 요청하고, 메인·서브·NPC와 운영자 전용 항목을 정합니다. 승인하면 공식 기록의 승인도 함께 바뀝니다.",
 };
 models.log_cleanup = {
   label: "삭제 중인 로그 정리",
@@ -554,7 +633,7 @@ export function buildRecord(section, values, previous, references) {
       ["item", "stat", "title", "choice", "profile"].includes(field.type)
     ) {
       if (field.optional && !value)
-        result = section === "gacha" ? null : undefined;
+        result = ["gacha", "explore"].includes(section) ? null : undefined;
       else {
         const choices = field.options
           ? field.options.map(([id]) => id)
@@ -690,6 +769,23 @@ export function buildRecord(section, values, previous, references) {
       if (!data.effect.stat || !data.effect.amount)
         throw new Error("회복할 능력치와 양을 설정하세요.");
     } else data.effect = { type: data.effect.type };
+  }
+  if (section === "character_fields") {
+    if (
+      !/^[a-z][a-z0-9_]{0,31}$/.test(id) ||
+      ["constructor", "prototype"].includes(id)
+    )
+      throw new Error(
+        "항목 ID는 영문 소문자로 시작하는 영문 소문자·숫자·밑줄 32자 이하입니다.",
+      );
+    if (data.type === "select" && !data.options.length)
+      throw new Error("단일 선택 항목에는 선택지를 입력하세요.");
+    if (
+      data.options.length > 30 ||
+      data.options.some((name) => name.length > 100)
+    )
+      throw new Error("선택지는 30개 이하, 각 100자 이하입니다.");
+    if (data.type !== "select") data.options = [];
   }
   if (section === "couples" && data.first === data.second)
     throw new Error("서로 다른 캐릭터를 선택하세요.");
