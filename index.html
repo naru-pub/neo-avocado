@@ -5,14 +5,29 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>네오 아보카도</title>
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="theme.css" />
   </head>
-  <body>
+  <body class="site">
     <header class="top">
       <h1>
         <img id="siteLogo" alt="" hidden /><span id="siteTitle"
           >네오 아보카도</span
         >
       </h1>
+      <button
+        id="menuToggle"
+        type="button"
+        aria-label="메뉴 열고 닫기"
+        aria-controls="siteMenu"
+      >
+        ☰
+      </button>
+      <nav
+        id="siteMenu"
+        class="site-menu"
+        aria-label="사이트 메뉴"
+        hidden
+      ></nav>
       <a href="admin.html">운영</a>
       <div class="account">
         <span id="whoami"></span>
@@ -24,7 +39,6 @@
         </button>
       </div>
     </header>
-    <nav id="siteMenu" class="site-menu" aria-label="사이트 메뉴" hidden></nav>
     <p id="status" role="status"></p>
     <div id="banners" class="banners" hidden></div>
     <dialog id="intro" class="intro">

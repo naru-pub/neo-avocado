@@ -486,3 +486,19 @@ The remaining rows were finished on 2026-10-14. Nothing has been deployed.
 - Guest secret posts, guest uploads and guest calls (see above).
 - Inline managed uploads in HTML posts: each upload needs its own media
   reference; posts keep one.
+
+## Look and feel
+
+`theme.css` (loaded by `index.html` only; the admin page stays plain)
+reproduces AvocadoEdition's default design as its installer seeds the design
+manager (`install/install_db.php` → `css_config`) and
+`adm/design_form_css.php` renders it: a dark 4px woven pattern on a fixed
+layer, white Dotum 12px text, `#29c7c9` as the point colour, a 200px menu
+fixed on the left with the logo above it, translucent black boxes, black
+inputs and buttons with point-coloured submits, the dashed sub-menu bar, and
+the mmb board's "No." picture header, rounded translucent comments and
+`▶ name ◀` author line. Under 1024px the menu becomes a 50px top bar with a
+menu sliding in from the right, as in `css/style.css`. Without owner menus
+the column shows the original's no-design menu (로그, 멤버목록, 상점, …).
+디자인 colours override the variables; their defaults are the original's.
+No AvocadoEdition image or font files are copied.

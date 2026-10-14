@@ -1,0 +1,413 @@
+/* AvocadoEdition's default design, as its installer seeds the design manager
+   (install/install_db.php → css_config) and adm/design_form_css.php renders it:
+   a dark patterned page, white text, #29c7c9 as the point colour, a 200px
+   menu fixed on the left (menu_pos "left"), translucent black boxes, black
+   inputs and buttons. The owner's 디자인 settings override these variables. */
+:root:has(body.site) {
+  --avocado: #29c7c9;
+  --pit: #bbbbbb;
+  --paper: #333333;
+  --ink: #ffffff;
+  --line: #555555;
+  --surface: rgba(0, 0, 0, 0.5);
+  --input: #000000;
+  --input-ink: #eeeeee;
+  --input-line: #222222;
+  --menu-width: 200px;
+  background: var(--paper);
+}
+body.site {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  color: var(--ink);
+  /* The page shows the fixed layer below (body.site::before). */
+  background: transparent;
+  font-family: "Dotum", "돋움", "Apple SD Gothic Neo", sans-serif;
+  font-size: 12px;
+  line-height: 1.5em;
+}
+/* html.single:before: a fixed layer under the page, so the pattern never ends.
+   skin/member/basic/img/bak_admin_login_top_pattern.png is a 4px weave. */
+body.site::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-color: var(--paper);
+  background-image: var(
+    --site-background,
+    linear-gradient(90deg, #474747 50%, #545454 50%),
+    linear-gradient(#0d0d0d 25%, transparent 25%)
+  );
+  background-size: var(--site-background-size, 4px 4px, 4px 4px);
+}
+body.site a,
+body.site .txt-point {
+  color: var(--avocado);
+}
+body.site ::selection {
+  background: var(--avocado);
+  color: var(--paper);
+}
+body.site *::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+body.site *::-webkit-scrollbar-track {
+  background-color: var(--paper);
+}
+body.site *::-webkit-scrollbar-thumb {
+  background: var(--avocado);
+  border-radius: 6em;
+}
+
+/* Header: logo and menu in a fixed column (#header, #logo, #gnb). */
+body.site > .top {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 50;
+  width: var(--menu-width);
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 0 0 20px;
+  border: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  background-image: var(--site-header-background, none);
+  text-align: center;
+}
+body.site > .top h1 {
+  justify-content: center;
+  margin: 0;
+  padding: 20px 10px;
+  color: var(--ink);
+  font-size: 18px;
+}
+body.site #siteLogo {
+  max-width: 180px;
+}
+body.site > .top > a[href="admin.html"] {
+  order: 3;
+  margin: 0;
+  color: var(--pit);
+}
+body.site .account {
+  order: 2;
+  flex-direction: column;
+  padding: 0 15px;
+}
+body.site .account button {
+  width: 100%;
+}
+body.site #whoami {
+  color: var(--avocado);
+}
+body.site .site-menu {
+  order: 1;
+}
+body.site .site-menu > ul {
+  display: block;
+  padding: 20px 0;
+  border: 0;
+  text-align: center;
+  line-height: 1.5em;
+}
+body.site .site-menu li {
+  display: block;
+  margin-bottom: 20px;
+}
+body.site .site-menu a {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: normal;
+}
+body.site .site-menu a:hover,
+body.site .site-menu a[aria-current="page"] {
+  color: var(--avocado);
+  text-decoration: none;
+}
+body.site .site-menu li ul {
+  padding: 8px 0 0;
+}
+body.site .site-menu li li {
+  margin-bottom: 8px;
+}
+body.site .site-menu li li a {
+  font-size: 12px;
+  opacity: 0.8;
+}
+#menuToggle {
+  display: none;
+}
+
+/* Body: the content column beside the menu (#body .fix-layout). */
+body.site > :not(.top):not(dialog):not(template):not(script) {
+  box-sizing: border-box;
+  max-width: 1000px;
+  margin-left: calc(
+    var(--menu-width) + max(10px, (100% - var(--menu-width) - 1000px) / 2)
+  );
+  margin-right: auto;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+body.site > main,
+body.site > #welcome {
+  padding-top: 30px;
+}
+
+/* Boxes (.theme-box: box_style) and status lines. */
+body.site .card,
+body.site [role="status"]:not(:empty),
+body.site .log-title,
+body.site .log-discussion > .meta {
+  background: var(--surface);
+  color: #eeeeee;
+  border-color: transparent;
+}
+body.site [role="status"]:not(:empty) {
+  border-left: 2px solid var(--avocado);
+}
+body.site .hint,
+body.site .meta,
+body.site #boardDescription {
+  color: var(--pit);
+  opacity: 0.9;
+}
+
+/* Inputs (input_bak) and buttons (btn_default, btn_point). */
+body.site input:not([type="checkbox"]):not([type="radio"]),
+body.site textarea,
+body.site select {
+  border: 1px solid var(--input-line);
+  background: var(--input);
+  color: var(--input-ink);
+}
+body.site input::placeholder,
+body.site textarea::placeholder {
+  color: #777;
+}
+body.site input[type="checkbox"] {
+  accent-color: var(--avocado);
+}
+body.site button {
+  height: auto;
+  min-height: 28px;
+  border: 1px solid #000000;
+  background: #000000;
+  color: #ffffff;
+}
+body.site button:hover:not(:disabled) {
+  border-color: #000000;
+  background: #222222;
+  color: #ffffff;
+}
+body.site button[type="submit"],
+body.site #signIn {
+  border-color: var(--avocado);
+  background: var(--avocado);
+  color: #ffffff;
+}
+body.site button[type="submit"]:hover:not(:disabled),
+body.site #signIn:hover:not(:disabled) {
+  border-color: var(--avocado);
+  background: var(--avocado);
+  filter: brightness(1.1);
+}
+body.site :focus-visible {
+  outline: 2px solid var(--avocado);
+}
+
+/* Sub menu (#submenu: sub_menu) as the community's tabs. */
+body.site .tabs {
+  justify-content: center;
+  gap: 0;
+  margin: 0 0 20px;
+  padding: 0;
+  border-top: 1px dashed var(--line);
+  border-bottom: 1px dashed var(--line);
+  background: var(--surface);
+}
+body.site .tabs button {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: #eeeeee;
+  font-size: 13px;
+  font-weight: 600;
+}
+body.site .tabs button:hover:not(:disabled),
+body.site .tabs button[aria-pressed="true"] {
+  border: 0;
+  background: transparent;
+  color: var(--avocado);
+  filter: none;
+}
+
+/* The mmb log board: picture with a "No." header, comments beside it. */
+body.site .log.card {
+  border-bottom: 0;
+}
+body.site .log-number {
+  margin: 0;
+  padding: 0 10px;
+  line-height: 30px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: bold;
+}
+body.site .log.notice .log-number {
+  color: var(--avocado);
+}
+body.site .log-title {
+  font-size: 12px;
+}
+body.site .comment {
+  margin: 0 0 10px;
+  padding: 5px 15px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #eaeaea;
+  line-height: 1.6em;
+}
+body.site .comment .author {
+  display: block;
+  line-height: 30px;
+  color: #eeeeee;
+  font-size: 12px;
+}
+body.site .log-discussion > .meta .author {
+  color: var(--avocado);
+}
+body.site .log-discussion > .meta .author::before {
+  content: "▶ ";
+}
+body.site .log-discussion > .meta .author::after {
+  content: " ◀";
+}
+body.site time {
+  color: #bbbbbb;
+  font-size: 11px;
+}
+body.site .member-call,
+body.site .hash-tag,
+body.site .log-link,
+body.site .dice {
+  color: var(--avocado);
+}
+body.site .member-call {
+  padding: 0 5px;
+}
+body.site .post-action {
+  margin: 8px 0 0;
+  padding: 8px;
+  border: 1px solid var(--avocado);
+  background: rgba(0, 0, 0, 0.7);
+}
+
+/* Boxes the original paints with its point colour. */
+body.site .character.card,
+body.site #items li,
+body.site #inventory li {
+  border: 1px solid transparent;
+}
+body.site #inventory li {
+  border-color: var(--avocado);
+  padding: 8px;
+}
+body.site dialog {
+  border: 1px solid var(--line);
+  background: #222222;
+  color: var(--ink);
+}
+
+/* Mobile (≤1024px): a 50px bar on top, the menu sliding in from the right. */
+@media (max-width: 1024px) {
+  body.site > .top {
+    bottom: auto;
+    right: 0;
+    width: auto;
+    height: 50px;
+    overflow: visible;
+    flex-direction: row;
+    align-items: center;
+    padding: 0 60px 0 10px;
+  }
+  body.site > .top h1 {
+    padding: 0;
+    font-size: 16px;
+  }
+  body.site #siteLogo {
+    max-height: 36px;
+  }
+  body.site .account {
+    flex-direction: row;
+    margin-left: auto;
+    padding: 0;
+  }
+  body.site .account button {
+    width: auto;
+  }
+  body.site > .top > a[href="admin.html"] {
+    display: none;
+  }
+  #menuToggle {
+    display: block;
+    position: absolute;
+    top: 5px;
+    right: 10px;
+    width: 40px;
+    height: 40px;
+    border-radius: 100%;
+    font-size: 18px;
+  }
+  body.site .site-menu {
+    position: fixed;
+    top: 0;
+    right: -280px;
+    bottom: 0;
+    z-index: 60;
+    width: 280px;
+    overflow-y: auto;
+    background: rgba(0, 0, 0, 0.85);
+  }
+  body.site.open-gnb .site-menu {
+    right: 0;
+  }
+  body.site > :not(.top):not(dialog):not(template):not(script) {
+    margin-left: auto;
+  }
+  body.site > main,
+  body.site > #welcome {
+    padding-top: 70px;
+  }
+  body.site > #status {
+    margin-top: 60px;
+  }
+}
+@media (max-width: 1024px) {
+  body.site .tabs {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+  }
+  body.site .tabs button {
+    flex: none;
+    white-space: nowrap;
+  }
+}
+@media (max-width: 1024px) {
+  body.site.open-gnb #menuToggle {
+    position: fixed;
+    z-index: 70;
+  }
+}

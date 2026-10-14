@@ -819,11 +819,14 @@ async function loadSite() {
   const root = document.documentElement.style;
   for (const [key, variable] of Object.entries(SITE_COLORS))
     if (design.colors[key]) root.setProperty(variable, design.colors[key]);
-  if (design.background)
+  if (design.background) {
+    // The owner's picture tiles at its own size, as background_repeat did.
+    root.setProperty("--site-background-size", "auto");
     root.setProperty(
       "--site-background",
       `url("${encodeURI(design.background)}")`,
     );
+  }
   if (design.headerBackground)
     root.setProperty(
       "--site-header-background",
@@ -858,13 +861,32 @@ function menuLink(menu) {
   link.href = `#${menu.link}`;
   link.onclick = (event) => {
     event.preventDefault();
+    document.body.classList.remove("open-gnb");
     run(() => follow(menu.link));
   };
   return link;
 }
+/** head.php's menu when the owner has not designed one (#no_design_gnb). */
+const DEFAULT_MENUS = [
+  ["로그", "tab:logs"],
+  ["멤버목록", "tab:characters", true],
+  ["상점", "tab:shop", true],
+  ["퀘스트", "tab:quests", true],
+  ["쪽지", "tab:messages", true],
+  ["알림", "tab:calls", true],
+  ["안내", "tab:content"],
+].map(([name, link, memberOnly]) => ({
+  id: link,
+  name,
+  link,
+  parent: null,
+  mobile: true,
+  memberOnly,
+}));
 function renderMenus(menus) {
   const nav = $("siteMenu");
   nav.replaceChildren();
+  if (!menus.length) menus = DEFAULT_MENUS;
   const top = menus.filter(
     (menu) => !menu.parent || !menus.some((row) => row.id === menu.parent),
   );
@@ -873,6 +895,7 @@ function renderMenus(menus) {
   for (const menu of top) {
     const item = document.createElement("li");
     if (!menu.mobile) item.className = "desktop-only";
+    if (menu.memberOnly) item.classList.add("member-only");
     item.append(menuLink(menu));
     const children = menus.filter((row) => row.parent === menu.id);
     if (children.length) {
@@ -927,6 +950,7 @@ function renderBanners(banners) {
   $("introImages").replaceChildren(...intro.map(bannerPicture));
   $("intro").showModal?.();
 }
+$("menuToggle").onclick = () => document.body.classList.toggle("open-gnb");
 $("enterSite").onclick = () => {
   try {
     sessionStorage.setItem("neo-avocado-entered", "1");

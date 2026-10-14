@@ -207,6 +207,7 @@ const server = createServer(async (req, res) => {
       "/media-cleanup.js": "media-cleanup.js",
       "/admin-titles.js": "admin-titles.js",
       "/style.css": "style.css",
+      "/theme.css": "theme.css",
     };
     if (path === "/config.js") {
       res.setHeader("Content-Type", "text/javascript");
@@ -1094,6 +1095,13 @@ try {
     await log.locator(".comment-list img.emoticon").getAttribute("alt"),
     ":웃음:",
   );
+  if (process.env.NARU_MEMBER_SCREENSHOT_PATH) {
+    await page.locator("#tabLogs").click();
+    await page.screenshot({
+      path: process.env.NARU_MEMBER_SCREENSHOT_PATH,
+      fullPage: true,
+    });
+  }
   // A visitor: public boards through the gate, posting as a named guest.
   write(`${P}boards`, "free", {
     name: "자유게시판",
