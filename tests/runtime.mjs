@@ -132,6 +132,19 @@ const host = (operation, args) => {
     return null;
   }
   if (operation === "random") return 0.5;
+  if (operation === "count") {
+    const options = id ?? {};
+    return db
+      .prepare("SELECT id FROM documents WHERE collection=?")
+      .all(collection)
+      .map((row) => get(collection, row.id))
+      .filter(
+        (row) =>
+          Object.entries(options.filter ?? {}).every(
+            ([key, value]) => row.data[key] === value,
+          ) && matches(row, options.where),
+      ).length;
+  }
   if (operation === "list") {
     const options = id;
     const all = db
@@ -857,6 +870,54 @@ try {
     ).reason,
     "access_denied",
   );
+  // Comment counts use ctx.count; guests see only what they may read.
+  await guest("communityData", {
+    collection: `${P}comments`,
+    operation: "add",
+    data: { logId: guestPost.document.id, text: "hi" },
+    options: { guest: { name: "Other", password: "word5678" } },
+  });
+  assert.deepEqual(
+    (
+      await guest("commentCounts", {
+        ids: [guestPost.document.id, "rp-thread"],
+      })
+    ).counts,
+    { [guestPost.document.id]: 1 },
+  );
+  assert.equal(guestPost.document.data.number, 1);
+  // The owner pins and moves through admin.call.
+  const pinned = await call(
+    "moderatePost",
+    { id: guestPost.document.id, notice: true },
+    null,
+    { owner: true },
+  );
+  assert.equal(pinned.document.data.notice, true);
+  // In-post combination under the real runner.
+  put(`${P}items`, "herb", { name: "Herb" });
+  put(`${P}items`, "brew", { name: "Brew" });
+  put(`${P}recipes`, "brew-recipe", {
+    name: "Brew",
+    item: "brew",
+    cost: 0,
+    ingredients: [{ item: "herb", count: 2 }],
+  });
+  for (const id of ["h1", "h2"])
+    put(`${P}inventory`, id, { owner: ME, item: "herb", name: "Herb" });
+  const combined = await call("communityData", {
+    collection: `${P}comments`,
+    operation: "add",
+    data: {
+      logId: "rp-thread",
+      text: "",
+      action: "combine",
+      materials: ["h1", "h2"],
+      character: rpHero,
+    },
+  });
+  assert.equal(combined.document.data.actions[0].success, true);
+  assert.equal(get(`${P}inventory`, "h1"), null);
   const frame = await guest("site");
   assert.equal(frame.member, false);
   assert.equal(frame.level, 1);

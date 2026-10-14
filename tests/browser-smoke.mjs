@@ -159,6 +159,11 @@ function deliver({ notify, broadcast, data }) {
 }
 const ctx = {
   member: { id: ME },
+  // A stand-in for the runner's PBKDF2; tests/runtime.mjs runs the real one.
+  password: {
+    hash: (text) => `hash:${text}`,
+    verify: (text, hash) => hash === `hash:${text}`,
+  },
   now: Date.now(),
   random: () => 0.5,
   notify: (member, data) => pending.live.push({ notify: member, data }),
@@ -198,6 +203,7 @@ const server = createServer(async (req, res) => {
       "/admin.js": "admin.js",
       "/admin-model.js": "admin-model.js",
       "/admin-cleanup.js": "admin-cleanup.js",
+      "/admin-import.js": "admin-import.js",
       "/media-cleanup.js": "media-cleanup.js",
       "/admin-titles.js": "admin-titles.js",
       "/style.css": "style.css",
@@ -260,8 +266,10 @@ try {
       return route.fulfill({ status: 204, headers });
     const isOwner =
       request.headers().authorization === `Bearer ${"t".repeat(43)}`;
+    const isVisitor = !request.headers().authorization;
     assert.ok(
       isOwner ||
+        isVisitor ||
         request.headers().authorization === `Bearer m.${"x".repeat(43)}` ||
         request.headers().authorization === `Bearer m.${"y".repeat(43)}`,
     );
@@ -328,9 +336,16 @@ try {
         ),
       };
     } else if (["_call", "_read"].includes(parts[0])) {
-      const key = `${ctx.member.id}:${Math.floor(Date.now() / 60000)}`;
+      const key = `${isVisitor ? "visitor" : ctx.member.id}:${Math.floor(Date.now() / 60000)}`;
       // Read-only exports are declared by their modules (readOnly), as Naru reads them.
       const [module, exported] = parts.slice(1).join("/").split(":");
+      // Visitors reach only the exports a module opens to them (visitors).
+      if (isVisitor && !(modules[module]?.visitors ?? []).includes(exported))
+        return route.fulfill({
+          status: 401,
+          headers,
+          json: { error: { code: "AUTH_REQUIRED", message: "Sign in" } },
+        });
       const readonly =
         parts[0] === "_read" ||
         (modules[module]?.readOnly ?? []).includes(exported);
@@ -356,9 +371,12 @@ try {
           violation = true;
           throw new Error("read-only functions cannot write");
         };
-        const functionCtx = readonly
-          ? { ...ctx, add: forbid, set: forbid, delete: forbid }
+        const callerCtx = isVisitor
+          ? { ...ctx, member: null, visitor: true }
           : ctx;
+        const functionCtx = readonly
+          ? { ...callerCtx, add: forbid, set: forbid, delete: forbid }
+          : callerCtx;
         result = {
           result: await modules[parts.slice(1).join("/").split(":")[0]][
             parts.slice(1).join("/").split(":")[1]
@@ -404,7 +422,7 @@ try {
             filter: options.filter,
           })
         : true;
-      if (!isOwner && !native)
+      if (isVisitor || (!isOwner && !native))
         return route.fulfill({
           status: 403,
           headers,
@@ -444,7 +462,7 @@ try {
     const url = new URL(ws.url());
     const socket = {
       ws,
-      member: url.searchParams.get("ticket").replace(/^ticket-/, ""),
+      member: url.searchParams.get("ticket")?.replace(/^ticket-/, "") ?? null,
       topics: (url.searchParams.get("topics") ?? "").split(",").filter(Boolean),
     };
     sockets.add(socket);
@@ -1076,6 +1094,51 @@ try {
     await log.locator(".comment-list img.emoticon").getAttribute("alt"),
     ":웃음:",
   );
+  // A visitor: public boards through the gate, posting as a named guest.
+  write(`${P}boards`, "free", {
+    name: "자유게시판",
+    kind: "text",
+    enabled: true,
+    listLevel: 1,
+    readLevel: 1,
+    writeLevel: 1,
+    commentLevel: 1,
+    secret: "optional",
+    categories: [],
+  });
+  await page.locator("#signOut").click();
+  await page.locator("#guestIdentity").waitFor({ state: "visible" });
+  assert.equal(await page.locator("#tabShop").isVisible(), false);
+  // Only the level-1 board is listed to a visitor.
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll("#board option")]
+        .map((option) => option.value)
+        .join() === "free",
+  );
+  await page.locator("#guestName").fill("길손");
+  await page.locator("#guestPassword").fill("pass1234");
+  await page.locator("#logText").fill("손님 첫 글 #인사");
+  await page.locator('#logForm [type="submit"]').click();
+  await page.locator("#logs .log").filter({ hasText: "손님 첫 글" }).waitFor();
+  const guestLog = [...table(`${P}logs`).values()].find(
+    (row) => row.data.guest?.name === "길손",
+  );
+  assert.equal(guestLog.data.number, 1);
+  assert.equal(JSON.stringify(guestLog.data).includes("hash"), false);
+  assert.equal(
+    table(`${P}guest_keys`).get(`logs-${guestLog.id}`).data.hash,
+    "hash:pass1234",
+  );
+  const posted = page.locator("#logs .log").filter({ hasText: "손님 첫 글" });
+  await posted.locator(".edit").click();
+  await page.locator('#editorFields [name="password"]').fill("wrong");
+  await page.locator('#editorFields [name="text"]').fill("고친 글");
+  await page.locator('#editorForm [type="submit"]').click();
+  await page.locator("#editorStatus").filter({ hasText: "비밀번호" }).waitFor();
+  await page.locator('#editorFields [name="password"]').fill("pass1234");
+  await page.locator('#editorForm [type="submit"]').click();
+  await page.locator("#logs .log").filter({ hasText: "고친 글" }).waitFor();
   assert.deepEqual(errors, []);
   const screenshot =
     process.env.NARU_SCREENSHOT_PATH ?? "/tmp/neo-avocado-browser.png";

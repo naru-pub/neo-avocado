@@ -542,7 +542,8 @@ function communityCollection(collection) {
               : "INVALID_REQUEST";
       throw Object.assign(
         new Error(REASONS[result.reason] ?? "요청을 처리하지 못했습니다."),
-        { code },
+        // The gate's own reason, read like a ctx.fail detail.
+        { code, details: { reason: result.reason } },
       );
     }
     return result;
@@ -2568,9 +2569,10 @@ $("signOut").onclick = () =>
     state.shopLoaded = false;
     $("editor").close();
     clearPrivateViews();
+    // The page becomes a visitor's at once; revoking the sign-in follows.
+    await visit();
     await member.signOut();
     say("로그아웃했습니다.");
-    await visit();
   });
 $("profileForm").onsubmit = (event) => {
   event.preventDefault?.();
