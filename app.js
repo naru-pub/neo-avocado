@@ -175,7 +175,13 @@ async function run(action) {
       }
     }
     say(
-      reasonOf(error) ?? MESSAGES[error?.code] ?? "요청을 처리하지 못했습니다.",
+      // A collection that does not exist yet: the owner has not signed in to
+      // admin.html, whose first sign-in creates them all.
+      error?.code === "NOT_FOUND" && /^Collection /.test(error.message)
+        ? "사이트를 준비하고 있습니다. 운영자가 운영 화면에서 로그인하면 시작됩니다."
+        : (reasonOf(error) ??
+            MESSAGES[error?.code] ??
+            "요청을 처리하지 못했습니다."),
     );
   }
 }
@@ -743,7 +749,8 @@ $("editProfile").onclick = () => {
 async function start() {
   await connect();
   state.member = await state.naru.members.session();
-  await loadSite();
+  // The site's frame is decoration: without it the default design shows.
+  await loadSite().catch((error) => console.error(error));
   if (!state.member) return visit();
   const platform = await state.member.membership();
   state.admission = platform.status;

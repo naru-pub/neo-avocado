@@ -176,7 +176,12 @@ function fakeDatabase(rows = {}) {
     // 정한 결과를 돌려준다.
     async call(name, args = null) {
       // The site frame is read on every load; tests that care set database.site.
-      if (name === functionReference("site"))
+      if (name === functionReference("site")) {
+        if (database.unprepared)
+          throw Object.assign(
+            new Error("Collection neo_avocado_design does not exist."),
+            { code: "NOT_FOUND" },
+          );
         return {
           ok: true,
           level: 2,
@@ -186,6 +191,7 @@ function fakeDatabase(rows = {}) {
           banners: [],
           ...database.site,
         };
+      }
       if (name === functionReference("commentCounts")) {
         const counts = {};
         for (const id of args.ids)
@@ -1494,4 +1500,23 @@ test("a visitor falls back to the gate when posts are members-only", async () =>
         call.args?.collection === LOGS && call.args.operation === "list",
     ),
   );
+});
+
+test("before the owner's first sign-in, the page says the site is being prepared", async () => {
+  const database = fakeDatabase();
+  database.signedIn = false;
+  database.unprepared = true;
+  // Collections are missing: every read the visitor makes fails NOT_FOUND.
+  database.visitor.call = async () => {
+    throw Object.assign(
+      new Error("Collection neo_avocado_boards does not exist."),
+      {
+        code: "NOT_FOUND",
+      },
+    );
+  };
+  const { $, settle } = await page(database);
+  await settle();
+  assert.equal($("welcome").hidden, false);
+  assert.match($("status").textContent, /사이트를 준비하고 있습니다/);
 });
