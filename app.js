@@ -116,6 +116,9 @@ const state = {
   boards: [],
   board: "default",
   tag: null,
+  // Visitors read posts natively until the collections turn out not to be
+  // world-readable; then the gate serves them.
+  visitorNative: true,
   live: null,
   newPost: null,
   ownPosts: new Set(),
@@ -509,10 +512,21 @@ async function connect() {
   state.naru = createNaru(config.site ? { site: config.site } : undefined);
 }
 function communityCollection(collection) {
-  // Rules give members native reads; visitors read through the gate.
+  // The board rule serves members and, where posts are world-readable,
+  // visitors; a visitor falls back to the gate if they are not.
   const nativeReads =
-    Boolean(state.member) &&
+    (Boolean(state.member) || state.visitorNative) &&
     [COLLECTION.logs, COLLECTION.comments].includes(collection);
+  const reader = () => (state.member ?? state.naru).collection(collection);
+  const native = async (read, fallback) => {
+    try {
+      return await read(reader());
+    } catch (error) {
+      if (state.member || error?.code !== "ACCESS_DENIED") throw error;
+      state.visitorNative = false;
+      return fallback();
+    }
+  };
   const invoke = async (operation, id, data, options = {}) => {
     // Reads go through the gate's read-only export, on the read budget.
     const gate = ["get", "getMany", "list"].includes(operation)
@@ -553,11 +567,17 @@ function communityCollection(collection) {
       (await invoke("getMany", undefined, undefined, { ids })).documents,
     get: async (id) =>
       nativeReads
-        ? state.member.collection(collection).get(id)
+        ? native(
+            (handle) => handle.get(id),
+            async () => (await invoke("get", id)).document,
+          )
         : (await invoke("get", id)).document,
     list: async (options) => {
       if (!nativeReads) return invoke("list", undefined, undefined, options);
-      const page = await state.member.collection(collection).list(options);
+      const page = await native(
+        (handle) => handle.list(options),
+        () => invoke("list", undefined, undefined, gateOptions(options)),
+      );
       // Native reads return complete visible posts; trim previews only in this page.
       return collection === COLLECTION.logs
         ? {
@@ -589,6 +609,12 @@ function communityCollection(collection) {
     },
   };
 }
+/** A native list's options as the gate takes them: tags by name, not predicate. */
+function gateOptions(options) {
+  const { where, ...rest } = options;
+  return state.tag && where ? { ...rest, tag: state.tag } : rest;
+}
+
 /** The text of an HTML body, for a preview cut short. */
 function htmlText(html) {
   const holder = document.createElement("div");
@@ -1023,7 +1049,7 @@ const LOG_SORT = [
 const TAG_FIELDS = 5;
 /** Members' native reads match a tag over tag0…tag4; the gate builds this itself. */
 const tagOptions = (tag) =>
-  state.member
+  state.member || state.visitorNative
     ? {
         where: {
           any: Array.from({ length: TAG_FIELDS }, (_, index) => ({

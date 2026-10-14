@@ -415,14 +415,14 @@ try {
         after: url.searchParams.get("after"),
       };
       const predicate = native
-        ? await boardRules.scope(ctx, {
+        ? await boardRules.scope(isVisitor ? { ...ctx, member: null } : ctx, {
             collection: name,
             operation: id ? "get" : "list",
             id,
             filter: options.filter,
           })
         : true;
-      if (isVisitor || (!isOwner && !native))
+      if (!isOwner && !native)
         return route.fulfill({
           status: 403,
           headers,

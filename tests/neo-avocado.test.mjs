@@ -308,8 +308,15 @@ async function page(database) {
     ["createNaru"],
     function () {
       this.setExport("createNaru", () => ({
-        collection: () => {
-          throw new Error("visitor handles are not used");
+        // Visitors read posts natively only where they are world-readable.
+        collection: (name) => {
+          if (database.visitorWorld) return database.member.collection(name);
+          const denied = async () => {
+            throw Object.assign(new Error("Members only"), {
+              code: "ACCESS_DENIED",
+            });
+          };
+          return { get: denied, list: denied };
         },
         call: database.visitor.call,
         live: database.visitor.live,
@@ -598,8 +605,13 @@ test("a guest posts with a name and password, and must give the password to edit
     ],
   });
   database.signedIn = false;
+  database.visitorWorld = true;
   const { $, submit, settle } = await page(database);
   const post = $("logs").querySelector(".log");
+  // World-readable posts are read natively, through the board rule.
+  assert.ok(
+    database.calls.some((call) => call.method === "list" && call.name === LOGS),
+  );
   assert.equal(post.querySelector(".author").textContent, "길손 (손님)");
   assert.equal(post.querySelector(".edit").hidden, false);
   assert.equal($("logForm").hidden, false);
@@ -1468,4 +1480,25 @@ test("HTML posts render sanitized, without scripts or handlers", async () => {
   assert.equal(body.querySelector("b").textContent, "굵게");
   assert.equal(body.querySelector("script"), null);
   assert.equal(body.querySelector("img").hasAttribute("onerror"), false);
+});
+
+test("a visitor falls back to the gate when posts are members-only", async () => {
+  const database = fakeDatabase({
+    neo_avocado_boards: [
+      {
+        id: "free",
+        data: { name: "자유", kind: "text", listLevel: 1, readLevel: 1 },
+      },
+    ],
+    [LOGS]: [{ id: "p", data: { board: "free", text: "공개 글" } }],
+  });
+  database.signedIn = false;
+  const { $ } = await page(database);
+  assert.match($("logs").textContent, /공개 글/);
+  assert.ok(
+    database.visitor.calls.some(
+      (call) =>
+        call.args?.collection === LOGS && call.args.operation === "list",
+    ),
+  );
 });

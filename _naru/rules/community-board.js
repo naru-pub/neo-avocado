@@ -12,7 +12,7 @@ import {
 const LOGS = `${PREFIX}logs`;
 const COMMENTS = `${PREFIX}comments`;
 export async function scope(ctx, { collection, operation, id, filter }) {
-  if (!ctx.member) return false;
+  // Visitors (ctx.member null, with world read) have the guest level 1.
   const actor = await communityAccess(ctx);
   if (collection === COMMENTS) {
     const logId =
@@ -45,13 +45,15 @@ export async function scope(ctx, { collection, operation, id, filter }) {
       { ne: ["deleted", true] },
       actor.role === "moderator"
         ? true
-        : {
-            any: [
-              { ne: ["secret", true] },
-              { eq: ["owner", ctx.member.id] },
-              { eq: [{ metadata: "createdBy" }, ctx.member.id] },
-            ],
-          },
+        : ctx.member
+          ? {
+              any: [
+                { ne: ["secret", true] },
+                { eq: ["owner", ctx.member.id] },
+                { eq: [{ metadata: "createdBy" }, ctx.member.id] },
+              ],
+            }
+          : { ne: ["secret", true] },
     ],
   };
 }

@@ -21,22 +21,23 @@ reproduce the existing demo. SDK additions require the owner's approval.
 
 ## Requirements and evidence
 
-| Workflow                                          | Reference                                                   | Status                                                                                                                                                                                                                                                                 |
-| ------------------------------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Member login and profiles                         | `bbs/register*`, `mypage`                                   | Identity, profile, application approval/closed admission/bans implemented; upload authority remains unresolved; approved read budget implemented locally                                                                                                               |
-| Drawing logs and comments                         | `bbs/write*`, board skins                                   | Gateway CRUD, ownership/revisions, moderator edit/delete and resumable child cleanup implemented; board levels/categories/secrets/previews implemented; posting as a character, server dice and [[nick]] calls implemented; public/guest access and rich posts pending |
-| In-post roleplay actions                          | `skin/board/mmb/*`, `extend/mmb.lib.php`                    | Dice, exploration with a Korean-day limit counted on request, explore drop table and item use logged into the comment implemented; in-post combination (action H) deferred                                                                                             |
-| Character profiles                                | `mypage/character`, `adm/character_article*`                | Create/read/edit/delete, main character, owner-defined custom fields with public/owner/admin visibility, editing → submitted → approved review, public applicant list and main/sub/NPC implemented; managed uploads for image fields pending                           |
-| Character relationships, couples, outfits, titles | `mypage/character`, `couple`, `adm/title*`                  | Relationships, wardrobe, owner-managed couples/title grants and member title selection implemented; bulk grants/revocation implemented; ownership gallery review and title deletion cleanup implemented                                                                |
-| Stats, experience and ranks                       | `adm/status*`, `adm/exp*`, `adm/level*`                     | Allocation, recovery, official progression, rank display and owner administration implemented                                                                                                                                                                          |
-| Shop, attendance and gacha                        | `shop`, `extend/item.lib.php`                               | Member flows, private history, exchange costs and owner catalog/gacha/recipe forms implemented                                                                                                                                                                         |
-| Inventory use, sale, gift and crafting            | `inventory`, `adm/recipi*`                                  | Use eligibility, sale/gift/craft, character linking, owner inventory grants and validated catalog effects implemented                                                                                                                                                  |
-| Quests                                            | `adm/quest*` and their callers                              | Reference admin fields implemented; scheduled member display and category pagination implemented; reference has no claim/reward endpoint                                                                                                                               |
-| Private messages and notifications                | `bbs/memo*`, `ajax/*call*`                                  | Private inbox/sent/read/reply/delete, receive preference, bulk costs, live unread notices, new-post notices, [[nick]] calls and comment notices with call history implemented                                                                                          |
-| Community administration                          | `adm/admin.menu*.php`                                       | Owner member status/role controls and existing catalog/economy controls implemented; broader board moderation pending; owner cleanup recovery implemented                                                                                                              |
-| Navigation, content, themes and emoticons         | `adm/menu*`, `adm/content*`, `adm/design*`, `adm/emoticon*` | Emoticon owner CRUD, comment catalogue/picker and safe keyword rendering implemented; managed desktop/mobile content implemented; navigation and themes pending                                                                                                        |
-| Existing data import                              | SQL schema and uploaded files                               | Pending: explicit ID/member mapping and media handling; never copy PHP credentials                                                                                                                                                                                     |
-| Browser and server acceptance                     | Naru release checklist                                      | 98 unit/page tests, actual-runner QuickJS/SQLite checks and synthetic Chrome pass; Chrome peaks at 10 mutations/30 and 81 reads/120. Real deployment acceptance pending                                                                                                |
+| Workflow                                          | Reference                                                                                | Status                                                                                                                                                                                                        |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Member login and profiles                         | `bbs/register*`, `mypage`                                                                | Implemented: platform membership, approval/closed admission/bans, nicknames, receive preferences                                                                                                              |
+| Guests and public boards                          | GnuBoard level 1, `bbs/write.php` (`wr_name`, `wr_password`)                             | Implemented: level-1 boards and pages readable without sign-in; guests post, comment, edit and delete with a name and password (PBKDF2 via `ctx.password`, hashes kept apart)                                 |
+| Drawing logs and comments                         | `bbs/write*`, `skin/board/mmb/*`                                                         | Implemented: levels, categories, secrets, previews, character speakers, dice, calls, HTML posts (sanitized), log numbers, `@N` links, `#tags`, comment counts                                                 |
+| In-post roleplay actions                          | `skin/board/mmb/*`, `extend/mmb.lib.php`                                                 | Implemented: exploration with a Korean-day limit, explore table, item use and combination (action H)                                                                                                          |
+| Character profiles                                | `mypage/character`, `adm/character_article*`                                             | Implemented: custom fields with public/owner/admin visibility, editing → submitted → approved review, main/sub/NPC, managed uploads for image fields                                                          |
+| Character relationships, couples, outfits, titles | `mypage/character`, `couple`, `adm/title*`                                               | Implemented: relationships, wardrobe, couples, title grants, bulk grant/revoke, ownership review, title deletion cleanup                                                                                      |
+| Stats, experience and ranks                       | `adm/status*`, `adm/exp*`, `adm/level*`                                                  | Implemented: allocation, recovery, official progression, rank display, owner administration                                                                                                                   |
+| Shop, attendance and gacha                        | `shop`, `extend/item.lib.php`                                                            | Implemented: member flows, private history, exchange costs, owner catalog/gacha/recipe forms                                                                                                                  |
+| Inventory use, sale, gift and crafting            | `inventory`, `adm/recipi*`                                                               | Implemented: use eligibility, sale/gift/craft, character linking, owner grants, catalog effects                                                                                                               |
+| Quests                                            | `adm/quest*`                                                                             | Implemented as the reference has it (admin fields and scheduled display); the reference has no claim endpoint                                                                                                 |
+| Private messages and notifications                | `bbs/memo*`, `ajax/*call*`                                                               | Implemented: mailbox, receive preference, costs, live unread notices, new-post notices, `[[nick]]` calls and comment notices (also from guests)                                                               |
+| Community administration                          | `adm/admin.menu*.php`                                                                    | Implemented: member status/roles, catalog/economy, cleanup recovery; moderators pin notices and move posts between boards                                                                                     |
+| Navigation, content, themes and emoticons         | `adm/menu*`, `adm/content*`, `adm/design*`, `adm/banner*`, `adm/intro*`, `adm/emoticon*` | Implemented: two-level menus, main slides and intro, design (title, logo, backgrounds, font, colors as CSS variables), content pages, emoticons                                                               |
+| Existing data import                              | SQL schema and uploaded files                                                            | Implemented: `scripts/avocado-import.mjs` (dump → documents, explicit member mapping, files rewritten onto a media base) and a resumable owner loader in `admin.html`                                         |
+| Browser and server acceptance                     | Naru release checklist                                                                   | 111 unit/page tests, actual-runner QuickJS/SQLite checks and real-SDK Chrome (member, owner and guest) pass; Chrome peaks at 10/30 mutations and 85/120 reads. Live deployment acceptance is the owner's step |
 
 Naru replaces PHP hosting, account passwords, email verification and SQL server
 maintenance. These platform implementation details are not new application features.
@@ -405,3 +406,83 @@ calls (`ajax/board_call.php`). Nothing has been deployed.
 - Guest posting (visitor calls are being added to the SDK separately).
 - Theme-specific fields (`ar_theme`) and form sizes (`ar_size`), which are
   presentation details of PHP themes.
+
+## Completion: guests, boards, frame and import
+
+The remaining rows were finished on 2026-10-14. Nothing has been deployed.
+
+- **Guests (level 1).** `communityRead` and `communityData` are opened to
+  visitors (`export const visitors`). A visitor has GnuBoard's guest level 1
+  and reaches boards, logs, comments, emoticons and authors' nicknames only
+  (`getMany` of profiles returns `{ nick }`). A guest names themselves and
+  gives a 4–64 character password; the hash goes to the admin/admin
+  `neo_avocado_guest_keys` collection, never into the post, because members
+  read posts natively. Edits and deletions verify it. Guests cannot post
+  secret posts (they could never read them back), use characters, actions or
+  `[[nick]]` calls, or upload; they may link an HTTPS picture. A guest comment
+  still notifies the post's member author. Log/comment cascades delete the
+  keys. Content pages with read level 1 are public too. The board rule
+  treats a visitor (`ctx.member` null) as level 1, so world-readable posts
+  are read natively; the page falls back to the gate on `ACCESS_DENIED`.
+- **Board features.** Each log takes the board's next number from
+  `neo_avocado_counters` (one document per board). `@N` opens that log;
+  `#tag` searches the board. `where` cannot test array membership, so the
+  first five tags are also stored as `tag0`…`tag4`; the gate builds the tag
+  predicate itself and never matches secret posts. Notices sort first in the
+  same query (`[["notice","desc"], [createdAt,"desc"]]`), so pinning costs no
+  extra read. `commentCounts` is read-only and uses `ctx.count`.
+  `moderatePost` lets moderators (and the owner) pin and move a post;
+  moving renumbers it on the target board.
+- **HTML posts.** A board with `html` on takes bodies up to 12,000
+  characters, shown through the content pages' DOMPurify profile. Previews,
+  tags and calls use the text of the HTML. Inline pictures are HTTPS
+  addresses; only the post's main picture is a managed upload.
+- **Combination (action H).** A comment with `action: "combine"` and one to
+  three of the speaker's items matches recipes by item multiset, charges the
+  recipe cost and makes the item for the character. A miss uses up the
+  materials, as the original did; reusable items are kept.
+- **Image fields.** Image-type custom fields take uploads. Each holds a media
+  reference `characters/<id>#<field>`, at most three per character, moved on
+  edit and released when the character is deleted.
+- **Site frame.** `content/site:site` (visitors, read-only) returns the
+  design, menus and banners in one call. Admin sections: 디자인
+  (`neo_avocado_design`, fixed ID `site`), 메뉴 (`neo_avocado_menus`; links are
+  `board:ID`, `content:ID`, `tab:name` or HTTPS), 메인 슬라이드·인트로
+  (`neo_avocado_banners`, scheduled in Korean time).
+- **Import.** `scripts/avocado-import.mjs` reads a mysqldump and writes
+  `import.json`; `admin.html → AvocadoEdition 가져오기` loads it in batches of
+  25, creating only absent documents, so a stopped import resumes. Members
+  are mapped explicitly (`mb_id` → Naru member ID); content of unmapped
+  members keeps their old nickname (`importedAuthor`) and belongs to nobody.
+  Passwords, e-mail and IP addresses are never read. Naru stamps
+  `createdAt` at import, so posts are written oldest first and keep the
+  original time in `postedAt`. Item effects need setting again.
+
+### Deploy steps
+
+1. Create, each with read and write set to **admin**:
+   `neo_avocado_guest_keys`, `neo_avocado_counters`, `neo_avocado_design`,
+   `neo_avocado_menus` and `neo_avocado_banners`.
+2. Sign in to `admin.html` again so the owner grant covers them (and
+   `neo_avocado_messages` for imports).
+3. Publish the site files together (new modules:
+   `functions/community/boards.js`, `functions/content/site.js`).
+4. To open a board to visitors, set its list/read levels to 1; to let guests
+   write, set write/comment levels to 1. Set `neo_avocado_logs` and
+   `neo_avocado_comments` read access to **world**, keeping the
+   `community-board` rule: the rule gives visitors level 1 and hides secret
+   posts, and visitors then read posts natively. Left at member, visitors
+   are served through the `communityRead` gate instead (slower, uncached).
+5. Existing logs have no `number`; they show without one, and new logs start
+   at 1 unless a counter document is set.
+
+### Not ported, with reasons
+
+- Polls (`lib/poll.lib.php` is included but never rendered) and popup
+  layers (commented out of `adm/admin.menu100.php`).
+- Votes (`bo_use_good`) are used only by the unused `theme/basic` skin.
+- Threaded comment replies (`wr_comment_reply`), visitor statistics, mail,
+  SMS, RSS and captcha are platform plumbing or unused by the mmb skin.
+- Guest secret posts, guest uploads and guest calls (see above).
+- Inline managed uploads in HTML posts: each upload needs its own media
+  reference; posts keep one.
