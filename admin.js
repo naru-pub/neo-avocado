@@ -1,6 +1,7 @@
 import { releaseMediaReferences } from "./media-cleanup.js";
 import { applyTitles, deleteTitle } from "./admin-titles.js";
 import { resumeCleanup } from "./admin-cleanup.js";
+import { importDocuments, runImport } from "./admin-import.js";
 import { config } from "./config.js";
 import { functionReference } from "./function-references.js";
 import {
@@ -727,5 +728,30 @@ $("holdingsSearch").onkeydown = (event) => {
   if (event.key === "Enter") {
     event.preventDefault();
     run(() => load());
+  }
+};
+
+$("importForm").onsubmit = async (event) => {
+  event.preventDefault();
+  const button = $("importForm").querySelector('[type="submit"]');
+  button.disabled = true;
+  try {
+    const file = $("importFile").files?.[0];
+    const documents = importDocuments(JSON.parse(await file.text()));
+    if (!confirm(`문서 ${documents.length}개를 가져올까요?`)) return;
+    const result = await runImport(owner, documents, (progress) => {
+      $("importStatus").textContent =
+        `${progress.written + progress.skipped} / ${progress.total} (새로 씀 ${progress.written}, 건너뜀 ${progress.skipped})`;
+    });
+    $("importStatus").textContent =
+      `가져오기를 마쳤습니다. 새로 씀 ${result.written}, 이미 있어 건너뜀 ${result.skipped}.`;
+    references.characters = await all("neo_avocado_characters");
+    references.profiles = await all("neo_avocado_profiles");
+    await load();
+  } catch (error) {
+    $("importStatus").textContent =
+      `${message(error)} 같은 파일로 다시 가져오면 이어집니다.`;
+  } finally {
+    button.disabled = false;
   }
 };
