@@ -17,6 +17,10 @@ import {
   nextNumber,
   tagFields,
   tagWhere,
+  TEXT_LIMIT,
+  HTML_LIMIT,
+  plainText,
+  preview,
 } from "../../modules/shared.js";
 import { memberSheet, presentCharacter } from "../../modules/characters.js";
 import {
@@ -170,8 +174,8 @@ export async function communityData(
                   category: row.data.category ?? "",
                   image: row.data.image ?? null,
                   secret: row.data.secret === true,
-                  text: (row.data.text ?? "").slice(0, 150),
-                  truncated: (row.data.text ?? "").length > 150,
+                  format: row.data.format === "html" ? "html" : "text",
+                  ...preview(row.data),
                 },
               }
             : {
@@ -357,7 +361,13 @@ export async function communityData(
       !(board.data.categories ?? []).includes(value.category)
     )
       return failure("invalid_input");
-    value.text = text(data.text ?? "", 2000);
+    // Boards with HTML on (bo_use_dhtml_editor) take sanitized-on-display HTML.
+    value.format =
+      previous?.data.format ?? (board.data.html === true ? "html" : "text");
+    value.text = text(
+      data.text ?? "",
+      value.format === "html" ? HTML_LIMIT : TEXT_LIMIT,
+    );
     value.image =
       data.image === previous?.data.image
         ? data.image
@@ -382,7 +392,10 @@ export async function communityData(
       ? { text: value.text, recipients: [] }
       : await resolveCalls(ctx, value.text, previous?.data.text ?? "");
     value.text = calls.text;
-    Object.assign(value, tagFields(value.text));
+    Object.assign(
+      value,
+      tagFields(value.format === "html" ? plainText(value.text) : value.text),
+    );
     if (!previous) value.number = await nextNumber(ctx, boardId);
   }
   if (kind === "comments") {

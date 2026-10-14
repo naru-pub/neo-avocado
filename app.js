@@ -5,7 +5,7 @@ import {
   recoverPendingUploads,
 } from "./media-cleanup.js";
 import { emoticonContent } from "./emoticons.js";
-import { renderContent } from "./content-renderer.js";
+import { renderContent, sanitizedFragment } from "./content-renderer.js";
 import { functionReference } from "./function-references.js";
 import { config } from "./config.js";
 
@@ -554,16 +554,19 @@ function communityCollection(collection) {
       return collection === COLLECTION.logs
         ? {
             ...page,
-            documents: page.documents.map((doc) => ({
-              ...doc,
-              data: {
-                ...doc.data,
-                text: (doc.data.text ?? "").slice(0, 150),
-                ...((doc.data.text ?? "").length > 150
-                  ? { truncated: true }
-                  : {}),
-              },
-            })),
+            documents: page.documents.map((doc) => {
+              const raw = doc.data.text ?? "";
+              if (raw.length <= 150) return doc;
+              const text = doc.data.format === "html" ? htmlText(raw) : raw;
+              return {
+                ...doc,
+                data: {
+                  ...doc.data,
+                  text: text.slice(0, 150),
+                  truncated: true,
+                },
+              };
+            }),
           }
         : page;
     },
@@ -577,6 +580,12 @@ function communityCollection(collection) {
       while (!result.done) result = await invoke("delete", id, undefined, rest);
     },
   };
+}
+/** The text of an HTML body, for a preview cut short. */
+function htmlText(html) {
+  const holder = document.createElement("div");
+  holder.append(sanitizedFragment(document, html));
+  return holder.textContent.replace(/\s+/g, " ").trim();
 }
 function showAdmission(status) {
   state.admission = status;
@@ -1133,7 +1142,12 @@ async function logItem(log) {
   if (log.data.locked)
     item.querySelector(".log-text").textContent =
       "비밀글입니다. 본문을 볼 수 없습니다.";
-  else item.querySelector(".log-text").append(postText(log.data.text));
+  else if (log.data.format === "html" && !log.data.truncated) {
+    item.querySelector(".log-text").classList.add("rich-text");
+    item
+      .querySelector(".log-text")
+      .append(sanitizedFragment(document, log.data.text));
+  } else item.querySelector(".log-text").append(postText(log.data.text));
   if (log.data.dice && !log.data.locked) {
     item.querySelector(".log-dice").hidden = false;
     item.querySelector(".log-dice").textContent = diceText(log);
@@ -1190,10 +1204,10 @@ async function logItem(log) {
             ]),
         {
           name: "text",
-          label: "설명",
+          label: current.data.format === "html" ? "본문 (HTML)" : "설명",
           value: current.data.text,
           multiline: true,
-          max: 2000,
+          max: current.data.format === "html" ? 12000 : 2000,
         },
       ],
       async ({ text, title, category, secret = false, password }) => {
@@ -2785,6 +2799,8 @@ async function loadBoards() {
 function configureBoard() {
   const board = state.boards.find((row) => row.id === state.board);
   $("boardDescription").textContent = board?.data.description ?? "";
+  $("logText").maxLength = board?.data.html ? 12000 : 2000;
+  $("logHtmlHint").hidden = !board?.data.html;
   $("logImage").required = Boolean(state.member) && board?.data.kind !== "text";
   $("logImageUrl").required = !state.member && board?.data.kind !== "text";
   $("logForm").hidden =

@@ -2417,3 +2417,41 @@ test("logs are numbered per board, tagged for search, counted and moderated", as
     false,
   );
 });
+
+test("HTML boards store longer rich bodies, tag their text and preview it plainly", async () => {
+  const { ctx, table } = fakeCtx();
+  table(`${P}boards`).set("rich", { ...PUBLIC_BOARD, html: true });
+  const body = `<p style="color:#fff">#소식 ${"가".repeat(3000)}</p>`;
+  const saved = (
+    await communityData(ctx, {
+      collection: `${P}logs`,
+      operation: "add",
+      data: { board: "rich", text: body, image: null },
+    })
+  ).document;
+  assert.equal(saved.data.format, "html");
+  assert.deepEqual(saved.data.tags, ["소식"]);
+  ctx.member = { id: "m-2" };
+  const [row] = (
+    await communityRead(ctx, {
+      collection: `${P}logs`,
+      operation: "list",
+      options: { board: "rich" },
+    })
+  ).documents;
+  assert.equal(row.data.truncated, true);
+  assert.equal(row.data.text.startsWith("#소식 가"), true);
+  assert.equal(row.data.text.length, 150);
+  // Plain boards keep their 2,000-character limit.
+  await assert.rejects(
+    communityData(ctx, {
+      collection: `${P}logs`,
+      operation: "add",
+      data: {
+        board: "default",
+        text: "x".repeat(2001),
+        image: "https://a.b/c.png",
+      },
+    }),
+  );
+});

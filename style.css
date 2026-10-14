@@ -758,3 +758,19 @@ h1 {
     display: none;
   }
 }
+.rich-text img {
+  max-width: 100%;
+  height: auto;
+}
+.log-number {
+  margin: 0;
+  color: var(--pit);
+  font-size: 11px;
+}
+.log.notice {
+  border-color: var(--avocado);
+}
+.hash-tag,
+.log-link {
+  color: var(--avocado);
+}

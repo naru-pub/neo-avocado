@@ -58,6 +58,26 @@ export async function nextNumber(ctx, board) {
   return number;
 }
 
+/** Body limits: plain logs as before, HTML posts like content pages. */
+export const TEXT_LIMIT = 2000;
+export const HTML_LIMIT = 12000;
+
+/** A rough text view of an HTML body, for previews, tags and calls. */
+export const plainText = (value) =>
+  String(value ?? "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+/** A list preview: at most 150 characters, HTML reduced to its text when cut. */
+export function preview(data) {
+  const raw = data.text ?? "";
+  if (raw.length <= 150) return { text: raw, truncated: false };
+  const text = data.format === "html" ? plainText(raw) : raw;
+  return { text: text.slice(0, 150), truncated: true };
+}
+
 export const MAX_TAGS = 5;
 const TAG = /#([0-9a-zA-Z가-힣_]{1,30})/g;
 

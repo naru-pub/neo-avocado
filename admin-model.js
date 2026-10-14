@@ -110,6 +110,11 @@ export const models = {
       { key: "commentLevel", label: "댓글 등급", type: "number", default: 2 },
       { key: "categories", label: "분류 (쉼표로 구분)", type: "tokens" },
       {
+        key: "html",
+        label: "HTML 본문 허용 (최대 12,000자, 표시할 때 정리)",
+        type: "checkbox",
+      },
+      {
         key: "actions",
         label: "댓글 행동 허용 (탐색·아이템 사용)",
         type: "checkbox",

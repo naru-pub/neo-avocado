@@ -1448,3 +1448,24 @@ test("log numbers, @N links, #tags, notices first and comment counts", async () 
   // Members are not moderators: no pin or move.
   assert.equal(items[0].querySelector(".pin").hidden, true);
 });
+
+test("HTML posts render sanitized, without scripts or handlers", async () => {
+  const database = fakeDatabase({
+    [PROFILES]: [me],
+    [LOGS]: [
+      {
+        id: "rich",
+        data: {
+          image: "a.png",
+          format: "html",
+          text: '<b>굵게</b><img src="https://a.b/x.png" onerror="alert(1)"><script>alert(2)</script>',
+        },
+      },
+    ],
+  });
+  const { $ } = await page(database);
+  const body = $("logs").querySelector(".log-text");
+  assert.equal(body.querySelector("b").textContent, "굵게");
+  assert.equal(body.querySelector("script"), null);
+  assert.equal(body.querySelector("img").hasAttribute("onerror"), false);
+});
