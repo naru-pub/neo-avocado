@@ -2961,7 +2961,7 @@ test("a settlement is settled by a moderator, granting experience and money, the
   assert.equal(await refusal(posts.remove(ctx, { id: request.id })), "settled");
 });
 
-test("a board search reaches every post, 500 a call, continuing from its cursor", async () => {
+test("a board search reaches every post at once and pages what it finds", async () => {
   const { ctx, table } = fakeCtx();
   table(`${P}boards`).set("free", {
     name: "자유",
@@ -2969,23 +2969,28 @@ test("a board search reaches every post, 500 a call, continuing from its cursor"
     listLevel: 1,
     readLevel: 1,
   });
+  table(`${P}characters`).set("c-1", { name: "보물찾기단" });
   for (let n = 0; n < 650; n += 1)
     table(`${P}logs`).set(`p${n}`, {
       board: "free",
       owner: "m-1",
-      text: n === 649 ? "아주 오래된 보물" : `글 ${n}`,
+      text: n === 649 ? "아주 오래된 보물" : n < 25 ? `조개 ${n}` : `글 ${n}`,
+      ...(n === 300 ? { character: "c-1" } : {}),
     });
-  const first = await posts.search(ctx, { board: "free", text: "보물" });
-  assert.deepEqual(first.documents, []);
-  assert.ok(first.nextCursor);
+  const ids = (page) => page.documents.map((row) => row.id).sort();
+  // The oldest post, and one written as a character named so.
+  assert.deepEqual(
+    ids(await posts.search(ctx, { board: "free", text: "보물" })),
+    ["p300", "p649"],
+  );
+  // 25 finds: 20, then 5.
+  const first = await posts.search(ctx, { board: "free", text: "조개" });
+  assert.equal(first.documents.length, 20);
   const second = await posts.search(ctx, {
     board: "free",
-    text: "보물",
+    text: "조개",
     after: first.nextCursor,
   });
-  assert.deepEqual(
-    second.documents.map((row) => row.id),
-    ["p649"],
-  );
+  assert.equal(second.documents.length, 5);
   assert.equal(second.nextCursor, null);
 });

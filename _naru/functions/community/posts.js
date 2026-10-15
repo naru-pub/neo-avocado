@@ -1,6 +1,7 @@
 import {
   PREFIX,
   PROFILES,
+  CHARACTERS,
   CHARACTER_STATE,
   HISTORY,
   WALLETS,
@@ -224,16 +225,17 @@ async function readableBoard(ctx, id) {
 }
 
 /**
- * Searches a board (the skins' 검색) over all its posts, 500 at a time:
- * those the caller may read whose title, text, speaker, guest name or
- * author's nickname holds `text`, newest first. `after` continues where the
- * last call's scan stopped (`nextCursor`, null at the board's first post).
+ * Searches a board (the skins' 검색) over all its posts, 20 a page, newest
+ * first: those the caller may read whose title or text holds `text`, or
+ * whose author's nickname or character's name does. `after` is the last
+ * page's nextCursor. Naru does the matching (`contains`), so a search reads
+ * only what it finds.
  */
 export async function search(
   ctx,
-  { board: id, text: wanted, after: from = null } = {},
+  { board: id, text: wanted, after = null } = {},
 ) {
-  if (from !== null && typeof from !== "string")
+  if (after !== null && typeof after !== "string")
     ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
       reason: "invalid_input",
     });
@@ -242,45 +244,50 @@ export async function search(
       reason: "invalid_input",
     });
   const { access } = await readableBoard(ctx, id);
-  const needle = wanted.trim().toLowerCase();
-  const visible = readableBy(ctx, access);
-  const rows = [];
-  let after = from;
-  for (let page = 0; page < 5; page += 1) {
-    const result = await ctx.list(LOGS, {
-      filter: { board: id },
-      sort: [[{ metadata: "createdAt" }, "desc"]],
-      size: 100,
-      after,
-    });
-    rows.push(
-      ...result.documents.filter((row) => !row.data.deleted && visible(row)),
-    );
-    after = result.nextCursor;
-    if (!after) break;
-  }
-  const owners = [...new Set(rows.map(author).filter(Boolean))].slice(0, 60);
-  const nicks = new Map(
-    (owners.length ? await ctx.getMany(PROFILES, owners) : [])
-      .filter(Boolean)
-      .map((row) => [row.id, row.data.nick]),
-  );
-  const found = rows.filter((row) =>
-    [
-      row.data.title,
-      row.data.format === "html"
-        ? plainText(row.data.text ?? "")
-        : row.data.text,
-      row.data.speaker?.name,
-      row.data.guest?.name,
-      nicks.get(author(row)),
-    ].some(
-      (value) =>
-        typeof value === "string" && value.toLowerCase().includes(needle),
-    ),
-  );
-  return { documents: found, nextCursor: after };
+  const text = wanted.trim();
+  // The members and characters named so, up to 100 each.
+  const [members, characters] = await Promise.all([
+    ctx.list(PROFILES, { where: { contains: ["nick", text] }, size: 100 }),
+    ctx.list(CHARACTERS, { where: { contains: ["name", text] }, size: 100 }),
+  ]);
+  const ids = (page) => page.documents.map((row) => row.id);
+  const found = [
+    { contains: ["title", text] },
+    { contains: ["text", text] },
+    ...(members.documents.length
+      ? [
+          { in: ["owner", ids(members)] },
+          { in: [{ metadata: "createdBy" }, ids(members)] },
+        ]
+      : []),
+    ...(characters.documents.length
+      ? [{ in: ["character", ids(characters)] }]
+      : []),
+  ];
+  return ctx.list(LOGS, {
+    filter: { board: id },
+    where: {
+      all: [{ ne: ["deleted", true] }, readable(ctx, access), { any: found }],
+    },
+    sort: [[{ metadata: "createdAt" }, "desc"]],
+    size: 20,
+    after,
+  });
 }
+
+/** readableBy as a predicate: for a list, which posts the caller may read. */
+const readable = (ctx, access) =>
+  access.role === "moderator"
+    ? true
+    : ctx.member
+      ? {
+          any: [
+            { ne: ["secret", true] },
+            { eq: ["owner", ctx.member.id] },
+            { eq: [{ metadata: "createdBy" }, ctx.member.id] },
+          ],
+        }
+      : { ne: ["secret", true] };
 
 /**
  * A Q&A board's questions (skin/board/qna), ten to a page, newest first:

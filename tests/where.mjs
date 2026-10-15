@@ -1,6 +1,7 @@
 // The `where` predicate language of Naru SDK 1.1.0, for the in-memory fakes:
 // values match only their own JSON type, a missing field matches only `ne`, and
-// ranges compare strings or numbers.
+// ranges compare strings or numbers. contains folds A–Z only, as Naru does;
+// toLowerCase folds more, which no test here depends on.
 const RANGE = {
   gt: (a, b) => a > b,
   gte: (a, b) => a >= b,
@@ -31,6 +32,11 @@ export function matches(row, where) {
   if (operator === "in") return value.some((option) => same(actual, option));
   if (operator === "has")
     return Array.isArray(actual) && actual.some((item) => same(item, value));
+  if (operator === "contains")
+    return (
+      typeof actual === "string" &&
+      actual.toLowerCase().includes(value.toLowerCase())
+    );
   if (!Object.hasOwn(RANGE, operator))
     throw new Error(`Unknown operator ${operator}`);
   return (

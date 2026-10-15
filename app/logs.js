@@ -207,34 +207,29 @@ $("clearTag").onclick = () =>
   });
 /**
  * The board's search results (the skins' 검색), newest first, over every
- * post: the search reads 500 posts a call, going on by itself to 2,000 and
- * then on request, to the board's first post.
+ * post, 20 at a time; 더 찾기 reads the next 20.
  */
 let searchFrom = null;
+let searchFound = 0;
 async function showSearch({ more = false } = {}) {
   if (!more) {
     searchFrom = null;
+    searchFound = 0;
     $("logs").replaceChildren();
   }
-  let found = more ? $("logs").children.length : 0;
-  for (let call = 0; call < 4; call += 1) {
-    const page = await caller().call("community/posts:search", {
-      board: state.board,
-      text: state.search,
-      after: searchFrom,
-    });
-    await preloadNicks(page.documents);
-    for (const log of page.documents)
-      $("logs").append(
-        await logItem(kindOf() === "qna" ? log : previewOf(log)),
-      );
-    found += page.documents.length;
-    searchFrom = page.nextCursor;
-    if (!searchFrom) break;
-  }
+  const page = await caller().call("community/posts:search", {
+    board: state.board,
+    text: state.search,
+    after: searchFrom,
+  });
+  await preloadNicks(page.documents);
+  for (const log of page.documents)
+    $("logs").append(await logItem(kindOf() === "qna" ? log : previewOf(log)));
+  searchFound += page.documents.length;
+  searchFrom = page.nextCursor;
   $("tagFilter").hidden = false;
   $("tagName").textContent =
-    `‘${state.search}’ 검색 결과 ${found}건${searchFrom ? " (이전 글은 더 찾기)" : ""}`;
+    `‘${state.search}’ 검색 결과 ${searchFound}건${searchFrom ? " 이상" : ""}`;
   $("searchMore").hidden = !searchFrom;
   $("logPages").hidden = true;
   routeList();
