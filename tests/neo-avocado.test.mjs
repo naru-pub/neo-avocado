@@ -338,44 +338,37 @@ async function page(database) {
     },
     { context },
   );
-  const app = new SourceTextModule(
-    await readFile(new URL("app.js", root), "utf8"),
-    {
-      context,
-      importModuleDynamically: async () => {
-        await sdk.link(() => {
-          throw new Error("no imports");
-        });
-        if (sdk.status !== "evaluated") await sdk.evaluate();
-        return sdk;
-      },
-    },
-  );
-  const emoticons = new SourceTextModule(
-    await readFile(new URL("emoticons.js", root), "utf8"),
-    { context },
-  );
-  await emoticons.link(() => {
-    throw new Error("unexpected emoticon dependency");
-  });
-  const purifier = new SourceTextModule(
-    await readFile(new URL("vendor/purify.es.mjs", root), "utf8"),
-    { context },
-  );
-  await purifier.link(() => {
-    throw new Error("unexpected purifier dependency");
-  });
-  const renderer = new SourceTextModule(
-    await readFile(new URL("content-renderer.js", root), "utf8"),
-    { context },
-  );
-  await renderer.link(() => purifier);
-  await app.link(async (specifier) =>
-    specifier === "./emoticons.js"
-      ? emoticons
-      : specifier === "./content-renderer.js"
-        ? renderer
-        : config,
+  // The page's modules, linked as the browser links them: each import
+  // resolved against the module importing it, config.js replaced and the SDK
+  // served by the fake.
+  // One instance per file, even when two importers ask at once: the map
+  // holds the pending load.
+  const modules = new Map();
+  const load = (url) => {
+    if (url.pathname.endsWith("/config.js")) return config;
+    if (!modules.has(url.href))
+      modules.set(
+        url.href,
+        readFile(url, "utf8").then(
+          (source) =>
+            new SourceTextModule(source, {
+              context,
+              identifier: url.href,
+              importModuleDynamically: async () => {
+                await sdk.link(() => {
+                  throw new Error("no imports");
+                });
+                if (sdk.status !== "evaluated") await sdk.evaluate();
+                return sdk;
+              },
+            }),
+        ),
+      );
+    return modules.get(url.href);
+  };
+  const app = await load(new URL("app.js", root));
+  await app.link((specifier, referencing) =>
+    load(new URL(specifier, referencing.identifier)),
   );
   await app.evaluate();
   const $ = (id) => window.document.getElementById(id);

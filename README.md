@@ -91,11 +91,61 @@ HTML은 [DOMPurify](https://github.com/cure53/DOMPurify)로 정리하여 표시�
 `npm run vendor:content`로 잠긴 의존성에서 배포용 자산을 갱신하고,
 `npm run vendor:check`로 자산이 의존성과 일치하는지 검사합니다.
 
-서버 함수 호출은 SDK 1.1.0의 `member.call("neo-avocado:함수", 인자)` 또는
-`member.read("neo-avocado:함수", 인자)` 형식입니다. 하위 폴더가 있으면
-`member.read("community/boards:list")`는 `_naru/functions/community/boards.js`의
-`list`를 호출합니다. 파일 경로와 함수는 `:`로 구분합니다.
+## 코드 둘러보기
 
-서버 함수는 `_naru/functions/`에 기능별로 나뉘어 있으며, 공통 코드는
-`_naru/modules/shared.js`를 정적 import합니다. 별도의 번들 생성은 필요하지
-않습니다. 자세한 구조는 [_naru/README.md](_naru/README.md)를 참고하세요.
+기능 하나가 화면 파일 하나와 서버 함수 파일로 나뉘어 있습니다. 화면 쪽은 브라우저에서
+그대로 도는 JavaScript 모듈이고, 서버 함수는 나루가 사이트 소유자 권한으로 실행합니다.
+돈·재고·주사위처럼 회원이 마음대로 정하면 안 되는 값은 서버 함수만 바꿉니다.
+
+| 기능 | 화면 | 서버 함수 |
+| --- | --- | --- |
+| 로그인·가입·닉네임 | `app.js` | `_naru/functions/community/membership.js` |
+| 게시판·로그·댓글 | `app/logs.js`, `app/posts.js` | `_naru/functions/community/data.js`, `boards.js` |
+| 캐릭터 | `app/characters.js` | `_naru/functions/characters/` |
+| 상점·인벤토리·제작 | `app/shop.js` | `_naru/functions/economy/` |
+| 쪽지 | `app/messages.js` | `_naru/functions/community/messages.js` |
+| 알림(호출) | `app/calls.js` | `_naru/functions/community/calls.js` |
+| 퀘스트·안내 페이지 | `app/content.js` | `_naru/functions/content/` |
+| 디자인·메뉴·배너 | `app/site.js` | `_naru/functions/content/site.js` |
+| 새 글·알림 실시간 수신 | `app/live.js` | |
+| 운영 화면 | `admin.html`, `admin.js`, `admin-model.js` | `_naru/functions/characters/review.js` |
+
+`app/core.js`는 모든 화면이 함께 쓰는 것(컬렉션 이름, 상태, 오류 표시, 편집 창)입니다.
+
+화면은 서버 함수를 `"파일 경로:함수 이름"`으로 부릅니다.
+
+```js
+// app/shop.js: 출석 보상 버튼
+$("daily").onclick = () =>
+  spend(
+    "economy/shop:daily",
+    null,
+    (result) => `출석 보상을 받았습니다. 잔액 ${result.balance} 아보.`,
+  );
+
+function spend(reference, args, success) {
+  return run(async () => {
+    const result = await state.member.call(reference, args);
+    say(success(result));
+    await loadShop();
+  });
+}
+```
+
+```js
+// _naru/functions/economy/shop.js
+export async function daily(ctx) {
+  const current = await wallet(ctx);
+  const today = kstDay(ctx.now);
+  if (current.lastDaily === today)
+    ctx.fail("CONFLICT", "오늘은 이미 받았습니다.", { reason: "already" });
+  const balance = await pay(ctx, current, -DAILY_REWARD, { lastDaily: today });
+  await record(ctx, "daily", { delta: DAILY_REWARD, balance });
+  return { balance };
+}
+```
+
+`ctx.fail`은 호출을 멈추고 그때까지의 쓰기를 모두 되돌립니다. `call`은 그 메시지로
+오류를 던지고, `run`이 그 메시지를 화면에 그대로 보여 줍니다. 공통 코드는 `_naru/modules/`에 있고 서버 함수가 정적 import합니다.
+번들 생성은 필요하지 않습니다. 자세한 구조는 [_naru/README.md](_naru/README.md)를
+참고하세요.

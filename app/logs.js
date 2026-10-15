@@ -1,0 +1,626 @@
+// Boards, logs and comments: reading, writing, tags and emoticons.
+
+import { emoticonContent } from "../emoticons.js";
+import { sanitizedFragment } from "../content-renderer.js";
+import {
+  $,
+  allDocuments,
+  caller,
+  COLLECTION,
+  COMMENT_PAGE,
+  communityCollection,
+  edit,
+  formatTime,
+  guestCredentials,
+  LOG_PAGE,
+  mine,
+  preloadNicks,
+  run,
+  say,
+  showTab,
+  state,
+  uploadManaged,
+  withGuestPassword,
+} from "./core.js";
+import {
+  actionItem,
+  diceText,
+  postText,
+  speakerLabel,
+  wireItemChoice,
+  wireSpeakerChoice,
+} from "./posts.js";
+import { showNewPost } from "./live.js";
+
+const LOG_SORT = [
+  ["notice", "desc"],
+  [{ metadata: "createdAt" }, "desc"],
+];
+/** A tag search, as members' native reads and the gate both take it. */
+const tagOptions = (tag) => ({ where: { has: ["tags", tag] } });
+export async function loadLogs({ more = false } = {}) {
+  if (!state.member && !state.boards.length) return $("logs").replaceChildren();
+  const logs = communityCollection(COLLECTION.logs);
+  const page = await logs.list({
+    filter: { board: state.board },
+    // Notices (bo_notice) sort first: true above false and unset.
+    sort: LOG_SORT,
+    size: LOG_PAGE,
+    after: more ? state.logCursor : null,
+    ...(state.tag ? tagOptions(state.tag) : {}),
+  });
+  await preloadNicks(page.documents);
+  if (!more) {
+    $("logs").replaceChildren();
+    showNewPost(null);
+  }
+  $("tagFilter").hidden = !state.tag;
+  $("tagName").textContent = state.tag ? `#${state.tag} 태그가 달린 로그` : "";
+  const shown = [];
+  for (const log of page.documents) {
+    const item = await logItem(log);
+    if (log.data.notice) item.classList.add("notice");
+    $("logs").append(item);
+    shown.push([log.id, item]);
+  }
+  state.logCursor = page.nextCursor;
+  $("moreLogs").hidden = !page.nextCursor;
+  await showCommentCounts(shown);
+}
+/** Fills each log's "댓글 (n)" from one read-only count call. */
+async function showCommentCounts(entries) {
+  const ids = entries.map(([id]) => id).filter(Boolean);
+  if (!ids.length) return;
+  // Counts are a decoration: a page without them is still a page.
+  const counts = await caller()
+    .call("community/boards:commentCounts", {
+      ids: ids.slice(0, 20),
+    })
+    .then(
+      (result) => result.counts ?? {},
+      () => ({}),
+    );
+  for (const [id, item] of entries)
+    if (typeof counts[id] === "number")
+      item.querySelector(".comments summary").textContent =
+        `댓글 (${counts[id]})`;
+}
+/** Shows log No. `number` of the current board, as the skin's log link (?log=N&single=Y). */
+export async function openLogNumber(number) {
+  const page = await communityCollection(COLLECTION.logs).list({
+    filter: { board: state.board, number },
+    size: 1,
+  });
+  const log = page.documents[0];
+  if (!log) return say("자료를 찾을 수 없습니다.");
+  await preloadNicks([log]);
+  $("logFocus").replaceChildren(await logItem(log));
+  $("logFocusPanel").hidden = false;
+  $("logFocusPanel").scrollIntoView?.();
+}
+$("closeFocus").onclick = () => {
+  $("logFocus").replaceChildren();
+  $("logFocusPanel").hidden = true;
+};
+/** Lists the current board's logs with `tag` (mmb's hash search). */
+export async function searchTag(tag) {
+  showTab("logs");
+  state.tag = tag;
+  await loadLogs();
+}
+$("clearTag").onclick = () =>
+  run(async () => {
+    state.tag = null;
+    await loadLogs();
+  });
+export async function logItem(log) {
+  const item = $("logTemplate").content.firstElementChild.cloneNode(true);
+  item.dataset.id = log.id;
+  item.querySelector(".log-number").textContent =
+    `${log.data.notice ? "공지 · " : ""}${log.data.number ? `No. ${log.data.number}` : ""}`;
+  const pin = item.querySelector(".pin");
+  const move = item.querySelector(".move");
+  pin.hidden = move.hidden = state.role !== "moderator" || log.data.locked;
+  pin.textContent = log.data.notice ? "공지 해제" : "공지로";
+  pin.onclick = () =>
+    run(async () => {
+      const { document: saved } = await caller().call(
+        "community/boards:moderatePost",
+        {
+          id: log.id,
+          notice: !log.data.notice,
+        },
+      );
+      item.replaceWith(await logItem(saved));
+      await loadLogs();
+    });
+  move.onclick = () =>
+    edit(
+      "다른 게시판으로 이동",
+      [
+        {
+          name: "board",
+          label: "게시판",
+          value: log.data.board ?? "default",
+          options: state.boards.map((row) => [row.id, row.data.name]),
+        },
+      ],
+      async ({ board }) => {
+        await caller().call("community/boards:moderatePost", {
+          id: log.id,
+          board,
+        });
+        item.remove();
+      },
+    );
+  const image = item.querySelector(".log-image");
+  if (log.data.image && !log.data.locked) image.src = log.data.image;
+  else image.remove();
+  if (log.data.locked)
+    item.querySelector(".log-text").textContent =
+      "비밀글입니다. 본문을 볼 수 없습니다.";
+  else if (log.data.format === "html" && !log.data.truncated) {
+    item.querySelector(".log-text").classList.add("rich-text");
+    item
+      .querySelector(".log-text")
+      .append(sanitizedFragment(document, log.data.text));
+  } else item.querySelector(".log-text").append(postText(log.data.text));
+  if (log.data.dice && !log.data.locked) {
+    item.querySelector(".log-dice").hidden = false;
+    item.querySelector(".log-dice").textContent = diceText(log);
+  }
+  item.querySelector(".log-title").textContent =
+    `${log.data.secret ? "🔒 " : ""}${log.data.title ?? ""}${log.data.category ? ` · ${log.data.category}` : ""}`;
+  item.querySelector(".author").replaceChildren(await speakerLabel(log));
+  item.querySelector("time").textContent = formatTime(log.createdAt);
+  const remove = item.querySelector(".delete");
+  const guestPost = !state.member && Boolean(log.data.guest);
+  remove.hidden = !mine(log) && state.role !== "moderator" && !guestPost;
+  const change = item.querySelector(".edit");
+  change.hidden =
+    Boolean(log.data.locked) ||
+    (!mine(log) && state.role !== "moderator" && !guestPost);
+  const beginEdit = (current) =>
+    edit(
+      "로그 수정",
+      [
+        ...(guestPost
+          ? [
+              {
+                name: "password",
+                label: "비밀번호",
+                type: "password",
+                required: true,
+                max: 64,
+              },
+            ]
+          : []),
+        { name: "title", label: "제목", value: current.data.title, max: 120 },
+        {
+          name: "category",
+          label: "분류",
+          value: current.data.category ?? "",
+          options: [
+            ["", "분류 없음"],
+            ...(
+              state.boards.find(
+                (row) => row.id === (current.data.board ?? "default"),
+              )?.data.categories ?? []
+            ).map((name) => [name, name]),
+          ],
+        },
+        ...(guestPost
+          ? []
+          : [
+              {
+                name: "secret",
+                label: "비밀글",
+                value: current.data.secret === true,
+                type: "checkbox",
+              },
+            ]),
+        {
+          name: "text",
+          label: current.data.format === "html" ? "본문 (HTML)" : "설명",
+          value: current.data.text,
+          multiline: true,
+          max: current.data.format === "html" ? 12000 : 2000,
+        },
+      ],
+      async ({ text, title, category, secret = false, password }) => {
+        const saved = await communityCollection(COLLECTION.logs).set(
+          log.id,
+          { ...current.data, text, title, category, secret },
+          {
+            condition: { revision: current.revision },
+            ...(guestPost ? { guest: { password } } : {}),
+          },
+        );
+        item.replaceWith(await logItem(saved));
+      },
+    );
+  change.onclick = () =>
+    log.data.truncated
+      ? run(async () =>
+          beginEdit(await communityCollection(COLLECTION.logs).get(log.id)),
+        )
+      : beginEdit(log);
+  if (log.data.truncated && !log.data.locked) {
+    const expand = document.createElement("button");
+    expand.type = "button";
+    expand.textContent = "본문 보기";
+    expand.onclick = () =>
+      run(async () => {
+        const full = await communityCollection(COLLECTION.logs).get(log.id);
+        item.replaceWith(
+          await logItem({ ...full, data: { ...full.data, truncated: false } }),
+        );
+      });
+    item.querySelector(".log-text").after(expand);
+  }
+  remove.onclick = () =>
+    guestPost
+      ? withGuestPassword("로그 삭제", async (guest) => {
+          await communityCollection(COLLECTION.logs).delete(log.id, { guest });
+          item.remove();
+        })
+      : run(async () => {
+          if (!confirm("이 로그를 지울까요?")) return;
+          await communityCollection(COLLECTION.logs).delete(log.id);
+          item.remove();
+        });
+  // 댓글은 펼쳤을 때 처음 읽는다.
+  const comments = item.querySelector(".comments");
+  comments.hidden = Boolean(log.data.locked);
+  let cursor;
+  const load = (more) =>
+    run(async () => {
+      const page = await communityCollection(COLLECTION.comments).list({
+        filter: { logId: log.id },
+        sort: [[{ metadata: "createdAt" }, "asc"]],
+        size: COMMENT_PAGE,
+        after: more ? cursor : null,
+      });
+      await preloadNicks(page.documents);
+      const list = item.querySelector(".comment-list");
+      if (!more) list.replaceChildren();
+      for (const comment of page.documents)
+        list.append(await commentItem(comment));
+      cursor = page.nextCursor;
+      item.querySelector(".more-comments").hidden = !cursor;
+    });
+  comments.ontoggle = () => {
+    if (comments.open && cursor === undefined) load(false);
+  };
+  item.querySelector(".more-comments").onclick = () => load(true);
+  const form = item.querySelector(".comment-form");
+  const picker = document.createElement("details");
+  const summary = document.createElement("summary");
+  summary.textContent = "이모티콘";
+  const choices = document.createElement("div");
+  choices.className = "emoticon-choices";
+  picker.append(summary, choices);
+  form.prepend(picker);
+  picker.ontoggle = () => {
+    if (picker.open && !choices.childNodes.length)
+      run(async () => {
+        const definitions = await loadEmoticons();
+        for (const row of definitions) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.title = row.data.name;
+          button.setAttribute("aria-label", row.data.name);
+          button.append(
+            emoticonContent(document, row.data.name, [row]),
+            row.data.name,
+          );
+          button.onclick = () => {
+            const input = form.querySelector(".comment-text");
+            input.setRangeText(
+              row.data.name,
+              input.selectionStart,
+              input.selectionEnd,
+              "end",
+            );
+            input.focus();
+          };
+          choices.append(button);
+        }
+        if (!definitions.length)
+          choices.textContent = "등록된 이모티콘이 없습니다.";
+      });
+  };
+
+  const speakerChoice = form.querySelector(".comment-character");
+  const actionChoice = form.querySelector(".comment-action");
+  const itemChoice = form.querySelector(".comment-item");
+  const materialsChoice = form.querySelector(".comment-materials");
+  wireSpeakerChoice(speakerChoice);
+  wireItemChoice(itemChoice);
+  // Combination takes up to three of the inventory's items (make_1…make_3).
+  actionChoice.onchange = () =>
+    run(async () => {
+      materialsChoice.hidden = actionChoice.value !== "combine";
+      if (materialsChoice.hidden || materialsChoice.dataset.loaded) return;
+      materialsChoice.dataset.loaded = "1";
+      state.postItems ??= await allDocuments(COLLECTION.inventory, {
+        owner: state.member.id,
+      });
+      for (const row of state.postItems) {
+        const option = document.createElement("option");
+        option.value = row.id;
+        option.textContent = row.data.name ?? row.data.item;
+        materialsChoice.append(option);
+      }
+    });
+  const board = state.boards.find(
+    (row) => row.id === (log.data.board ?? "default"),
+  );
+  form.querySelector(".comment-actions").hidden =
+    !state.member || !board?.data.actions;
+  form.hidden =
+    board?.data.enabled === false ||
+    (state.role !== "moderator" &&
+      state.level < (board?.data.commentLevel ?? 2));
+  form.onsubmit = (event) => {
+    event.preventDefault?.();
+    run(async () => {
+      const text = form.querySelector(".comment-text").value.trim();
+      const dice = form.querySelector(".comment-dice").checked;
+      const character = speakerChoice.value;
+      const action = actionChoice.value;
+      const used = itemChoice.value;
+      const materials = [...materialsChoice.selectedOptions].map(
+        (option) => option.value,
+      );
+      if (action === "combine" && (!materials.length || materials.length > 3))
+        return say("조합 재료를 1~3개 선택해 주세요.");
+      if (!text && !dice && !action && !used) return;
+      const guest = state.member ? null : guestCredentials();
+      const saved = await communityCollection(COLLECTION.comments).add(
+        {
+          logId: log.id,
+          text,
+          dice,
+          ...(character && !guest ? { character } : {}),
+          ...(action && !guest ? { action } : {}),
+          ...(action === "combine" && !guest ? { materials } : {}),
+          ...(used && !guest ? { item: used } : {}),
+        },
+        guest ? { guest } : {},
+      );
+      item.querySelector(".comment-list").append(await commentItem(saved));
+      form.querySelector(".comment-text").value = "";
+      form.querySelector(".comment-dice").checked = false;
+      actionChoice.value = "";
+      if (used || action) {
+        // The inventory changed: read it again when next needed.
+        state.postItems = null;
+        state.shopLoaded = false;
+        itemChoice.replaceChildren(itemChoice.options[0]);
+        delete itemChoice.dataset.loaded;
+        materialsChoice.replaceChildren();
+        materialsChoice.hidden = true;
+        delete materialsChoice.dataset.loaded;
+      }
+    });
+  };
+  return item;
+}
+async function commentItem(comment) {
+  const item = document.createElement("li");
+  item.className = "comment";
+  const author = document.createElement("strong");
+  author.className = "author";
+  author.append(await speakerLabel(comment));
+  item.append(author, " ");
+  if (comment.data.dice) {
+    const dice = document.createElement("span");
+    dice.className = "dice";
+    dice.textContent = diceText(comment);
+    item.append(dice, " ");
+  }
+  item.append(postText(comment.data.text ?? "", await loadEmoticons()));
+  for (const action of Array.isArray(comment.data.actions)
+    ? comment.data.actions
+    : [])
+    item.append(actionItem(action));
+  const guestComment = !state.member && Boolean(comment.data.guest);
+  if (mine(comment) || state.role === "moderator" || guestComment) {
+    const change = document.createElement("button");
+    change.type = "button";
+    change.className = "edit";
+    change.textContent = "수정";
+    change.onclick = () =>
+      edit(
+        "댓글 수정",
+        [
+          ...(guestComment
+            ? [
+                {
+                  name: "password",
+                  label: "비밀번호",
+                  type: "password",
+                  required: true,
+                  max: 64,
+                },
+              ]
+            : []),
+          {
+            name: "text",
+            label: "댓글",
+            value: comment.data.text,
+            multiline: true,
+            max: 500,
+          },
+        ],
+        async ({ text, password }) => {
+          if (!text && !comment.data.dice)
+            throw new Error("댓글을 입력해 주세요.");
+          const saved = await communityCollection(COLLECTION.comments).set(
+            comment.id,
+            { ...comment.data, text },
+            {
+              condition: { revision: comment.revision },
+              ...(guestComment ? { guest: { password } } : {}),
+            },
+          );
+          item.replaceWith(await commentItem(saved));
+        },
+      );
+    item.append(" ", change);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "delete";
+    remove.textContent = "삭제";
+    remove.onclick = () =>
+      guestComment
+        ? withGuestPassword("댓글 삭제", async (guest) => {
+            await communityCollection(COLLECTION.comments).delete(comment.id, {
+              guest,
+            });
+            item.remove();
+          })
+        : run(async () => {
+            await communityCollection(COLLECTION.comments).delete(comment.id);
+            item.remove();
+          });
+    item.append(" ", remove);
+  }
+  return item;
+}
+$("tabLogs").onclick = () =>
+  run(async () => {
+    showTab("logs");
+    if (state.newPost) await loadLogs();
+  });
+$("moreLogs").onclick = () => run(() => loadLogs({ more: true }));
+$("logForm").onsubmit = (event) => {
+  event.preventDefault?.();
+  run(async () => {
+    const board = state.boards.find((row) => row.id === state.board);
+    // Visitors cannot upload; they may link an HTTPS picture instead.
+    const guest = state.member ? null : guestCredentials();
+    const file = guest ? null : $("logImage").files?.[0];
+    const address = guest ? $("logImageUrl").value.trim() : "";
+    if (!file && !address && board?.data.kind !== "text")
+      return say("그림을 골라 주세요.");
+    say("올리는 중…");
+    const image = file ? await uploadManaged(file) : null;
+    const character = guest ? "" : $("logCharacter").value;
+    const log = await communityCollection(COLLECTION.logs).add(
+      {
+        image: image?.url ?? (address || null),
+        text: $("logText").value.trim(),
+        board: state.board,
+        title: $("logTitle").value.trim(),
+        category: $("logCategory").value,
+        secret: guest ? false : $("logSecret").checked,
+        ...(character ? { character } : {}),
+        ...($("logDice").checked ? { dice: true } : {}),
+      },
+      guest ? { guest } : {},
+    );
+    state.ownPosts.add(log.id);
+    if (state.newPost === log.id) showNewPost(null);
+    $("logs").prepend(await logItem(log));
+    $("logForm").reset?.();
+    $("logCharacter").value = character;
+    configureBoard();
+    say("로그를 올렸습니다.");
+  });
+};
+export async function loadBoards() {
+  state.boards = await allDocuments(COLLECTION.boards);
+  $("noPublicBoards").hidden = Boolean(state.member) || state.boards.length > 0;
+  $("logs").hidden = $("board").hidden = !state.boards.length;
+  if (!state.boards.length && !state.member) {
+    $("board").replaceChildren();
+    $("logForm").hidden = true;
+    $("moreLogs").hidden = true;
+    return;
+  }
+  if (!state.boards.length)
+    state.boards = [
+      {
+        id: "default",
+        data: {
+          name: "로그",
+          kind: "image",
+          enabled: true,
+          secret: "optional",
+          categories: [],
+          writeLevel: 2,
+          actions: true,
+        },
+      },
+    ];
+  if (!state.boards.some((row) => row.id === state.board))
+    state.board = state.boards[0].id;
+  $("board").replaceChildren();
+  for (const row of state.boards) {
+    const option = document.createElement("option");
+    option.value = row.id;
+    option.textContent = row.data.name;
+    $("board").append(option);
+  }
+  $("board").value = state.board;
+  configureBoard();
+}
+export function configureBoard() {
+  const board = state.boards.find((row) => row.id === state.board);
+  $("boardDescription").textContent = board?.data.description ?? "";
+  $("logText").maxLength = board?.data.html ? 12000 : 2000;
+  $("logHtmlHint").hidden = !board?.data.html;
+  $("logInlineImage").hidden = !board?.data.html;
+  $("logImage").required = Boolean(state.member) && board?.data.kind !== "text";
+  $("logImageUrl").required = !state.member && board?.data.kind !== "text";
+  $("logForm").hidden =
+    board?.data.enabled === false ||
+    (state.role !== "moderator" && state.level < (board?.data.writeLevel ?? 2));
+  $("logCategory").replaceChildren();
+  for (const name of ["", ...(board?.data.categories ?? [])]) {
+    const option = document.createElement("option");
+    option.value = name;
+    option.textContent = name || "분류 없음";
+    $("logCategory").append(option);
+  }
+  if (!state.member && board?.data.secret === "required")
+    $("logForm").hidden = true;
+  $("logSecret").disabled = board?.data.secret !== "optional";
+  $("logSecret").checked = board?.data.secret === "required";
+}
+wireSpeakerChoice($("logCharacter"));
+// An uploaded picture goes into the HTML body at the cursor; the post's
+// address of it is what keeps the upload (managed uploads, SDK 1.1.0).
+$("logInlineFile").onchange = () =>
+  run(async () => {
+    const file = $("logInlineFile").files?.[0];
+    if (!file) return;
+    say("그림을 올리는 중…");
+    const uploaded = await uploadManaged(file);
+    const area = $("logText");
+    area.setRangeText(
+      `<img src="${uploaded.url}" alt="">`,
+      area.selectionStart,
+      area.selectionEnd,
+      "end",
+    );
+    $("logInlineFile").value = "";
+    say("그림을 넣었습니다.");
+  });
+$("board").onchange = () =>
+  run(async () => {
+    state.board = $("board").value;
+    state.tag = null;
+    configureBoard();
+    await loadLogs();
+  });
+async function loadEmoticons() {
+  if (state.emoticons !== null) return state.emoticons;
+  const member = state.member;
+  const rows = await allDocuments(COLLECTION.emoticons);
+  if (state.member !== member) return [];
+  state.emoticons = rows.filter((row) => !row.data.deleted);
+  return state.emoticons;
+}

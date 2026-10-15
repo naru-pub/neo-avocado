@@ -5,7 +5,14 @@ import { readdir, readFile } from "node:fs/promises";
 // The pages call site functions by "<module/path>:<export>", as the SDK takes
 // them. Every such reference must name a function a module exports, and every
 // callable export must be one the pages call.
-const pages = ["app.js", "admin.js", "admin-titles.js"];
+const pages = [
+  "app.js",
+  "admin.js",
+  "admin-titles.js",
+  ...(await readdir(new URL("../app", import.meta.url))).map(
+    (file) => `app/${file}`,
+  ),
+];
 const references = new Set();
 for (const page of pages) {
   const source = await readFile(new URL(`../${page}`, import.meta.url), "utf8");

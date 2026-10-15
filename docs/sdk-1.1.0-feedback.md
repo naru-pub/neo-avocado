@@ -21,7 +21,7 @@ So anything with a private part goes back behind a function:
   receive a hash stored on the post.
 - Characters' owner/admin-only custom fields keep the whole characters
   collection behind the `communityRead` gate, with its whitelist, per-kind
-  page limits and a client shim (`communityCollection` in `app.js`) that
+  page limits and a client shim (`communityCollection` in `app/core.js`) that
   imitates the SDK.
 - Locked secret posts are redacted by the gate for visitors.
 

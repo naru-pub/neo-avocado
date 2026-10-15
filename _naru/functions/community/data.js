@@ -548,7 +548,7 @@ export async function communityData(
   };
 }
 
-/** Topic on which new posts are announced to open pages (app.js listens). */
+/** Topic on which new posts are announced to open pages (app/live.js listens). */
 const POSTS_TOPIC = `${PREFIX}logs`;
 const BASE_ACCESS = { level: 2, role: "member" };
 

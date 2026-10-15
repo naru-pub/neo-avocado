@@ -393,6 +393,8 @@ test("the site declares every collection it uses, and sign-in asks for them", as
   const { scopes } = await import("../admin-model.js");
   const { readdir, readFile } = await import("node:fs/promises");
   const files = ["app.js", "admin.js"];
+  for (const name of await readdir(new URL("../app", import.meta.url)))
+    files.push(`app/${name}`);
   for (const dir of [
     "_naru/modules",
     "_naru/functions/community",
