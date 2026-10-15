@@ -137,4 +137,5 @@ on them without SDK changes.
   `auth.signIn` now takes `settings` (read, write, rules, unique per
   collection); Naru's sign-in page creates missing collections that way and,
   on the owner's click, corrects existing ones, marking widened access.
-  `admin.html` uses it (naru-pub `97701a29`).
+  Since replaced by `_naru/collections.json`, which Naru installs when the
+  files arrive; `admin.html` now only signs in.

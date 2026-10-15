@@ -5,7 +5,6 @@ import { functionReference } from "./function-references.js";
 import {
   models,
   scopes,
-  collectionSettings,
   buildRecord,
   fieldValue,
   walletWrites,
@@ -607,12 +606,7 @@ $("adminSection").onchange = () =>
     await load();
   });
 $("adminSignIn").onclick = () =>
-  run(() =>
-    naru.auth.signIn({
-      collections: scopes,
-      settings: collectionSettings,
-    }),
-  );
+  run(() => naru.auth.signIn({ collections: scopes }));
 $("adminSignOut").onclick = () =>
   run(async () => {
     await owner.signOut();

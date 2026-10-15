@@ -1,0 +1,53 @@
+{
+  "collections": {
+    "neo_avocado_banners": {},
+    "neo_avocado_boards": {},
+    "neo_avocado_calls": {},
+    "neo_avocado_character_fields": {},
+    "neo_avocado_character_state": {},
+    "neo_avocado_characters": {
+      "read": "member",
+      "write": "admin",
+      "rules": "characters"
+    },
+    "neo_avocado_comments": {
+      "read": "world",
+      "write": "admin",
+      "rules": "community-board"
+    },
+    "neo_avocado_content": {},
+    "neo_avocado_counters": {},
+    "neo_avocado_couples": {},
+    "neo_avocado_design": {},
+    "neo_avocado_emoticons": {},
+    "neo_avocado_explore": {},
+    "neo_avocado_gacha": {},
+    "neo_avocado_history": {},
+    "neo_avocado_inventory": {},
+    "neo_avocado_items": {},
+    "neo_avocado_levels": {},
+    "neo_avocado_logs": {
+      "read": "world",
+      "write": "admin",
+      "rules": "community-board"
+    },
+    "neo_avocado_members": {},
+    "neo_avocado_menus": {},
+    "neo_avocado_messages": {},
+    "neo_avocado_profiles": {
+      "read": "admin",
+      "write": "admin",
+      "unique": [
+        "nick"
+      ]
+    },
+    "neo_avocado_quests": {},
+    "neo_avocado_recipes": {},
+    "neo_avocado_relations": {},
+    "neo_avocado_settings": {},
+    "neo_avocado_stat_config": {},
+    "neo_avocado_titles": {},
+    "neo_avocado_wallets": {},
+    "neo_avocado_wardrobe": {}
+  }
+}

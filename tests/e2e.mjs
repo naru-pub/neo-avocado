@@ -82,12 +82,14 @@ const PNG = Buffer.from(
 const picture = (name) => ({ name, mimeType: "image/png", buffer: PNG });
 
 try {
-  // The owner signs in: Naru makes every collection with its settings.
+  // _naru/collections.json made every collection as the site started, so
+  // the owner's sign-in only signs in.
+  assert.match(log, /_naru\/collections\.json: 31 created, 0 changed/);
   const owner = await person();
   await owner.goto(`${origin}/admin.html`);
   await owner.locator("#adminSignIn").click();
   await owner.locator("#adminWorkspace").waitFor();
-  assert.match(log, /owner signed in: \d+ collections, \d+ created/);
+  assert.match(log, /owner signed in: \d+ collections, 0 created/);
   // Setup through the owner's own SDK handle: a public board and fields.
   await owner.evaluate(async (P) => {
     const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");

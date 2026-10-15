@@ -42,8 +42,8 @@ workflows to the port, and says what was left out and why.
 
 ## How it is built
 
-- **Collections** are created by Naru when the owner first signs in at
-  `admin.html`: logs and comments readable by members (and visitors, on level-1
+- **Collections** are declared in `_naru/collections.json`, which Naru
+  installs when the files arrive: logs and comments readable by members (and visitors, on level-1
   boards) through the `community-board` rule, characters through the
   `characters` rule (which trims custom fields a reader may not see), profiles
   with unique nicknames, and everything else admin-only.

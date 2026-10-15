@@ -631,6 +631,9 @@ models.title_holdings = {
 };
 for (const [name, model] of Object.entries(models))
   model.collection ??= `${P}${name}`;
+// The collections the owner's sign-in asks for. Their settings (access, rules,
+// unique fields) are declared in _naru/collections.json, which Naru installs
+// when the site's files arrive.
 export const scopes = [
   ...new Set([
     ...Object.values(models).map((model) => model.collection),
@@ -639,31 +642,12 @@ export const scopes = [
     `${P}comments`,
     `${P}relations`,
     `${P}wardrobe`,
-    // Written only by site functions; listed so sign-in creates them.
+    // Written only by site functions.
     `${P}messages`,
     `${P}counters`,
     `${P}calls`,
   ]),
 ];
-
-/**
- * What each collection must be, sent with the owner's sign-in so Naru creates
- * (or, on the owner's click, corrects) them: posts are world-readable through
- * the community-board rule, which gives visitors level 1 and hides secrets;
- * nicknames are unique; everything else stays admin-only, reached through
- * site functions. Collections not listed here start admin/admin.
- */
-export const collectionSettings = {
-  [`${P}logs`]: { read: "world", write: "admin", rules: "community-board" },
-  [`${P}comments`]: {
-    read: "world",
-    write: "admin",
-    rules: "community-board",
-  },
-  [`${P}profiles`]: { read: "admin", write: "admin", unique: ["nick"] },
-  // Read natively by members; custom fields trimmed by the rule's present().
-  [`${P}characters`]: { read: "member", write: "admin", rules: "characters" },
-};
 
 const nonnegative = (value) => {
   if (!Number.isSafeInteger(value) || value < 0)

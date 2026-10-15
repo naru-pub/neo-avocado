@@ -389,8 +389,8 @@ test("profile field definitions validate codes and options; explore misses store
   assert.equal(models.character_review.collection, "neo_avocado_characters");
 });
 
-test("owner sign-in asks for every collection the site uses, with its settings", async () => {
-  const { scopes, collectionSettings } = await import("../admin-model.js");
+test("the site declares every collection it uses, and sign-in asks for them", async () => {
+  const { scopes } = await import("../admin-model.js");
   const { readdir, readFile } = await import("node:fs/promises");
   const files = ["app.js", "admin.js"];
   for (const dir of [
@@ -418,8 +418,13 @@ test("owner sign-in asks for every collection the site uses, with its settings",
     [...used].filter((name) => !scopes.includes(name)),
     [],
   );
-  assert.ok(
-    Object.keys(collectionSettings).every((name) => scopes.includes(name)),
+  const { collections } = JSON.parse(
+    await readFile(
+      new URL("../_naru/collections.json", import.meta.url),
+      "utf8",
+    ),
   );
-  assert.equal(collectionSettings.neo_avocado_logs.rules, "community-board");
+  assert.deepEqual(Object.keys(collections).sort(), [...scopes].sort());
+  assert.equal(collections.neo_avocado_logs.rules, "community-board");
+  assert.deepEqual(collections.neo_avocado_profiles.unique, ["nick"]);
 });
