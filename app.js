@@ -746,59 +746,40 @@ $("editProfile").onclick = () => {
   );
 };
 
-/**
- * The first screen comes from one call (content/home.js): every request
- * to Naru is a round trip, so the frame, the member's standing, the boards
- * and the first logs arrive together. A member Naru has not approved is
- * refused it, and run() shows why.
- */
 async function start() {
   await connect();
   state.member = await state.naru.members.session();
-  let home;
-  try {
-    home = await callRule("home", { board: state.board });
-  } catch (error) {
-    if (!state.member || error?.code === "ACCESS_DENIED") show();
-    throw error;
+  // The site's frame is decoration: without it the default design shows.
+  await loadSite().catch((error) => console.error(error));
+  if (!state.member) return visit();
+  const platform = await state.member.membership();
+  state.admission = platform.status;
+  if (platform.status !== "approved") {
+    show();
+    return showAdmission(platform.status);
   }
-  applySite(home.site);
-  if (!state.member) return visit(home);
-  state.admission = "approved";
-  state.role = home.membership.role;
-  state.level = home.membership.level ?? 2;
-  const profile = home.membership.profile;
+  const status = await callRule("membership");
+  state.role = status.role;
+  state.level = status.level ?? 2;
+  const profile = status.profile;
   show(profile);
   if (profile) {
     state.nicks.set(state.member.id, Promise.resolve(profile.data.nick));
-    showUnread(home.notice.unread);
-    showCalls(home.notice.calls === true);
-    await showHome(home);
+    await loadBoards();
+    await loadLogs();
     listen();
   }
 }
 
 /** A visitor's view: public boards and pages at GnuBoard's guest level 1. */
-async function visit(home) {
+async function visit() {
   state.role = "guest";
   state.level = 1;
   show();
   showTab("logs");
-  if (home) await showHome(home);
-  else {
-    await loadBoards();
-    await loadLogs();
-  }
+  await loadBoards();
+  await loadLogs();
   if (state.boards.length) listen();
-}
-
-/** Boards and the first page of logs, as home() read them. */
-async function showHome(home) {
-  showBoards(home.boards);
-  if (!home.logs || home.logs.board !== state.board) return loadLogs();
-  for (const [id, nick] of Object.entries(home.nicks))
-    if (!state.nicks.has(id)) state.nicks.set(id, Promise.resolve(nick));
-  await showLogs(home.logs, false, home.counts);
 }
 
 /* ------------------------------------------------------------- site --- */
@@ -812,7 +793,8 @@ const SITE_COLORS = {
   surface: "--surface",
 };
 /** Applies the owner's design, menus and banners (adm/design_form.php, menu_list.php). */
-function applySite(site) {
+async function loadSite() {
+  const site = await callRule("site");
   const { design } = site;
   const root = document.documentElement.style;
   for (const [key, variable] of Object.entries(SITE_COLORS))
@@ -1082,15 +1064,7 @@ async function loadLogs({ more = false } = {}) {
     after: more ? state.logCursor : null,
     ...(state.tag ? tagOptions(state.tag) : {}),
   });
-  // Authors and comment counts are read at once.
-  const [, counts] = await Promise.all([
-    preloadNicks(page.documents),
-    commentCounts(page.documents.map((log) => log.id)),
-  ]);
-  await showLogs(page, more, counts);
-}
-/** Renders a page of logs; `counts` are their comment counts when known. */
-async function showLogs(page, more, counts) {
+  await preloadNicks(page.documents);
   if (!more) {
     $("logs").replaceChildren();
     showNewPost(null);
@@ -1106,20 +1080,20 @@ async function showLogs(page, more, counts) {
   }
   state.logCursor = page.nextCursor;
   $("moreLogs").hidden = !page.nextCursor;
-  paintCommentCounts(shown, counts);
+  await showCommentCounts(shown);
 }
 
-/** Each log's comment count, from one read-only call. */
-async function commentCounts(ids) {
-  ids = ids.filter(Boolean);
-  if (!ids.length) return {};
+/** Fills each log's "댓글 (n)" from one read-only count call. */
+async function showCommentCounts(entries) {
+  const ids = entries.map(([id]) => id).filter(Boolean);
+  if (!ids.length) return;
   // Counts are a decoration: a page without them is still a page.
-  return callRule("commentCounts", { ids: ids.slice(0, 20) }).then(
+  const counts = await callRule("commentCounts", {
+    ids: ids.slice(0, 20),
+  }).then(
     (result) => result.counts ?? {},
     () => ({}),
   );
-}
-function paintCommentCounts(entries, counts) {
   for (const [id, item] of entries)
     if (typeof counts[id] === "number")
       item.querySelector(".comments summary").textContent =
@@ -1790,59 +1764,14 @@ function wireCharacterDetails(item, character) {
   let loaded = false;
   const refresh = async () => {
     await loadFieldCatalogue();
-    // Each read is a round trip to Naru: the details read in two waves at
-    // once, not one after another.
-    const [sheet, status, couples, relations, clothes] = await Promise.all([
-      state.fieldCatalogue.length
-        ? communityCollection(COLLECTION.characters).get(character.id)
-        : null,
-      callRule("characterStatus", { character: character.id }),
-      allDocuments(COLLECTION.couples, undefined, {
-        any: [
-          { eq: ["first", character.id] },
-          { eq: ["second", character.id] },
-        ],
-      }),
-      allDocuments(COLLECTION.relations, { character: character.id }),
-      allDocuments(COLLECTION.wardrobe, { character: character.id }),
-    ]);
-    // The gate reads only the character's titles (at most 100 per query).
-    const owned = [...new Set(status.state.titles ?? [])];
-    const chunks = [];
-    for (let i = 0; i < owned.length; i += 100)
-      chunks.push(owned.slice(i, i + 100));
-    const others = [
-      ...new Set([
-        ...couples.map((couple) =>
-          couple.data.first === character.id
-            ? couple.data.second
-            : couple.data.first,
-        ),
-        ...relations.map((row) => row.data.target),
-      ]),
-    ];
-    const [titlePages, otherRows] = await Promise.all([
-      Promise.all(
-        chunks.map((ids) =>
-          allDocuments(COLLECTION.titles, undefined, {
-            in: [{ metadata: "id" }, ids],
-          }),
-        ),
-      ),
-      Promise.all(
-        others.map((id) =>
-          communityCollection(COLLECTION.characters)
-            .get(id)
-            .catch((error) => {
-              if (error.code === "NOT_FOUND") return null;
-              throw error;
-            }),
-        ),
-      ),
-    ]);
-    const titles = titlePages.flat();
-    const otherCharacter = (id) => otherRows[others.indexOf(id)];
-    if (sheet) renderFields(item.querySelector(".character-fields"), sheet);
+    if (state.fieldCatalogue.length)
+      renderFields(
+        item.querySelector(".character-fields"),
+        await communityCollection(COLLECTION.characters).get(character.id),
+      );
+    const status = await callRule("characterStatus", {
+      character: character.id,
+    });
     item.querySelector(".progression").textContent =
       `경험치 ${status.state.exp}${status.rank ? ` · ${status.rank}` : ""} · 능력치 포인트 ${status.state.points}`;
     item.querySelector(".stats").replaceChildren();
@@ -1875,6 +1804,15 @@ function wireCharacterDetails(item, character) {
           });
           await refresh();
         },
+      );
+    // The gate reads only the character's titles (at most 100 per query).
+    const owned = [...new Set(status.state.titles ?? [])];
+    const titles = [];
+    for (let i = 0; i < owned.length; i += 100)
+      titles.push(
+        ...(await allDocuments(COLLECTION.titles, undefined, {
+          in: [{ metadata: "id" }, owned.slice(i, i + 100)],
+        })),
       );
     const titleChoice = item.querySelector(".title-choice");
     item.querySelector(".titles").replaceChildren();
@@ -1909,6 +1847,9 @@ function wireCharacterDetails(item, character) {
         });
         await refresh();
       });
+    const couples = await allDocuments(COLLECTION.couples, undefined, {
+      any: [{ eq: ["first", character.id] }, { eq: ["second", character.id] }],
+    });
     item.querySelector(".couples").replaceChildren();
     for (const couple of couples.sort(
       (a, b) => (a.data.order ?? 0) - (b.data.order ?? 0),
@@ -1917,15 +1858,31 @@ function wireCharacterDetails(item, character) {
         couple.data.first === character.id
           ? couple.data.second
           : couple.data.first;
-      const partner = otherCharacter(partnerId);
+      const partner = await communityCollection(COLLECTION.characters)
+        .get(partnerId)
+        .catch((error) => {
+          if (error.code === "NOT_FOUND") return null;
+          throw error;
+        });
       const li = document.createElement("li");
       li.textContent = `${partner?.data.name ?? "삭제된 캐릭터"}${couple.data.since ? ` · ${couple.data.since}부터` : ""}`;
       item.querySelector(".couples").append(li);
     }
+    const relations = await allDocuments(COLLECTION.relations, {
+      character: character.id,
+    });
+    const clothes = await allDocuments(COLLECTION.wardrobe, {
+      character: character.id,
+    });
     item.querySelector(".relations").replaceChildren();
     for (const row of relations.sort((a, b) => a.data.order - b.data.order)) {
       const li = document.createElement("li");
-      const target = otherCharacter(row.data.target);
+      const target = await communityCollection(COLLECTION.characters)
+        .get(row.data.target)
+        .catch((error) => {
+          if (error.code === "NOT_FOUND") return null;
+          throw error;
+        });
       li.textContent = `${target?.data.name ?? "삭제된 캐릭터"} · 호감도 ${row.data.affinity}: ${row.data.memo}`;
       if (row.data.link && row.data.link.startsWith("https://")) {
         const link = document.createElement("a");
@@ -2874,10 +2831,7 @@ $("logForm").onsubmit = (event) => {
 };
 
 async function loadBoards() {
-  showBoards(await allDocuments(COLLECTION.boards));
-}
-function showBoards(boards) {
-  state.boards = boards;
+  state.boards = await allDocuments(COLLECTION.boards);
   $("noPublicBoards").hidden = Boolean(state.member) || state.boards.length > 0;
   $("logs").hidden = $("board").hidden = !state.boards.length;
   if (!state.boards.length && !state.member) {

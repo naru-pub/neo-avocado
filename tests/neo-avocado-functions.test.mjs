@@ -42,7 +42,6 @@ import {
   communityRead,
   commentCounts,
   moderatePost,
-  home,
 } from "../_naru/modules/index.js";
 import { scope, canWrite } from "../_naru/rules/community-board.js";
 import * as characterRule from "../_naru/rules/characters.js";
@@ -2347,46 +2346,6 @@ test("the site frame shows only safe design values and menus/banners a reader ma
     (await site(ctx)).menus.map((menu) => menu.id),
     ["c", "b", "a"],
   );
-});
-
-test("the first screen comes in one call: frame, standing, boards, logs, authors and counts", async () => {
-  const { ctx, table } = fakeCtx();
-  table(`${P}boards`).set("free", PUBLIC_BOARD);
-  // Before joining, a member gets the frame and their standing only.
-  const before = await home(ctx);
-  assert.equal(before.membership.profile, null);
-  assert.deepEqual(before.boards, []);
-  assert.equal(before.logs, null);
-  await join(ctx, { nick: "앨리스" });
-  const { document: log } = await communityData(ctx, {
-    collection: `${P}logs`,
-    operation: "add",
-    data: { board: "free", image: null, text: "가".repeat(200) },
-  });
-  await communityData(ctx, {
-    collection: `${P}comments`,
-    operation: "add",
-    data: { logId: log.id, text: "멋져요" },
-  });
-  const member = await home(ctx, { board: "free" });
-  assert.equal(member.membership.profile.data.nick, "앨리스");
-  assert.deepEqual(member.notice, { unread: false, calls: false });
-  assert.equal(member.logs.board, "free");
-  assert.deepEqual(
-    member.logs.documents.map((row) => row.id),
-    [log.id],
-  );
-  // Previews are trimmed as the gate trims them.
-  assert.equal(member.logs.documents[0].data.truncated, true);
-  assert.deepEqual(member.nicks, { "m-1": "앨리스" });
-  assert.deepEqual(member.counts, { [log.id]: 1 });
-  // A visitor gets the public board's logs and no standing.
-  ctx.member = null;
-  const visitor = await home(ctx, { board: "nope" });
-  assert.equal(visitor.membership, null);
-  assert.equal(visitor.notice, null);
-  assert.equal(visitor.logs.board, "free");
-  assert.deepEqual(visitor.nicks, { "m-1": "앨리스" });
 });
 
 test("logs are numbered per board, tagged for search, counted and moderated", async () => {

@@ -36,7 +36,6 @@ export const FUNCTION_MODULES = Object.freeze({
   contentPages: "content/pages",
   contentPage: "content/pages",
   site: "content/site",
-  home: "content/home",
 });
 export function functionReference(name) {
   const module = Object.hasOwn(FUNCTION_MODULES, name)
