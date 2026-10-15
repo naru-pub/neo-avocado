@@ -487,7 +487,7 @@ function withGuestPassword(title, action) {
 }
 
 async function connect() {
-  const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+  const { createNaru } = await import("https://sdk.naru.pub/sdk/1.1.0/naru.js");
   state.naru = createNaru(config.site ? { site: config.site } : undefined);
 }
 function communityCollection(collection) {
