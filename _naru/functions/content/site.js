@@ -1,7 +1,14 @@
 // The site's frame, read once per page by members and visitors alike:
 // design settings (adm/design_form.php), navigation (adm/menu_list.php) and
-// main/intro banners (adm/banner_list.php, adm/intro_list.php).
-import { PREFIX, communityAccess, scheduled } from "../../modules/shared.js";
+// main/intro banners (adm/banner_list.php, adm/intro_list.php) and the
+// background music (cf_bgm, bgm.php).
+import {
+  PREFIX,
+  SETTINGS,
+  backgroundMusic,
+  communityAccess,
+  scheduled,
+} from "../../modules/shared.js";
 
 export const readOnly = ["site"];
 export const visitors = ["site"];
@@ -37,6 +44,8 @@ export async function site(ctx) {
     if (/^#[0-9a-f]{6}$/i.test(saved.colors?.[key] ?? ""))
       colors[key] = saved.colors[key];
   const design = {
+    // 디자인 사용 (use_header): off, the page is plain, as a fresh install.
+    enabled: saved.enabled === true,
     title: short(saved.title, 60),
     logo: https(saved.logo),
     background: https(saved.background),
@@ -76,10 +85,12 @@ export async function site(ctx) {
       url: https(row.data.url),
       newWindow: row.data.newWindow === true,
     }));
+  const settings = (await ctx.get(SETTINGS, "community"))?.data ?? {};
   return {
     level: access.level,
     member: Boolean(ctx.member),
     design,
+    bgm: backgroundMusic(settings.bgm),
     menus,
     banners,
   };

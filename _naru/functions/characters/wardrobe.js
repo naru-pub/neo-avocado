@@ -9,7 +9,7 @@ import { presentCharacter } from "../../modules/characters.js";
 
 export async function outfit(ctx, { character, name, image } = {}) {
   if (!(await ownCharacter(ctx, character)))
-    ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
+    ctx.fail("ACCESS_DENIED", "내 캐릭터만 바꿀 수 있습니다.", {
       reason: "not_owned",
     });
   const document = await ctx.add(WARDROBE, {
@@ -24,7 +24,7 @@ export async function outfit(ctx, { character, name, image } = {}) {
 export async function wear(ctx, { character, outfit } = {}) {
   const owned = await ownCharacter(ctx, character);
   if (!owned)
-    ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
+    ctx.fail("ACCESS_DENIED", "내 캐릭터만 바꿀 수 있습니다.", {
       reason: "not_owned",
     });
   const clothing =
@@ -35,7 +35,7 @@ export async function wear(ctx, { character, outfit } = {}) {
       clothing.data.owner !== ctx.member.id ||
       clothing.data.character !== character)
   )
-    ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
+    ctx.fail("ACCESS_DENIED", "내 캐릭터만 바꿀 수 있습니다.", {
       reason: "not_owned",
     });
   const document = await ctx.set(CHARACTERS, owned.id, {
@@ -48,12 +48,12 @@ export async function wear(ctx, { character, outfit } = {}) {
 export async function removeOutfit(ctx, { id } = {}) {
   const clothing = typeof id === "string" ? await ctx.get(WARDROBE, id) : null;
   if (!clothing || clothing.data.owner !== ctx.member.id)
-    ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
+    ctx.fail("ACCESS_DENIED", "내 캐릭터만 바꿀 수 있습니다.", {
       reason: "not_owned",
     });
   const character = await ownCharacter(ctx, clothing.data.character);
   if (!character)
-    ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
+    ctx.fail("ACCESS_DENIED", "내 캐릭터만 바꿀 수 있습니다.", {
       reason: "not_owned",
     });
   if (character.data.outfit === clothing.id)

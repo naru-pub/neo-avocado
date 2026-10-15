@@ -22,7 +22,7 @@ export async function relation(
   } = {},
 ) {
   if (!(await ownCharacter(ctx, character)))
-    ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
+    ctx.fail("ACCESS_DENIED", "내 캐릭터만 바꿀 수 있습니다.", {
       reason: "not_owned",
     });
   const targetCharacter =
@@ -48,7 +48,7 @@ export async function relation(
       previous.data.owner !== ctx.member.id ||
       previous.data.character !== character)
   )
-    ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
+    ctx.fail("ACCESS_DENIED", "내 캐릭터만 바꿀 수 있습니다.", {
       reason: "not_owned",
     });
   if (previous && previous.revision !== revision)
@@ -80,7 +80,7 @@ export async function removeRelation(ctx, { id } = {}) {
     row.data.owner !== ctx.member.id ||
     !(await ownCharacter(ctx, row.data.character))
   )
-    ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
+    ctx.fail("ACCESS_DENIED", "내 캐릭터만 바꿀 수 있습니다.", {
       reason: "not_owned",
     });
   await ctx.delete(RELATIONS, row.id);

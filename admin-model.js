@@ -159,6 +159,11 @@ export const models = {
           ["moderator", "게시물 운영자"],
         ],
       },
+      {
+        key: "left",
+        label: "탈퇴일 (빈칸: 이용 중. 지우면 다시 이용할 수 있습니다)",
+        type: "date",
+      },
       { key: "note", label: "운영 메모", max: 500 },
     ],
   },
@@ -207,6 +212,11 @@ export const models = {
       { key: "name", label: "이름", required: true, max: 80 },
       { key: "description", label: "설명", type: "textarea", max: 2000 },
       { key: "image", label: "이미지", type: "url", image: true, max: 2000 },
+      {
+        key: "shopCategory",
+        label: "상점 분류 (기본 설정의 분류 중 하나, 빈칸: 첫 분류)",
+        max: 40,
+      },
       { key: "price", label: "구매 가격", type: "number", default: 0 },
       { key: "stock", label: "재고 (빈칸: 무제한)", type: "optional-number" },
       {
@@ -461,6 +471,13 @@ export const models = {
       { key: "side", label: "공식 세력", max: 40 },
       { key: "class", label: "공식 종족", max: 40 },
       { key: "exp", label: "경험치", type: "number", default: 0 },
+      {
+        key: "expNote",
+        label:
+          "경험치 변경 사유 (경험치를 바꿀 때, 회원의 경험치 내역에 남습니다)",
+        max: 500,
+        transient: true,
+      },
       { key: "points", label: "총 배분 포인트", type: "number", default: 0 },
       {
         key: "titles",
@@ -509,6 +526,30 @@ export const models = {
         type: "number",
         default: 0,
       },
+      {
+        key: "shopCategories",
+        label: "상점 분류 (쉼표로 구분, 첫 분류가 기본)",
+        default: "일반, 이벤트",
+        max: 200,
+      },
+      {
+        key: "shopNpc",
+        label: "상점 NPC 이미지",
+        type: "url",
+        image: true,
+        max: 2000,
+      },
+      {
+        key: "shopGreeting",
+        label: "상점 NPC 인사말",
+        type: "textarea",
+        max: 500,
+      },
+      {
+        key: "bgm",
+        label: "배경음악 (유튜브 재생목록·영상 주소, 빈칸: 끄기)",
+        max: 300,
+      },
     ],
   },
 };
@@ -528,9 +569,10 @@ const schedule = [
 ];
 models.design = {
   label: "디자인",
-  help: "사이트 이름, 로고, 배경과 색을 정합니다. 이미지는 파일로 올리거나 HTTPS 주소로 입력합니다. 회원과 손님 모두에게 적용됩니다.",
+  help: "사이트 이름, 로고, 배경과 색을 정합니다. 디자인 사용을 끄면 원본처럼 꾸미지 않은 기본 화면이고, 켜면 아래 배경·글꼴·색이 적용됩니다. 이미지는 파일로 올리거나 HTTPS 주소로 입력합니다. 회원과 손님 모두에게 적용됩니다.",
   fixedId: "site",
   fields: [
+    { key: "enabled", label: "디자인 사용", type: "checkbox" },
     { key: "title", label: "사이트 이름", max: 60 },
     { key: "logo", label: "로고 이미지", type: "url", image: true, max: 2000 },
     {
@@ -577,7 +619,7 @@ models.design = {
 };
 models.menus = {
   label: "메뉴",
-  help: "상단 메뉴입니다. 연결은 board:게시판ID, content:내용페이지ID, tab:characters(캐릭터)·shop·quests·messages·calls, 또는 https:// 주소입니다. 상위 메뉴 ID를 적으면 하위 메뉴가 됩니다. 보기 등급 1은 손님에게도 보입니다.",
+  help: "상단 메뉴입니다. 연결은 board:게시판ID, content:내용페이지ID, tab:members(멤버목록)·applicants(신청자목록)·couples(커플목록)·shop·mypage(마이페이지)·quests·content·messages·calls·characters, 또는 https:// 주소입니다. 메뉴를 하나도 만들지 않으면 원본의 기본 메뉴가 보입니다. 상위 메뉴 ID를 적으면 하위 메뉴가 됩니다. 보기 등급 1은 손님에게도 보입니다.",
   fields: [
     { key: "name", label: "메뉴 이름", required: true, max: 40 },
     { key: "link", label: "연결", required: true, max: 2000 },
@@ -721,6 +763,7 @@ export function buildRecord(section, values, previous, references) {
   for (const field of model.fields) {
     const value = values[field.key];
     if (field.transient) {
+      if (value === undefined && !field.required) continue;
       if (
         typeof value !== "string" ||
         (field.required && !value.trim()) ||
@@ -1006,6 +1049,47 @@ export function buildRecord(section, values, previous, references) {
     if (!data.titles.includes(data.activeTitle)) data.activeTitle = null;
   }
   return { id, data };
+}
+
+/**
+ * A character's official record, and when its experience changed, a line in
+ * its owner's experience history (adm/exp_list.php, member/exp.php), in one
+ * batch.
+ */
+export function characterStateWrites(record, previous, note, at, historyId) {
+  const writes = [
+    {
+      collection: "neo_avocado_character_state",
+      set: {
+        id: record.id,
+        data: record.data,
+        condition: previous
+          ? { revision: previous.revision }
+          : { absent: true },
+      },
+    },
+  ];
+  const before = previous?.data.exp ?? 0;
+  const after = record.data.exp ?? 0;
+  if (after !== before && record.data.owner)
+    writes.push({
+      collection: "neo_avocado_history",
+      set: {
+        id: historyId,
+        data: {
+          owner: record.data.owner,
+          kind: "exp",
+          at,
+          character: record.id,
+          expDelta: after - before,
+          exp: after,
+          memo: (note ?? "").trim(),
+          actor: "site-owner",
+        },
+        condition: { absent: true },
+      },
+    });
+  return writes;
 }
 
 export function walletWrites(record, previous, note, at, historyId) {

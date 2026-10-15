@@ -2,7 +2,7 @@ import { PROFILES, ownCharacter } from "../../modules/shared.js";
 
 export async function mainCharacter(ctx, { character } = {}) {
   if (!(await ownCharacter(ctx, character)))
-    ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
+    ctx.fail("ACCESS_DENIED", "내 캐릭터만 대표로 정할 수 있습니다.", {
       reason: "not_owned",
     });
   const profile = await ctx.get(PROFILES, ctx.member.id);

@@ -5,13 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>네오 아보카도</title>
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="plain.css" />
     <link rel="stylesheet" href="theme.css" />
   </head>
   <body class="site">
     <header class="top">
       <h1>
-        <img id="siteLogo" alt="" hidden /><span id="siteTitle"
-          >네오 아보카도</span
+        <a id="homeLink" href="#"
+          ><img id="siteLogo" alt="" hidden /><span id="siteTitle"
+            >네오 아보카도</span
+          ></a
         >
       </h1>
       <button
@@ -28,6 +31,15 @@
         aria-label="사이트 메뉴"
         hidden
       ></nav>
+      <!-- templete/txt.bgm.php: the owner's YouTube music, on request. -->
+      <div id="bgmPlayer" class="bgm-player" hidden>
+        <span class="bar-equalizer" aria-hidden="true"
+          ><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i
+        ></span>
+        <button id="bgmPlay" type="button">재생</button>
+        <button id="bgmStop" type="button" hidden>정지</button>
+        <span id="bgmFrame"></span>
+      </div>
       <a href="admin.html">운영</a>
       <div class="account">
         <span id="whoami"></span>
@@ -37,18 +49,10 @@
       </div>
     </header>
     <p id="status" role="status"></p>
-    <div id="banners" class="banners" hidden></div>
     <dialog id="intro" class="intro">
       <div id="introImages"></div>
       <button id="enterSite" type="button">입장하기</button>
     </dialog>
-
-    <section id="welcome" hidden>
-      <p>
-        자캐 커뮤니티입니다. 공개 게시판과 안내는 손님도 볼 수 있어요. 캐릭터,
-        상점, 쪽지는 나루 후원 플랜이 있는 계정으로 회원 로그인해 주세요.
-      </p>
-    </section>
 
     <section id="profileSetup" hidden>
       <h2>처음 오셨네요</h2>
@@ -63,7 +67,8 @@
 
     <main id="community" hidden>
       <nav class="tabs">
-        <button id="tabLogs" type="button" aria-pressed="true">로그</button>
+        <button id="tabHome" type="button" aria-pressed="true">메인</button>
+        <button id="tabLogs" type="button" aria-pressed="false">로그</button>
         <button
           id="tabCharacters"
           class="member-only"
@@ -105,9 +110,106 @@
         >
           알림
         </button>
+        <button
+          id="tabCouples"
+          class="member-only"
+          type="button"
+          aria-pressed="false"
+        >
+          커플목록
+        </button>
+        <button
+          id="tabMypage"
+          class="member-only"
+          type="button"
+          aria-pressed="false"
+        >
+          마이페이지
+        </button>
       </nav>
 
-      <section id="logsView">
+      <!-- mypage/: one menu over the account, posts, experience, mail, calls. -->
+      <nav id="mypageNav" class="sub-tabs" hidden>
+        <button id="myAccountTab" type="button">계정정보</button>
+        <button id="myLogsTab" type="button">로그내역</button>
+        <button id="myExpTab" type="button">경험치 내역</button>
+        <button id="myMailTab" type="button">우편함</button>
+        <button id="myCallsTab" type="button">호출내역</button>
+      </nav>
+
+      <!-- main.php: the slides, a welcome, the member's card, the copyright. -->
+      <section id="homeView">
+        <div id="banners" class="banners" hidden></div>
+        <div class="home-boxes">
+          <section id="welcome" class="home-welcome" hidden>
+            <p>
+              자캐 커뮤니티입니다. 공개 게시판과 안내는 손님도 볼 수 있어요.
+              캐릭터, 상점, 쪽지는 나루 후원 플랜이 있는 계정으로 회원 로그인해
+              주세요.
+            </p>
+          </section>
+          <div id="profileCard" class="profile-card">
+            <div id="cardThumb" class="thumb">⌘</div>
+            <div class="info">
+              <p class="name">
+                <span id="cardName"></span>
+                <span id="cardRole" class="badge" hidden>운영진</span>
+              </p>
+              <p id="cardDescript"></p>
+              <ul class="control-group member-only">
+                <li><button id="cardMessages" type="button">쪽지</button></li>
+                <li><button id="cardMyPage" type="button">계정관리</button></li>
+                <li>
+                  <button id="cardSignOut" type="button">로그아웃</button>
+                </li>
+              </ul>
+              <button id="cardSignIn" class="guest-only" type="button">
+                회원 로그인
+              </button>
+            </div>
+          </div>
+        </div>
+        <p class="copyright">
+          COPYRIGHT &copy; <span id="copyrightYear"></span> by
+          <span id="copyrightName">네오 아보카도</span>
+          · <a href="admin.html">운영</a>
+        </p>
+      </section>
+
+      <section id="mypageView" hidden>
+        <h2>계정정보 <small>My Information</small></h2>
+        <dl class="account-info">
+          <dt>닉네임</dt>
+          <dd id="myNick"></dd>
+          <dt>쪽지 받기</dt>
+          <dd id="myAcceptMessages"></dd>
+          <dt>댓글 알림</dt>
+          <dd id="myCommentAlerts"></dd>
+          <dt>회원 번호</dt>
+          <dd id="myMemberId"></dd>
+        </dl>
+        <p class="actions">
+          <button id="myEdit" type="button">정보수정</button>
+        </p>
+        <h2>캐릭터 <small>My Character</small></h2>
+        <ul id="myCharacters" class="my-characters"></ul>
+        <p class="actions"><button id="myLeave" type="button">탈퇴</button></p>
+      </section>
+      <section id="myLogsView" hidden>
+        <h2>로그내역 <small>My Logs</small></h2>
+        <ul id="myLogs" class="my-logs"></ul>
+      </section>
+      <section id="myExpView" hidden>
+        <h2>경험치 내역 <small>Experience</small></h2>
+        <ul id="myExp" class="my-exp"></ul>
+        <button id="moreExp" type="button" hidden>더 보기</button>
+      </section>
+      <section id="couplesView" hidden>
+        <h2>커플목록 <small>Couple</small></h2>
+        <ul id="coupleList" class="couple-list"></ul>
+      </section>
+
+      <section id="logsView" hidden>
         <label
           >게시판
           <select id="board"></select
@@ -251,6 +353,11 @@
           <button id="gacha" type="button">뽑기 (50 아보)</button>
         </div>
         <h2>상점</h2>
+        <div class="shop-npc">
+          <img id="shopNpc" alt="" hidden />
+          <p id="shopTalk" class="shop-talk"></p>
+        </div>
+        <nav id="shopCategories" class="sub-tabs"></nav>
         <ul id="items" class="items"></ul>
         <button id="moreItems" type="button" hidden>상점 더 보기</button>
         <h2>내 인벤토리</h2>
@@ -468,6 +575,7 @@
         <button id="cancelEditor" type="button">취소</button>
       </form>
     </dialog>
+    <a id="gotoTop" href="#" aria-label="맨 위로">TOP</a>
     <script type="module" src="app.js"></script>
   </body>
 </html>

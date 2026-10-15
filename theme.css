@@ -1,9 +1,11 @@
-/* AvocadoEdition's default design, as its installer seeds the design manager
+/* AvocadoEdition's design, as its installer seeds the design manager
    (install/install_db.php → css_config) and adm/design_form_css.php renders it:
    a dark patterned page, white text, #29c7c9 as the point colour, a 200px
    menu fixed on the left (menu_pos "left"), translucent black boxes, black
-   inputs and buttons. The owner's 디자인 settings override these variables. */
-:root:has(body.site) {
+   inputs and buttons. It applies when the owner turns 디자인 사용 on
+   (body.designed), as the original's design CSS does; their 디자인 settings
+   override these variables. Without it the page is plain (plain.css). */
+:root:has(body.site.designed) {
   --avocado: #29c7c9;
   --pit: #bbbbbb;
   --paper: #333333;
@@ -16,12 +18,12 @@
   --menu-width: 200px;
   background: var(--paper);
 }
-body.site {
+body.site.designed {
   max-width: none;
   margin: 0;
   padding: 0;
   color: var(--ink);
-  /* The page shows the fixed layer below (body.site::before). */
+  /* The page shows the fixed layer below (body.site.designed::before). */
   background: transparent;
   font-family: "Dotum", "돋움", "Apple SD Gothic Neo", sans-serif;
   font-size: 12px;
@@ -29,7 +31,7 @@ body.site {
 }
 /* html.single:before: a fixed layer under the page, so the pattern never ends.
    skin/member/basic/img/bak_admin_login_top_pattern.png is a 4px weave. */
-body.site::before {
+body.site.designed::before {
   content: "";
   position: fixed;
   inset: 0;
@@ -42,28 +44,28 @@ body.site::before {
   );
   background-size: var(--site-background-size, 4px 4px, 4px 4px);
 }
-body.site a,
-body.site .txt-point {
+body.site.designed a,
+body.site.designed .txt-point {
   color: var(--avocado);
 }
-body.site ::selection {
+body.site.designed ::selection {
   background: var(--avocado);
   color: var(--paper);
 }
-body.site *::-webkit-scrollbar {
+body.site.designed *::-webkit-scrollbar {
   width: 5px;
   height: 5px;
 }
-body.site *::-webkit-scrollbar-track {
+body.site.designed *::-webkit-scrollbar-track {
   background-color: var(--paper);
 }
-body.site *::-webkit-scrollbar-thumb {
+body.site.designed *::-webkit-scrollbar-thumb {
   background: var(--avocado);
   border-radius: 6em;
 }
 
 /* Header: logo and menu in a fixed column (#header, #logo, #gnb). */
-body.site > .top {
+body.site.designed > .top {
   position: fixed;
   top: 0;
   bottom: 0;
@@ -83,72 +85,72 @@ body.site > .top {
   background-image: var(--site-header-background, none);
   text-align: center;
 }
-body.site > .top h1 {
+body.site.designed > .top h1 {
   justify-content: center;
   margin: 0;
   padding: 20px 10px;
   color: var(--ink);
   font-size: 18px;
 }
-body.site #siteLogo {
+body.site.designed #siteLogo {
   max-width: 180px;
 }
-body.site > .top > a[href="admin.html"] {
+body.site.designed > .top > a[href="admin.html"] {
   order: 3;
   margin: 0;
   color: var(--pit);
 }
-body.site .account {
+body.site.designed .account {
   order: 2;
   flex-direction: column;
   padding: 0 15px;
 }
-body.site .account button {
+body.site.designed .account button {
   width: 100%;
 }
-body.site #whoami {
+body.site.designed #whoami {
   color: var(--avocado);
 }
-body.site .site-menu {
+body.site.designed .site-menu {
   order: 1;
 }
-body.site .site-menu > ul {
+body.site.designed .site-menu > ul {
   display: block;
   padding: 20px 0;
   border: 0;
   text-align: center;
   line-height: 1.5em;
 }
-body.site .site-menu li {
+body.site.designed .site-menu li {
   display: block;
   margin-bottom: 20px;
 }
-body.site .site-menu a {
+body.site.designed .site-menu a {
   color: var(--ink);
   font-size: 14px;
   font-weight: normal;
 }
-body.site .site-menu a:hover,
-body.site .site-menu a[aria-current="page"] {
+body.site.designed .site-menu a:hover,
+body.site.designed .site-menu a[aria-current="page"] {
   color: var(--avocado);
   text-decoration: none;
 }
-body.site .site-menu li ul {
+body.site.designed .site-menu li ul {
   padding: 8px 0 0;
 }
-body.site .site-menu li li {
+body.site.designed .site-menu li li {
   margin-bottom: 8px;
 }
-body.site .site-menu li li a {
+body.site.designed .site-menu li li a {
   font-size: 12px;
   opacity: 0.8;
 }
-#menuToggle {
+body.site.designed #menuToggle {
   display: none;
 }
 
 /* Body: the content column beside the menu (#body .fix-layout). */
-body.site > :not(.top):not(dialog):not(template):not(script) {
+body.site.designed > :not(.top):not(dialog):not(template):not(script) {
   box-sizing: border-box;
   max-width: 1000px;
   margin-left: calc(
@@ -158,75 +160,75 @@ body.site > :not(.top):not(dialog):not(template):not(script) {
   padding-left: 10px;
   padding-right: 10px;
 }
-body.site > main,
-body.site > #welcome {
+body.site.designed > main,
+body.site.designed > #welcome {
   padding-top: 30px;
 }
 
 /* Boxes (.theme-box: box_style) and status lines. */
-body.site .card,
-body.site [role="status"]:not(:empty),
-body.site .log-title,
-body.site .log-discussion > .meta {
+body.site.designed .card,
+body.site.designed [role="status"]:not(:empty),
+body.site.designed .log-title,
+body.site.designed .log-discussion > .meta {
   background: var(--surface);
   color: #eeeeee;
   border-color: transparent;
 }
-body.site [role="status"]:not(:empty) {
+body.site.designed [role="status"]:not(:empty) {
   border-left: 2px solid var(--avocado);
 }
-body.site .hint,
-body.site .meta,
-body.site #boardDescription {
+body.site.designed .hint,
+body.site.designed .meta,
+body.site.designed #boardDescription {
   color: var(--pit);
   opacity: 0.9;
 }
 
 /* Inputs (input_bak) and buttons (btn_default, btn_point). */
-body.site input:not([type="checkbox"]):not([type="radio"]),
-body.site textarea,
-body.site select {
+body.site.designed input:not([type="checkbox"]):not([type="radio"]),
+body.site.designed textarea,
+body.site.designed select {
   border: 1px solid var(--input-line);
   background: var(--input);
   color: var(--input-ink);
 }
-body.site input::placeholder,
-body.site textarea::placeholder {
+body.site.designed input::placeholder,
+body.site.designed textarea::placeholder {
   color: #777;
 }
-body.site input[type="checkbox"] {
+body.site.designed input[type="checkbox"] {
   accent-color: var(--avocado);
 }
-body.site button {
+body.site.designed button {
   height: auto;
   min-height: 28px;
   border: 1px solid #000000;
   background: #000000;
   color: #ffffff;
 }
-body.site button:hover:not(:disabled) {
+body.site.designed button:hover:not(:disabled) {
   border-color: #000000;
   background: #222222;
   color: #ffffff;
 }
-body.site button[type="submit"],
-body.site #signIn {
+body.site.designed button[type="submit"],
+body.site.designed #signIn {
   border-color: var(--avocado);
   background: var(--avocado);
   color: #ffffff;
 }
-body.site button[type="submit"]:hover:not(:disabled),
-body.site #signIn:hover:not(:disabled) {
+body.site.designed button[type="submit"]:hover:not(:disabled),
+body.site.designed #signIn:hover:not(:disabled) {
   border-color: var(--avocado);
   background: var(--avocado);
   filter: brightness(1.1);
 }
-body.site :focus-visible {
+body.site.designed :focus-visible {
   outline: 2px solid var(--avocado);
 }
 
 /* Sub menu (#submenu: sub_menu) as the community's tabs. */
-body.site .tabs {
+body.site.designed .tabs {
   justify-content: center;
   gap: 0;
   margin: 0 0 20px;
@@ -235,7 +237,7 @@ body.site .tabs {
   border-bottom: 1px dashed var(--line);
   background: var(--surface);
 }
-body.site .tabs button {
+body.site.designed .tabs button {
   min-width: 0;
   padding: 8px 10px;
   border: 0;
@@ -244,8 +246,8 @@ body.site .tabs button {
   font-size: 13px;
   font-weight: 600;
 }
-body.site .tabs button:hover:not(:disabled),
-body.site .tabs button[aria-pressed="true"] {
+body.site.designed .tabs button:hover:not(:disabled),
+body.site.designed .tabs button[aria-pressed="true"] {
   border: 0;
   background: transparent;
   color: var(--avocado);
@@ -253,10 +255,10 @@ body.site .tabs button[aria-pressed="true"] {
 }
 
 /* The mmb log board: picture with a "No." header, comments beside it. */
-body.site .log.card {
+body.site.designed .log.card {
   border-bottom: 0;
 }
-body.site .log-number {
+body.site.designed .log-number {
   margin: 0;
   padding: 0 10px;
   line-height: 30px;
@@ -264,13 +266,13 @@ body.site .log-number {
   font-size: 14px;
   font-weight: bold;
 }
-body.site .log.notice .log-number {
+body.site.designed .log.notice .log-number {
   color: var(--avocado);
 }
-body.site .log-title {
+body.site.designed .log-title {
   font-size: 12px;
 }
-body.site .comment {
+body.site.designed .comment {
   margin: 0 0 10px;
   padding: 5px 15px 10px;
   border: 0;
@@ -279,35 +281,35 @@ body.site .comment {
   color: #eaeaea;
   line-height: 1.6em;
 }
-body.site .comment .author {
+body.site.designed .comment .author {
   display: block;
   line-height: 30px;
   color: #eeeeee;
   font-size: 12px;
 }
-body.site .log-discussion > .meta .author {
+body.site.designed .log-discussion > .meta .author {
   color: var(--avocado);
 }
-body.site .log-discussion > .meta .author::before {
+body.site.designed .log-discussion > .meta .author::before {
   content: "▶ ";
 }
-body.site .log-discussion > .meta .author::after {
+body.site.designed .log-discussion > .meta .author::after {
   content: " ◀";
 }
-body.site time {
+body.site.designed time {
   color: #bbbbbb;
   font-size: 11px;
 }
-body.site .member-call,
-body.site .hash-tag,
-body.site .log-link,
-body.site .dice {
+body.site.designed .member-call,
+body.site.designed .hash-tag,
+body.site.designed .log-link,
+body.site.designed .dice {
   color: var(--avocado);
 }
-body.site .member-call {
+body.site.designed .member-call {
   padding: 0 5px;
 }
-body.site .post-action {
+body.site.designed .post-action {
   margin: 8px 0 0;
   padding: 8px;
   border: 1px solid var(--avocado);
@@ -315,16 +317,16 @@ body.site .post-action {
 }
 
 /* Boxes the original paints with its point colour. */
-body.site .character.card,
-body.site #items li,
-body.site #inventory li {
+body.site.designed .character.card,
+body.site.designed #items li,
+body.site.designed #inventory li {
   border: 1px solid transparent;
 }
-body.site #inventory li {
+body.site.designed #inventory li {
   border-color: var(--avocado);
   padding: 8px;
 }
-body.site dialog {
+body.site.designed dialog {
   border: 1px solid var(--line);
   background: #222222;
   color: var(--ink);
@@ -332,7 +334,7 @@ body.site dialog {
 
 /* Mobile (≤1024px): a 50px bar on top, the menu sliding in from the right. */
 @media (max-width: 1024px) {
-  body.site > .top {
+  body.site.designed > .top {
     bottom: auto;
     right: 0;
     width: auto;
@@ -342,25 +344,25 @@ body.site dialog {
     align-items: center;
     padding: 0 60px 0 10px;
   }
-  body.site > .top h1 {
+  body.site.designed > .top h1 {
     padding: 0;
     font-size: 16px;
   }
-  body.site #siteLogo {
+  body.site.designed #siteLogo {
     max-height: 36px;
   }
-  body.site .account {
+  body.site.designed .account {
     flex-direction: row;
     margin-left: auto;
     padding: 0;
   }
-  body.site .account button {
+  body.site.designed .account button {
     width: auto;
   }
-  body.site > .top > a[href="admin.html"] {
+  body.site.designed > .top > a[href="admin.html"] {
     display: none;
   }
-  #menuToggle {
+  body.site.designed #menuToggle {
     display: block;
     position: absolute;
     top: 5px;
@@ -370,7 +372,7 @@ body.site dialog {
     border-radius: 100%;
     font-size: 18px;
   }
-  body.site .site-menu {
+  body.site.designed .site-menu {
     position: fixed;
     top: 0;
     right: -280px;
@@ -383,24 +385,24 @@ body.site dialog {
   body.site.open-gnb .site-menu {
     right: 0;
   }
-  body.site > :not(.top):not(dialog):not(template):not(script) {
+  body.site.designed > :not(.top):not(dialog):not(template):not(script) {
     margin-left: auto;
   }
-  body.site > main,
-  body.site > #welcome {
+  body.site.designed > main,
+  body.site.designed > #welcome {
     padding-top: 70px;
   }
-  body.site > #status {
+  body.site.designed > #status {
     margin-top: 60px;
   }
 }
 @media (max-width: 1024px) {
-  body.site .tabs {
+  body.site.designed .tabs {
     flex-wrap: nowrap;
     justify-content: flex-start;
     overflow-x: auto;
   }
-  body.site .tabs button {
+  body.site.designed .tabs button {
     flex: none;
     white-space: nowrap;
   }
@@ -410,4 +412,12 @@ body.site dialog {
     position: fixed;
     z-index: 70;
   }
+}
+/* 마이페이지's menu is links, as the plain page's. */
+body.site.designed .sub-tabs:not(#shopCategories) button {
+  background: none;
+  color: var(--ink);
+}
+body.site.designed .sub-tabs:not(#shopCategories) button[aria-pressed="true"] {
+  color: var(--avocado);
 }

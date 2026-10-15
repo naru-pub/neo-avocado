@@ -49,12 +49,64 @@ async function loadShop() {
   // Independent panels, read at once.
   await Promise.all([
     loadBalance(),
-    loadItems(),
+    loadShopFront().then(() => loadItems()),
     loadInventory(),
     loadRecipes(),
     $("historyPanel").open ? loadHistory() : null,
   ]);
   state.shopLoaded = true;
+}
+/**
+ * The shop's front (shop/skin/shop.skin.php): the owner's NPC and greeting,
+ * and a button for each category (cf_shop_category); items without one are
+ * in the first.
+ */
+async function loadShopFront() {
+  const settings = await collection(COLLECTION.settings)
+    .get("community")
+    .catch((error) => {
+      if (error?.code === "NOT_FOUND") return null;
+      throw error;
+    });
+  const categories = String(settings?.data.shopCategories ?? "일반, 이벤트")
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+  state.shopCategories = categories.length ? categories : ["일반"];
+  if (!state.shopCategories.includes(state.shopCategory))
+    state.shopCategory = state.shopCategories[0];
+  state.shopGreeting = settings?.data.shopGreeting ?? "";
+  $("shopTalk").textContent = state.shopGreeting;
+  $("shopNpc").hidden = !settings?.data.shopNpc;
+  if (settings?.data.shopNpc) $("shopNpc").src = settings.data.shopNpc;
+  $("shopCategories").replaceChildren(
+    ...state.shopCategories.map((name) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = name;
+      button.setAttribute("aria-pressed", String(name === state.shopCategory));
+      button.onclick = () => {
+        state.shopCategory = name;
+        for (const other of $("shopCategories").children)
+          other.setAttribute("aria-pressed", String(other === button));
+        showCategory();
+      };
+      return button;
+    }),
+  );
+}
+/** The shop's items of the chosen category, from what has been read. */
+function showCategory() {
+  const first = state.shopCategories?.[0];
+  $("items").replaceChildren(
+    ...[...state.itemCatalog.values()]
+      .filter(
+        (item) =>
+          !item.data.hidden &&
+          (item.data.shopCategory || first) === state.shopCategory,
+      )
+      .map((item) => shopItem(item)),
+  );
 }
 async function loadItems({ more = false } = {}) {
   const page = await collection(COLLECTION.items).list({
@@ -67,11 +119,7 @@ async function loadItems({ more = false } = {}) {
     state.itemCatalog.clear();
   }
   for (const item of page.documents) state.itemCatalog.set(item.id, item);
-  $("items").append(
-    ...page.documents
-      .filter((item) => !item.data.hidden)
-      .map((item) => shopItem(item)),
-  );
+  showCategory();
   state.itemCursor = page.nextCursor;
   $("moreItems").hidden = !page.nextCursor;
 }
@@ -95,6 +143,12 @@ function itemPortrait(data) {
 function shopItem(item) {
   const row = document.createElement("li");
   row.className = "card shop-item";
+  // As the original's popup, the NPC talks about the item picked.
+  row.onclick = (event) => {
+    if (event.target.closest("button")) return;
+    $("shopTalk").textContent =
+      `${item.data.name}${item.data.description ? ` — ${item.data.description}` : ""}`;
+  };
   row.append(itemPortrait(item.data));
   const label = document.createElement("span");
   const stock =
@@ -303,6 +357,7 @@ const HISTORY_NAMES = {
   craft: "제작",
   gacha: "뽑기",
   use: "아이템 사용",
+  exp: "경험치 변경",
 };
 async function loadHistory({ more = false } = {}) {
   const page = await caller().call("economy/history:history", {
@@ -312,7 +367,7 @@ async function loadHistory({ more = false } = {}) {
   if (!more) $("history").replaceChildren();
   for (const row of page.documents) {
     const li = document.createElement("li");
-    li.textContent = `${formatTime(row.data.at)} · ${HISTORY_NAMES[row.data.kind] ?? row.data.kind}${row.data.delta !== undefined ? ` · ${row.data.delta > 0 ? "+" : ""}${row.data.delta} 아보` : ""}${row.data.balance !== undefined ? ` · 잔액 ${row.data.balance}` : ""}${row.data.memo ? ` · ${row.data.memo}` : ""}`;
+    li.textContent = `${formatTime(row.data.at)} · ${HISTORY_NAMES[row.data.kind] ?? row.data.kind}${row.data.delta !== undefined ? ` · ${row.data.delta > 0 ? "+" : ""}${row.data.delta} 아보` : ""}${row.data.balance !== undefined ? ` · 잔액 ${row.data.balance}` : ""}${row.data.expDelta !== undefined ? ` · 경험치 ${row.data.expDelta > 0 ? "+" : ""}${row.data.expDelta} (총 ${row.data.exp})` : ""}${row.data.memo ? ` · ${row.data.memo}` : ""}`;
     $("history").append(li);
   }
   state.historyCursor = page.nextCursor;

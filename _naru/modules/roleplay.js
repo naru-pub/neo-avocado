@@ -42,7 +42,7 @@ export async function speakerOf(ctx, id) {
   if (id === undefined || id === null) return null;
   const character = await ownCharacter(ctx, id);
   if (!character)
-    ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
+    ctx.fail("ACCESS_DENIED", "내 캐릭터로만 쓸 수 있습니다.", {
       reason: "not_owned",
     });
   const state = await ctx.get(CHARACTER_STATE, character.id);

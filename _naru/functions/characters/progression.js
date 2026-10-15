@@ -45,7 +45,7 @@ export async function allocateStats(
   { character, allocation, revision = null } = {},
 ) {
   if (!(await ownCharacter(ctx, character)))
-    ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
+    ctx.fail("ACCESS_DENIED", "내 캐릭터만 바꿀 수 있습니다.", {
       reason: "not_owned",
     });
   if (
@@ -103,7 +103,7 @@ export async function allocateStats(
 
 export async function equipTitle(ctx, { character, title = null } = {}) {
   if (!(await ownCharacter(ctx, character)))
-    ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
+    ctx.fail("ACCESS_DENIED", "내 캐릭터만 바꿀 수 있습니다.", {
       reason: "not_owned",
     });
   const state = await characterState(ctx, character);

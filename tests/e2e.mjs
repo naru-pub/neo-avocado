@@ -58,9 +58,12 @@ async function person() {
   page.on("dialog", (dialog) => dialog.accept());
   return page;
 }
+/** Opens a page from the site menu, as a member would. */
+const menu = (page, name) =>
+  page.locator("#siteMenu a", { hasText: name }).first().click();
 async function signInAs(page, name) {
   await page.goto(`${origin}/`);
-  await page.locator("#signIn").click();
+  await page.locator("#cardSignIn").click();
   await page.waitForURL(/members\/sign-in/);
   await page.locator("input[name=as]:not([type=hidden])").fill(name);
   await page.getByRole("button", { name: "로그인", exact: true }).click();
@@ -148,7 +151,7 @@ try {
   const alice = await person();
   await signInAs(alice, "alice");
   await joinAs(alice, "앨리스");
-  await alice.locator("#tabCharacters").click();
+  await menu(alice, "신청자목록");
   await alice.locator('#characterFields [data-field="age"]').waitFor();
   await alice.locator("#characterName").fill("초록");
   await alice.locator('#characterFields [data-field="age"]').fill("17");
@@ -163,7 +166,7 @@ try {
     .locator("#characters .character")
     .filter({ hasText: "초록" })
     .waitFor();
-  await alice.locator("#tabLogs").click();
+  await menu(alice, "로그");
   await alice.locator("#logImage").setInputFiles(picture("log.png"));
   await alice.locator("#logText").fill("첫 로그 #봄");
   await alice.locator('#logForm [type="submit"]').click();
@@ -185,7 +188,7 @@ try {
   const bob = await person();
   await signInAs(bob, "bob");
   await joinAs(bob, "밥");
-  await bob.locator("#tabCharacters").click();
+  await menu(bob, "신청자목록");
   const sheet = bob
     .locator("#characters .character")
     .filter({ hasText: "초록" });
@@ -194,7 +197,7 @@ try {
   await sheet.locator(".character-fields").filter({ hasText: "17" }).waitFor();
   assert.doesNotMatch(await sheet.textContent(), /비밀 일기/);
   // Alice still sees her own.
-  await alice.locator("#tabCharacters").click();
+  await menu(alice, "신청자목록");
   const own = alice
     .locator("#characters .character")
     .filter({ hasText: "초록" });
@@ -205,7 +208,7 @@ try {
     .waitFor();
 
   // Bob calls Alice in a comment; her live connection marks the call.
-  await bob.locator("#tabLogs").click();
+  await menu(bob, "로그");
   const thread = bob.locator("#logs .log").filter({ hasText: "첫 로그" });
   await thread.locator(".comments > summary").click();
   await thread.locator(".comment-text").fill("[[앨리스]] 멋져요");
@@ -216,7 +219,7 @@ try {
   );
 
   // The shop runs in site functions with the real write budget.
-  await bob.locator("#tabShop").click();
+  await menu(bob, "상점");
   await bob.locator("#daily").click();
   await bob.waitForFunction(
     () => document.querySelector("#balance").textContent === "100",
@@ -231,10 +234,45 @@ try {
   );
   assert.equal(await bob.locator("#balance").textContent(), "100");
 
+  // 마이페이지's 로그내역 lists the member's own posts.
+  await menu(alice, "마이페이지");
+  await alice.locator("#myLogsTab").click();
+  await alice.locator("#myLogs li", { hasText: "첫 로그" }).waitFor();
+
+  // The owner pairs two characters; members see them in 커플목록.
+  await owner.evaluate(async (P) => {
+    const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+    const admin = await createNaru().auth.session();
+    const { documents } = await admin.collection(`${P}characters`).list();
+    await admin.collection(`${P}couples`).set("pair", {
+      first: documents[0].id,
+      second: documents[documents.length - 1].id,
+      since: "2030-01-01",
+    });
+    // Shop categories: the event item shows under 이벤트 only.
+    await admin.collection(`${P}settings`).set("community", {
+      shopCategories: "일반, 이벤트",
+      shopGreeting: "어서 오세요",
+    });
+    await admin
+      .collection(`${P}items`)
+      .set("cake", { name: "케이크", price: 1, shopCategory: "이벤트" });
+  }, P);
+  await menu(alice, "커플목록");
+  await alice.locator("#coupleList li", { hasText: "초록" }).waitFor();
+  await menu(alice, "상점");
+  await alice.locator("#shopTalk", { hasText: "어서 오세요" }).waitFor();
+  assert.equal(
+    await alice.locator("#items li", { hasText: "케이크" }).count(),
+    0,
+  );
+  await alice.locator("#shopCategories button", { hasText: "이벤트" }).click();
+  await alice.locator("#items li", { hasText: "케이크" }).waitFor();
+
   // Deleting the post deletes its picture too (a managed upload).
   const file = logPicture.split("/").pop();
   assert.equal((await fetch(`${origin}/media/1/${file}`)).status, 200);
-  await alice.locator("#tabLogs").click();
+  await menu(alice, "로그");
   await alice
     .locator("#logs .log")
     .filter({ hasText: "첫 로그" })
@@ -257,6 +295,7 @@ try {
   // A visitor posts on the public board, and edits with the password only.
   const guest = await person();
   await guest.goto(`${origin}/`);
+  await menu(guest, "로그");
   await guest.waitForFunction(() =>
     [...document.querySelectorAll("#board option")].some(
       (o) => o.value === "free",
@@ -352,6 +391,13 @@ try {
     forged: "ACCESS_DENIED",
     theirs: "ACCESS_DENIED",
   });
+
+  // Bob leaves the community: from then on he is a guest here.
+  await menu(bob, "마이페이지");
+  await bob.locator("#myLeave").click();
+  await bob.locator("#admissionTitle", { hasText: "탈퇴한 회원" }).waitFor();
+  await bob.reload();
+  await bob.locator("#admissionTitle", { hasText: "탈퇴한 회원" }).waitFor();
 
   assert.deepEqual(errors, []);
   console.log("neo-avocado on naru-dev: every flow passed.");

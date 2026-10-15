@@ -109,7 +109,13 @@ test("settings: only the community settings, trimmed to what pages use", () => {
     settings.present(rulesCtx("m-1"), {
       document: { id: "community", data: { messageCost: 3, secretKey: "x" } },
     }),
-    { initialStatPoints: 0, messageCost: 3 },
+    {
+      initialStatPoints: 0,
+      messageCost: 3,
+      shopCategories: "일반, 이벤트",
+      shopNpc: null,
+      shopGreeting: "",
+    },
   );
 });
 

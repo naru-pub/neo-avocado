@@ -51,6 +51,9 @@ function fakeDatabase(rows = {}) {
       "neo_avocado_emoticons",
       "neo_avocado_character_fields",
       "neo_avocado_inventory",
+      "neo_avocado_items",
+      "neo_avocado_settings",
+      "neo_avocado_couples",
     ].map((name) => [
       name,
       (rows[name] ?? []).map((row) => ({

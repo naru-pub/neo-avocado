@@ -31,6 +31,7 @@ import {
   messageStatus,
   membership,
   join,
+  leave,
   posts,
   comments,
   sheet,
@@ -1593,10 +1594,13 @@ test("the board rule shares the gate's helpers: levels, moderators, secrets and 
 // Writes go through the community/data function; reads are the SDK's own,
 // through the collection rules (tests/native-read.mjs).
 const gate = (ctx, collection, operation, rest = {}) =>
-  (["get", "getMany", "list"].includes(operation) ? nativeRead : communityWrite)(
-    ctx,
-    { collection: `${P}${collection}`, operation, ...rest },
-  );
+  (["get", "getMany", "list"].includes(operation)
+    ? nativeRead
+    : communityWrite)(ctx, {
+    collection: `${P}${collection}`,
+    operation,
+    ...rest,
+  });
 const reasonOf = async (promise) => {
   try {
     await promise;
@@ -2326,6 +2330,8 @@ test("the site frame shows only safe design values and menus/banners a reader ma
   ctx.member = null;
   const frame = await site(ctx);
   assert.deepEqual(frame.design, {
+    // 디자인 사용 is off unless the owner turns it on.
+    enabled: false,
     title: "아보카도",
     logo: null,
     background: "https://cdn.example/bg.png",
@@ -2337,6 +2343,17 @@ test("the site frame shows only safe design values and menus/banners a reader ma
     frame.menus.map((menu) => menu.id),
     ["b", "a"],
   );
+  // No background music until the owner sets a YouTube link; only its ID
+  // reaches pages.
+  assert.equal(frame.bgm, null);
+  table(`${P}settings`).set("community", {
+    bgm: "https://www.youtube.com/playlist?list=PLx0sYbCqOb8TBPRdmBHs5Iftvv9TPboYG",
+  });
+  assert.deepEqual((await site(ctx)).bgm, {
+    list: "PLx0sYbCqOb8TBPRdmBHs5Iftvv9TPboYG",
+  });
+  table(`${P}settings`).set("community", { bgm: "javascript:alert(1)" });
+  assert.equal((await site(ctx)).bgm, null);
   assert.deepEqual(
     frame.banners.map((banner) => [banner.id, banner.place]),
     [
@@ -2562,4 +2579,48 @@ test("the characters rule shows members only the custom fields they may see", as
     ),
     false,
   );
+});
+
+test("a member who leaves becomes a guest until the owner clears the date", async () => {
+  const { ctx, table } = fakeCtx({ now: Date.parse("2030-01-01T16:00:00Z") });
+  await join(ctx, { nick: "떠날이" });
+  table(`${P}members`).get("m-1").level = 5;
+  assert.equal(await refusal(leave(ctx, {})), "invalid_input");
+  assert.deepEqual(await leave(ctx, { confirm: true }), { left: true });
+  // The date is Korea's: 01:00 the next day there.
+  assert.equal(table(`${P}members`).get("m-1").left, "2030-01-02");
+  const left = await membership(ctx);
+  assert.equal(left.left, true);
+  assert.equal(left.level, 1);
+  assert.equal(await refusal(leave(ctx, { confirm: true })), "left");
+  assert.equal(await refusal(join(ctx, { nick: "다시" })), "left");
+  // Their profile stays; the owner clears the date to let them back.
+  assert.equal(table(`${P}profiles`).get("m-1").nick, "떠날이");
+  delete table(`${P}members`).get("m-1").left;
+  assert.equal((await membership(ctx)).level, 5);
+});
+
+test("history narrows to one kind, as the experience list asks", async () => {
+  const { ctx, table } = fakeCtx();
+  table(`${P}history`).set("h1", { owner: "m-1", kind: "buy", at: 1 });
+  table(`${P}history`).set("h2", {
+    owner: "m-1",
+    kind: "exp",
+    at: 2,
+    expDelta: 5,
+    exp: 5,
+  });
+  table(`${P}history`).set("h3", {
+    owner: "m-2",
+    kind: "exp",
+    at: 3,
+    expDelta: 9,
+    exp: 9,
+  });
+  assert.deepEqual(
+    (await history(ctx, { kind: "exp" })).documents.map((row) => row.id),
+    ["h2"],
+  );
+  assert.equal((await history(ctx, {})).documents.length, 2);
+  assert.equal(await refusal(history(ctx, { kind: 5 })), "invalid_input");
 });

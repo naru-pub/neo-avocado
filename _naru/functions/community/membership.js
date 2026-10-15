@@ -2,6 +2,7 @@ import {
   PROFILES,
   MEMBERS,
   communityAccess,
+  kstDay,
   text,
 } from "../../modules/shared.js";
 
@@ -21,6 +22,10 @@ export async function join(
   { nick, acceptMessages = true, commentAlerts = true } = {},
 ) {
   const access = await communityAccess(ctx);
+  if (access.left)
+    ctx.fail("ACCESS_DENIED", "탈퇴한 회원입니다. 운영자에게 문의해 주세요.", {
+      reason: "left",
+    });
   const old = await ctx.get(PROFILES, ctx.member.id);
   const profile = await ctx.set(PROFILES, ctx.member.id, {
     ...old?.data,
@@ -35,4 +40,26 @@ export async function join(
       requestedAt: ctx.now,
     });
   return { profile, ...access };
+}
+
+/**
+ * Leaves the community (bbs/member_leave.php): the member's record keeps the
+ * date, and they are a guest from then on; their posts and characters stay.
+ * The owner clears the date to let them back. Leaving the Naru site itself is
+ * Naru's, under the site's members.
+ */
+export async function leave(ctx, { confirm } = {}) {
+  if (confirm !== true)
+    ctx.fail("INVALID_REQUEST", "탈퇴를 확인해 주세요.", {
+      reason: "invalid_input",
+    });
+  const row = await ctx.get(MEMBERS, ctx.member.id);
+  if (row?.data.left)
+    ctx.fail("CONFLICT", "이미 탈퇴했습니다.", { reason: "left" });
+  await ctx.set(MEMBERS, ctx.member.id, {
+    role: "member",
+    ...row?.data,
+    left: kstDay(ctx.now),
+  });
+  return { left: true };
 }

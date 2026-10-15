@@ -7,6 +7,7 @@ import {
   buildRecord,
   fieldValue,
   walletWrites,
+  characterStateWrites,
   titleHoldings,
 } from "./admin-model.js";
 const $ = (id) => document.getElementById(id);
@@ -609,6 +610,17 @@ $("adminForm").onsubmit = async (event) => {
           record,
           selected,
           values.note,
+          Date.now(),
+          crypto.randomUUID(),
+        ),
+      );
+      saved = { ...record, ...results[0] };
+    } else if (section === "character_state") {
+      const results = await owner.batch(
+        characterStateWrites(
+          record,
+          selected,
+          values.expNote,
           Date.now(),
           crypto.randomUUID(),
         ),

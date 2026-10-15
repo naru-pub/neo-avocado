@@ -268,13 +268,17 @@ export function showAdmission(status) {
       ? "접근 차단"
       : status === "closed"
         ? "가입 닫힘"
-        : "가입 승인 대기";
+        : status === "left"
+          ? "탈퇴한 회원"
+          : "가입 승인 대기";
   $("admissionDescription").textContent =
     status === "banned"
       ? "이 커뮤니티에서 차단되었습니다."
       : status === "closed"
         ? "현재 신규 가입을 받지 않습니다."
-        : "운영자의 가입 승인이 필요합니다.";
+        : status === "left"
+          ? "탈퇴한 회원입니다. 다시 이용하려면 운영자에게 문의해 주세요."
+          : "운영자의 가입 승인이 필요합니다.";
   $("admissionId").textContent = `가입 문의용 회원 번호: ${state.member.id}`;
   $("editProfile").hidden = true;
 }
@@ -291,6 +295,10 @@ export function show(profile) {
   // Visitors see the public boards and pages (level 1).
   $("community").hidden = member ? !profile : false;
   $("whoami").textContent = profile ? `${profile.data.nick} 님` : "";
+  // The main page's card (templete/txt.outlogin.php).
+  $("cardName").textContent = profile ? profile.data.nick : "손님";
+  $("cardRole").hidden = state.role !== "moderator";
+  $("cardDescript").textContent = profile ? "" : "회원 로그인해 주세요.";
   state.profile = profile ?? null;
 }
 /** An inline form retains the draft when saving fails. */
@@ -374,8 +382,32 @@ export async function allDocuments(name, filter, where) {
   } while (after);
   return documents;
 }
+/** The views under 마이페이지's own menu (mypage/). */
+const MYPAGE = {
+  mypage: "myAccountTab",
+  myLogs: "myLogsTab",
+  myExp: "myExpTab",
+  messages: "myMailTab",
+  calls: "myCallsTab",
+};
 export function showTab(name) {
+  $("mypageNav").hidden = !Object.hasOwn(MYPAGE, name);
+  for (const [view, button] of Object.entries(MYPAGE))
+    $(button).setAttribute("aria-pressed", String(view === name));
+  for (const [view, key] of [
+    ["mypageView", "mypage"],
+    ["myLogsView", "myLogs"],
+    ["myExpView", "myExp"],
+    ["couplesView", "couples"],
+  ])
+    $(view).hidden = name !== key;
+  $("tabCouples").setAttribute("aria-pressed", String(name === "couples"));
+  $("tabMypage").setAttribute(
+    "aria-pressed",
+    String(Object.hasOwn(MYPAGE, name)),
+  );
   for (const [tab, view, key] of [
+    ["tabHome", "homeView", "home"],
     ["tabLogs", "logsView", "logs"],
     ["tabCharacters", "charactersView", "characters"],
     ["tabShop", "shopView", "shop"],

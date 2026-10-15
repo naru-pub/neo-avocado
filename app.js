@@ -12,6 +12,7 @@ import {
   $,
   caller,
   clearPrivateViews,
+  collection,
   COLLECTION,
   edit,
   run,
@@ -29,6 +30,8 @@ import "./app/shop.js";
 import "./app/messages.js";
 import "./app/calls.js";
 import "./app/content.js";
+import "./app/mypage.js";
+import "./app/couples.js";
 
 export { diceOf } from "./app/posts.js";
 
@@ -93,10 +96,16 @@ async function start() {
     return showAdmission(platform.status);
   }
   const status = await caller().call("community/membership:membership");
+  if (status.left) {
+    show();
+    return showAdmission("left");
+  }
   state.role = status.role;
   state.level = status.level ?? 2;
   const profile = status.profile;
   show(profile);
+  // Decoration: the card keeps its placeholder if this fails.
+  showMainCharacter(profile).catch((error) => console.error(error));
   if (profile) {
     state.nicks.set(state.member.id, Promise.resolve(profile.data.nick));
     await loadBoards();
@@ -109,12 +118,42 @@ async function visit() {
   state.role = "guest";
   state.level = 1;
   show();
-  showTab("logs");
+  showTab("home");
   await loadBoards();
   await loadLogs();
   if (state.boards.length) listen();
 }
 $("signIn").onclick = () => run(() => state.naru.members.signIn());
+// The main page, as the original lands on main.php; the logo leads back.
+$("tabHome").onclick = () => showTab("home");
+$("homeLink").onclick = (event) => {
+  event.preventDefault();
+  document.body.classList.remove("open-gnb");
+  showTab("home");
+};
+$("cardSignIn").onclick = () => $("signIn").click();
+$("cardSignOut").onclick = () => $("signOut").click();
+$("cardMessages").onclick = () => $("tabMessages").click();
+$("copyrightYear").textContent = String(new Date().getFullYear());
+$("gotoTop").onclick = (event) => {
+  event.preventDefault();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+};
+/** The card shows the member's main character, as the original's thumbnail. */
+async function showMainCharacter(profile) {
+  const id = profile?.data.mainCharacter;
+  const character = id
+    ? await collection(COLLECTION.characters)
+        .get(id)
+        .catch(() => null)
+    : null;
+  $("cardThumb").replaceChildren(
+    character?.data.image
+      ? Object.assign(new Image(), { src: character.data.image, alt: "" })
+      : "⌘",
+  );
+  if (character) $("cardDescript").textContent = character.data.name;
+}
 $("signOut").onclick = () =>
   run(async () => {
     const member = state.member;

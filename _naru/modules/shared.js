@@ -85,6 +85,9 @@ export const GUEST_ACCESS = Object.freeze({ level: 1, role: "guest" });
 export async function communityAccess(ctx, id = ctx.member?.id) {
   if (!id) return GUEST_ACCESS;
   const row = await ctx.get(MEMBERS, id);
+  // A member who left (bbs/member_leave.php) is a guest until the owner
+  // clears their leave date.
+  if (row?.data.left) return { ...GUEST_ACCESS, role: "member", left: true };
   return {
     level:
       Number.isInteger(row?.data.level) &&
@@ -468,4 +471,23 @@ export async function contentReadable(ctx, row) {
     !row.data.deleted &&
     (await communityAccess(ctx)).level >= (row.data.readLevel ?? 2)
   );
+}
+
+/**
+ * The background music the owner set: a YouTube playlist (`list=…`, or the
+ * bare ID) or a single video (`v=…`, youtu.be/…), else null. Only the ID
+ * reaches pages, which embed it themselves.
+ */
+export function backgroundMusic(value) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const text = value.trim();
+  const id = /^[\w-]{10,64}$/;
+  const list = text.match(/[?&]list=([\w-]{10,64})/)?.[1];
+  if (list) return { list };
+  const video =
+    text.match(/[?&]v=([\w-]{11})/)?.[1] ??
+    text.match(/youtu\.be\/([\w-]{11})/)?.[1];
+  if (video) return { video };
+  if (!id.test(text)) return null;
+  return text.length === 11 ? { video: text } : { list: text };
 }

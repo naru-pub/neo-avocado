@@ -5,6 +5,7 @@ import {
   scopes,
   models,
   walletWrites,
+  characterStateWrites,
   titleHoldings,
 } from "../admin-model.js";
 const references = {
@@ -431,4 +432,40 @@ test("the site declares every collection it uses, and sign-in asks for them", as
     assert.ok(entry.read && entry.write, `${name} states read and write`);
   assert.equal(collections.neo_avocado_logs.rules, "community-board");
   assert.deepEqual(collections.neo_avocado_profiles.unique, ["nick"]);
+});
+
+test("a character's experience change is recorded for its owner in the same batch", () => {
+  const previous = { revision: "r1", data: { owner: "m-1", exp: 10 } };
+  const record = { id: "hero", data: { owner: "m-1", exp: 25 } };
+  const writes = characterStateWrites(record, previous, " 이벤트 ", 7, "h-1");
+  assert.equal(writes.length, 2);
+  assert.deepEqual(writes[0].set.condition, { revision: "r1" });
+  assert.deepEqual(writes[1], {
+    collection: "neo_avocado_history",
+    set: {
+      id: "h-1",
+      data: {
+        owner: "m-1",
+        kind: "exp",
+        at: 7,
+        character: "hero",
+        expDelta: 15,
+        exp: 25,
+        memo: "이벤트",
+        actor: "site-owner",
+      },
+      condition: { absent: true },
+    },
+  });
+  // Unchanged experience writes the record alone.
+  assert.equal(
+    characterStateWrites(
+      { id: "hero", data: { owner: "m-1", exp: 10 } },
+      previous,
+      "",
+      7,
+      "h-2",
+    ).length,
+    1,
+  );
 });

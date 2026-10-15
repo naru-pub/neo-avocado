@@ -17,6 +17,14 @@ export async function loadSite() {
   const site = await caller().call("content/site:site");
   const { design } = site;
   const root = document.documentElement.style;
+  // Without 디자인 사용 the page is plain (plain.css), as the original
+  // without its design CSS: the title, logo, menus and slides still apply.
+  document.body.classList.toggle("designed", design.enabled);
+  applyNames(design);
+  renderMenus(site.menus);
+  renderBanners(site.banners);
+  setMusic(site.bgm);
+  if (!design.enabled) return;
   for (const [key, variable] of Object.entries(SITE_COLORS))
     if (design.colors[key]) root.setProperty(variable, design.colors[key]);
   if (design.background) {
@@ -35,17 +43,20 @@ export async function loadSite() {
   document.body.classList.remove("font-serif", "font-mono");
   if (design.font !== "sans")
     document.body.classList.add(`font-${design.font}`);
+}
+/** The site's name and logo, in the header and the copyright. */
+function applyNames(design) {
   if (design.title) {
     $("siteTitle").textContent = design.title;
+    $("copyrightName").textContent = design.title;
     document.title = design.title;
   }
   $("siteLogo").hidden = !design.logo;
+  $("siteTitle").hidden = Boolean(design.logo);
   if (design.logo) {
     $("siteLogo").src = design.logo;
     $("siteLogo").alt = design.title || "";
   }
-  renderMenus(site.menus);
-  renderBanners(site.banners);
 }
 function menuLink(menu) {
   const link = document.createElement("a");
@@ -67,13 +78,16 @@ function menuLink(menu) {
   return link;
 }
 /** head.php's menu when the owner has not designed one (#no_design_gnb). */
+// The original's menu without a design (head.php #no_design_gnb), with the
+// boards first and neo-avocado's quests and pages after.
 const DEFAULT_MENUS = [
   ["로그", "tab:logs"],
-  ["멤버목록", "tab:characters", true],
+  ["멤버목록", "tab:members", true],
+  ["신청자목록", "tab:applicants", true],
+  ["커플목록", "tab:couples", true],
   ["상점", "tab:shop", true],
+  ["마이페이지", "tab:mypage", true],
   ["퀘스트", "tab:quests", true],
-  ["쪽지", "tab:messages", true],
-  ["알림", "tab:calls", true],
   ["안내", "tab:content"],
 ].map(([name, link, memberOnly]) => ({
   id: link,
@@ -150,7 +164,45 @@ function renderBanners(banners) {
   $("introImages").replaceChildren(...intro.map(bannerPicture));
   $("intro").showModal?.();
 }
+/**
+ * The owner's background music (cf_bgm): a YouTube playlist or video, played
+ * on request in a frame that stays as the member moves around the page.
+ */
+let music = null;
+function setMusic(bgm) {
+  music = bgm;
+  $("bgmPlayer").hidden = !bgm;
+  if (!bgm) stopMusic();
+}
+function stopMusic() {
+  $("bgmFrame").replaceChildren();
+  $("bgmPlayer").classList.remove("playing");
+  $("bgmPlay").hidden = false;
+  $("bgmStop").hidden = true;
+}
+$("bgmPlay").onclick = () => {
+  if (!music) return;
+  const frame = document.createElement("iframe");
+  frame.title = "배경음악";
+  frame.allow = "autoplay; encrypted-media";
+  frame.src = music.list
+    ? `https://www.youtube-nocookie.com/embed/videoseries?list=${encodeURIComponent(music.list)}&autoplay=1&loop=1&playsinline=1`
+    : `https://www.youtube-nocookie.com/embed/${encodeURIComponent(music.video)}?autoplay=1&loop=1&playlist=${encodeURIComponent(music.video)}&playsinline=1`;
+  $("bgmFrame").replaceChildren(frame);
+  $("bgmPlayer").classList.add("playing");
+  $("bgmPlay").hidden = true;
+  $("bgmStop").hidden = false;
+};
+$("bgmStop").onclick = stopMusic;
 $("menuToggle").onclick = () => document.body.classList.toggle("open-gnb");
+// A tap outside the open menu closes it.
+document.addEventListener("click", (event) => {
+  if (
+    document.body.classList.contains("open-gnb") &&
+    !event.target.closest("#siteMenu, #menuToggle")
+  )
+    document.body.classList.remove("open-gnb");
+});
 $("enterSite").onclick = () => {
   try {
     sessionStorage.setItem("neo-avocado-entered", "1");
@@ -178,6 +230,13 @@ async function follow(link) {
       return say("자료를 찾을 수 없습니다.");
     $("contentPage").value = id;
     return loadContentBody();
+  }
+  // member/ and member/ready.php: the character list, approved or not yet.
+  if (id === "members" || id === "applicants") {
+    if (!state.member) return say("회원 로그인 후 이용할 수 있습니다.");
+    $("characterFilter").value = id === "members" ? "approved" : "applicants";
+    $("characterFilter").dispatchEvent(new Event("change"));
+    return $("tabCharacters").click();
   }
   const tab = $(`tab${id.charAt(0).toUpperCase()}${id.slice(1)}`);
   if (!tab) return;
