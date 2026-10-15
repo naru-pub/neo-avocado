@@ -128,8 +128,7 @@ try {
   await owner.page.locator("#adminSignIn").click();
   await owner.page.locator("#adminWorkspace").waitFor();
   await owner.page.evaluate(async (P) => {
-    const { createNaru } =
-      await import("https://sdk.naru.pub/sdk/1.1.0/naru.js");
+    const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
     const admin = await createNaru().auth.session();
     await admin.collection(`${P}boards`).set("default", {
       name: "자유",
@@ -165,7 +164,7 @@ try {
     await who.page.evaluate(
       async ({ P, nick }) => {
         const { createNaru } =
-          await import("https://sdk.naru.pub/sdk/1.1.0/naru.js");
+          await import("https://naru.pub/sdk/1.1.0/naru.js");
         const member = await createNaru().members.session();
         const call = (args) =>
           member.call("community/data:communityData", args);

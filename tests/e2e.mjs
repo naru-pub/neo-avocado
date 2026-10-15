@@ -90,8 +90,7 @@ try {
   assert.match(log, /owner signed in: \d+ collections, \d+ created/);
   // Setup through the owner's own SDK handle: a public board and fields.
   await owner.evaluate(async (P) => {
-    const { createNaru } =
-      await import("https://sdk.naru.pub/sdk/1.1.0/naru.js");
+    const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
     const admin = await createNaru().auth.session();
     await admin.collection(`${P}boards`).set("free", {
       name: "자유",
