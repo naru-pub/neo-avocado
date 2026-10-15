@@ -2,7 +2,12 @@
 // and whenever the address changes: a shared link, a reload, the back and
 // forward buttons. app/core.js's route() writes the addresses.
 import { $, opening, run, say, showTab, state } from "./core.js";
-import { configureBoard, loadLogs, openLogNumber } from "./logs.js";
+import {
+  configureBoard,
+  loadBoards,
+  loadLogs,
+  openLogNumber,
+} from "./logs.js";
 import { follow } from "./site.js";
 import { openCharacter } from "./characters.js";
 import { showShopCategory } from "./shop.js";
@@ -29,6 +34,8 @@ export function openRoute(hash = location.hash) {
     if (kind === "logs") {
       $("tabLogs").click();
       if (first && first !== state.board) {
+        // A board made since the page read its list: read it again, once.
+        if (!state.boards.some((row) => row.id === first)) await loadBoards();
         if (!state.boards.some((row) => row.id === first))
           return say("권한이 없습니다.");
         state.board = first;

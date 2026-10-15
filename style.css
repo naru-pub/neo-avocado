@@ -1087,3 +1087,50 @@ table.report input[type="number"] {
   height: 60px;
   object-fit: contain;
 }
+
+/* Page numbers (pg_wrap): bordered squares, the current one filled. */
+.pages {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  padding: 20px 0;
+}
+.pages[hidden] {
+  display: none;
+}
+.pages .page,
+body.site:not(.designed) .pages .page {
+  min-width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0 5px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font-size: 13px;
+}
+.pages .page[aria-current="page"] {
+  background: var(--avocado);
+  border-color: var(--avocado);
+  color: var(--paper);
+}
+
+/* Board search, a guest's secret question, a settled request. */
+.board-search {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  margin: 10px 0;
+}
+.board-search input {
+  flex: 0 1 220px;
+  min-width: 0;
+}
+.open-secret {
+  display: inline-flex;
+  gap: 4px;
+}
+.log.settled .log-title {
+  color: var(--pit);
+}

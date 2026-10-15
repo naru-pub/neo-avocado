@@ -23,6 +23,8 @@ import {
   withGuestPassword,
   removeAll,
   route,
+  cursorPages,
+  renderPages,
 } from "./core.js";
 import {
   actionItem,
@@ -40,32 +42,53 @@ const LOG_SORT = [
 ];
 /** A tag search: logs whose tags hold `tag`. */
 const tagOptions = (tag) => ({ where: { has: ["tags", tag] } });
-export async function loadLogs({ more = false } = {}) {
+/**
+ * What a board is (bo_skin): image logs (mmb), plain posts, questions and
+ * answers (qna), or settlement requests (caculate).
+ */
+export const kindOf = (id = state.board) =>
+  state.boards.find((row) => row.id === (id ?? "default"))?.data.kind ??
+  "image";
+/** The current board's posts, ten to a page (or those with the tag). */
+const logPages = cursorPages((after, includeTotal) =>
+  // A Q&A board shows others' secret questions locked, so a function reads it.
+  kindOf() === "qna" && !state.tag
+    ? caller().call("community/posts:questions", { board: state.board, after })
+    : collection(COLLECTION.logs).list({
+        filter: { board: state.board },
+        // Notices (bo_notice) sort first: true above false and unset.
+        sort: LOG_SORT,
+        size: LOG_PAGE,
+        after,
+        ...(includeTotal ? { includeTotal: true } : {}),
+        ...(state.tag ? tagOptions(state.tag) : {}),
+      }),
+);
+/** Shows a page of the board: the first unless `page` is given. */
+export async function loadLogs({ page: number = 1 } = {}) {
   if (!state.member && !state.boards.length) return $("logs").replaceChildren();
-  const page = await collection(COLLECTION.logs).list({
-    filter: { board: state.board },
-    // Notices (bo_notice) sort first: true above false and unset.
-    sort: LOG_SORT,
-    size: LOG_PAGE,
-    after: more ? state.logCursor : null,
-    ...(state.tag ? tagOptions(state.tag) : {}),
-  });
+  if (state.search) return showSearch();
+  if (number === 1) logPages.reset();
+  const page = await logPages.page(number);
   await preloadNicks(page.documents);
-  if (!more) {
-    $("logs").replaceChildren();
-    showNewPost(null);
-  }
+  $("logs").replaceChildren();
+  if (page.number === 1) showNewPost(null);
   $("tagFilter").hidden = !state.tag;
   $("tagName").textContent = state.tag ? `#${state.tag} 태그가 달린 로그` : "";
   const shown = [];
   for (const log of page.documents) {
-    const item = await logItem(previewOf(log));
+    // Questions show whole, as the qna skin lists them.
+    const item = await logItem(kindOf() === "qna" ? log : previewOf(log));
     if (log.data.notice) item.classList.add("notice");
     $("logs").append(item);
     shown.push([log.id, item]);
   }
-  state.logCursor = page.nextCursor;
-  $("moreLogs").hidden = !page.nextCursor;
+  renderPages(
+    $("logPages"),
+    page.number,
+    Math.ceil((logPages.total ?? 0) / LOG_PAGE),
+    (next) => loadLogs({ page: next }),
+  );
   await showCommentCounts(shown);
 }
 /** Fills each log's "댓글 (n)" from one read-only count call. */
@@ -134,8 +157,34 @@ export async function searchTag(tag) {
 $("clearTag").onclick = () =>
   run(async () => {
     state.tag = null;
+    state.search = null;
+    $("searchText").value = "";
     await loadLogs();
   });
+/** The board's search results (the skins' 검색), newest first. */
+async function showSearch() {
+  const { documents } = await caller().call("community/posts:search", {
+    board: state.board,
+    text: state.search,
+  });
+  await preloadNicks(documents);
+  $("logs").replaceChildren();
+  for (const log of documents)
+    $("logs").append(await logItem(kindOf() === "qna" ? log : previewOf(log)));
+  $("tagFilter").hidden = false;
+  $("tagName").textContent =
+    `‘${state.search}’ 검색 결과 ${documents.length}건${documents.length === 50 ? " (최근 50건까지)" : ""}`;
+  $("logPages").hidden = true;
+}
+$("boardSearch").onsubmit = (event) => {
+  event.preventDefault?.();
+  run(async () => {
+    const text = $("searchText").value.trim();
+    state.tag = null;
+    state.search = text || null;
+    await loadLogs();
+  });
+};
 export async function logItem(log) {
   const item = $("logTemplate").content.firstElementChild.cloneNode(true);
   item.dataset.id = log.id;
@@ -179,7 +228,31 @@ export async function logItem(log) {
   const image = item.querySelector(".log-image");
   if (log.data.image && !log.data.locked) image.src = log.data.image;
   else image.remove();
-  if (log.data.locked)
+  if (log.data.locked && log.data.guest) {
+    // A guest's secret question opens with its password (qna/password.php).
+    const form = document.createElement("form");
+    form.className = "open-secret";
+    const password = document.createElement("input");
+    password.type = "password";
+    password.placeholder = "비밀번호";
+    password.autocomplete = "current-password";
+    password.setAttribute("aria-label", "질문 비밀번호");
+    const enter = document.createElement("button");
+    enter.type = "submit";
+    enter.textContent = "열기";
+    form.append(password, enter);
+    form.onsubmit = (event) => {
+      event.preventDefault?.();
+      run(async () => {
+        const { document: opened } = await caller().call(
+          "community/posts:open",
+          { id: log.id, password: password.value },
+        );
+        item.replaceWith(await logItem(opened));
+      });
+    };
+    item.querySelector(".log-text").replaceChildren("비밀 질문입니다. ", form);
+  } else if (log.data.locked)
     item.querySelector(".log-text").textContent =
       "비밀글입니다. 본문을 볼 수 없습니다.";
   else if (log.data.format === "html" && !log.data.truncated) {
@@ -193,7 +266,8 @@ export async function logItem(log) {
     item.querySelector(".log-dice").textContent = diceText(log);
   }
   item.querySelector(".log-title").textContent =
-    `${log.data.secret ? "🔒 " : ""}${log.data.title ?? ""}${log.data.category ? ` · ${log.data.category}` : ""}`;
+    `${log.data.settlement ? `[${log.data.settlement.state}] ` : ""}${log.data.secret ? "🔒 " : ""}${log.data.title ?? ""}${log.data.category ? ` · ${log.data.category}` : ""}`;
+  if (log.data.settlement) item.classList.add("settled");
   item.querySelector(".author").replaceChildren(await speakerLabel(log));
   item.querySelector("time").textContent = formatTime(log.createdAt);
   const remove = item.querySelector(".delete");
@@ -203,6 +277,56 @@ export async function logItem(log) {
   change.hidden =
     Boolean(log.data.locked) ||
     (!mine(log) && state.role !== "moderator" && !guestPost);
+  // A settled request stays as it was settled (caculate's wr_10).
+  if (log.data.settlement && state.role !== "moderator")
+    remove.hidden = change.hidden = true;
+  if (
+    kindOf(log.data.board) === "settlement" &&
+    state.role === "moderator" &&
+    !log.data.locked
+  ) {
+    const settle = document.createElement("button");
+    settle.type = "button";
+    settle.textContent = "정산 처리";
+    settle.onclick = () =>
+      edit(
+        "정산 처리",
+        [
+          {
+            name: "state",
+            label: "처리 상태",
+            value: log.data.settlement?.state ?? "완료",
+            options: [
+              ["완료", "완료"],
+              ["반려", "반려"],
+              ["보류", "보류"],
+            ],
+          },
+          {
+            name: "exp",
+            label: "캐릭터 경험치 지급",
+            type: "number",
+            value: 0,
+          },
+          { name: "money", label: "오너 아보 지급", type: "number", value: 0 },
+          { name: "memo", label: "답변", multiline: true, max: 500 },
+        ],
+        async ({ state: settled, exp, money, memo }) => {
+          const { document: saved } = await caller().call(
+            "community/posts:settle",
+            {
+              id: log.id,
+              state: settled,
+              exp: Number(exp) || 0,
+              money: Number(money) || 0,
+              memo,
+            },
+          );
+          item.replaceWith(await logItem(previewOf(saved)));
+        },
+      );
+    change.after(" ", settle);
+  }
   const beginEdit = (current) =>
     edit(
       "로그 수정",
@@ -525,16 +649,14 @@ $("tabLogs").onclick = () =>
     showTab("logs");
     if (state.newPost) await loadLogs();
   });
-$("moreLogs").onclick = () => run(() => loadLogs({ more: true }));
 $("logForm").onsubmit = (event) => {
   event.preventDefault?.();
   run(async () => {
-    const board = state.boards.find((row) => row.id === state.board);
     // Visitors cannot upload; they may link an HTTPS picture instead.
     const guest = state.member ? null : guestCredentials();
     const file = guest ? null : $("logImage").files?.[0];
     const address = guest ? $("logImageUrl").value.trim() : "";
-    if (!file && !address && board?.data.kind !== "text")
+    if (!file && !address && kindOf() === "image")
       return say("그림을 골라 주세요.");
     say("올리는 중…");
     const image = file ? await uploadManaged(file) : null;
@@ -546,7 +668,7 @@ $("logForm").onsubmit = (event) => {
         board: state.board,
         title: $("logTitle").value.trim(),
         category: $("logCategory").value,
-        secret: guest ? false : $("logSecret").checked,
+        secret: guest && kindOf() !== "qna" ? false : $("logSecret").checked,
         ...(character ? { character } : {}),
         ...($("logDice").checked ? { dice: true } : {}),
       },
@@ -568,7 +690,7 @@ export async function loadBoards() {
   if (!state.boards.length && !state.member) {
     $("board").replaceChildren();
     $("logForm").hidden = true;
-    $("moreLogs").hidden = true;
+    $("logPages").hidden = true;
     return;
   }
   // Posts without a board are on "default", which exists until the admin
@@ -619,8 +741,17 @@ export function configureBoard() {
   $("logText").maxLength = board?.data.html ? 12000 : 2000;
   $("logHtmlHint").hidden = !board?.data.html;
   $("logInlineImage").hidden = !board?.data.html;
-  $("logImage").required = Boolean(state.member) && board?.data.kind !== "text";
-  $("logImageUrl").required = !state.member && board?.data.kind !== "text";
+  const kind = kindOf();
+  // Pictures belong to image boards; questions and settlements are text.
+  const pictures = !["qna", "settlement"].includes(kind);
+  $("logImage").required = Boolean(state.member) && kind === "image";
+  $("logImageUrl").required = !state.member && kind === "image";
+  $("logImageLabel").hidden = !pictures;
+  $("logImageUrlLabel").hidden = !pictures;
+  $("logTitleLabel").hidden = !pictures;
+  // A settlement names its category (정산 분류); a guest may ask in secret.
+  $("logCategory").required = kind === "settlement";
+  $("logSecretLabel").classList.toggle("member-only", kind !== "qna");
   $("logForm").hidden =
     board?.data.enabled === false ||
     (state.role !== "moderator" && state.level < (board?.data.writeLevel ?? 2));
@@ -660,6 +791,8 @@ $("board").onchange = () =>
     state.board = $("board").value;
     route(`logs/${state.board}`, { replace: true });
     state.tag = null;
+    state.search = null;
+    $("searchText").value = "";
     configureBoard();
     await loadLogs();
   });

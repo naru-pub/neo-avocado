@@ -17,6 +17,7 @@ import {
   state,
   uploadManaged,
   route,
+  renderPages,
 } from "./core.js";
 import { onDisplay } from "../_naru/modules/display.js";
 
@@ -104,33 +105,30 @@ export function showShopCategory(name) {
   showCategory();
 }
 /** The shop's items of the chosen category, from what has been read. */
-function showCategory() {
+function showCategory(number = 1) {
   const first = state.shopCategories?.[0];
+  const shown = [...state.itemCatalog.values()].filter(
+    (item) =>
+      !item.data.hidden &&
+      onDisplay(item.data.display, Date.now()) &&
+      (item.data.shopCategory || first) === state.shopCategory,
+  );
+  // Ten to a page (shop/index.php's page_rows).
+  const pages = Math.ceil(shown.length / SHOP_PAGE);
+  const current = Math.min(Math.max(1, number), Math.max(1, pages));
   $("items").replaceChildren(
-    ...[...state.itemCatalog.values()]
-      .filter(
-        (item) =>
-          !item.data.hidden &&
-          onDisplay(item.data.display, Date.now()) &&
-          (item.data.shopCategory || first) === state.shopCategory,
-      )
+    ...shown
+      .slice((current - 1) * SHOP_PAGE, current * SHOP_PAGE)
       .map((item) => shopItem(item)),
   );
+  renderPages($("itemPages"), current, pages, (next) => showCategory(next));
 }
-async function loadItems({ more = false } = {}) {
-  const page = await collection(COLLECTION.items).list({
-    sort: [[{ metadata: "createdAt" }, "asc"]],
-    size: SHOP_PAGE,
-    after: more ? state.itemCursor : null,
-  });
-  if (!more) {
-    $("items").replaceChildren();
-    state.itemCatalog.clear();
-  }
-  for (const item of page.documents) state.itemCatalog.set(item.id, item);
+/** Every item, once: categories and pages are drawn from them. */
+async function loadItems() {
+  const items = await allDocuments(COLLECTION.items);
+  state.itemCatalog.clear();
+  for (const item of items) state.itemCatalog.set(item.id, item);
   showCategory();
-  state.itemCursor = page.nextCursor;
-  $("moreItems").hidden = !page.nextCursor;
 }
 function itemPortrait(data) {
   const portrait = document.createElement("div");
@@ -551,4 +549,3 @@ $("gacha").onclick = () =>
         : "아무것도 나오지 않았습니다.",
   );
 $("moreInventory").onclick = () => run(() => loadInventory({ more: true }));
-$("moreItems").onclick = () => run(() => loadItems({ more: true }));

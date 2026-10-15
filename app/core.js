@@ -25,7 +25,7 @@ export const COLLECTION = {
   classes: `${PREFIX}classes`,
   boardGroups: `${PREFIX}board_groups`,
 };
-export const SHOP_PAGE = 50;
+export const SHOP_PAGE = 10;
 export const STATE_NAMES = {
   editing: "수정 중",
   submitted: "신청",
@@ -40,12 +40,9 @@ export const state = {
   naru: null,
   member: null,
   nicks: new Map(),
-  logCursor: null,
-  characterCursor: null,
   charactersLoaded: false,
   shopLoaded: false,
   inventoryCursor: null,
-  itemCursor: null,
   itemCatalog: new Map(),
   profile: null,
   recipes: [],
@@ -60,6 +57,8 @@ export const state = {
   boards: [],
   board: "default",
   tag: null,
+  // The board search (skins' 검색), while it is shown.
+  search: null,
   live: null,
   newPost: null,
   ownPosts: new Set(),
@@ -549,4 +548,68 @@ export function showTab(name) {
     $(tab).setAttribute("aria-pressed", String(name === key));
     $(view).hidden = name !== key;
   }
+}
+
+/**
+ * Numbered pages over a list the SDK reads by cursor (lib's get_paging,
+ * pg_wrap): each page's cursor is kept as it is reached, and a page not yet
+ * reached is walked to from the last one known. `read(after)` reads a page.
+ */
+export function cursorPages(read) {
+  const starts = [null];
+  return {
+    total: null,
+    reset() {
+      starts.length = 1;
+      this.total = null;
+    },
+    async page(number) {
+      while (starts.length < number) {
+        const step = await read(starts[starts.length - 1], false);
+        if (!step.nextCursor) break;
+        starts.push(step.nextCursor);
+      }
+      const at = Math.min(number, starts.length);
+      const page = await read(starts[at - 1], this.total === null);
+      if (page.totalCount !== undefined) this.total = page.totalCount;
+      if (page.nextCursor && starts.length === at) starts.push(page.nextCursor);
+      return { ...page, number: at };
+    },
+  };
+}
+
+/**
+ * The page numbers under a list: ‹ 1 2 3 4 5 › around the current page, as
+ * the original shows five at a time.
+ */
+export function renderPages(nav, current, pages, pick) {
+  nav.replaceChildren();
+  nav.hidden = pages <= 1;
+  if (pages <= 1) return;
+  const first = Math.max(1, Math.min(current - 2, pages - 4));
+  const last = Math.min(pages, first + 4);
+  const button = (label, number, extra = {}) => {
+    const element = document.createElement("button");
+    element.type = "button";
+    element.textContent = label;
+    element.className = "page";
+    if (number === current) element.setAttribute("aria-current", "page");
+    element.disabled = number < 1 || number > pages;
+    Object.assign(element, extra);
+    element.onclick = () => run(() => pick(number));
+    return element;
+  };
+  nav.append(
+    button("‹", current - 1, {
+      ariaLabel: "이전 페이지",
+      className: "page control",
+    }),
+    ...Array.from({ length: last - first + 1 }, (_, i) =>
+      button(String(first + i), first + i),
+    ),
+    button("›", current + 1, {
+      ariaLabel: "다음 페이지",
+      className: "page control",
+    }),
+  );
 }

@@ -115,6 +115,8 @@ export const models = {
         options: [
           ["image", "그림 로그"],
           ["text", "일반 글"],
+          ["qna", "질문 답변 (손님 비밀 질문, 운영진 답변)"],
+          ["settlement", "정산 (분류 필수, 운영진이 경험치·아보 지급)"],
         ],
       },
       { key: "enabled", label: "운영 중", type: "checkbox", default: true },

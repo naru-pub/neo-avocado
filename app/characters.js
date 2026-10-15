@@ -22,6 +22,8 @@ import {
   removeAll,
   route,
   formatTime,
+  cursorPages,
+  renderPages,
 } from "./core.js";
 import { writeTo } from "./messages.js";
 
@@ -77,35 +79,42 @@ function choiceEdit(name, label, rows, value) {
     ],
   };
 }
-export async function loadCharacters({ more = false } = {}) {
+/** The characters the filter picks, newest first, by numbered pages. */
+const characterPages = cursorPages((after, includeTotal) => {
   const where = CHARACTER_FILTERS[$("characterFilter").value];
+  return collection(COLLECTION.characters).list({
+    sort: [[{ metadata: "createdAt" }, "desc"]],
+    size: CHARACTER_PAGE,
+    after,
+    ...(includeTotal ? { includeTotal: true } : {}),
+    ...(where ? { where } : {}),
+  });
+});
+export async function loadCharacters({ page: number = 1 } = {}) {
+  const where = CHARACTER_FILTERS[$("characterFilter").value];
+  if (number === 1) characterPages.reset();
   const [, , page] = await Promise.all([
     loadFieldCatalogue(),
-    more ? null : loadChoices(),
-    collection(COLLECTION.characters).list({
-      sort: [[{ metadata: "createdAt" }, "desc"]],
-      size: CHARACTER_PAGE,
-      after: more ? state.characterCursor : null,
-      ...(where ? { where } : {}),
-    }),
+    number === 1 ? loadChoices() : null,
+    characterPages.page(number),
   ]);
   // 멤버목록 by 소속 (member/index.php's 진영별), once there are two.
-  if (
-    !more &&
-    $("characterFilter").value === "approved" &&
-    state.sides.length >= 2
-  ) {
+  if ($("characterFilter").value === "approved" && state.sides.length >= 2) {
     await showBySide(where);
     state.charactersLoaded = true;
     return;
   }
   await preloadNicks(page.documents);
-  if (!more) $("characters").replaceChildren();
+  $("characters").replaceChildren();
   for (const character of page.documents)
     $("characters").append(await characterItem(character));
-  state.characterCursor = page.nextCursor;
   state.charactersLoaded = true;
-  $("moreCharacters").hidden = !page.nextCursor;
+  renderPages(
+    $("characterPages"),
+    page.number,
+    Math.ceil((characterPages.total ?? 0) / CHARACTER_PAGE),
+    (next) => loadCharacters({ page: next }),
+  );
 }
 /** Every approved character under its 소속's title, the rest under 기타. */
 async function showBySide(where) {
@@ -143,7 +152,7 @@ async function showBySide(where) {
     for (const character of members) items.push(await characterItem(character));
   }
   $("characters").replaceChildren(...items);
-  $("moreCharacters").hidden = true;
+  $("characterPages").hidden = true;
 }
 /** The owner's custom profile fields (adm/character_article_list.php), read once. */
 async function loadFieldCatalogue() {
@@ -713,7 +722,6 @@ $("tabCharacters").onclick = () =>
     showTab("characters");
     if (!state.charactersLoaded) await loadCharacters();
   });
-$("moreCharacters").onclick = () => run(() => loadCharacters({ more: true }));
 $("characterFilter").onchange = () => run(() => loadCharacters());
 $("characterForm").onsubmit = (event) => {
   event.preventDefault?.();

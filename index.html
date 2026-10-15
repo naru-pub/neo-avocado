@@ -247,11 +247,11 @@
         </fieldset>
         <form id="logForm" class="card">
           <h2>로그 올리기</h2>
-          <label class="member-only">
+          <label id="logImageLabel" class="member-only">
             그림
             <input id="logImage" type="file" accept="image/*" required />
           </label>
-          <label class="guest-only">
+          <label id="logImageUrlLabel" class="guest-only">
             그림 주소 (HTTPS)
             <input id="logImageUrl" type="url" maxlength="2000" />
           </label>
@@ -261,12 +261,14 @@
               <option value="">닉네임으로</option>
             </select></label
           >
-          <label>제목 <input id="logTitle" maxlength="120" /></label>
+          <label id="logTitleLabel"
+            >제목 <input id="logTitle" maxlength="120"
+          /></label>
           <label
             >분류
             <select id="logCategory"></select
           ></label>
-          <label class="member-only"
+          <label id="logSecretLabel" class="member-only"
             ><input id="logSecret" type="checkbox" /> 비밀글 (작성자와
             운영자만)</label
           >
@@ -287,16 +289,26 @@
           <label><input id="logDice" type="checkbox" /> 주사위</label>
           <button type="submit">올리기</button>
         </form>
+        <form id="boardSearch" class="board-search" role="search">
+          <input
+            id="searchText"
+            type="search"
+            maxlength="40"
+            placeholder="제목·내용·이름"
+            aria-label="게시판 검색어"
+          />
+          <button type="submit">검색</button>
+        </form>
         <p id="tagFilter" hidden>
           <span id="tagName"></span>
-          <button id="clearTag" type="button">태그 검색 끝내기</button>
+          <button id="clearTag" type="button">검색 끝내기</button>
         </p>
         <div id="logFocusPanel" hidden>
           <button id="closeFocus" type="button">로그 링크 닫기</button>
           <ol id="logFocus" class="logs"></ol>
         </div>
         <ol id="logs" class="logs"></ol>
-        <button id="moreLogs" type="button" hidden>로그 더 보기</button>
+        <nav id="logPages" class="pages" aria-label="로그 페이지" hidden></nav>
       </section>
 
       <section id="charactersView" hidden>
@@ -353,7 +365,12 @@
           <button type="submit">등록</button>
         </form>
         <ul id="characters" class="characters"></ul>
-        <button id="moreCharacters" type="button" hidden>캐릭터 더 보기</button>
+        <nav
+          id="characterPages"
+          class="pages"
+          aria-label="캐릭터 페이지"
+          hidden
+        ></nav>
       </section>
 
       <section id="shopView" hidden>
@@ -376,7 +393,7 @@
         </div>
         <nav id="shopCategories" class="sub-tabs"></nav>
         <ul id="items" class="items"></ul>
-        <button id="moreItems" type="button" hidden>상점 더 보기</button>
+        <nav id="itemPages" class="pages" aria-label="상점 페이지" hidden></nav>
         <h2>내 인벤토리</h2>
         <ul id="inventory" class="inventory"></ul>
         <button id="moreInventory" type="button" hidden>더 보기</button>

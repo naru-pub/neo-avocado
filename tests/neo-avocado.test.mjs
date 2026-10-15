@@ -119,6 +119,7 @@ function fakeDatabase(rows = {}) {
       return {
         documents,
         nextCursor: end < sorted.length ? String(end) : null,
+        ...(options.includeTotal ? { totalCount: sorted.length } : {}),
       };
     },
     async add(data) {
@@ -537,12 +538,22 @@ test("the shop exposes later pages and crafts selected inventory through the ser
   const { $, settle, submit } = await page(database);
   $("tabShop").onclick();
   for (let n = 0; n < 5; n++) await settle();
-  assert.equal($("items").children.length, 50);
-  assert.equal($("moreItems").hidden, false);
-  $("moreItems").onclick();
+  // Ten to a page, as the original's shop: 51 items make six pages.
+  assert.equal($("items").children.length, 10);
+  const pages = [...$("itemPages").querySelectorAll("button.page")].map(
+    (button) => button.textContent,
+  );
+  assert.deepEqual(pages, ["‹", "1", "2", "3", "4", "5", "›"]);
+  $("itemPages").querySelector("button:last-child").onclick();
   await settle();
-  assert.equal($("items").children.length, 51);
-  assert.equal($("moreItems").hidden, true);
+  assert.equal(
+    $("itemPages").querySelector('[aria-current="page"]').textContent,
+    "2",
+  );
+  for (let n = 0; n < 4; n += 1)
+    $("itemPages").querySelector("button:last-child").onclick();
+  await settle();
+  assert.equal($("items").children.length, 1);
   $("inventory").querySelector(".material").checked = true;
   submit($("craftForm"));
   await settle();
@@ -717,6 +728,7 @@ test("logs are read a page at a time, newest first, and comments only when opene
       ],
       size: 10,
       after: null,
+      includeTotal: true,
     },
   ]);
   const items = $("logs").querySelectorAll(".log");
@@ -759,11 +771,17 @@ test("logs are read a page at a time, newest first, and comments only when opene
     },
   );
   assert.match(items[0].querySelector(".comment-list").textContent, /멋져요/);
-  $("moreLogs").onclick();
-  await settle();
-  await settle();
-  assert.equal($("logs").querySelectorAll(".log").length, 12);
-  assert.equal($("moreLogs").hidden, true);
+  // Numbered pages: 12 posts make two pages of ten.
+  const pageTwo = [...$("logPages").querySelectorAll("button")].find(
+    (button) => button.textContent === "2",
+  );
+  pageTwo.onclick();
+  for (let n = 0; n < 4; n += 1) await settle();
+  assert.equal($("logs").querySelectorAll(".log").length, 2);
+  assert.equal(
+    $("logPages").querySelector('[aria-current="page"]').textContent,
+    "2",
+  );
 });
 
 test("a dice comment's roll comes from the id the server gave it", async () => {
@@ -855,6 +873,7 @@ test("characters are read when their tab is first opened, and registered by memb
         sort: [[{ metadata: "createdAt" }, "desc"]],
         size: 20,
         after: null,
+        includeTotal: true,
       },
     ],
   );
@@ -903,10 +922,9 @@ test("an ended sign-in returns the page to the welcome screen", async () => {
       throw Object.assign(new Error("expired"), { code: "AUTH_REQUIRED" });
     },
   });
-  $("moreLogs").hidden = false;
   $("messageDetail").textContent = "private message";
   $("messageBody").value = "private draft";
-  $("moreLogs").onclick();
+  $("board").onchange();
   await settle();
   assert.equal($("welcome").hidden, false);
   assert.equal($("messageDetail").textContent, "");
@@ -1051,7 +1069,7 @@ test("a live platform ban clears private content after ACCESS_DENIED; board deni
         throw Object.assign(new Error("denied"), { code: "ACCESS_DENIED" });
       },
     });
-    await $("moreLogs").onclick();
+    await $("board").onchange();
     await settle();
     assert.equal($("admissionPanel").hidden, status === "approved");
     if (status === "banned") assert.equal($("logs").children.length, 0);

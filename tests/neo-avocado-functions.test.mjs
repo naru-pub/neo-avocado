@@ -2811,3 +2811,152 @@ test("a character's viewer shows its experience to members, and its inventory an
     "no_character",
   );
 });
+
+test("a board search finds titles, text and nicknames among posts the reader may read", async () => {
+  const { ctx, table } = fakeCtx();
+  table(`${P}boards`).set("free", {
+    name: "자유",
+    kind: "text",
+    listLevel: 1,
+    readLevel: 1,
+  });
+  table(`${P}profiles`).set("m-2", { nick: "보라돌이" });
+  table(`${P}logs`).set("a", {
+    board: "free",
+    owner: "m-2",
+    title: "봄 소풍",
+    text: "",
+  });
+  table(`${P}logs`).set("b", {
+    board: "free",
+    owner: "m-2",
+    text: "여름 바다",
+  });
+  table(`${P}logs`).set("c", {
+    board: "free",
+    owner: "m-2",
+    text: "봄 비밀",
+    secret: true,
+  });
+  const found = async (text) =>
+    (await posts.search(ctx, { board: "free", text })).documents
+      .map((row) => row.id)
+      .sort();
+  assert.deepEqual(await found("봄"), ["a"]);
+  assert.deepEqual(await found("바다"), ["b"]);
+  assert.deepEqual(await found("보라"), ["a", "b"]);
+  assert.equal(
+    await refusal(posts.search(ctx, { board: "free", text: " " })),
+    "invalid_input",
+  );
+});
+
+test("a Q&A board lets guests ask in secret and open their question with its password", async () => {
+  const { ctx, table } = fakeCtx();
+  table(`${P}boards`).set("qna", {
+    name: "문의",
+    kind: "qna",
+    listLevel: 1,
+    readLevel: 1,
+    writeLevel: 1,
+    commentLevel: 9,
+    secret: "optional",
+  });
+  table(`${P}boards`).set("free", {
+    name: "자유",
+    kind: "text",
+    listLevel: 1,
+    readLevel: 1,
+    writeLevel: 1,
+    secret: "optional",
+  });
+  ctx.member = null;
+  const guest = { name: "길손", password: "pass1234" };
+  assert.equal(
+    await refusal(
+      posts.write(ctx, {
+        data: { board: "free", text: "?", secret: true },
+        guest,
+      }),
+    ),
+    "guest_secret",
+  );
+  const asked = (
+    await posts.write(ctx, {
+      data: { board: "qna", text: "환불되나요?", secret: true },
+      guest,
+    })
+  ).document;
+  const listed = (await posts.questions(ctx, { board: "qna" })).documents;
+  assert.equal(listed.length, 1);
+  assert.equal(listed[0].data.locked, true);
+  assert.equal(listed[0].data.text, undefined);
+  assert.equal(
+    await refusal(posts.open(ctx, { id: asked.id, password: "wrong" })),
+    "guest_password",
+  );
+  const opened = await posts.open(ctx, { id: asked.id, password: "pass1234" });
+  assert.equal(opened.document.data.text, "환불되나요?");
+  assert.equal(
+    await refusal(posts.questions(ctx, { board: "free" })),
+    "invalid_input",
+  );
+});
+
+test("a settlement is settled by a moderator, granting experience and money, then stays", async () => {
+  const { ctx, table } = fakeCtx();
+  table(`${P}boards`).set("calc", {
+    name: "정산",
+    kind: "settlement",
+    categories: ["이벤트"],
+  });
+  table(`${P}characters`).set("hero", { owner: "m-1", name: "용사" });
+  table(`${P}members`).set("m-1", { level: 2, role: "member" });
+  const request = (
+    await posts.write(ctx, {
+      data: {
+        board: "calc",
+        category: "이벤트",
+        text: "참여했어요",
+        character: "hero",
+      },
+    })
+  ).document;
+  assert.equal(
+    await refusal(posts.settle(ctx, { id: request.id, state: "완료", exp: 5 })),
+    "access_denied",
+  );
+  table(`${P}members`).set("m-2", { level: 2, role: "moderator" });
+  ctx.member = { id: "m-2" };
+  await posts.settle(ctx, {
+    id: request.id,
+    state: "완료",
+    exp: 5,
+    money: 30,
+    memo: "수고하셨습니다",
+  });
+  assert.deepEqual(table(`${P}logs`).get(request.id).settlement.state, "완료");
+  assert.equal(table(`${P}character_state`).get("hero").exp, 5);
+  assert.equal(table(`${P}wallets`).get("m-1").balance, 30);
+  const kinds = [...table(`${P}history`).values()]
+    .map((row) => row.kind)
+    .sort();
+  assert.deepEqual(kinds, ["exp", "settle"]);
+  // The reply says what was given.
+  assert.match(
+    [...table(`${P}comments`).values()][0].text,
+    /\[완료\] 경험치 \+5 \+30 아보 수고하셨습니다/,
+  );
+  // The author can no longer change or delete it.
+  ctx.member = { id: "m-1" };
+  assert.equal(
+    await refusal(
+      posts.write(ctx, {
+        id: request.id,
+        data: { ...request.data, text: "고침" },
+      }),
+    ),
+    "settled",
+  );
+  assert.equal(await refusal(posts.remove(ctx, { id: request.id })), "settled");
+});

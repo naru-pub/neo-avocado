@@ -437,6 +437,68 @@ try {
     .first()
     .waitFor();
 
+  // Board search finds Alice's post by its text.
+  await menu(alice, "로그");
+  await alice.locator("#searchText").fill("봄");
+  await alice.locator("#boardSearch button").click();
+  await alice.locator("#tagName", { hasText: "검색 결과" }).waitFor();
+  await alice.locator("#clearTag").click();
+
+  // A Q&A board: a guest asks in secret and opens it with the password;
+  // a settlement board: Alice asks as her character, the owner settles.
+  await owner.evaluate(async (P) => {
+    const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+    const admin = await createNaru().auth.session();
+    for (const [id, data] of [
+      ["ask", { name: "문의", kind: "qna", secret: "optional" }],
+      ["calc", { name: "정산", kind: "settlement", categories: ["이벤트"] }],
+    ])
+      await admin.collection(`${P}boards`).set(id, {
+        enabled: true,
+        listLevel: 1,
+        readLevel: 1,
+        writeLevel: 1,
+        commentLevel: 9,
+        ...data,
+      });
+  }, P);
+  const asker = await person();
+  await asker.goto(`${origin}/#/logs/ask`);
+  await asker.locator("#logText").waitFor();
+  await asker.locator("#guestName").fill("문의자");
+  await asker.locator("#guestPassword").fill("pass1234");
+  await asker.locator("#logText").fill("환불되나요?");
+  await asker.locator("#logSecret").check();
+  await asker.locator('#logForm [type="submit"]').click();
+  await asker.locator("#logs .log", { hasText: "환불되나요?" }).waitFor();
+  await asker.reload();
+  const question = asker.locator("#logs .log", { hasText: "비밀 질문" });
+  await question.waitFor();
+  await question.locator(".open-secret input").fill("pass1234");
+  await question.locator(".open-secret button").click();
+  await asker.locator("#logs .log", { hasText: "환불되나요?" }).waitFor();
+
+  await alice.goto(`${origin}/#/logs/calc`);
+  await alice.locator("#logCategory").selectOption("이벤트");
+  await alice.locator("#logText").fill("이벤트 참여 정산 부탁드려요");
+  await alice.locator('#logForm [type="submit"]').click();
+  await alice.locator("#logs .log", { hasText: "정산 부탁" }).waitFor();
+  await owner.evaluate(async (P) => {
+    const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+    const admin = await createNaru().auth.session();
+    const { documents } = await admin
+      .collection(`${P}logs`)
+      .list({ filter: { board: "calc" } });
+    await admin.call("community/posts:settle", {
+      id: documents[0].id,
+      state: "완료",
+      money: 10,
+      memo: "확인했습니다",
+    });
+  }, P);
+  await alice.reload();
+  await alice.locator("#logs .log .log-title", { hasText: "[완료]" }).waitFor();
+
   // Bob leaves the community: from then on he is a guest here.
   await menu(bob, "마이페이지");
   await bob.locator("#myLeave").click();
