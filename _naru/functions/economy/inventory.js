@@ -8,14 +8,13 @@ import {
   ownCharacter,
   text,
   imageUrl,
-  failure,
   amount,
   wallet,
   pay,
   give,
   draw,
   ownedItem,
-  useRestriction,
+  requireUsable,
   restoreStat,
 } from "../../modules/shared.js";
 import { presentCharacter } from "../../modules/characters.js";
@@ -23,14 +22,19 @@ import { presentCharacter } from "../../modules/characters.js";
 /** Selling consumes exactly one owned item; prices always come from the catalog. */
 export async function sell(ctx, { inventory } = {}) {
   const owned = await ownedItem(ctx, inventory);
-  if (!owned) return failure("not_owned");
+  if (!owned)
+    ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
+      reason: "not_owned",
+    });
   const item = await ctx.get(ITEMS, owned.data.item);
   if (
     !item ||
     item.data.sellPrice === undefined ||
     item.data.sellable === false
   )
-    return failure("not_sellable");
+    ctx.fail("CONFLICT", "판매할 수 없는 아이템입니다.", {
+      reason: "not_sellable",
+    });
   const price = amount(item.data.sellPrice, "Sale price");
   const balance = await pay(ctx, await wallet(ctx), -price);
   await ctx.delete(INVENTORY, owned.id);
@@ -41,7 +45,7 @@ export async function sell(ctx, { inventory } = {}) {
     delta: price,
     balance,
   });
-  return { ok: true, balance, name: owned.data.name };
+  return { balance, name: owned.data.name };
 }
 
 /** The recipient must be an existing member profile, never a browser-supplied owner. */
@@ -50,17 +54,27 @@ export async function gift(
   { inventory, recipient, character = null, memo = "" } = {},
 ) {
   const owned = await ownedItem(ctx, inventory);
-  if (!owned) return failure("not_owned");
+  if (!owned)
+    ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
+      reason: "not_owned",
+    });
   if (
     typeof recipient !== "string" ||
     recipient === ctx.member.id ||
     !(await ctx.get(PROFILES, recipient))
   )
-    return failure("no_recipient");
+    ctx.fail("INVALID_REQUEST", "받는 회원을 확인해 주세요.", {
+      reason: "no_recipient",
+    });
   if (typeof memo !== "string" || memo.length > 500)
-    return failure("invalid_input");
+    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+      reason: "invalid_input",
+    });
   const item = await ctx.get(ITEMS, owned.data.item);
-  if (!item || item.data.giftable === false) return failure("not_giftable");
+  if (!item || item.data.giftable === false)
+    ctx.fail("CONFLICT", "선물할 수 없는 아이템입니다.", {
+      reason: "not_giftable",
+    });
   const target =
     typeof character === "string" ? await ctx.get(CHARACTERS, character) : null;
   if (
@@ -69,8 +83,13 @@ export async function gift(
       target.data.deleted ||
       (target.createdBy ?? target.data.owner) !== recipient)
   )
-    return failure("no_character");
-  if (owned.data.character && !target) return failure("no_character");
+    ctx.fail("INVALID_REQUEST", "캐릭터를 확인해 주세요.", {
+      reason: "no_character",
+    });
+  if (owned.data.character && !target)
+    ctx.fail("INVALID_REQUEST", "캐릭터를 확인해 주세요.", {
+      reason: "no_character",
+    });
   const transferred = await ctx.set(INVENTORY, owned.id, {
     ...owned.data,
     owner: recipient,
@@ -98,23 +117,28 @@ export async function gift(
     },
     recipient,
   );
-  return { ok: true, owned: transferred };
+  return { owned: transferred };
 }
 
 /** Selected materials are checked against the owner's recipe, then consumed atomically. */
 export async function craft(ctx, { recipe, materials, character = null } = {}) {
   if (character && !(await ownCharacter(ctx, character)))
-    return failure("no_character");
+    ctx.fail("INVALID_REQUEST", "캐릭터를 확인해 주세요.", {
+      reason: "no_character",
+    });
   const row =
     typeof recipe === "string" ? await ctx.get(RECIPES, recipe) : null;
-  if (!row || row.data.hidden) return failure("no_recipe");
+  if (!row || row.data.hidden)
+    ctx.fail("NOT_FOUND", "없는 레시피입니다.", { reason: "no_recipe" });
   if (
     !Array.isArray(materials) ||
     materials.length > 20 ||
     materials.some((id) => typeof id !== "string") ||
     new Set(materials).size !== materials.length
   )
-    return failure("invalid_materials");
+    ctx.fail("INVALID_REQUEST", "레시피에 맞는 재료를 선택해 주세요.", {
+      reason: "invalid_materials",
+    });
   const ingredients = row.data.ingredients;
   if (
     !Array.isArray(ingredients) ||
@@ -134,7 +158,9 @@ export async function craft(ctx, { recipe, materials, character = null } = {}) {
   if (
     owned.some((item) => !item || (item.data.character ?? null) !== character)
   )
-    return failure("not_owned");
+    ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
+      reason: "not_owned",
+    });
   const provided = new Map();
   for (const item of owned)
     provided.set(item.data.item, (provided.get(item.data.item) ?? 0) + 1);
@@ -142,7 +168,9 @@ export async function craft(ctx, { recipe, materials, character = null } = {}) {
     provided.size !== required.size ||
     [...required].some(([item, count]) => provided.get(item) !== count)
   )
-    return failure("invalid_materials");
+    ctx.fail("INVALID_REQUEST", "레시피에 맞는 재료를 선택해 주세요.", {
+      reason: "invalid_materials",
+    });
   const prize =
     typeof row.data.item === "string"
       ? await ctx.get(ITEMS, row.data.item)
@@ -150,7 +178,8 @@ export async function craft(ctx, { recipe, materials, character = null } = {}) {
   if (!prize) throw new Error("Recipe output item is missing.");
   const cost = amount(row.data.cost ?? 0, "Crafting cost");
   const current = await wallet(ctx);
-  if (current.balance < cost) return failure("not_enough");
+  if (current.balance < cost)
+    ctx.fail("CONFLICT", "아보가 모자랍니다.", { reason: "not_enough" });
   const balance = await pay(ctx, current, cost);
   for (const item of owned) await ctx.delete(INVENTORY, item.id);
   const output = await give(ctx, prize, "craft", character);
@@ -160,7 +189,7 @@ export async function craft(ctx, { recipe, materials, character = null } = {}) {
     delta: -cost,
     balance,
   });
-  return { ok: true, balance, owned: output };
+  return { balance, owned: output };
 }
 
 export async function assignInventory(
@@ -168,11 +197,15 @@ export async function assignInventory(
   { inventory, character = null } = {},
 ) {
   const owned = await ownedItem(ctx, inventory);
-  if (!owned) return failure("not_owned");
+  if (!owned)
+    ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
+      reason: "not_owned",
+    });
   if (character && !(await ownCharacter(ctx, character)))
-    return failure("no_character");
+    ctx.fail("INVALID_REQUEST", "캐릭터를 확인해 주세요.", {
+      reason: "no_character",
+    });
   return {
-    ok: true,
     document: await ctx.set(INVENTORY, owned.id, { ...owned.data, character }),
   };
 }
@@ -180,26 +213,41 @@ export async function assignInventory(
 /** Four built-in item actions mirror inventory/use_item.php. */
 export async function useItem(ctx, { inventory, character, data = {} } = {}) {
   const owned = await ownedItem(ctx, inventory);
-  if (!owned) return failure("not_owned");
+  if (!owned)
+    ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
+      reason: "not_owned",
+    });
   const item = await ctx.get(ITEMS, owned.data.item);
   if (!item?.data.effect || item.data.usable === false)
-    return failure("not_usable");
+    ctx.fail("CONFLICT", "사용할 수 없는 아이템입니다.", {
+      reason: "not_usable",
+    });
   if (owned.data.character && owned.data.character !== character)
-    return failure("wrong_character");
+    ctx.fail("CONFLICT", "이 아이템을 가진 캐릭터를 선택해 주세요.", {
+      reason: "wrong_character",
+    });
   if (owned.data.character && !(await ownCharacter(ctx, character)))
-    return failure("not_owned");
-  const restricted = await useRestriction(ctx, item, character);
-  if (restricted) return failure(restricted);
+    ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
+      reason: "not_owned",
+    });
+  await requireUsable(ctx, item, character);
   const effect = item.data.effect;
-  let result = { ok: true, name: owned.data.name };
+  let result = { name: owned.data.name };
   if (effect.type === "restore") {
-    if (!(await ownCharacter(ctx, character))) return failure("not_owned");
+    if (!(await ownCharacter(ctx, character)))
+      ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
+        reason: "not_owned",
+      });
     const restored = await restoreStat(ctx, effect, character);
-    if (!restored) return failure("already_full");
+    if (!restored)
+      ctx.fail("CONFLICT", "이미 전부 회복되었습니다.", {
+        reason: "already_full",
+      });
     result.document = restored;
   } else if (effect.type === "draw") {
     const outcome = await draw(ctx, item.id);
-    if (!outcome.configured) return failure("empty");
+    if (!outcome.configured)
+      ctx.fail("CONFLICT", "아직 뽑을 것이 없습니다.", { reason: "empty" });
     result.owned = outcome.prize
       ? await give(ctx, outcome.prize, "item", owned.data.character ?? null)
       : null;
@@ -223,8 +271,16 @@ export async function useItem(ctx, { inventory, character, data = {} } = {}) {
     );
   } else if (effect.type === "profile") {
     const target = await ownCharacter(ctx, character);
-    if (!target) return failure("not_owned");
-    if (data.revision !== target.revision) return failure("conflict");
+    if (!target)
+      ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
+        reason: "not_owned",
+      });
+    if (data.revision !== target.revision)
+      ctx.fail(
+        "CONFLICT",
+        "다른 곳에서 수정되었습니다. 새로고침 후 다시 수정해 주세요.",
+        { reason: "conflict" },
+      );
     const profile = {
       ...target.data,
       name: text(data.name, 40, true),
@@ -238,7 +294,10 @@ export async function useItem(ctx, { inventory, character, data = {} } = {}) {
       ctx,
       await ctx.set(CHARACTERS, character, profile),
     );
-  } else return failure("not_usable");
+  } else
+    ctx.fail("CONFLICT", "사용할 수 없는 아이템입니다.", {
+      reason: "not_usable",
+    });
   // The original personal-item creation form always consumes its ticket.
   if (item.data.reusable !== true || effect.type === "create")
     await ctx.delete(INVENTORY, owned.id);

@@ -93,11 +93,6 @@ export const tagWhere = (tag) => ({ has: ["tags", tag] });
 /** A visitor's access: level 1, as GnuBoard gives a guest. */
 export const GUEST_ACCESS = Object.freeze({ level: 1, role: "guest" });
 
-/** Abort the call, rolling back its writes, with a reason the page maps to text. */
-export function fail(ctx, code, reason, message = reason) {
-  ctx.fail(code, message, { reason });
-}
-
 export async function communityAccess(ctx, id = ctx.member?.id) {
   if (!id) return GUEST_ACCESS;
   const row = await ctx.get(MEMBERS, id);
@@ -195,7 +190,7 @@ export async function logReadable(ctx, row, access, viewer = ctx.member?.id) {
 export async function deleteCommunityDocument(ctx, collection, kind, row) {
   if (!["logs", "characters"].includes(kind)) {
     await ctx.delete(collection, row.id);
-    return { ok: true, done: true };
+    return { done: true };
   }
   if (!row.data.deleted)
     await ctx.set(collection, row.id, { ...row.data, deleted: true });
@@ -238,7 +233,7 @@ export async function deleteCommunityDocument(ctx, collection, kind, row) {
       });
   }
   if (!unfinished) await ctx.delete(collection, row.id);
-  return { ok: true, done: !unfinished };
+  return { done: !unfinished };
 }
 
 export async function record(ctx, kind, details, owner = ctx.member.id) {
@@ -273,8 +268,6 @@ export function imageUrl(value) {
     throw new Error("An image must have an HTTPS address.");
   return url;
 }
-
-export const failure = (reason) => ({ ok: false, reason });
 
 export function amount(value, label) {
   if (!Number.isSafeInteger(value) || value < 0)
@@ -433,7 +426,8 @@ export async function characterState(ctx, character, owner = ctx.member.id) {
 }
 
 /** Why `character` may not use `item` under its catalog conditions, or null. */
-export async function useRestriction(ctx, item, character) {
+/** Fails the call unless `character` meets the item's use requirements. */
+export async function requireUsable(ctx, item, character) {
   const requirements = item.data.useRequirements ?? {};
   if (
     !requirements.approved &&
@@ -442,11 +436,16 @@ export async function useRestriction(ctx, item, character) {
     !requirements.exp &&
     !requirements.title
   )
-    return null;
-  if (!(await ownCharacter(ctx, character))) return "no_character";
+    return;
+  if (!(await ownCharacter(ctx, character)))
+    ctx.fail("INVALID_REQUEST", "캐릭터를 확인해 주세요.", {
+      reason: "no_character",
+    });
   const official = (await characterState(ctx, character)).data;
   if (requirements.approved && official.approved !== true)
-    return "not_approved";
+    ctx.fail("CONFLICT", "승인된 캐릭터만 할 수 있습니다.", {
+      reason: "not_approved",
+    });
   for (const [key, field] of [
     ["sides", "side"],
     ["classes", "class"],
@@ -461,17 +460,20 @@ export async function useRestriction(ctx, item, character) {
       requirements[key]?.length &&
       !requirements[key].includes(official[field])
     )
-      return "restricted_character";
+      ctx.fail("CONFLICT", "이 캐릭터의 세력·종족은 구매할 수 없습니다.", {
+        reason: "restricted_character",
+      });
   }
   if (official.exp < amount(requirements.exp ?? 0, "Use experience"))
-    return "not_enough_exp";
+    ctx.fail("CONFLICT", "경험치가 모자랍니다.", { reason: "not_enough_exp" });
   if (
     requirements.title &&
     (!official.titles?.includes(requirements.title) ||
       (await ctx.get(TITLES, requirements.title))?.data.deleted)
   )
-    return "missing_title";
-  return null;
+    ctx.fail("CONFLICT", "필요한 타이틀이 없습니다.", {
+      reason: "missing_title",
+    });
 }
 
 /** Applies a recovery effect to an owned character; null when already full. */

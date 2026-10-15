@@ -10,7 +10,6 @@ import {
   deleteCommunityDocument,
   text,
   imageUrl,
-  failure,
   nextNumber,
   tagFields,
   tagWhere,
@@ -52,7 +51,9 @@ const WHERE_KINDS = [
 /** The gate's reads, declared read-only: they cannot write and use the read budget. */
 export async function communityRead(ctx, args = {}) {
   if (!["get", "getMany", "list"].includes(args?.operation))
-    return failure("invalid_input");
+    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+      reason: "invalid_input",
+    });
   return communityData(ctx, args);
 }
 
@@ -67,10 +68,15 @@ export async function communityData(
     typeof collection === "string" && collection.startsWith(PREFIX)
       ? collection.slice(PREFIX.length)
       : "";
-  if (!Object.hasOwn(READ_LIMITS, kind)) return failure("access_denied");
-  if (visitor && !GUEST_KINDS.includes(kind)) return failure("access_denied");
+  if (!Object.hasOwn(READ_LIMITS, kind))
+    ctx.fail("ACCESS_DENIED", "권한이 없습니다.", { reason: "access_denied" });
+  if (visitor && !GUEST_KINDS.includes(kind))
+    ctx.fail("ACCESS_DENIED", "권한이 없습니다.", { reason: "access_denied" });
   if (operation === "getMany") {
-    if (!["profiles", "items"].includes(kind)) return failure("access_denied");
+    if (!["profiles", "items"].includes(kind))
+      ctx.fail("ACCESS_DENIED", "권한이 없습니다.", {
+        reason: "access_denied",
+      });
     if (
       !Array.isArray(options.ids) ||
       options.ids.length > 50 ||
@@ -78,9 +84,10 @@ export async function communityData(
         (id) => typeof id !== "string" || !/^[a-zA-Z0-9_-]{1,64}$/.test(id),
       )
     )
-      return failure("invalid_input");
+      ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+        reason: "invalid_input",
+      });
     return {
-      ok: true,
       documents: (await ctx.getMany(collection, options.ids)).map((row) =>
         row?.data.deleted
           ? null
@@ -101,12 +108,17 @@ export async function communityData(
       ["wallets", "character_state", "settings"].includes(kind) ||
       (visitor && kind === "profiles")
     )
-      return failure("access_denied");
+      ctx.fail("ACCESS_DENIED", "권한이 없습니다.", {
+        reason: "access_denied",
+      });
     if (options.where !== undefined) {
       // A predicate can probe fields this gate redacts or hides (secret log
       // bodies, deleted rows), so it is only for collections returned whole,
       // and never reaches deleted rows.
-      if (!WHERE_KINDS.includes(kind)) return failure("invalid_input");
+      if (!WHERE_KINDS.includes(kind))
+        ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+          reason: "invalid_input",
+        });
       query.where = { all: [options.where, { ne: ["deleted", true] }] };
     }
     if (kind === "inventory")
@@ -114,13 +126,18 @@ export async function communityData(
     if (kind === "logs") {
       const selected = options.board ?? query.filter?.board ?? "default";
       const board = await boardOf(ctx, selected);
-      if (!boardAllowed(board, access, "list")) return failure("access_denied");
+      if (!boardAllowed(board, access, "list"))
+        ctx.fail("ACCESS_DENIED", "권한이 없습니다.", {
+          reason: "access_denied",
+        });
       query.filter = { ...query.filter, board: selected };
       // Tag search builds its own predicate; it never matches secret posts,
       // whose tags come from bodies the caller may not read.
       if (options.tag !== undefined) {
         if (typeof options.tag !== "string" || options.tag.length > 30)
-          return failure("invalid_input");
+          ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+            reason: "invalid_input",
+          });
         query.where = {
           all: [tagWhere(options.tag), { ne: ["secret", true] }],
         };
@@ -133,7 +150,9 @@ export async function communityData(
           ? await ctx.get(`${PREFIX}logs`, logId)
           : null;
       if (!(await logReadable(ctx, log, access)))
-        return failure("document_not_found");
+        ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {
+          reason: "document_not_found",
+        });
     }
     const page = await ctx.list(collection, query);
     let documents = page.documents.filter((row) => !row.data.deleted);
@@ -191,7 +210,6 @@ export async function communityData(
         ),
       );
     return {
-      ok: true,
       ...page,
       documents,
     };
@@ -204,25 +222,34 @@ export async function communityData(
       : null;
   if (operation === "get") {
     if (!previous || previous.data.deleted)
-      return failure("document_not_found");
+      ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {
+        reason: "document_not_found",
+      });
     if (kind === "boards" && !boardAllowed(previous, access, "list"))
-      return failure("access_denied");
+      ctx.fail("ACCESS_DENIED", "권한이 없습니다.", {
+        reason: "access_denied",
+      });
     if (kind === "logs" && !(await logReadable(ctx, previous, access)))
-      return failure("access_denied");
+      ctx.fail("ACCESS_DENIED", "권한이 없습니다.", {
+        reason: "access_denied",
+      });
     if (kind === "comments") {
       const log = await ctx.get(`${PREFIX}logs`, previous.data.logId);
       if (!(await logReadable(ctx, log, access)))
-        return failure("document_not_found");
+        ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {
+          reason: "document_not_found",
+        });
     }
     if (
       (kind === "wallets" && id !== ctx.member.id) ||
       (kind === "inventory" && previous.data.owner !== ctx.member.id)
     )
-      return failure("access_denied");
+      ctx.fail("ACCESS_DENIED", "권한이 없습니다.", {
+        reason: "access_denied",
+      });
     if (kind === "settings")
       return id === "community"
         ? {
-            ok: true,
             document: {
               ...previous,
               data: {
@@ -231,27 +258,34 @@ export async function communityData(
               },
             },
           }
-        : failure("access_denied");
+        : ctx.fail("ACCESS_DENIED", "권한이 없습니다.", {
+            reason: "access_denied",
+          });
     if (kind === "characters")
-      return { ok: true, document: await presentCharacter(ctx, previous) };
+      return { document: await presentCharacter(ctx, previous) };
     if (kind === "character_fields" && previous.data.visibility === "admin")
-      return failure("access_denied");
+      ctx.fail("ACCESS_DENIED", "권한이 없습니다.", {
+        reason: "access_denied",
+      });
     if (kind === "character_state") {
       const { purchases, ...publicState } = previous.data;
-      return { ok: true, document: { ...previous, data: publicState } };
+      return { document: { ...previous, data: publicState } };
     }
-    return { ok: true, document: previous };
+    return { document: previous };
   }
   if (
     !["profiles", "characters", "logs", "comments"].includes(kind) ||
     !["add", "set", "delete"].includes(operation)
   )
-    return failure("access_denied");
+    ctx.fail("ACCESS_DENIED", "권한이 없습니다.", { reason: "access_denied" });
   if (visitor && !["logs", "comments"].includes(kind))
-    return failure("access_denied");
+    ctx.fail("ACCESS_DENIED", "권한이 없습니다.", { reason: "access_denied" });
   if (kind === "profiles" && (operation !== "set" || id !== ctx.member.id))
-    return failure("access_denied");
-  if (operation !== "add" && !previous) return failure("document_not_found");
+    ctx.fail("ACCESS_DENIED", "권한이 없습니다.", { reason: "access_denied" });
+  if (operation !== "add" && !previous)
+    ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {
+      reason: "document_not_found",
+    });
   // A guest proves a post is theirs with its password (bbs/password_check.php).
   let guest = null;
   if (visitor) {
@@ -262,7 +296,9 @@ export async function communityData(
       password.length < 4 ||
       password.length > 64
     )
-      return failure("guest_password");
+      ctx.fail("ACCESS_DENIED", "비밀번호를 확인해 주세요. (4~64자)", {
+        reason: "guest_password",
+      });
     // The post keeps the password as its write secret (SDK 1.1.0): Naru
     // stores a hash nobody can read and checks it here.
     if (previous) {
@@ -270,11 +306,15 @@ export async function communityData(
         !previous.data.guest ||
         !(await ctx.secretMatches(collection, previous.id, password))
       )
-        return failure("guest_password");
+        ctx.fail("ACCESS_DENIED", "비밀번호를 확인해 주세요. (4~64자)", {
+          reason: "guest_password",
+        });
       guest = { name: previous.data.guest.name, secret: password };
     } else {
       if (typeof name !== "string" || !name.trim() || name.length > 20)
-        return failure("invalid_input");
+        ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+          reason: "invalid_input",
+        });
       guest = { name: name.trim(), secret: password };
     }
     if (data) {
@@ -286,16 +326,30 @@ export async function communityData(
     author(previous) !== ctx.member.id &&
     !(access.role === "moderator" && ["logs", "comments"].includes(kind))
   )
-    return failure("not_owned");
+    ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
+      reason: "not_owned",
+    });
   if (
     options.condition?.revision &&
     previous?.revision !== options.condition.revision
   )
-    return failure("conflict");
-  if (options.condition?.absent && previous) return failure("conflict");
+    ctx.fail(
+      "CONFLICT",
+      "다른 곳에서 수정되었습니다. 새로고침 후 다시 수정해 주세요.",
+      { reason: "conflict" },
+    );
+  if (options.condition?.absent && previous)
+    ctx.fail(
+      "CONFLICT",
+      "다른 곳에서 수정되었습니다. 새로고침 후 다시 수정해 주세요.",
+      { reason: "conflict" },
+    );
   if (operation === "delete")
     return await deleteCommunityDocument(ctx, collection, kind, previous);
-  if (previous?.data.deleted) return failure("document_not_found");
+  if (previous?.data.deleted)
+    ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {
+      reason: "document_not_found",
+    });
   if (
     kind === "logs" &&
     !boardAllowed(
@@ -304,7 +358,7 @@ export async function communityData(
       "write",
     )
   )
-    return failure("access_denied");
+    ctx.fail("ACCESS_DENIED", "권한이 없습니다.", { reason: "access_denied" });
   let value = {
     ...previous?.data,
     owner: previous ? author(previous) : (ctx.member?.id ?? null),
@@ -349,9 +403,14 @@ export async function communityData(
         ? data.secret === true
         : Boolean(previous?.data.secret));
     if (secret && board.data.secret === "off" && !previous?.data.secret)
-      return failure("invalid_input");
+      ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+        reason: "invalid_input",
+      });
     // A guest could never read their secret post back, so they cannot write one.
-    if (secret && guest) return failure("guest_secret");
+    if (secret && guest)
+      ctx.fail("ACCESS_DENIED", "손님은 비밀글을 쓸 수 없습니다.", {
+        reason: "guest_secret",
+      });
     value.board = boardId;
     value.secret = secret;
     value.title = text(data.title ?? previous?.data.title ?? "", 120);
@@ -360,7 +419,9 @@ export async function communityData(
       value.category &&
       !(board.data.categories ?? []).includes(value.category)
     )
-      return failure("invalid_input");
+      ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+        reason: "invalid_input",
+      });
     // Boards with HTML on (bo_use_dhtml_editor) take sanitized-on-display HTML.
     value.format =
       previous?.data.format ?? (board.data.html === true ? "html" : "text");
@@ -375,8 +436,13 @@ export async function communityData(
           ? imageUrl(data.image)
           : null;
     if (board.data.kind === "image" && !value.image)
-      return failure("invalid_input");
-    if (!value.image && !value.text) return failure("invalid_input");
+      ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+        reason: "invalid_input",
+      });
+    if (!value.image && !value.text)
+      ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+        reason: "invalid_input",
+      });
     if (!previous) {
       speaker = await speakerOf(ctx, data.character);
       if (speaker) {
@@ -403,10 +469,14 @@ export async function communityData(
     const log =
       typeof logId === "string" ? await ctx.get(`${PREFIX}logs`, logId) : null;
     if (!(await logReadable(ctx, log, access)))
-      return failure("document_not_found");
+      ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {
+        reason: "document_not_found",
+      });
     board = await boardOf(ctx, log.data.board ?? "default");
     if (!boardAllowed(board, access, "comment"))
-      return failure("access_denied");
+      ctx.fail("ACCESS_DENIED", "권한이 없습니다.", {
+        reason: "access_denied",
+      });
     value = {
       ...value,
       logId,
@@ -417,14 +487,21 @@ export async function communityData(
       !previous &&
       (["explore", "combine"].includes(data.action) || data.item !== undefined);
     if (acting && (guest || board.data.actions !== true))
-      return failure("access_denied");
+      ctx.fail("ACCESS_DENIED", "권한이 없습니다.", {
+        reason: "access_denied",
+      });
     if (
       (data.action !== undefined &&
         !["explore", "combine"].includes(data.action)) ||
       (data.item !== undefined && typeof data.item !== "string")
     )
-      return failure("invalid_input");
-    if (!value.text && !value.dice && !acting) return failure("invalid_input");
+      ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+        reason: "invalid_input",
+      });
+    if (!value.text && !value.dice && !acting)
+      ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+        reason: "invalid_input",
+      });
     calls = guest
       ? { text: value.text, recipients: [] }
       : await resolveCalls(ctx, value.text, previous?.data.text ?? "");
@@ -464,7 +541,6 @@ export async function communityData(
       guest: guest?.name ?? null,
     });
   return {
-    ok: true,
     document:
       kind === "characters"
         ? await presentCharacter(ctx, document, { catalogue })

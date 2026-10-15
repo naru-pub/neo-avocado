@@ -5,7 +5,6 @@ import {
   CHARACTER_FIELDS,
   CHARACTER_STATE,
   author,
-  fail,
   imageUrl,
   weightedRows,
 } from "./shared.js";
@@ -103,39 +102,35 @@ export async function presentCharacter(
 
 function fieldValue(ctx, definition, value) {
   if (typeof value !== "string" || value.length > FIELD_LIMITS[definition.type])
-    fail(
-      ctx,
+    ctx.fail(
       "INVALID_REQUEST",
-      "invalid_field",
-      definition.label || definition.code,
+      `프로필 항목 "${definition.label || definition.code}"을(를) 확인해 주세요.`,
+      { reason: "invalid_field" },
     );
   const trimmed = value.trim();
   if (!trimmed) return null;
   if (definition.type === "select" && !definition.options.includes(trimmed))
-    fail(
-      ctx,
+    ctx.fail(
       "INVALID_REQUEST",
-      "invalid_field",
-      definition.label || definition.code,
+      `프로필 항목 "${definition.label || definition.code}"을(를) 확인해 주세요.`,
+      { reason: "invalid_field" },
     );
   if (definition.type === "url" || definition.type === "image") {
     try {
       return imageUrl(trimmed);
     } catch {
-      fail(
-        ctx,
+      ctx.fail(
         "INVALID_REQUEST",
-        "invalid_field",
-        definition.label || definition.code,
+        `프로필 항목 "${definition.label || definition.code}"을(를) 확인해 주세요.`,
+        { reason: "invalid_field" },
       );
     }
   }
   if (definition.type === "text" && /[\r\n]/.test(trimmed))
-    fail(
-      ctx,
+    ctx.fail(
       "INVALID_REQUEST",
-      "invalid_field",
-      definition.label || definition.code,
+      `프로필 항목 "${definition.label || definition.code}"을(를) 확인해 주세요.`,
+      { reason: "invalid_field" },
     );
   return trimmed;
 }
@@ -159,7 +154,9 @@ export async function memberSheet(ctx, previous, data) {
   const catalogue = await fieldCatalogue(ctx);
   const input = data.fields ?? {};
   if (!input || typeof input !== "object" || Array.isArray(input))
-    fail(ctx, "INVALID_REQUEST", "invalid_field", "Invalid profile fields.");
+    ctx.fail("INVALID_REQUEST", "프로필 항목을 확인해 주세요.", {
+      reason: "invalid_field",
+    });
   const editable = new Map(
     catalogue
       .filter((definition) => definition.visibility !== "admin")
@@ -167,7 +164,9 @@ export async function memberSheet(ctx, previous, data) {
   );
   for (const code of Object.keys(input))
     if (!editable.has(code))
-      fail(ctx, "INVALID_REQUEST", "invalid_field", `Unknown field ${code}.`);
+      ctx.fail("INVALID_REQUEST", `고칠 수 없는 프로필 항목입니다: ${code}`, {
+        reason: "invalid_field",
+      });
   const before =
     previous?.data.fields && typeof previous.data.fields === "object"
       ? previous.data.fields
@@ -187,7 +186,11 @@ export async function memberSheet(ctx, previous, data) {
     size += value.length;
   }
   if (size > MAX_FIELD_TEXT)
-    fail(ctx, "INVALID_REQUEST", "fields_too_long", "Profile is too long.");
+    ctx.fail(
+      "INVALID_REQUEST",
+      "추가 프로필 항목은 합쳐서 6,000자까지입니다.",
+      { reason: "fields_too_long" },
+    );
   const was = previous?.data.type;
   const type =
     was === "npc"
@@ -197,12 +200,16 @@ export async function memberSheet(ctx, previous, data) {
     !["main", "sub", "npc"].includes(type) ||
     (type === "npc" && was !== "npc")
   )
-    fail(ctx, "INVALID_REQUEST", "invalid_input", "Invalid character type.");
+    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+      reason: "invalid_input",
+    });
   const prior = await currentState(ctx, previous);
   let state =
     prior === "approved" ? "approved" : (data.state ?? prior ?? "editing");
   if (prior !== "approved" && !["editing", "submitted"].includes(state))
-    fail(ctx, "INVALID_REQUEST", "invalid_input", "Invalid character state.");
+    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+      reason: "invalid_input",
+    });
   if (
     state === "submitted" &&
     catalogue.some(
@@ -212,6 +219,10 @@ export async function memberSheet(ctx, previous, data) {
         !Object.hasOwn(fields, definition.code),
     )
   )
-    fail(ctx, "INVALID_REQUEST", "missing_fields", "Required fields missing.");
+    ctx.fail(
+      "INVALID_REQUEST",
+      "신청하려면 필수 프로필 항목을 모두 채워 주세요.",
+      { reason: "missing_fields" },
+    );
   return { fields, type, state, catalogue };
 }

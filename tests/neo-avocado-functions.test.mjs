@@ -118,13 +118,23 @@ function fakeCtx({ now = Date.parse("2030-01-01T03:00:00Z"), roll = 0 } = {}) {
   return { ctx, table, sent, released };
 }
 
+/** The reason a function refused with (its ctx.fail details), or null. */
+const refusal = (call) =>
+  call.then(
+    () => null,
+    (error) => {
+      if (!error.details) throw error;
+      return error.details.reason;
+    },
+  );
+
 test("the daily reward is once per day in Korea", async () => {
   const { ctx, table } = fakeCtx();
-  assert.deepEqual(await daily(ctx), { ok: true, balance: DAILY_REWARD });
-  assert.deepEqual(await daily(ctx), { ok: false, reason: "already" });
+  assert.deepEqual(await daily(ctx), { balance: DAILY_REWARD });
+  assert.equal(await refusal(daily(ctx)), "already");
   // 2030-01-01 15:00 UTC is already 2 January in Korea.
   ctx.now = Date.parse("2030-01-01T15:00:00Z");
-  assert.deepEqual(await daily(ctx), { ok: true, balance: 2 * DAILY_REWARD });
+  assert.deepEqual(await daily(ctx), { balance: 2 * DAILY_REWARD });
   assert.equal(table(`${P}wallets`).get("m-1").lastDaily, "2030-01-02");
 });
 
@@ -156,13 +166,13 @@ test("boards enforce independent levels, secret bodies and parent comment access
   ).document;
   assert.equal(record.data.board, "notes");
   assert.equal(
-    (
-      await communityData(ctx, {
+    await refusal(
+      communityData(ctx, {
         collection: `${P}logs`,
         operation: "get",
         id: record.id,
-      })
-    ).reason,
+      }),
+    ),
     "access_denied",
   );
   const list = await communityData(ctx, {
@@ -173,13 +183,13 @@ test("boards enforce independent levels, secret bodies and parent comment access
   assert.equal(list.documents[0].data.locked, true);
   assert.equal(list.documents[0].data.text, undefined);
   assert.equal(
-    (
-      await communityData(ctx, {
+    await refusal(
+      communityData(ctx, {
         collection: `${P}comments`,
         operation: "add",
         data: { logId: record.id, text: "no" },
-      })
-    ).reason,
+      }),
+    ),
     "document_not_found",
   );
   table(`${P}members`).set("m-1", {
@@ -211,23 +221,23 @@ test("boards enforce independent levels, secret bodies and parent comment access
   });
   ctx.member.id = "m-2";
   assert.equal(
-    (
-      await communityData(ctx, {
+    await refusal(
+      communityData(ctx, {
         collection: `${P}logs`,
         operation: "get",
         id: secret.id,
-      })
-    ).reason,
+      }),
+    ),
     "access_denied",
   );
   assert.equal(
-    (
-      await communityData(ctx, {
+    await refusal(
+      communityData(ctx, {
         collection: `${P}comments`,
         operation: "list",
         options: { filter: { logId: secret.id } },
-      })
-    ).reason,
+      }),
+    ),
     "document_not_found",
   );
   table(`${P}members`).get("m-2").role = "moderator";
@@ -253,13 +263,13 @@ test("board categories, required secrets and previews are validated without trun
     categories: ["Alpha"],
   });
   assert.equal(
-    (
-      await communityData(ctx, {
+    await refusal(
+      communityData(ctx, {
         collection: `${P}logs`,
         operation: "add",
         data: { board: "notes", text: "x", category: "Unknown" },
-      })
-    ).reason,
+      }),
+    ),
     "invalid_input",
   );
   const saved = (
@@ -295,10 +305,10 @@ test("legacy admission fields do not override platform access; profile and role 
   const { ctx, table } = fakeCtx();
   table(`${P}settings`).set("community", { admission: "approval" });
   assert.equal((await membership(ctx)).status, undefined);
-  assert.equal((await join(ctx, { nick: "New" })).ok, true);
+  await join(ctx, { nick: "New" });
   assert.equal(table(`${P}members`).get("m-1").role, "member");
   assert.equal(table(`${P}members`).get("m-1").status, undefined);
-  assert.equal((await daily(ctx)).ok, true);
+  await daily(ctx);
   const created = await communityData(ctx, {
     collection: `${P}characters`,
     operation: "add",
@@ -313,30 +323,30 @@ test("legacy admission fields do not override platform access; profile and role 
   assert.equal(created.document.data.owner, "m-1");
   assert.equal(created.document.data.points, undefined);
   assert.equal(
-    (
-      await communityData(ctx, {
+    await refusal(
+      communityData(ctx, {
         collection: `${P}members`,
         operation: "set",
         id: "m-1",
         data: { role: "moderator" },
-      })
-    ).reason,
+      }),
+    ),
     "access_denied",
   );
   table(`${P}wallets`).set("m-2", { balance: 999 });
   assert.equal(
-    (
-      await communityData(ctx, {
+    await refusal(
+      communityData(ctx, {
         collection: `${P}wallets`,
         operation: "get",
         id: "m-2",
-      })
-    ).reason,
+      }),
+    ),
     "access_denied",
   );
   table(`${P}members`).get("m-1").status = "banned";
-  assert.equal((await messageStatus(ctx)).ok, true);
-  assert.equal((await join(ctx, { nick: "Approved by platform" })).ok, true);
+  await messageStatus(ctx);
+  await join(ctx, { nick: "Approved by platform" });
   assert.equal(table(`${P}profiles`).get("m-1").nick, "Approved by platform");
 });
 
@@ -354,37 +364,37 @@ test("content ownership, parent checks, revisions and moderator boundaries hold 
     data: { image: "https://example.com/x.png", text: "edit", owner: "m-1" },
     options: { condition: { revision: "r1" } },
   };
-  assert.equal((await communityData(ctx, args)).reason, "not_owned");
+  assert.equal(await refusal(communityData(ctx, args)), "not_owned");
   table(`${P}members`).set("m-1", { status: "approved", role: "moderator" });
   assert.equal(
-    (
-      await communityData(ctx, {
+    await refusal(
+      communityData(ctx, {
         ...args,
         options: { condition: { revision: "old" } },
-      })
-    ).reason,
+      }),
+    ),
     "conflict",
   );
   assert.equal((await communityData(ctx, args)).document.data.owner, "m-2");
   table(`${P}characters`).set("other", { owner: "m-2", name: "Other" });
   assert.equal(
-    (
-      await communityData(ctx, {
+    await refusal(
+      communityData(ctx, {
         collection: `${P}characters`,
         operation: "delete",
         id: "other",
-      })
-    ).reason,
+      }),
+    ),
     "not_owned",
   );
   assert.equal(
-    (
-      await communityData(ctx, {
+    await refusal(
+      communityData(ctx, {
         collection: `${P}comments`,
         operation: "add",
         data: { logId: "missing", text: "orphan" },
-      })
-    ).reason,
+      }),
+    ),
     "document_not_found",
   );
 });
@@ -407,13 +417,13 @@ test("deletion marks durable work, hides partial cleanup and preserves purchased
   assert.equal((await deleteLog()).done, false);
   assert.equal(table(`${P}logs`).get("log").deleted, true);
   assert.equal(
-    (
-      await communityData(ctx, {
+    await refusal(
+      communityData(ctx, {
         collection: `${P}comments`,
         operation: "get",
         id: "comment-8",
-      })
-    ).reason,
+      }),
+    ),
     "document_not_found",
   );
   // Ten comments a call: the second finishes it.
@@ -466,8 +476,8 @@ test("private mail checks parties for listing, reading and deletion and marks on
   );
   assert.equal((await readMessage(ctx, { id })).document.data.readAt, null);
   ctx.member.id = "m-3";
-  assert.equal((await readMessage(ctx, { id })).reason, "message_not_found");
-  assert.equal((await removeMessage(ctx, { id })).reason, "message_not_found");
+  assert.equal(await refusal(readMessage(ctx, { id })), "message_not_found");
+  assert.equal(await refusal(removeMessage(ctx, { id })), "message_not_found");
   assert.equal(
     (await mailbox(ctx, { box: "sent", owner: "m-1" })).documents.length,
     0,
@@ -480,9 +490,9 @@ test("private mail checks parties for listing, reading and deletion and marks on
   assert.deepEqual(live.at(-1), { member: "m-2", data: { unread: false } });
   await readMessage(ctx, { id });
   assert.equal(live.length, 2);
-  assert.equal((await removeMessage(ctx, { id })).ok, true);
+  await removeMessage(ctx, { id });
   ctx.member.id = "m-1";
-  assert.equal((await readMessage(ctx, { id })).reason, "message_not_found");
+  assert.equal(await refusal(readMessage(ctx, { id })), "message_not_found");
 });
 
 test("bulk mail validates every recipient before charging and bounds previews and pagination", async () => {
@@ -502,9 +512,9 @@ test("bulk mail validates every recipient before charging and bounds previews an
     ["m-1"],
     [],
   ]) {
-    assert.equal(
-      (await sendMessage(ctx, { recipients, body: "hello" })).ok,
-      false,
+    assert.notEqual(
+      await refusal(sendMessage(ctx, { recipients, body: "hello" })),
+      null,
     );
     assert.equal(table(`${P}messages`).size, 0);
     assert.equal(table(`${P}wallets`).get("m-1").balance, 100);
@@ -565,10 +575,10 @@ test("item use conditions are checked against official state before consuming ti
     character: "hero",
     data: { name: "Medal" },
   };
-  assert.equal((await useItem(ctx, args)).reason, "not_enough_exp");
+  assert.equal(await refusal(useItem(ctx, args)), "not_enough_exp");
   assert.equal(table(`${P}inventory`).has("ticket-a"), true);
   table(`${P}character_state`).get("hero").exp = 10;
-  assert.equal((await useItem(ctx, args)).ok, true);
+  await useItem(ctx, args);
   assert.equal(table(`${P}inventory`).has("ticket-a"), false);
 });
 
@@ -615,15 +625,15 @@ test("character-linked purchases, exchanges and limits use official state and pr
     activeTitle: "winner",
   });
   const args = { item: "sword", character: "hero", materials: ["seed"] };
-  assert.equal((await buy(ctx, args)).reason, "not_approved");
+  assert.equal(await refusal(buy(ctx, args)), "not_approved");
   const state = table(`${P}character_state`).get("hero");
   state.approved = true;
   state.side = "city";
   state.class = "elf";
-  assert.equal((await buy(ctx, args)).reason, "restricted_character");
+  assert.equal(await refusal(buy(ctx, args)), "restricted_character");
   state.side = "forest";
   assert.equal(
-    (await buy(ctx, { ...args, materials: ["seed", "seed"] })).reason,
+    await refusal(buy(ctx, { ...args, materials: ["seed", "seed"] })),
     "invalid_materials",
   );
   assert.equal(table(`${P}wallets`).get("m-1").balance, 100);
@@ -635,37 +645,32 @@ test("character-linked purchases, exchanges and limits use official state and pr
   assert.deepEqual(table(`${P}character_state`).get("hero").titles, []);
   table(`${P}items`).get("sword").requirements = { limit: 1 };
   assert.equal(
-    (await buy(ctx, { item: "sword", character: "hero" })).reason,
+    await refusal(buy(ctx, { item: "sword", character: "hero" })),
     "purchase_limit",
   );
   assert.equal(
-    (
-      await gift(ctx, {
+    await refusal(
+      gift(ctx, {
         inventory: result.owned.id,
         recipient: "m-2",
         character: "hero",
-      })
-    ).reason,
+      }),
+    ),
     "no_character",
   );
-  assert.equal(
-    (
-      await gift(ctx, {
-        inventory: result.owned.id,
-        recipient: "m-2",
-        character: "other",
-      })
-    ).ok,
-    true,
-  );
+  await gift(ctx, {
+    inventory: result.owned.id,
+    recipient: "m-2",
+    character: "other",
+  });
   assert.equal(table(`${P}inventory`).get(result.owned.id).character, "other");
   assert.equal(
-    (
-      await assignInventory(ctx, {
+    await refusal(
+      assignInventory(ctx, {
         inventory: result.owned.id,
         character: "hero",
-      })
-    ).reason,
+      }),
+    ),
     "not_owned",
   );
 });
@@ -684,23 +689,17 @@ test("history ignores a caller's owner filter, paginates, and titles require act
     titles: ["winner"],
   });
   assert.equal(
-    (await equipTitle(ctx, { character: "hero", title: "unearned" })).reason,
+    await refusal(equipTitle(ctx, { character: "hero", title: "unearned" })),
     "missing_title",
   );
-  assert.equal(
-    (await equipTitle(ctx, { character: "hero", title: "winner" })).ok,
-    true,
-  );
+  await equipTitle(ctx, { character: "hero", title: "winner" });
   assert.equal(table(`${P}character_state`).get("hero").activeTitle, "winner");
   table(`${P}titles`).get("winner").deleted = true;
   assert.equal(
-    (await equipTitle(ctx, { character: "hero", title: "winner" })).reason,
+    await refusal(equipTitle(ctx, { character: "hero", title: "winner" })),
     "missing_title",
   );
-  assert.equal(
-    (await equipTitle(ctx, { character: "hero", title: null })).ok,
-    true,
-  );
+  await equipTitle(ctx, { character: "hero", title: null });
   table(`${P}history`).set("a", { owner: "m-1", kind: "daily" });
   table(`${P}history`).set("b", { owner: "m-2", memo: "private" });
   table(`${P}history`).set("c", { owner: "m-1", kind: "buy" });
@@ -710,7 +709,7 @@ test("history ignores a caller's owner filter, paginates, and titles require act
     (await history(ctx, { after: first.nextCursor, size: 1 })).documents[0].id,
     "c",
   );
-  assert.equal((await history(ctx, { size: 21 })).reason, "invalid_input");
+  assert.equal(await refusal(history(ctx, { size: 21 })), "invalid_input");
 });
 
 test("stat allocation is bounded by server points and preserves damage through zero and back", async () => {
@@ -731,69 +730,56 @@ test("stat allocation is bounded by server points and preserves damage through z
   assert.equal(first.rank, "초보");
   assert.equal(first.revision, null);
   assert.equal(
-    (await allocateStats(ctx, { character: "hero", allocation: { hp: 11 } }))
-      .reason,
+    await refusal(
+      allocateStats(ctx, { character: "hero", allocation: { hp: 11 } }),
+    ),
     "not_enough_points",
   );
   assert.equal(table(`${P}character_state`).size, 0);
-  assert.equal(
-    (await allocateStats(ctx, { character: "hero", allocation: { hp: 10 } }))
-      .ok,
-    true,
-  );
+  await allocateStats(ctx, { character: "hero", allocation: { hp: 10 } });
   const saved = table(`${P}character_state`).get("hero");
   saved.stats.hp.damage = 7;
   saved.stats.hp.current = 3;
-  assert.equal(
-    (
-      await allocateStats(ctx, {
-        character: "hero",
-        allocation: { hp: 0 },
-        revision: "r1",
-      })
-    ).ok,
-    true,
-  );
-  assert.equal(
-    (
-      await allocateStats(ctx, {
-        character: "hero",
-        allocation: { hp: 10 },
-        revision: "r1",
-      })
-    ).ok,
-    true,
-  );
+  await allocateStats(ctx, {
+    character: "hero",
+    allocation: { hp: 0 },
+    revision: "r1",
+  });
+  await allocateStats(ctx, {
+    character: "hero",
+    allocation: { hp: 10 },
+    revision: "r1",
+  });
   assert.equal(table(`${P}character_state`).get("hero").stats.hp.current, 3);
   assert.equal(
-    (
-      await allocateStats(ctx, {
+    await refusal(
+      allocateStats(ctx, {
         character: "hero",
         allocation: { hp: 2 },
         revision: "old",
-      })
-    ).reason,
+      }),
+    ),
     "conflict",
   );
   assert.equal(
-    (
-      await allocateStats(ctx, {
+    await refusal(
+      allocateStats(ctx, {
         character: "hero",
         allocation: { hp: 2, invented: 0 },
         revision: "r1",
-      })
-    ).reason,
+      }),
+    ),
     "invalid_input",
   );
   ctx.member.id = "m-2";
   assert.equal(
-    (
-      await allocateStats(ctx, {
+    await refusal(
+      allocateStats(ctx, {
         character: "hero",
         allocation: { hp: 2 },
         revision: "r1",
-      })
-    ).reason,
+      }),
+    ),
     "not_owned",
   );
 });
@@ -820,23 +806,18 @@ test("recovery uses the catalog effect, caps health, consumes once and refuses f
     name: "물약",
   });
   assert.equal(
-    (await useItem(ctx, { inventory: "p1", character: "other" })).reason,
+    await refusal(useItem(ctx, { inventory: "p1", character: "other" })),
     "not_owned",
   );
   assert.equal(table(`${P}inventory`).has("p1"), true);
-  assert.equal(
-    (
-      await useItem(ctx, {
-        inventory: "p1",
-        character: "hero",
-        data: { amount: 99999 },
-      })
-    ).ok,
-    true,
-  );
+  await useItem(ctx, {
+    inventory: "p1",
+    character: "hero",
+    data: { amount: 99999 },
+  });
   assert.equal(table(`${P}character_state`).get("hero").stats.hp.current, 7);
   assert.equal(
-    (await useItem(ctx, { inventory: "p1", character: "hero" })).reason,
+    await refusal(useItem(ctx, { inventory: "p1", character: "hero" })),
     "not_owned",
   );
   table(`${P}items`).get("potion").reusable = true;
@@ -845,14 +826,11 @@ test("recovery uses the catalog effect, caps health, consumes once and refuses f
     item: "potion",
     name: "물약",
   });
-  assert.equal(
-    (await useItem(ctx, { inventory: "p2", character: "hero" })).ok,
-    true,
-  );
+  await useItem(ctx, { inventory: "p2", character: "hero" });
   assert.equal(table(`${P}character_state`).get("hero").stats.hp.current, 10);
   assert.equal(table(`${P}inventory`).has("p2"), true);
   assert.equal(
-    (await useItem(ctx, { inventory: "p2", character: "hero" })).reason,
+    await refusal(useItem(ctx, { inventory: "p2", character: "hero" })),
     "already_full",
   );
 });
@@ -934,26 +912,21 @@ test("personal-item and profile tickets cannot inject privileged catalog or char
     name: "수정권",
   });
   assert.equal(
-    (
-      await useItem(ctx, {
+    await refusal(
+      useItem(ctx, {
         inventory: "profile-ticket",
         character: "hero",
         data: { name: "New", revision: "old" },
-      })
-    ).reason,
+      }),
+    ),
     "conflict",
   );
   assert.equal(table(`${P}inventory`).has("profile-ticket"), true);
-  assert.equal(
-    (
-      await useItem(ctx, {
-        inventory: "profile-ticket",
-        character: "hero",
-        data: { name: "New", revision: "r1", owner: "m-2", points: 99999 },
-      })
-    ).ok,
-    true,
-  );
+  await useItem(ctx, {
+    inventory: "profile-ticket",
+    character: "hero",
+    data: { name: "New", revision: "r1", owner: "m-2", points: 99999 },
+  });
   assert.deepEqual(table(`${P}characters`).get("hero"), {
     owner: "m-1",
     name: "New",
@@ -974,18 +947,20 @@ test("character relationships validate source ownership, targets, revisions and 
     memo: "친구",
     order: 1,
   };
-  assert.deepEqual(
-    await relation(ctx, { ...args, character: "other", target: "mine" }),
-    { ok: false, reason: "not_owned" },
+  assert.equal(
+    await refusal(
+      relation(ctx, { ...args, character: "other", target: "mine" }),
+    ),
+    "not_owned",
   );
-  assert.deepEqual(await relation(ctx, { ...args, target: "mine" }), {
-    ok: false,
-    reason: "no_character",
-  });
-  assert.deepEqual(await relation(ctx, { ...args, affinity: 101 }), {
-    ok: false,
-    reason: "invalid_input",
-  });
+  assert.equal(
+    await refusal(relation(ctx, { ...args, target: "mine" })),
+    "no_character",
+  );
+  assert.equal(
+    await refusal(relation(ctx, { ...args, affinity: 101 })),
+    "invalid_input",
+  );
   await assert.rejects(
     async () => await relation(ctx, { ...args, link: "javascript:alert(1)" }),
     /HTTPS/,
@@ -993,34 +968,31 @@ test("character relationships validate source ownership, targets, revisions and 
   assert.equal(table(`${P}relations`).size, 0);
   const created = (await relation(ctx, args)).document;
   assert.equal(created.data.owner, "m-1");
-  assert.deepEqual(
-    await relation(ctx, {
-      ...args,
-      id: created.id,
-      revision: "old",
-      memo: "changed",
-    }),
-    { ok: false, reason: "conflict" },
-  );
-  assert.equal(table(`${P}relations`).get(created.id).memo, "친구");
   assert.equal(
-    (
-      await relation(ctx, {
+    await refusal(
+      relation(ctx, {
         ...args,
         id: created.id,
-        revision: "r1",
-        memo: "새 관계",
-      })
-    ).ok,
-    true,
+        revision: "old",
+        memo: "changed",
+      }),
+    ),
+    "conflict",
   );
-  ctx.member.id = "m-2";
-  assert.deepEqual(await removeRelation(ctx, { id: created.id }), {
-    ok: false,
-    reason: "not_owned",
+  assert.equal(table(`${P}relations`).get(created.id).memo, "친구");
+  await relation(ctx, {
+    ...args,
+    id: created.id,
+    revision: "r1",
+    memo: "새 관계",
   });
+  ctx.member.id = "m-2";
+  assert.equal(
+    await refusal(removeRelation(ctx, { id: created.id })),
+    "not_owned",
+  );
   ctx.member.id = "m-1";
-  assert.equal((await removeRelation(ctx, { id: created.id })).ok, true);
+  await removeRelation(ctx, { id: created.id });
   assert.equal(table(`${P}relations`).size, 0);
   // A member-written decorative owner field must not override actual authorship.
   const get = ctx.get;
@@ -1030,10 +1002,7 @@ test("character relationships validate source ownership, targets, revisions and 
       ? { ...row, createdBy: "m-2" }
       : row;
   };
-  assert.deepEqual(await relation(ctx, args), {
-    ok: false,
-    reason: "not_owned",
-  });
+  assert.equal(await refusal(relation(ctx, args)), "not_owned");
 });
 
 test("wardrobe protects characters, rejects unsafe addresses and keeps the active outfit", async () => {
@@ -1061,30 +1030,24 @@ test("wardrobe protects characters, rejects unsafe addresses and keeps the activ
       image: "https://media.naru.pub/outfit.png",
     })
   ).document;
-  assert.deepEqual(
-    await wear(ctx, { character: "other", outfit: clothing.id }),
-    {
-      ok: false,
-      reason: "not_owned",
-    },
-  );
   assert.equal(
-    (await wear(ctx, { character: "mine", outfit: clothing.id })).ok,
-    true,
+    await refusal(wear(ctx, { character: "other", outfit: clothing.id })),
+    "not_owned",
   );
+  await wear(ctx, { character: "mine", outfit: clothing.id });
   assert.equal(table(`${P}characters`).get("mine").outfit, clothing.id);
-  assert.deepEqual(await removeOutfit(ctx, { id: clothing.id }), {
-    ok: false,
-    reason: "outfit_in_use",
-  });
-  assert.equal((await wear(ctx, { character: "mine", outfit: null })).ok, true);
-  assert.equal((await removeOutfit(ctx, { id: clothing.id })).ok, true);
-  assert.equal((await mainCharacter(ctx, { character: "mine" })).ok, true);
+  assert.equal(
+    await refusal(removeOutfit(ctx, { id: clothing.id })),
+    "outfit_in_use",
+  );
+  await wear(ctx, { character: "mine", outfit: null });
+  await removeOutfit(ctx, { id: clothing.id });
+  await mainCharacter(ctx, { character: "mine" });
   assert.equal(table(`${P}profiles`).get("m-1").mainCharacter, "mine");
-  assert.deepEqual(await mainCharacter(ctx, { character: "other" }), {
-    ok: false,
-    reason: "not_owned",
-  });
+  assert.equal(
+    await refusal(mainCharacter(ctx, { character: "other" })),
+    "not_owned",
+  );
 });
 
 test("catalog prices and balances cannot create money through invalid arithmetic", async () => {
@@ -1125,21 +1088,17 @@ test("selling checks ownership and server price and cannot pay twice", async () 
     item: "seed",
     name: "씨앗",
   });
-  assert.deepEqual(await sell(ctx, { inventory: "theirs", sellPrice: 10000 }), {
-    ok: false,
-    reason: "not_owned",
-  });
+  assert.equal(
+    await refusal(sell(ctx, { inventory: "theirs", sellPrice: 10000 })),
+    "not_owned",
+  );
   assert.equal(table(`${P}wallets`).size, 0);
   assert.deepEqual(await sell(ctx, { inventory: "mine", sellPrice: 10000 }), {
-    ok: true,
     balance: 12,
     name: "씨앗",
   });
   assert.equal(table(`${P}inventory`).has("mine"), false);
-  assert.deepEqual(await sell(ctx, { inventory: "mine" }), {
-    ok: false,
-    reason: "not_owned",
-  });
+  assert.equal(await refusal(sell(ctx, { inventory: "mine" })), "not_owned");
   assert.equal(table(`${P}wallets`).get("m-1").balance, 12);
 });
 
@@ -1154,16 +1113,13 @@ test("gifts transfer one item only to an existing other member and retain proven
     from: "shop",
   });
   for (const recipient of ["missing", "m-1", null]) {
-    assert.deepEqual(await gift(ctx, { inventory: "mine", recipient }), {
-      ok: false,
-      reason: "no_recipient",
-    });
+    assert.equal(
+      await refusal(gift(ctx, { inventory: "mine", recipient })),
+      "no_recipient",
+    );
     assert.equal(table(`${P}inventory`).get("mine").owner, "m-1");
   }
-  assert.equal(
-    (await gift(ctx, { inventory: "mine", recipient: "m-2", memo: "선물" })).ok,
-    true,
-  );
+  await gift(ctx, { inventory: "mine", recipient: "m-2", memo: "선물" });
   assert.deepEqual(table(`${P}inventory`).get("mine"), {
     owner: "m-2",
     item: "seed",
@@ -1174,14 +1130,11 @@ test("gifts transfer one item only to an existing other member and retain proven
     receivedAt: ctx.now,
     character: null,
   });
-  assert.deepEqual(await gift(ctx, { inventory: "mine", recipient: "m-2" }), {
-    ok: false,
-    reason: "not_owned",
-  });
-  assert.deepEqual(await sell(ctx, { inventory: "mine" }), {
-    ok: false,
-    reason: "not_owned",
-  });
+  assert.equal(
+    await refusal(gift(ctx, { inventory: "mine", recipient: "m-2" })),
+    "not_owned",
+  );
+  assert.equal(await refusal(sell(ctx, { inventory: "mine" })), "not_owned");
 });
 
 test("crafting rejects duplicate, foreign, extra and insufficient materials before spending", async () => {
@@ -1205,7 +1158,10 @@ test("crafting rejects duplicate, foreign, extra and insufficient materials befo
     [7],
     null,
   ]) {
-    assert.equal((await craft(ctx, { recipe: "recipe", materials })).ok, false);
+    assert.notEqual(
+      await refusal(craft(ctx, { recipe: "recipe", materials })),
+      null,
+    );
     assert.equal(table(`${P}inventory`).size, 3);
     assert.equal(table(`${P}wallets`).get("m-1").balance, 100);
   }
@@ -1219,9 +1175,9 @@ test("crafting rejects duplicate, foreign, extra and insufficient materials befo
   assert.equal(table(`${P}inventory`).has("a"), false);
   assert.equal(table(`${P}inventory`).has("b"), false);
   assert.equal(table(`${P}inventory`).has("foreign"), true);
-  assert.equal(
-    (await craft(ctx, { recipe: "recipe", materials: ["a", "b"] })).ok,
-    false,
+  assert.notEqual(
+    await refusal(craft(ctx, { recipe: "recipe", materials: ["a", "b"] })),
+    null,
   );
   assert.equal(table(`${P}wallets`).get("m-1").balance, 80);
 });
@@ -1260,14 +1216,10 @@ test("buying checks the item, its stock and the balance before taking anything",
   table(`${P}items`).set("sword", { name: "검", price: 80, stock: 1 });
   table(`${P}items`).set("potion", { name: "물약", price: 10 });
   table(`${P}items`).set("secret", { name: "비밀", price: 1, hidden: true });
-  assert.deepEqual(await buy(ctx, { item: "sword" }), {
-    ok: false,
-    reason: "not_enough",
-  });
+  assert.equal(await refusal(buy(ctx, { item: "sword" })), "not_enough");
   assert.equal(table(`${P}wallets`).size, 0);
   await daily(ctx);
   const bought = await buy(ctx, { item: "sword" });
-  assert.equal(bought.ok, true);
   assert.equal(bought.balance, DAILY_REWARD - 80);
   assert.deepEqual(bought.owned.data, {
     owner: "m-1",
@@ -1276,18 +1228,12 @@ test("buying checks the item, its stock and the balance before taking anything",
     from: "shop",
   });
   assert.equal(table(`${P}items`).get("sword").stock, 0);
-  assert.deepEqual(await buy(ctx, { item: "sword" }), {
-    ok: false,
-    reason: "sold_out",
-  });
+  assert.equal(await refusal(buy(ctx, { item: "sword" })), "sold_out");
   // No stock is no limit.
-  assert.equal((await buy(ctx, { item: "potion" })).ok, true);
+  await buy(ctx, { item: "potion" });
   assert.equal(table(`${P}items`).get("potion").stock, undefined);
   for (const item of ["secret", "missing", undefined, 7])
-    assert.deepEqual(await buy(ctx, { item }), {
-      ok: false,
-      reason: "no_item",
-    });
+    assert.equal(await refusal(buy(ctx, { item })), "no_item");
 });
 
 test("gacha picks by weight with the server's roll, and costs what it says", async () => {
@@ -1309,9 +1255,9 @@ test("gacha picks by weight with the server's roll, and costs what it says", asy
   assert.equal(await prize(0.9), "황금 아보카도");
   assert.equal(await prize(0.999), "황금 아보카도");
   const { ctx, table } = fakeCtx();
-  assert.deepEqual(await gacha(ctx), { ok: false, reason: "not_enough" });
+  assert.equal(await refusal(gacha(ctx)), "not_enough");
   table(`${P}wallets`).set("m-1", { balance: GACHA_COST });
-  assert.deepEqual(await gacha(ctx), { ok: false, reason: "empty" });
+  assert.equal(await refusal(gacha(ctx)), "empty");
   // A table naming an item the shop does not have is the owner's mistake,
   // and fails the call, which Naru then rolls back.
   table(`${P}gacha`).set("g", { item: "gone", weight: 1 });
@@ -1349,7 +1295,7 @@ test("quest reads enforce Korean start/end boundaries, categories and pagination
     (await quests(ctx, { type: "weekly" })).documents.map((row) => row.id),
     ["weekly"],
   );
-  assert.equal((await quests(ctx, { type: "bad" })).reason, "invalid_input");
+  assert.equal(await refusal(quests(ctx, { type: "bad" })), "invalid_input");
   for (let i = 0; i < 60; i++)
     table(`${P}quests`).set(`extra${i}`, { type: "weekly" });
   const page = await quests(ctx, { type: "weekly" });
@@ -1390,11 +1336,11 @@ test("content read levels and publication protect both metadata and selected bod
     "Mobile",
   );
   assert.equal(
-    (await contentPage(ctx, { id: "restricted" })).reason,
+    await refusal(contentPage(ctx, { id: "restricted" })),
     "document_not_found",
   );
   assert.equal(
-    (await contentPage(ctx, { id: "draft" })).reason,
+    await refusal(contentPage(ctx, { id: "draft" })),
     "document_not_found",
   );
   table(`${P}members`).set("m-1", { level: 5 });
@@ -1470,11 +1416,11 @@ test("the gate takes where predicates only for collections it returns whole, nev
   );
   // Logs are redacted for locked secrets, so a predicate could probe bodies.
   assert.equal(
-    (await list("logs", { eq: ["text", "guess"] })).reason,
+    await refusal(list("logs", { eq: ["text", "guess"] })),
     "invalid_input",
   );
   assert.equal(
-    (await list("inventory", { eq: ["item", "x"] })).reason,
+    await refusal(list("inventory", { eq: ["item", "x"] })),
     "invalid_input",
   );
 });
@@ -1597,8 +1543,8 @@ const gate = (ctx, collection, operation, rest = {}) =>
   communityData(ctx, { collection: `${P}${collection}`, operation, ...rest });
 const reasonOf = async (promise) => {
   try {
-    const result = await promise;
-    return result.ok ? "ok" : result.reason;
+    await promise;
+    return "ok";
   } catch (error) {
     return error.details?.reason ?? error.message;
   }
@@ -1817,7 +1763,7 @@ test("custom profile fields validate types and hide owner/admin values from othe
     ["age", "gender", "secret", "theme"],
   );
   assert.equal(
-    (await gate(ctx, "character_fields", "get", { id: "memo" })).reason,
+    await refusal(gate(ctx, "character_fields", "get", { id: "memo" })),
     "access_denied",
   );
 });
@@ -1855,12 +1801,12 @@ test("the owner's review moves editing → submitted → approved with the offic
   assert.equal(table(`${P}character_state`).get(created.id).approved, true);
   assert.equal(table(`${P}character_state`).get(created.id).owner, "m-1");
   assert.equal(
-    (
-      await reviewCharacter(owner, {
+    await refusal(
+      reviewCharacter(owner, {
         character: created.id,
         fields: { age: "1" },
-      })
-    ).reason,
+      }),
+    ),
     "invalid_input",
   );
   // The member's later edit cannot leave approval or the NPC type.
@@ -2115,10 +2061,10 @@ test("call history shows readable posts newest first and is cleared once seen", 
     ]),
     [["thread", "카도", true]],
   );
-  assert.equal((await callHistory(ctx, { size: 50 })).reason, "invalid_input");
+  assert.equal(await refusal(callHistory(ctx, { size: 50 })), "invalid_input");
   sent.length = 0;
   ctx.now += 1000;
-  assert.equal((await seeCalls(ctx)).ok, true);
+  await seeCalls(ctx);
   assert.deepEqual(sent, [{ member: "m-1", data: { calls: false } }]);
   assert.equal((await messageStatus(ctx)).calls, false);
   assert.equal((await callHistory(ctx, {})).documents[0].data.unread, false);
@@ -2161,13 +2107,13 @@ test("visitors read and post only on level-1 boards, as named guests with a pass
     ["free"],
   );
   assert.equal(
-    (
-      await read({
+    await refusal(
+      read({
         collection: `${P}logs`,
         operation: "list",
         options: { board: "members" },
-      })
-    ).reason,
+      }),
+    ),
     "access_denied",
   );
   // Nicknames reach visitors; nothing else from a profile does.
@@ -2183,8 +2129,9 @@ test("visitors read and post only on level-1 boards, as named guests with a pass
   );
   for (const collection of ["wallets", "inventory", "characters", "messages"])
     assert.equal(
-      (await read({ collection: `${P}${collection}`, operation: "list" }))
-        .reason,
+      await refusal(
+        read({ collection: `${P}${collection}`, operation: "list" }),
+      ),
       "access_denied",
     );
   // A guest must name themselves and give a password; no secrets or actions.
@@ -2195,18 +2142,15 @@ test("visitors read and post only on level-1 boards, as named guests with a pass
       data: { board: "free", image: null, ...data },
       options: guest ? { guest } : {},
     });
-  assert.equal((await post({ text: "x" })).reason, "guest_password");
+  assert.equal(await refusal(post({ text: "x" })), "guest_password");
   assert.equal(
-    (await post({ text: "x" }, { name: " ", password: "1234" })).reason,
+    await refusal(post({ text: "x" }, { name: " ", password: "1234" })),
     "invalid_input",
   );
   assert.equal(
-    (
-      await post(
-        { text: "x", secret: true },
-        { name: "길손", password: "1234" },
-      )
-    ).reason,
+    await refusal(
+      post({ text: "x", secret: true }, { name: "길손", password: "1234" }),
+    ),
     "guest_secret",
   );
   const saved = (
@@ -2232,9 +2176,9 @@ test("visitors read and post only on level-1 boards, as named guests with a pass
       data: { text, image: null },
       options: { guest: { password } },
     });
-  assert.equal((await edit(saved.id, "0000")).reason, "guest_password");
+  assert.equal(await refusal(edit(saved.id, "0000")), "guest_password");
   assert.equal(
-    (await edit(member.document.id, "1234")).reason,
+    await refusal(edit(member.document.id, "1234")),
     "guest_password",
   );
   assert.equal((await edit(saved.id, "1234")).document.data.text, "고침");
@@ -2247,20 +2191,19 @@ test("visitors read and post only on level-1 boards, as named guests with a pass
     data: { logId: member.document.id, text: "좋아요", action: undefined },
     options: { guest: { name: "길손", password: "abcd" } },
   });
-  assert.equal(comment.ok, true);
   assert.deepEqual(sent, [{ member: "m-1", data: { calls: true } }]);
   const call = [...table(`${P}calls`).values()].at(-1);
   assert.equal(call.from, null);
   assert.equal(call.nick, "길손 (손님)");
   assert.equal(
-    (
-      await communityData(ctx, {
+    await refusal(
+      communityData(ctx, {
         collection: `${P}comments`,
         operation: "add",
         data: { logId: member.document.id, action: "explore" },
         options: { guest: { name: "길손", password: "abcd" } },
-      })
-    ).reason,
+      }),
+    ),
     "access_denied",
   );
   // Deleting the post removes its comments' and its own keys.
@@ -2401,7 +2344,7 @@ test("logs are numbered per board, tagged for search, counted and moderated", as
   );
   // Only moderators (and the owner) pin and move, and a move renumbers.
   assert.equal(
-    (await moderatePost(ctx, { id: third.id, notice: true })).reason,
+    await refusal(moderatePost(ctx, { id: third.id, notice: true })),
     "access_denied",
   );
   table(`${P}members`).set("m-2", { role: "moderator" });

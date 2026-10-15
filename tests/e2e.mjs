@@ -221,6 +221,15 @@ try {
   await bob.waitForFunction(
     () => document.querySelector("#balance").textContent === "100",
   );
+  // A second claim is refused by the function's ctx.fail, in its own words,
+  // and the balance stays.
+  await bob.locator("#daily").click();
+  await bob.waitForFunction(
+    () =>
+      document.querySelector("#status").textContent ===
+      "오늘은 이미 받았습니다.",
+  );
+  assert.equal(await bob.locator("#balance").textContent(), "100");
 
   // Deleting the post deletes its picture too (a managed upload).
   const file = logPicture.split("/").pop();

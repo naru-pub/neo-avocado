@@ -7,7 +7,6 @@ import {
   boardAllowed,
   logReadable,
   nextNumber,
-  failure,
 } from "../../modules/shared.js";
 
 export const readOnly = ["commentCounts"];
@@ -24,14 +23,16 @@ export async function commentCounts(ctx, { ids } = {}) {
     ids.length > 20 ||
     ids.some((id) => typeof id !== "string" || !ID.test(id))
   )
-    return failure("invalid_input");
+    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+      reason: "invalid_input",
+    });
   const access = await communityAccess(ctx);
   const logs = await ctx.getMany(LOGS, ids);
   const counts = {};
   for (const log of logs)
     if (log && (await logReadable(ctx, log, access)))
       counts[log.id] = await ctx.count(COMMENTS, { filter: { logId: log.id } });
-  return { ok: true, counts };
+  return { counts };
 }
 
 /**
@@ -41,20 +42,30 @@ export async function commentCounts(ctx, { ids } = {}) {
 export async function moderatePost(ctx, { id, notice, board } = {}) {
   const access = ctx.owner ? null : await communityAccess(ctx);
   if (!ctx.owner && access.role !== "moderator")
-    return failure("access_denied");
+    ctx.fail("ACCESS_DENIED", "권한이 없습니다.", { reason: "access_denied" });
   const log = typeof id === "string" ? await ctx.get(LOGS, id) : null;
-  if (!log || log.data.deleted) return failure("document_not_found");
+  if (!log || log.data.deleted)
+    ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {
+      reason: "document_not_found",
+    });
   const data = { ...log.data };
   if (notice !== undefined) {
-    if (typeof notice !== "boolean") return failure("invalid_input");
+    if (typeof notice !== "boolean")
+      ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+        reason: "invalid_input",
+      });
     data.notice = notice;
   }
   if (board !== undefined && board !== (log.data.board ?? "default")) {
     const target = typeof board === "string" ? await boardOf(ctx, board) : null;
     if (!target || (access && !boardAllowed(target, access, "write")))
-      return failure("access_denied");
+      ctx.fail("ACCESS_DENIED", "권한이 없습니다.", {
+        reason: "access_denied",
+      });
     if (target.data.kind === "image" && !data.image)
-      return failure("invalid_input");
+      ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+        reason: "invalid_input",
+      });
     if (
       data.category &&
       !(target.data.categories ?? []).includes(data.category)
@@ -66,5 +77,5 @@ export async function moderatePost(ctx, { id, notice, board } = {}) {
   const saved = await ctx.set(LOGS, id, data, {
     condition: { revision: log.revision },
   });
-  return { ok: true, document: saved };
+  return { document: saved };
 }

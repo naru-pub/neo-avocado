@@ -1,6 +1,5 @@
 import { emoticonContent } from "./emoticons.js";
 import { renderContent, sanitizedFragment } from "./content-renderer.js";
-import { functionReference } from "./function-references.js";
 import { config } from "./config.js";
 
 // 아보카도 에디션의 뼈대만 나루 회원으로 다시 만든 것: 회원 로그인과 닉네임,
@@ -29,50 +28,6 @@ const COLLECTION = {
   characterFields: `${PREFIX}character_fields`,
 };
 const SHOP_PAGE = 50;
-const REASONS = {
-  already: "오늘은 이미 받았습니다.",
-  sold_out: "품절입니다.",
-  not_enough: "아보가 모자랍니다.",
-  no_item: "없는 아이템입니다.",
-  empty: "아직 뽑을 것이 없습니다.",
-  not_owned: "내가 가진 아이템이 아닙니다.",
-  not_sellable: "판매할 수 없는 아이템입니다.",
-  not_giftable: "선물할 수 없는 아이템입니다.",
-  no_recipient: "받는 회원을 확인해 주세요.",
-  invalid_input: "입력 내용을 확인해 주세요.",
-  no_recipe: "없는 레시피입니다.",
-  invalid_materials: "레시피에 맞는 재료를 선택해 주세요.",
-  no_character: "캐릭터를 확인해 주세요.",
-  conflict: "다른 곳에서 수정되었습니다. 새로고침 후 다시 수정해 주세요.",
-  outfit_in_use: "사용 중인 의상은 먼저 기본 두상으로 바꿔 주세요.",
-  no_profile: "먼저 닉네임을 등록해 주세요.",
-  not_usable: "사용할 수 없는 아이템입니다.",
-  already_full: "이미 전부 회복되었습니다.",
-  wrong_character: "이 아이템을 가진 캐릭터를 선택해 주세요.",
-  not_enough_points: "배분할 능력치 포인트가 모자랍니다.",
-  not_approved: "승인된 캐릭터만 할 수 있습니다.",
-  restricted_character: "이 캐릭터의 세력·종족은 구매할 수 없습니다.",
-  not_enough_exp: "경험치가 모자랍니다.",
-  missing_title: "필요한 타이틀이 없습니다.",
-  purchase_limit: "이 아이템의 구매 한도에 도달했습니다.",
-  invalid_recipients: "받는 회원을 중복 없이 1~20명 선택해 주세요.",
-  message_not_found: "쪽지가 없거나 읽을 권한이 없습니다.",
-  banned: "이 커뮤니티에서 차단되었습니다.",
-  approval_required: "운영자의 가입 승인이 필요합니다.",
-  registration_closed: "현재 신규 가입을 받지 않습니다.",
-  document_not_found: "자료를 찾을 수 없습니다.",
-  access_denied: "권한이 없습니다.",
-  nick_taken: "이미 쓰는 닉네임입니다.",
-  invalid_field: "프로필 항목을 확인해 주세요.",
-  missing_fields: "신청하려면 필수 프로필 항목을 모두 채워 주세요.",
-  fields_too_long: "추가 프로필 항목은 합쳐서 6,000자까지입니다.",
-  explore_closed: "지금은 탐색할 수 없습니다.",
-  explore_limit: "이 캐릭터는 오늘 탐색을 모두 했습니다.",
-  not_usable_here: "이 아이템은 인벤토리에서 사용해 주세요.",
-  guest_password: "비밀번호를 확인해 주세요. (4~64자)",
-  guest_secret: "손님은 비밀글을 쓸 수 없습니다.",
-  guest_identity: "손님 이름과 4자 이상의 비밀번호를 입력해 주세요.",
-};
 const STATE_NAMES = {
   editing: "수정 중",
   submitted: "신청",
@@ -130,13 +85,13 @@ const MESSAGES = {
   UNAVAILABLE: "나루에 연결하지 못했습니다. 잠시 뒤에 다시 해 주세요.",
   CONFLICT: "다른 곳에서 수정되었습니다. 새로고침 후 다시 수정해 주세요.",
 };
-/** A function's ctx.fail reason, or a unique field it collided on. */
-function reasonOf(error) {
-  if (error?.details?.unique === "nick") return REASONS.nick_taken;
-  const reason = error?.details?.reason;
-  return typeof reason === "string" && Object.hasOwn(REASONS, reason)
-    ? REASONS[reason]
-    : undefined;
+/**
+ * The site's own words for an error: a site function's ctx.fail message
+ * (it passes a reason in its details), or the unique field a write hit.
+ */
+function siteMessage(error) {
+  if (error?.details?.unique === "nick") return "이미 쓰는 닉네임입니다.";
+  return error?.details?.reason ? error.message : undefined;
 }
 function say(message) {
   $("status").textContent = message;
@@ -175,11 +130,11 @@ async function run(action) {
       }
     }
     say(
-      // A collection that does not exist yet: the owner has not signed in to
-      // admin.html, whose first sign-in creates them all.
+      // A collection that does not exist yet: Naru creates them from
+      // _naru/collections.json as the site's files arrive.
       error?.code === "NOT_FOUND" && /^Collection /.test(error.message)
-        ? "사이트를 준비하고 있습니다. 운영자가 운영 화면에서 로그인하면 시작됩니다."
-        : (reasonOf(error) ??
+        ? "사이트를 준비하고 있습니다. 잠시 뒤에 다시 해 주세요."
+        : (siteMessage(error) ??
             MESSAGES[error?.code] ??
             "요청을 처리하지 못했습니다."),
     );
@@ -463,9 +418,12 @@ function guestCredentials() {
   const name = $("guestName").value.trim();
   const password = $("guestPassword").value.trim();
   if (!name || password.length < 4)
-    throw Object.assign(new Error(REASONS.guest_identity), {
-      details: { reason: "guest_identity" },
-    });
+    throw Object.assign(
+      new Error("손님 이름과 4자 이상의 비밀번호를 입력해 주세요."),
+      {
+        details: { reason: "guest_identity" },
+      },
+    );
   return { name, password };
 }
 
@@ -512,37 +470,15 @@ function communityCollection(collection) {
   const invoke = async (operation, id, data, options = {}) => {
     // Reads go through the gate's read-only export, on the read budget.
     const gate = ["get", "getMany", "list"].includes(operation)
-      ? "communityRead"
-      : "communityData";
-    const result = await caller().call(functionReference(gate), {
+      ? "community/data:communityRead"
+      : "community/data:communityData";
+    return caller().call(gate, {
       collection,
       operation,
       ...(id !== undefined ? { id } : {}),
       ...(data !== undefined ? { data } : {}),
       options,
     });
-    if (!result.ok) {
-      const code =
-        result.reason === "document_not_found"
-          ? "NOT_FOUND"
-          : result.reason === "conflict"
-            ? "CONFLICT"
-            : [
-                  "guest_password",
-                  "access_denied",
-                  "not_owned",
-                  "banned",
-                  "approval_required",
-                ].includes(result.reason)
-              ? "ACCESS_DENIED"
-              : "INVALID_REQUEST";
-      throw Object.assign(
-        new Error(REASONS[result.reason] ?? "요청을 처리하지 못했습니다."),
-        // The gate's own reason, read like a ctx.fail detail.
-        { code, details: { reason: result.reason } },
-      );
-    }
-    return result;
   };
   return {
     getMany: async (ids) =>
@@ -619,10 +555,10 @@ function showAdmission(status) {
         : "가입 승인 대기";
   $("admissionDescription").textContent =
     status === "banned"
-      ? REASONS.banned
+      ? "이 커뮤니티에서 차단되었습니다."
       : status === "closed"
-        ? REASONS.registration_closed
-        : REASONS.approval_required;
+        ? "현재 신규 가입을 받지 않습니다."
+        : "운영자의 가입 승인이 필요합니다.";
   $("admissionId").textContent = `가입 문의용 회원 번호: ${state.member.id}`;
   $("editProfile").hidden = true;
 }
@@ -695,7 +631,7 @@ function edit(title, fields, save) {
       $("editor").close();
     } catch (error) {
       $("editorStatus").textContent =
-        reasonOf(error) ??
+        siteMessage(error) ??
         MESSAGES[error?.code] ??
         error.message ??
         "저장하지 못했습니다.";
@@ -758,7 +694,7 @@ async function start() {
     show();
     return showAdmission(platform.status);
   }
-  const status = await callRule("membership");
+  const status = await caller().call("community/membership:membership");
   state.role = status.role;
   state.level = status.level ?? 2;
   const profile = status.profile;
@@ -794,7 +730,7 @@ const SITE_COLORS = {
 };
 /** Applies the owner's design, menus and banners (adm/design_form.php, menu_list.php). */
 async function loadSite() {
-  const site = await callRule("site");
+  const site = await caller().call("content/site:site");
   const { design } = site;
   const root = document.documentElement.style;
   for (const [key, variable] of Object.entries(SITE_COLORS))
@@ -945,7 +881,7 @@ async function follow(link) {
   if (kind === "board") {
     showTab("logs");
     if (!state.boards.some((row) => row.id === id))
-      return say(REASONS.access_denied);
+      return say("권한이 없습니다.");
     state.board = id;
     $("board").value = id;
     configureBoard();
@@ -955,7 +891,7 @@ async function follow(link) {
     showTab("content");
     await loadContentPages();
     if (![...$("contentPage").options].some((option) => option.value === id))
-      return say(REASONS.document_not_found);
+      return say("자료를 찾을 수 없습니다.");
     $("contentPage").value = id;
     return loadContentBody();
   }
@@ -982,7 +918,7 @@ function showNewPost(id) {
 }
 async function refreshUnread() {
   const member = state.member;
-  const notice = await callRule("messageStatus");
+  const notice = await caller().call("community/messages:messageStatus");
   if (state.member !== member) return;
   showUnread(notice.unread);
   showCalls(notice.calls === true);
@@ -1088,12 +1024,14 @@ async function showCommentCounts(entries) {
   const ids = entries.map(([id]) => id).filter(Boolean);
   if (!ids.length) return;
   // Counts are a decoration: a page without them is still a page.
-  const counts = await callRule("commentCounts", {
-    ids: ids.slice(0, 20),
-  }).then(
-    (result) => result.counts ?? {},
-    () => ({}),
-  );
+  const counts = await caller()
+    .call("community/boards:commentCounts", {
+      ids: ids.slice(0, 20),
+    })
+    .then(
+      (result) => result.counts ?? {},
+      () => ({}),
+    );
   for (const [id, item] of entries)
     if (typeof counts[id] === "number")
       item.querySelector(".comments summary").textContent =
@@ -1107,7 +1045,7 @@ async function openLogNumber(number) {
     size: 1,
   });
   const log = page.documents[0];
-  if (!log) return say(REASONS.document_not_found);
+  if (!log) return say("자료를 찾을 수 없습니다.");
   await preloadNicks([log]);
   $("logFocus").replaceChildren(await logItem(log));
   $("logFocusPanel").hidden = false;
@@ -1141,10 +1079,13 @@ async function logItem(log) {
   pin.textContent = log.data.notice ? "공지 해제" : "공지로";
   pin.onclick = () =>
     run(async () => {
-      const { document: saved } = await callRule("moderatePost", {
-        id: log.id,
-        notice: !log.data.notice,
-      });
+      const { document: saved } = await caller().call(
+        "community/boards:moderatePost",
+        {
+          id: log.id,
+          notice: !log.data.notice,
+        },
+      );
       item.replaceWith(await logItem(saved));
       await loadLogs();
     });
@@ -1160,7 +1101,10 @@ async function logItem(log) {
         },
       ],
       async ({ board }) => {
-        await callRule("moderatePost", { id: log.id, board });
+        await caller().call("community/boards:moderatePost", {
+          id: log.id,
+          board,
+        });
         item.remove();
       },
     );
@@ -1733,7 +1677,7 @@ async function characterItem(character) {
   main.hidden = !mine(character);
   main.onclick = () =>
     run(async () => {
-      const result = await callRule("mainCharacter", {
+      const result = await caller().call("characters/profile:mainCharacter", {
         character: character.id,
       });
       show(result.document);
@@ -1745,14 +1689,6 @@ async function characterItem(character) {
 
 // Which functions only read is declared in their modules (readOnly), so Naru
 // gives them the read budget; the page calls them all the same way.
-async function callRule(name, args) {
-  const result = await caller().call(functionReference(name), args);
-  if (!result?.ok) {
-    throw new Error(REASONS[result?.reason] ?? "요청을 처리하지 못했습니다.");
-  }
-  return result;
-}
-
 function wireCharacterDetails(item, character) {
   const details = item.querySelector(".character-details");
   const addRelation = item.querySelector(".add-relation");
@@ -1769,9 +1705,12 @@ function wireCharacterDetails(item, character) {
         item.querySelector(".character-fields"),
         await communityCollection(COLLECTION.characters).get(character.id),
       );
-    const status = await callRule("characterStatus", {
-      character: character.id,
-    });
+    const status = await caller().call(
+      "characters/progression:characterStatus",
+      {
+        character: character.id,
+      },
+    );
     item.querySelector(".progression").textContent =
       `경험치 ${status.state.exp}${status.rank ? ` · ${status.rank}` : ""} · 능력치 포인트 ${status.state.points}`;
     item.querySelector(".stats").replaceChildren();
@@ -1792,7 +1731,7 @@ function wireCharacterDetails(item, character) {
           value: status.state.stats[definition.id].allocated,
         })),
         async (allocation) => {
-          await callRule("allocateStats", {
+          await caller().call("characters/progression:allocateStats", {
             character: character.id,
             revision: status.revision,
             allocation: Object.fromEntries(
@@ -1841,7 +1780,7 @@ function wireCharacterDetails(item, character) {
     titleChoice.hidden = !mine(character) || !titles.length;
     titleChoice.onchange = () =>
       run(async () => {
-        await callRule("equipTitle", {
+        await caller().call("characters/progression:equipTitle", {
           character: character.id,
           title: titleChoice.value || null,
         });
@@ -1902,7 +1841,9 @@ function wireCharacterDetails(item, character) {
         remove.onclick = () =>
           run(async () => {
             if (!confirm("이 관계를 지울까요?")) return;
-            await callRule("removeRelation", { id: row.id });
+            await caller().call("characters/relations:removeRelation", {
+              id: row.id,
+            });
             await refresh();
           });
         li.append(" ", change, " ", remove);
@@ -1925,7 +1866,7 @@ function wireCharacterDetails(item, character) {
         wear.disabled = character.data.outfit === clothing.id;
         wear.onclick = () =>
           run(async () => {
-            const result = await callRule("wear", {
+            const result = await caller().call("characters/wardrobe:wear", {
               character: character.id,
               outfit: clothing.id,
             });
@@ -1938,7 +1879,9 @@ function wireCharacterDetails(item, character) {
         remove.onclick = () =>
           run(async () => {
             if (!confirm("이 의상을 지울까요?")) return;
-            await callRule("removeOutfit", { id: clothing.id });
+            await caller().call("characters/wardrobe:removeOutfit", {
+              id: clothing.id,
+            });
             await refresh();
           });
         li.append(" ", wear, " ", remove);
@@ -2002,7 +1945,7 @@ function wireCharacterDetails(item, character) {
           },
         ],
         async (data) => {
-          await callRule("relation", {
+          await caller().call("characters/relations:relation", {
             ...data,
             ...(row ? { id: row.id, revision: row.revision } : {}),
             character: character.id,
@@ -2030,7 +1973,7 @@ function wireCharacterDetails(item, character) {
       async ({ name, image, file }) => {
         const uploaded = file ? await uploadManaged(file) : null;
         if (uploaded) image = uploaded.url;
-        await callRule("outfit", {
+        await caller().call("characters/wardrobe:outfit", {
           character: character.id,
           name,
           image,
@@ -2040,7 +1983,7 @@ function wireCharacterDetails(item, character) {
     );
   defaultOutfit.onclick = () =>
     run(async () => {
-      const result = await callRule("wear", {
+      const result = await caller().call("characters/wardrobe:wear", {
         character: character.id,
         outfit: null,
       });
@@ -2162,7 +2105,7 @@ function shopItem(item) {
   buy.disabled = item.data.stock === 0;
   buy.onclick = () =>
     spend(
-      "buy",
+      "economy/shop:buy",
       {
         item: item.id,
         ...(state.inventoryCharacter
@@ -2245,7 +2188,7 @@ async function loadInventory({ more = false } = {}) {
     sell.onclick = () => {
       if (confirm(`${owned.data.name}을(를) 판매할까요?`))
         spend(
-          "sell",
+          "economy/inventory:sell",
           { inventory: owned.id },
           (result) => `${result.name}을(를) 판매했습니다.`,
         );
@@ -2279,13 +2222,11 @@ async function loadInventory({ more = false } = {}) {
             { name: "memo", label: "메시지", multiline: true, max: 500 },
           ],
           async (data) => {
-            const result = await state.member.call(functionReference("gift"), {
+            await state.member.call("economy/inventory:gift", {
               inventory: owned.id,
               ...data,
               character: data.character || null,
             });
-            if (!result.ok)
-              throw new Error(REASONS[result.reason] ?? "선물하지 못했습니다.");
             say("선물을 보냈습니다.");
             await loadInventory();
           },
@@ -2334,7 +2275,7 @@ async function loadInventory({ more = false } = {}) {
           },
         ],
         async ({ character }) => {
-          await callRule("assignInventory", {
+          await caller().call("economy/inventory:assignInventory", {
             inventory: owned.id,
             character: character || null,
           });
@@ -2365,7 +2306,7 @@ const HISTORY_NAMES = {
   use: "아이템 사용",
 };
 async function loadHistory({ more = false } = {}) {
-  const page = await callRule("history", {
+  const page = await caller().call("economy/history:history", {
     after: more ? state.historyCursor : null,
     size: 20,
   });
@@ -2386,7 +2327,8 @@ $("moreHistory").onclick = () => run(() => loadHistory({ more: true }));
 async function useInventory(owned) {
   const item = await communityCollection(COLLECTION.items).get(owned.data.item);
   const effect = item.data.effect;
-  if (!effect || item.data.usable === false) return say(REASONS.not_usable);
+  if (!effect || item.data.usable === false)
+    return say("사용할 수 없는 아이템입니다.");
   const fields = [];
   let characters = [];
   const requirements = item.data.useRequirements ?? {};
@@ -2449,7 +2391,7 @@ async function useInventory(owned) {
       }
       if (effect.type === "profile")
         data.revision = characters.find((row) => row.id === character).revision;
-      const result = await callRule("useItem", {
+      const result = await caller().call("economy/inventory:useItem", {
         inventory: owned.id,
         ...(character || owned.data.character
           ? { character: character || owned.data.character }
@@ -2521,7 +2463,7 @@ $("craftForm").onsubmit = (event) => {
     ...$("inventory").querySelectorAll(".material:checked"),
   ].map((input) => input.value);
   spend(
-    "craft",
+    "economy/inventory:craft",
     {
       recipe: $("recipe").value,
       materials,
@@ -2537,12 +2479,9 @@ $("craftForm").onsubmit = (event) => {
  * 서버 함수 하나를 부르고, 결과를 알린 뒤 잔액과 인벤토리를 다시 읽는다. 값을
  * 정하는 것은 서버이므로 페이지는 결과만 보여 준다.
  */
-function spend(name, args, success) {
+function spend(reference, args, success) {
   return run(async () => {
-    const result = await state.member.call(functionReference(name), args);
-    if (!result?.ok) {
-      return say(REASONS[result?.reason] ?? "하지 못했습니다.");
-    }
+    const result = await state.member.call(reference, args);
     say(success(result));
     await loadShop();
   });
@@ -2586,7 +2525,7 @@ $("profileForm").onsubmit = (event) => {
     const nick = $("nick").value.trim();
     if (!nick) return;
     // 회원 번호를 ID로 쓰는 문서는 그 회원만 만들 수 있다.
-    const joined = await callRule("join", { nick });
+    const joined = await caller().call("community/membership:join", { nick });
     const profile = joined.profile;
     state.nicks.set(state.member.id, Promise.resolve(nick));
     show(profile);
@@ -2626,7 +2565,10 @@ $("messageForm").onsubmit = async (event) => {
     const recipients = [...$("messageRecipients").selectedOptions].map(
       (option) => option.value,
     );
-    await callRule("sendMessage", { recipients, body: $("messageBody").value });
+    await caller().call("community/messages:sendMessage", {
+      recipients,
+      body: $("messageBody").value,
+    });
     $("messageBody").value = "";
     $("messageBox").value = "sent";
     await loadMailbox();
@@ -2661,7 +2603,7 @@ async function loadMessageRecipients() {
 }
 
 async function loadMailbox({ more = false } = {}) {
-  const page = await callRule("mailbox", {
+  const page = await caller().call("community/messages:mailbox", {
     box: $("messageBox").value,
     after: more ? state.messageCursor : null,
     size: 20,
@@ -2678,7 +2620,9 @@ async function loadMailbox({ more = false } = {}) {
     open.textContent = `${row.data.readAt === null ? "[안 읽음] " : ""}${await nickOf($("messageBox").value === "inbox" ? row.data.from : row.data.to)} · ${formatTime(row.data.sentAt)} · ${row.data.preview}`;
     open.onclick = () =>
       run(async () => {
-        const result = await callRule("readMessage", { id: row.id });
+        const result = await caller().call("community/messages:readMessage", {
+          id: row.id,
+        });
         const message = result.document;
         showUnread(result.unread);
         $("messageDetail").replaceChildren();
@@ -2700,7 +2644,9 @@ async function loadMailbox({ more = false } = {}) {
               )
             )
               return;
-            await callRule("removeMessage", { id: message.id });
+            await caller().call("community/messages:removeMessage", {
+              id: message.id,
+            });
             await loadMailbox();
           });
         $("messageDetail").append(heading, receipt, body, remove);
@@ -2730,13 +2676,13 @@ async function loadMailbox({ more = false } = {}) {
 }
 $("daily").onclick = () =>
   spend(
-    "daily",
+    "economy/shop:daily",
     null,
     (result) => `출석 보상을 받았습니다. 잔액 ${result.balance} 아보.`,
   );
 $("gacha").onclick = () =>
   spend(
-    "gacha",
+    "economy/shop:gacha",
     state.inventoryCharacter ? { character: state.inventoryCharacter } : null,
     (result) =>
       result.owned
@@ -2754,7 +2700,7 @@ $("characterFilter").onchange = () => run(() => loadCharacters());
 /** ajax/board_call.php's alarm list: calls and comment notices, newest first. */
 async function loadCalls({ more = false } = {}) {
   const member = state.member;
-  const page = await callRule("callHistory", {
+  const page = await caller().call("community/calls:callHistory", {
     after: more ? state.callCursor : null,
     size: 20,
   });
@@ -2783,7 +2729,7 @@ async function loadCalls({ more = false } = {}) {
   state.callCursor = page.nextCursor;
   $("moreCalls").hidden = !page.nextCursor;
   // Opening the list is looking at it, as the original's close_call.php.
-  if (page.unread) await callRule("seeCalls");
+  if (page.unread) await caller().call("community/calls:seeCalls");
   showCalls(false);
 }
 $("tabCalls").onclick = () =>
@@ -2958,7 +2904,7 @@ await run(start);
 
 let questCursor = null;
 async function loadQuests(more = false) {
-  const page = await callRule("quests", {
+  const page = await caller().call("content/quests:quests", {
     type: $("questType").value,
     after: more ? questCursor : null,
   });
@@ -3011,7 +2957,7 @@ async function loadContentBody() {
   }
   const member = state.member;
   $("contentBody").replaceChildren();
-  const result = await callRule("contentPage", {
+  const result = await caller().call("content/pages:contentPage", {
     id,
     mobile: window.innerWidth <= 700,
   });
@@ -3023,7 +2969,9 @@ async function loadContentPages() {
   $("contentPage").replaceChildren();
   let cursor = null;
   do {
-    const page = await callRule("contentPages", { after: cursor });
+    const page = await caller().call("content/pages:contentPages", {
+      after: cursor,
+    });
     for (const row of page.documents) {
       const option = document.createElement("option");
       option.value = row.id;

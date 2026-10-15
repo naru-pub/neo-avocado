@@ -4,7 +4,6 @@ import {
   PROFILES,
   communityAccess,
   logReadable,
-  failure,
 } from "../../modules/shared.js";
 import { callsUnread } from "../../modules/roleplay.js";
 
@@ -24,7 +23,9 @@ export async function callHistory(ctx, { after = null, size = 20 } = {}) {
     size > 20 ||
     (after !== null && typeof after !== "string")
   )
-    return failure("invalid_input");
+    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+      reason: "invalid_input",
+    });
   const profile = await ctx.get(PROFILES, ctx.member.id);
   const seen = Number.isFinite(profile?.data.callsSeenAt)
     ? profile.data.callsSeenAt
@@ -64,7 +65,6 @@ export async function callHistory(ctx, { after = null, size = 20 } = {}) {
     });
   }
   return {
-    ok: true,
     documents,
     nextCursor: page.nextCursor,
     unread: await callsUnread(ctx),
@@ -74,11 +74,14 @@ export async function callHistory(ctx, { after = null, size = 20 } = {}) {
 /** Marks every call seen; the member's other tabs clear their notice too. */
 export async function seeCalls(ctx) {
   const profile = await ctx.get(PROFILES, ctx.member.id);
-  if (!profile) return failure("no_profile");
+  if (!profile)
+    ctx.fail("CONFLICT", "먼저 닉네임을 등록해 주세요.", {
+      reason: "no_profile",
+    });
   await ctx.set(PROFILES, profile.id, {
     ...profile.data,
     callsSeenAt: ctx.now,
   });
   ctx.notify(ctx.member.id, { calls: false });
-  return { ok: true };
+  return null;
 }

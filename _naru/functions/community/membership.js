@@ -10,7 +10,6 @@ export const readOnly = ["membership"];
 export async function membership(ctx) {
   const access = await communityAccess(ctx);
   return {
-    ok: true,
     ...access,
     memberId: ctx.member.id,
     profile: await ctx.get(PROFILES, ctx.member.id),
@@ -35,5 +34,5 @@ export async function join(
       role: "member",
       requestedAt: ctx.now,
     });
-  return { ok: true, profile, ...access };
+  return { profile, ...access };
 }

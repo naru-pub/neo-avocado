@@ -4,7 +4,6 @@ import {
   ownCharacter,
   text,
   imageUrl,
-  failure,
   amount,
 } from "../../modules/shared.js";
 
@@ -22,7 +21,10 @@ export async function relation(
     revision,
   } = {},
 ) {
-  if (!(await ownCharacter(ctx, character))) return failure("not_owned");
+  if (!(await ownCharacter(ctx, character)))
+    ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
+      reason: "not_owned",
+    });
   const targetCharacter =
     typeof target === "string" ? await ctx.get(CHARACTERS, target) : null;
   if (
@@ -31,9 +33,13 @@ export async function relation(
     !targetCharacter ||
     targetCharacter.data.deleted
   )
-    return failure("no_character");
+    ctx.fail("INVALID_REQUEST", "캐릭터를 확인해 주세요.", {
+      reason: "no_character",
+    });
   if (!Number.isInteger(affinity) || affinity < -100 || affinity > 100)
-    return failure("invalid_input");
+    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+      reason: "invalid_input",
+    });
   amount(order, "Relation order");
   const previous = id ? await ctx.get(RELATIONS, id) : null;
   if (
@@ -42,8 +48,15 @@ export async function relation(
       previous.data.owner !== ctx.member.id ||
       previous.data.character !== character)
   )
-    return failure("not_owned");
-  if (previous && previous.revision !== revision) return failure("conflict");
+    ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
+      reason: "not_owned",
+    });
+  if (previous && previous.revision !== revision)
+    ctx.fail(
+      "CONFLICT",
+      "다른 곳에서 수정되었습니다. 새로고침 후 다시 수정해 주세요.",
+      { reason: "conflict" },
+    );
   const data = {
     owner: ctx.member.id,
     character,
@@ -54,7 +67,6 @@ export async function relation(
     order,
   };
   return {
-    ok: true,
     document: previous
       ? await ctx.set(RELATIONS, id, data)
       : await ctx.add(RELATIONS, data),
@@ -68,7 +80,9 @@ export async function removeRelation(ctx, { id } = {}) {
     row.data.owner !== ctx.member.id ||
     !(await ownCharacter(ctx, row.data.character))
   )
-    return failure("not_owned");
+    ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
+      reason: "not_owned",
+    });
   await ctx.delete(RELATIONS, row.id);
-  return { ok: true };
+  return null;
 }

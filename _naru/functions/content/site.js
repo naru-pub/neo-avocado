@@ -77,7 +77,6 @@ export async function site(ctx) {
       newWindow: row.data.newWindow === true,
     }));
   return {
-    ok: true,
     level: access.level,
     member: Boolean(ctx.member),
     design,

@@ -8,10 +8,13 @@ posting as a character, dice, exploration, in-post items and calls. These are or
 Naru SDK 1.1.0 loads their static relative imports directly. No generated runtime
 files or bundling step is needed.
 
-`function-references.js` at the site root maps frontend calls to
-`<module/path>:<export>`. Shared modules cannot be called directly. The
-`modules/index.js` barrel is for Node tests; production calls load only their
-entry point and its dependencies.
+Pages call a function by `"<module/path>:<export>"`, as the SDK takes it:
+`member.call("economy/shop:buy", { item })`. A function that refuses calls
+`ctx.fail(code, "한국어 메시지", { reason })`; its writes roll back and the page
+shows the message. `tests/function-modules.test.mjs` checks that every reference
+names an export and every export is called. Shared modules cannot be called
+directly. The `modules/index.js` barrel is for Node tests; production calls load
+only their entry point and its dependencies.
 
 Deploy the entire site together through GitHub or a template install. If editing
 individual files, save shared dependencies first. Naru validates and activates a

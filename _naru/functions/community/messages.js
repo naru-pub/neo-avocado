@@ -4,7 +4,6 @@ import {
   MESSAGES,
   record,
   text,
-  failure,
   amount,
   wallet,
   pay,
@@ -22,9 +21,14 @@ export async function sendMessage(ctx, { recipients, body } = {}) {
     recipients.some((id) => typeof id !== "string") ||
     new Set(recipients).size !== recipients.length
   )
-    return failure("invalid_recipients");
+    ctx.fail("INVALID_REQUEST", "받는 회원을 중복 없이 1~20명 선택해 주세요.", {
+      reason: "invalid_recipients",
+    });
   const message = text(body, 5000, true);
-  if (!(await ctx.get(PROFILES, ctx.member.id))) return failure("no_profile");
+  if (!(await ctx.get(PROFILES, ctx.member.id)))
+    ctx.fail("CONFLICT", "먼저 닉네임을 등록해 주세요.", {
+      reason: "no_profile",
+    });
   for (const id of recipients) {
     const recipient = await ctx.get(PROFILES, id);
     if (
@@ -32,7 +36,9 @@ export async function sendMessage(ctx, { recipients, body } = {}) {
       !recipient ||
       recipient.data.acceptMessages === false
     )
-      return failure("no_recipient");
+      ctx.fail("INVALID_REQUEST", "받는 회원을 확인해 주세요.", {
+        reason: "no_recipient",
+      });
   }
   const cost = amount(
     (await ctx.get(SETTINGS, "community"))?.data.messageCost ?? 0,
@@ -41,7 +47,8 @@ export async function sendMessage(ctx, { recipients, body } = {}) {
   const total = cost * recipients.length;
   if (!Number.isSafeInteger(total)) throw new Error("Message cost overflow.");
   const current = await wallet(ctx);
-  if (current.balance < total) return failure("not_enough");
+  if (current.balance < total)
+    ctx.fail("CONFLICT", "아보가 모자랍니다.", { reason: "not_enough" });
   const balance = cost ? await pay(ctx, current, total) : current.balance;
   const ids = await Promise.all(
     recipients.map(
@@ -61,7 +68,7 @@ export async function sendMessage(ctx, { recipients, body } = {}) {
     await record(ctx, "message", { recipients, delta: -total, balance });
   // Sent after the commit; a reason for the recipient's page to show the tab.
   for (const to of recipients) ctx.notify(to, { unread: true });
-  return { ok: true, ids, balance };
+  return { ids, balance };
 }
 
 export async function mailbox(
@@ -75,7 +82,9 @@ export async function mailbox(
     size > 20 ||
     (after !== null && typeof after !== "string")
   )
-    return failure("invalid_input");
+    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+      reason: "invalid_input",
+    });
   const page = await ctx.list(MESSAGES, {
     filter: { [box === "inbox" ? "to" : "from"]: ctx.member.id },
     sort: [[{ metadata: "createdAt" }, "desc"]],
@@ -83,7 +92,6 @@ export async function mailbox(
     after,
   });
   return {
-    ok: true,
     unread: (await messageStatus(ctx)).unread,
     nextCursor: page.nextCursor,
     documents: page.documents.map((row) => ({
@@ -105,7 +113,9 @@ export async function readMessage(ctx, { id } = {}) {
     !message ||
     (message.data.from !== ctx.member.id && message.data.to !== ctx.member.id)
   )
-    return failure("message_not_found");
+    ctx.fail("NOT_FOUND", "쪽지가 없거나 읽을 권한이 없습니다.", {
+      reason: "message_not_found",
+    });
   const receipt =
     message.data.to === ctx.member.id && message.data.readAt === null;
   if (receipt)
@@ -116,7 +126,7 @@ export async function readMessage(ctx, { id } = {}) {
   const { unread } = await messageStatus(ctx);
   // The member's other tabs clear their notice too.
   if (receipt) ctx.notify(ctx.member.id, { unread });
-  return { ok: true, document: message, unread };
+  return { document: message, unread };
 }
 
 export async function removeMessage(ctx, { id } = {}) {
@@ -125,9 +135,11 @@ export async function removeMessage(ctx, { id } = {}) {
     !message ||
     (message.data.from !== ctx.member.id && message.data.to !== ctx.member.id)
   )
-    return failure("message_not_found");
+    ctx.fail("NOT_FOUND", "쪽지가 없거나 읽을 권한이 없습니다.", {
+      reason: "message_not_found",
+    });
   await ctx.delete(MESSAGES, message.id);
-  return { ok: true };
+  return null;
 }
 
 /** Unread mail, and calls/comment notices since the member last looked. */
@@ -137,7 +149,6 @@ export async function messageStatus(ctx) {
     size: 1,
   });
   return {
-    ok: true,
     unread: page.documents.length > 0,
     calls: await callsUnread(ctx),
   };

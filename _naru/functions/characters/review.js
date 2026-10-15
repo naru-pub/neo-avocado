@@ -3,7 +3,6 @@ import {
   CHARACTER_STATE,
   author,
   characterState,
-  failure,
 } from "../../modules/shared.js";
 import {
   CHARACTER_STATES,
@@ -25,17 +24,30 @@ export async function reviewCharacter(
   if (!ctx.owner) ctx.fail("ACCESS_DENIED", "Only the site owner reviews.");
   const row =
     typeof character === "string" ? await ctx.get(CHARACTERS, character) : null;
-  if (!row || row.data.deleted) return failure("no_character");
+  if (!row || row.data.deleted)
+    ctx.fail("INVALID_REQUEST", "캐릭터를 확인해 주세요.", {
+      reason: "no_character",
+    });
   if (revision !== undefined && revision !== row.revision)
-    return failure("conflict");
+    ctx.fail(
+      "CONFLICT",
+      "다른 곳에서 수정되었습니다. 새로고침 후 다시 수정해 주세요.",
+      { reason: "conflict" },
+    );
   if (state !== undefined && !CHARACTER_STATES.includes(state))
-    return failure("invalid_input");
+    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+      reason: "invalid_input",
+    });
   if (type !== undefined && !CHARACTER_TYPES.includes(type))
-    return failure("invalid_input");
+    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+      reason: "invalid_input",
+    });
   const values = { ...(row.data.fields ?? {}) };
   if (fields !== undefined) {
     if (!fields || typeof fields !== "object" || Array.isArray(fields))
-      return failure("invalid_input");
+      ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+        reason: "invalid_input",
+      });
     const admin = new Map(
       (await fieldCatalogue(ctx))
         .filter((definition) => definition.visibility === "admin")
@@ -44,7 +56,9 @@ export async function reviewCharacter(
     for (const [code, value] of Object.entries(fields)) {
       const definition = admin.get(code);
       if (!definition || typeof value !== "string" || value.length > 2000)
-        return failure("invalid_input");
+        ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+          reason: "invalid_input",
+        });
       if (value.trim()) values[code] = value.trim();
       else delete values[code];
     }
@@ -54,7 +68,11 @@ export async function reviewCharacter(
         0,
       ) > MAX_FIELD_TEXT
     )
-      return failure("fields_too_long");
+      ctx.fail(
+        "INVALID_REQUEST",
+        "추가 프로필 항목은 합쳐서 6,000자까지입니다.",
+        { reason: "fields_too_long" },
+      );
   }
   const document = await ctx.set(CHARACTERS, row.id, {
     ...row.data,
@@ -70,5 +88,5 @@ export async function reviewCharacter(
         approved: state === "approved",
       });
   }
-  return { ok: true, document };
+  return { document };
 }

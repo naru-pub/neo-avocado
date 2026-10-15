@@ -1,27 +1,59 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { FUNCTION_MODULES, functionReference } from "../function-references.js";
-import { readFile } from "node:fs/promises";
-for (const module of new Set(Object.values(FUNCTION_MODULES))) {
-  test(`${module} exposes exactly its registered callable functions`, async () => {
+import { readdir, readFile } from "node:fs/promises";
+
+// The pages call site functions by "<module/path>:<export>", as the SDK takes
+// them. Every such reference must name a function a module exports, and every
+// callable export must be one the pages call.
+const pages = ["app.js", "admin.js", "admin-titles.js"];
+const references = new Set();
+for (const page of pages) {
+  const source = await readFile(new URL(`../${page}`, import.meta.url), "utf8");
+  for (const [, reference] of source.matchAll(
+    /"((?:community|economy|characters|content)\/[a-z]+:[A-Za-z]+)"/g,
+  ))
+    references.add(reference);
+}
+
+const modules = [];
+for (const group of ["community", "economy", "characters", "content"])
+  for (const file of await readdir(
+    new URL(`../_naru/functions/${group}`, import.meta.url),
+  ))
+    modules.push(`${group}/${file.replace(/\.js$/, "")}`);
+
+for (const module of modules)
+  test(`${module} exports only functions the pages call`, async () => {
     const path = new URL(`../_naru/functions/${module}.js`, import.meta.url);
-    const source = await readFile(path, "utf8");
     const exports = await import(path.href);
-    const names = Object.keys(FUNCTION_MODULES)
-      .filter((name) => FUNCTION_MODULES[name] === module)
-      .sort();
     const { readOnly = [], visitors = [], ...callable } = exports;
-    assert.deepEqual(Object.keys(callable).sort(), names);
-    // What Naru runs read-only must be one of the module's own functions.
+    const names = Object.keys(callable).sort();
+    assert.ok(names.every((name) => typeof exports[name] === "function"));
+    assert.deepEqual(
+      names.filter((name) => !references.has(`${module}:${name}`)),
+      [],
+    );
+    // What Naru runs read-only or for visitors must be one of its functions.
     assert.ok(readOnly.every((name) => names.includes(name)));
     assert.ok(visitors.every((name) => names.includes(name)));
-    assert.ok(names.every((name) => typeof exports[name] === "function"));
+    const source = await readFile(path, "utf8");
     assert.match(source, /from "\.\.\/\.\.\/modules\/shared\.js"/);
-    for (const name of names)
-      assert.equal(functionReference(name), `${module}:${name}`);
   });
-}
-test("unknown or inherited names cannot become client function references", () => {
-  for (const name of ["missing", "constructor", "__proto__", "toString"])
-    assert.throws(() => functionReference(name), TypeError);
+
+test("every function the pages call exists", () => {
+  const known = new Set();
+  return Promise.all(
+    modules.map(async (module) => {
+      const exports = await import(
+        new URL(`../_naru/functions/${module}.js`, import.meta.url).href
+      );
+      for (const [name, value] of Object.entries(exports))
+        if (typeof value === "function") known.add(`${module}:${name}`);
+    }),
+  ).then(() =>
+    assert.deepEqual(
+      [...references].filter((reference) => !known.has(reference)),
+      [],
+    ),
+  );
 });

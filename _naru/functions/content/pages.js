@@ -1,4 +1,4 @@
-import { PREFIX, failure, contentReadable } from "../../modules/shared.js";
+import { PREFIX, contentReadable } from "../../modules/shared.js";
 
 export const readOnly = ["contentPages", "contentPage"];
 // Pages whose read level is 1 are public, as GnuBoard's guest level.
@@ -10,7 +10,6 @@ export async function contentPages(ctx, { after = null } = {}) {
     page.documents.map((row) => contentReadable(ctx, row)),
   );
   return {
-    ok: true,
     ...page,
     documents: page.documents
       .filter((row, index) => readable[index])
@@ -19,11 +18,16 @@ export async function contentPages(ctx, { after = null } = {}) {
 }
 
 export async function contentPage(ctx, { id, mobile = false } = {}) {
-  if (typeof id !== "string") return failure("invalid_input");
+  if (typeof id !== "string")
+    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+      reason: "invalid_input",
+    });
   const row = await ctx.get(`${PREFIX}content`, id);
-  if (!(await contentReadable(ctx, row))) return failure("document_not_found");
+  if (!(await contentReadable(ctx, row)))
+    ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {
+      reason: "document_not_found",
+    });
   return {
-    ok: true,
     page: {
       name: row.data.name,
       format: row.data.format,

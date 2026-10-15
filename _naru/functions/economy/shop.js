@@ -5,7 +5,6 @@ import {
   TITLES,
   record,
   ownCharacter,
-  failure,
   amount,
   DAILY_REWARD,
   GACHA_COST,
@@ -22,10 +21,11 @@ import {
 export async function daily(ctx) {
   const current = await wallet(ctx);
   const today = kstDay(ctx.now);
-  if (current.lastDaily === today) return { ok: false, reason: "already" };
+  if (current.lastDaily === today)
+    ctx.fail("CONFLICT", "오늘은 이미 받았습니다.", { reason: "already" });
   const balance = await pay(ctx, current, -DAILY_REWARD, { lastDaily: today });
   await record(ctx, "daily", { delta: DAILY_REWARD, balance });
-  return { ok: true, balance };
+  return { balance };
 }
 
 /** 상점에서 하나 산다. 재고(stock)가 없으면 무제한이다. */
@@ -34,14 +34,16 @@ export async function buy(
   { item, character = null, materials = [] } = {},
 ) {
   const listing = typeof item === "string" ? await ctx.get(ITEMS, item) : null;
-  if (!listing || listing.data.hidden) return { ok: false, reason: "no_item" };
+  if (!listing || listing.data.hidden)
+    ctx.fail("NOT_FOUND", "없는 아이템입니다.", { reason: "no_item" });
   const { price = 0, stock } = listing.data;
   amount(price, "Price");
   if (stock !== undefined) amount(stock, "Stock");
   if (typeof stock === "number" && stock < 1)
-    return { ok: false, reason: "sold_out" };
+    ctx.fail("CONFLICT", "품절입니다.", { reason: "sold_out" });
   const current = await wallet(ctx);
-  if (current.balance < price) return { ok: false, reason: "not_enough" };
+  if (current.balance < price)
+    ctx.fail("CONFLICT", "아보가 모자랍니다.", { reason: "not_enough" });
   const requirements = listing.data.requirements ?? {};
   const needsCharacter =
     character ||
@@ -53,12 +55,17 @@ export async function buy(
   const ownedCharacter = needsCharacter
     ? await ownCharacter(ctx, character)
     : null;
-  if (needsCharacter && !ownedCharacter) return failure("no_character");
+  if (needsCharacter && !ownedCharacter)
+    ctx.fail("INVALID_REQUEST", "캐릭터를 확인해 주세요.", {
+      reason: "no_character",
+    });
   const progression = ownedCharacter
     ? await characterState(ctx, character)
     : null;
   if (requirements.approved && progression.data.approved !== true)
-    return failure("not_approved");
+    ctx.fail("CONFLICT", "승인된 캐릭터만 할 수 있습니다.", {
+      reason: "not_approved",
+    });
   for (const [key, field] of [
     ["sides", "side"],
     ["classes", "class"],
@@ -75,17 +82,21 @@ export async function buy(
       requirements[key]?.length &&
       !requirements[key].includes(progression.data[field])
     )
-      return failure("restricted_character");
+      ctx.fail("CONFLICT", "이 캐릭터의 세력·종족은 구매할 수 없습니다.", {
+        reason: "restricted_character",
+      });
   }
   const expPrice = amount(requirements.exp ?? 0, "Required experience");
   if (expPrice && progression.data.exp < expPrice)
-    return failure("not_enough_exp");
+    ctx.fail("CONFLICT", "경험치가 모자랍니다.", { reason: "not_enough_exp" });
   if (
     requirements.title &&
     (!progression.data.titles?.includes(requirements.title) ||
       (await ctx.get(TITLES, requirements.title))?.data.deleted)
   )
-    return failure("missing_title");
+    ctx.fail("CONFLICT", "필요한 타이틀이 없습니다.", {
+      reason: "missing_title",
+    });
   const counts = {
     ...(progression ? progression.data.purchases : current.purchases),
   };
@@ -97,7 +108,9 @@ export async function buy(
     requirements.limit !== undefined &&
     previous >= amount(requirements.limit, "Purchase limit")
   )
-    return failure("purchase_limit");
+    ctx.fail("CONFLICT", "이 아이템의 구매 한도에 도달했습니다.", {
+      reason: "purchase_limit",
+    });
   if (previous === Number.MAX_SAFE_INTEGER)
     throw new Error("Purchase count overflow.");
   Object.defineProperty(counts, listing.id, {
@@ -114,7 +127,9 @@ export async function buy(
     new Set(materials).size !== materials.length ||
     materials.some((id) => typeof id !== "string")
   )
-    return failure("invalid_materials");
+    ctx.fail("INVALID_REQUEST", "레시피에 맞는 재료를 선택해 주세요.", {
+      reason: "invalid_materials",
+    });
   const needed = new Map();
   for (const exchange of exchanges) {
     if (typeof exchange.item !== "string" || needed.has(exchange.item))
@@ -127,7 +142,9 @@ export async function buy(
   if (
     supplied.some((row) => !row || (row.data.character ?? null) !== character)
   )
-    return failure("not_owned");
+    ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
+      reason: "not_owned",
+    });
   const provided = new Map();
   for (const row of supplied)
     provided.set(row.data.item, (provided.get(row.data.item) ?? 0) + 1);
@@ -135,7 +152,9 @@ export async function buy(
     provided.size !== needed.size ||
     [...needed].some(([id, rule]) => provided.get(id) !== rule.count)
   )
-    return failure("invalid_materials");
+    ctx.fail("INVALID_REQUEST", "레시피에 맞는 재료를 선택해 주세요.", {
+      reason: "invalid_materials",
+    });
   const debit = requirements.consumeMoney === false ? 0 : price;
   const balance = await pay(
     ctx,
@@ -165,17 +184,21 @@ export async function buy(
     balance,
     expDelta: requirements.consumeExp ? -expPrice : 0,
   });
-  return { ok: true, balance, owned };
+  return { balance, owned };
 }
 
 export async function gacha(ctx, args = {}) {
   const { character = null } = args ?? {};
   if (character && !(await ownCharacter(ctx, character)))
-    return failure("no_character");
+    ctx.fail("INVALID_REQUEST", "캐릭터를 확인해 주세요.", {
+      reason: "no_character",
+    });
   const current = await wallet(ctx);
-  if (current.balance < GACHA_COST) return failure("not_enough");
+  if (current.balance < GACHA_COST)
+    ctx.fail("CONFLICT", "아보가 모자랍니다.", { reason: "not_enough" });
   const result = await draw(ctx);
-  if (!result.configured) return failure("empty");
+  if (!result.configured)
+    ctx.fail("CONFLICT", "아직 뽑을 것이 없습니다.", { reason: "empty" });
   const balance = await pay(ctx, current, GACHA_COST);
   const owned = result.prize
     ? await give(ctx, result.prize, "gacha", character)
@@ -187,7 +210,6 @@ export async function gacha(ctx, args = {}) {
     balance,
   });
   return {
-    ok: true,
     balance,
     owned,
   };

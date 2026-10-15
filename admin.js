@@ -1,7 +1,6 @@
 import { applyTitles, deleteTitle } from "./admin-titles.js";
 import { resumeCleanup } from "./admin-cleanup.js";
 import { config } from "./config.js";
-import { functionReference } from "./function-references.js";
 import {
   models,
   scopes,
@@ -26,6 +25,8 @@ let references = {
   profiles: [],
 };
 function message(error) {
+  // A site function's own ctx.fail message comes with a reason.
+  if (error?.details?.reason) return error.message;
   return error?.code === "CONFLICT"
     ? "다른 창에서 바뀌었습니다. 다시 불러온 뒤 수정하세요."
     : error?.code === "NOT_FOUND"
@@ -287,7 +288,7 @@ function reviewRow(row) {
       for (const control of form.querySelectorAll("button,input,select"))
         control.disabled = true;
       try {
-        const result = await owner.call(functionReference("reviewCharacter"), {
+        await owner.call("characters/review:reviewCharacter", {
           character: row.id,
           revision: row.revision,
           type: type.value,
@@ -296,12 +297,6 @@ function reviewRow(row) {
             adminInputs.map((input) => [input.name, input.value]),
           ),
         });
-        if (!result?.ok)
-          throw new Error(
-            result?.reason === "conflict"
-              ? "다른 곳에서 바뀌었습니다. 다시 불러온 뒤 처리하세요."
-              : "처리하지 못했습니다.",
-          );
         $("adminStatus").textContent = state
           ? `${row.data.name}: ${STATES[state]}`
           : "저장했습니다.";

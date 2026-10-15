@@ -1,4 +1,3 @@
-import { functionReference } from "../function-references.js";
 // 실행: npm test
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -7,6 +6,14 @@ import { SourceTextModule, SyntheticModule } from "node:vm";
 import { JSDOM } from "jsdom";
 import { matches } from "./where.mjs";
 const root = new URL("../", import.meta.url);
+
+/** How a fake Naru answers a call its test did not expect: ctx.fail. */
+function refuse(reason, message = reason) {
+  throw Object.assign(new Error(message), {
+    code: "CONFLICT",
+    details: { reason },
+  });
+}
 
 const PROFILES = "neo_avocado_profiles";
 const CHARACTERS = "neo_avocado_characters";
@@ -176,14 +183,13 @@ function fakeDatabase(rows = {}) {
     // 정한 결과를 돌려준다.
     async call(name, args = null) {
       // The site frame is read on every load; tests that care set database.site.
-      if (name === functionReference("site")) {
+      if (name === "content/site:site") {
         if (database.unprepared)
           throw Object.assign(
             new Error("Collection neo_avocado_design does not exist."),
             { code: "NOT_FOUND" },
           );
         return {
-          ok: true,
           level: 2,
           member: true,
           design: { title: "", font: "sans", colors: {} },
@@ -192,19 +198,19 @@ function fakeDatabase(rows = {}) {
           ...database.site,
         };
       }
-      if (name === functionReference("commentCounts")) {
+      if (name === "community/boards:commentCounts") {
         const counts = {};
         for (const id of args.ids)
           counts[id] = store
             .get(COMMENTS)
             .filter((row) => row.data.logId === id).length;
-        return { ok: true, counts };
+        return { counts };
       }
-      if (name === functionReference("communityRead")) {
+      if (name === "community/data:communityRead") {
         gatewayReads.push(args);
-        name = functionReference("communityData");
+        name = "community/data:communityData";
       }
-      if (name === functionReference("membership")) {
+      if (name === "community/membership:membership") {
         const profile = await member
           .collection(PROFILES)
           .get(ME)
@@ -212,21 +218,19 @@ function fakeDatabase(rows = {}) {
             if (error.code === "NOT_FOUND") return null;
             throw error;
           });
-        return { ok: true, status: "approved", role: "member", profile };
+        return { status: "approved", role: "member", profile };
       }
-      if (name === functionReference("join"))
+      if (name === "community/membership:join")
         return {
-          ok: true,
           status: "approved",
           profile: await member
             .collection(PROFILES)
             .set(ME, { nick: args.nick }),
         };
-      if (name === functionReference("communityData")) {
+      if (name === "community/data:communityData") {
         const handle = member.collection(args.collection);
         if (args.operation === "getMany")
           return {
-            ok: true,
             documents: await Promise.all(
               args.options.ids.map((id) =>
                 handle.get(id).catch((error) => {
@@ -237,13 +241,12 @@ function fakeDatabase(rows = {}) {
             ),
           };
         if (args.operation === "list")
-          return { ok: true, ...(await handle.list(args.options)) };
+          return { ...(await handle.list(args.options)) };
         if (args.operation === "delete") {
           await handle.delete(args.id, args.options);
-          return { ok: true, done: true };
+          return { done: true };
         }
         return {
-          ok: true,
           document: await handle[args.operation](
             ...(args.operation === "add"
               ? [args.data]
@@ -261,7 +264,7 @@ function fakeDatabase(rows = {}) {
   const visitor = {
     calls: [],
     async call(name, args = null) {
-      if (name !== functionReference("site"))
+      if (name !== "content/site:site")
         visitor.calls.push(JSON.parse(JSON.stringify({ name, args })));
       return member.call(name, args);
     },
@@ -280,9 +283,9 @@ function fakeDatabase(rows = {}) {
     gatewayReads,
     signedIn: true,
     answer: (name) =>
-      name === functionReference("messageStatus")
-        ? { ok: true, unread: false }
-        : { ok: false, reason: "empty" },
+      name === "community/messages:messageStatus"
+        ? { unread: false }
+        : refuse("empty"),
   };
   return database;
 }
@@ -348,13 +351,6 @@ async function page(database) {
       },
     },
   );
-  const references = new SourceTextModule(
-    await readFile(new URL("function-references.js", root), "utf8"),
-    { context },
-  );
-  await references.link(() => {
-    throw new Error("unexpected reference dependency");
-  });
   const emoticons = new SourceTextModule(
     await readFile(new URL("emoticons.js", root), "utf8"),
     { context },
@@ -379,9 +375,7 @@ async function page(database) {
       ? emoticons
       : specifier === "./content-renderer.js"
         ? renderer
-        : specifier === "./function-references.js"
-          ? references
-          : config,
+        : config,
   );
   await app.evaluate();
   const $ = (id) => window.document.getElementById(id);
@@ -545,7 +539,7 @@ test("the shop exposes later pages and crafts selected inventory through the ser
     database.calls.filter((call) => call.method === "call").at(-1),
     {
       method: "call",
-      name: functionReference("craft"),
+      name: "economy/inventory:craft",
       args: { recipe: "tree", materials: ["seed-1"] },
     },
   );
@@ -964,19 +958,18 @@ test("the shop reads the wallet, items and own inventory when opened, and spends
   // The page never writes money or items itself: it calls the function, and
   // shows what the function decided.
   database.answer = (name) =>
-    name === functionReference("gacha")
-      ? { ok: true, balance: 70, owned: { data: { name: "황금 아보카도" } } }
-      : { ok: false, reason: "already" };
+    name === "economy/shop:gacha"
+      ? { balance: 70, owned: { data: { name: "황금 아보카도" } } }
+      : refuse("already", "오늘은 이미 받았습니다.");
   $("gacha").onclick();
   for (let n = 0; n < 4; n += 1) await settle();
   assert.deepEqual(
     database.calls
       .filter(
-        (call) =>
-          call.method === "call" && call.name === functionReference("gacha"),
+        (call) => call.method === "call" && call.name === "economy/shop:gacha",
       )
       .at(0),
-    { method: "call", name: functionReference("gacha"), args: null },
+    { method: "call", name: "economy/shop:gacha", args: null },
   );
   assert.match($("status").textContent, /황금 아보카도/);
   $("daily").onclick();
@@ -988,7 +981,7 @@ test("the shop reads the wallet, items and own inventory when opened, and spends
     database.calls.filter((call) => call.method === "call").at(-1),
     {
       method: "call",
-      name: functionReference("buy"),
+      name: "economy/shop:buy",
       args: { item: "potion" },
     },
   );
@@ -1079,10 +1072,7 @@ test("post details and comment lists use native reads while deletion stays trans
   let deletion;
   const originalCall = database.member.call;
   database.member.call = async (name, args) => {
-    if (
-      name === functionReference("communityData") &&
-      args.operation === "delete"
-    )
+    if (name === "community/data:communityData" && args.operation === "delete")
       deletion = args;
     return originalCall.call(database.member, name, args);
   };
@@ -1096,16 +1086,16 @@ test("unread notices and new posts arrive over the live connection instead of a 
   const database = fakeDatabase({ [PROFILES]: [me] });
   const unread = { value: false };
   database.answer = (name) =>
-    name === functionReference("messageStatus")
-      ? { ok: true, unread: unread.value }
-      : { ok: false, reason: "empty" };
+    name === "community/messages:messageStatus"
+      ? { unread: unread.value }
+      : refuse("empty");
   const { $, settle } = await page(database);
   await settle();
   const live = database.live;
   assert.deepEqual([...live.options.topics], [LOGS]);
   const statusReads = () =>
     database.calls.filter(
-      (call) => call.name === functionReference("messageStatus"),
+      (call) => call.name === "community/messages:messageStatus",
     ).length;
   assert.equal(statusReads(), 0);
   // Nothing is replayed, so every (re)open reads the status once.
@@ -1148,14 +1138,13 @@ test("unread notices and new posts arrive over the live connection instead of a 
 
 test("a function's ctx.fail reason and a duplicate nickname are shown as the page's own text", async () => {
   const database = fakeDatabase({ [PROFILES]: [me] });
-  const failure = (code, details) =>
-    Object.assign(new Error("server text"), { code, details });
+  const failure = (code, message, details) =>
+    Object.assign(new Error(message), { code, details });
   database.answer = (name) => {
-    if (name === functionReference("daily"))
-      throw failure("CONFLICT", { reason: "not_enough" });
-    if (name === functionReference("messageStatus"))
-      return { ok: true, unread: false };
-    return { ok: false, reason: "empty" };
+    if (name === "economy/shop:daily")
+      throw failure("CONFLICT", "아보가 모자랍니다.", { reason: "not_enough" });
+    if (name === "community/messages:messageStatus") return { unread: false };
+    refuse("empty");
   };
   const { $, settle, submit } = await page(database);
   await settle();
@@ -1163,7 +1152,7 @@ test("a function's ctx.fail reason and a duplicate nickname are shown as the pag
   await settle();
   assert.equal($("status").textContent, "아보가 모자랍니다.");
   database.member.call = async () => {
-    throw failure("CONFLICT", { unique: "nick" });
+    throw failure("CONFLICT", "server text", { unique: "nick" });
   };
   $("editProfile").onclick();
   $("editorFields").querySelector('[name="nick"]').value = "taken";
@@ -1365,11 +1354,10 @@ test("calls arrive as live notices and the history marks them seen", async () =>
     ],
   });
   database.answer = (name) =>
-    name === functionReference("messageStatus")
-      ? { ok: true, unread: false, calls: true }
-      : name === functionReference("callHistory")
+    name === "community/messages:messageStatus"
+      ? { unread: false, calls: true }
+      : name === "community/calls:callHistory"
         ? {
-            ok: true,
             unread: true,
             nextCursor: null,
             documents: [
@@ -1387,7 +1375,7 @@ test("calls arrive as live notices and the history marks them seen", async () =>
               },
             ],
           }
-        : { ok: true };
+        : null;
   const { $, settle } = await page(database);
   await settle();
   database.live.options.onStatus("open");
@@ -1401,7 +1389,7 @@ test("calls arrive as live notices and the history marks them seen", async () =>
   await settle();
   assert.match($("calls").textContent, /남 \(남의 것\)님이 호출했습니다/);
   assert.equal(
-    database.calls.some((call) => call.name === functionReference("seeCalls")),
+    database.calls.some((call) => call.name === "community/calls:seeCalls"),
     true,
   );
   assert.equal($("tabCalls").textContent, "알림");

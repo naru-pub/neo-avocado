@@ -20,7 +20,6 @@ import {
   characterState,
   communityAccess,
   draw,
-  fail,
   give,
   kstDay,
   logReadable,
@@ -28,7 +27,7 @@ import {
   ownedItem,
   record,
   restoreStat,
-  useRestriction,
+  requireUsable,
 } from "./shared.js";
 
 const https = (value) =>
@@ -43,7 +42,9 @@ export async function speakerOf(ctx, id) {
   if (id === undefined || id === null) return null;
   const character = await ownCharacter(ctx, id);
   if (!character)
-    fail(ctx, "ACCESS_DENIED", "not_owned", "Not your character.");
+    ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
+      reason: "not_owned",
+    });
   const state = await ctx.get(CHARACTER_STATE, character.id);
   const titleId = state?.data.activeTitle;
   const title =
@@ -176,22 +177,31 @@ export async function callsUnread(ctx) {
  */
 export async function explore(ctx, speaker) {
   if (!speaker)
-    fail(ctx, "INVALID_REQUEST", "no_character", "Explore as a character.");
+    ctx.fail("INVALID_REQUEST", "캐릭터를 확인해 주세요.", {
+      reason: "no_character",
+    });
   const limit = amount(
     (await ctx.get(SETTINGS, "community"))?.data.exploreLimit ?? 0,
     "Explore limit",
   );
-  if (!limit) fail(ctx, "CONFLICT", "explore_closed", "Exploration is off.");
+  if (!limit)
+    ctx.fail("CONFLICT", "지금은 탐색할 수 없습니다.", {
+      reason: "explore_closed",
+    });
   const state = await characterState(ctx, speaker.character);
   if (state.data.approved !== true)
-    fail(ctx, "CONFLICT", "not_approved", "Only approved characters explore.");
+    ctx.fail("CONFLICT", "승인된 캐릭터만 할 수 있습니다.", {
+      reason: "not_approved",
+    });
   const today = kstDay(ctx.now);
   const used =
     state.data.explore?.day === today
       ? amount(state.data.explore.count, "Explore count")
       : 0;
   if (used >= limit)
-    fail(ctx, "CONFLICT", "explore_limit", "No explorations left today.");
+    ctx.fail("CONFLICT", "이 캐릭터는 오늘 탐색을 모두 했습니다.", {
+      reason: "explore_limit",
+    });
   const outcome = await draw(ctx, null, EXPLORE);
   const prize = outcome.prize;
   if (prize) await give(ctx, prize, "explore", speaker.character);
@@ -219,15 +229,21 @@ export async function explore(ctx, speaker) {
  */
 export async function useInPost(ctx, inventory, speaker) {
   const owned = await ownedItem(ctx, inventory);
-  if (!owned) fail(ctx, "ACCESS_DENIED", "not_owned", "Not your item.");
+  if (!owned)
+    ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
+      reason: "not_owned",
+    });
   const item = await ctx.get(ITEMS, owned.data.item);
   if (!item || item.data.usable === false)
-    fail(ctx, "CONFLICT", "not_usable", "This item cannot be used.");
+    ctx.fail("CONFLICT", "사용할 수 없는 아이템입니다.", {
+      reason: "not_usable",
+    });
   const character = speaker?.character ?? null;
   if (owned.data.character && owned.data.character !== character)
-    fail(ctx, "CONFLICT", "wrong_character", "Use it as its character.");
-  const restricted = await useRestriction(ctx, item, character);
-  if (restricted) fail(ctx, "CONFLICT", restricted, restricted);
+    ctx.fail("CONFLICT", "이 아이템을 가진 캐릭터를 선택해 주세요.", {
+      reason: "wrong_character",
+    });
+  await requireUsable(ctx, item, character);
   const effect = item.data.effect?.type ?? null;
   const used = {
     type: "use",
@@ -238,21 +254,28 @@ export async function useInPost(ctx, inventory, speaker) {
   };
   if (effect === "restore") {
     if (!character)
-      fail(ctx, "INVALID_REQUEST", "no_character", "Use it as a character.");
+      ctx.fail("INVALID_REQUEST", "캐릭터를 확인해 주세요.", {
+        reason: "no_character",
+      });
     if (!(await restoreStat(ctx, item.data.effect, character)))
-      fail(ctx, "CONFLICT", "already_full", "Already full.");
+      ctx.fail("CONFLICT", "이미 전부 회복되었습니다.", {
+        reason: "already_full",
+      });
     used.stat = item.data.effect.stat;
     used.amount = item.data.effect.amount;
   } else if (effect === "draw") {
     const outcome = await draw(ctx, item.id);
-    if (!outcome.configured) fail(ctx, "CONFLICT", "empty", "Nothing to draw.");
+    if (!outcome.configured)
+      ctx.fail("CONFLICT", "아직 뽑을 것이 없습니다.", { reason: "empty" });
     if (outcome.prize)
       await give(ctx, outcome.prize, "item", owned.data.character ?? character);
     used.prize = outcome.prize
       ? { item: outcome.prize.id, name: outcome.prize.data.name }
       : null;
   } else if (effect)
-    fail(ctx, "CONFLICT", "not_usable_here", "Use this item from inventory.");
+    ctx.fail("CONFLICT", "이 아이템은 인벤토리에서 사용해 주세요.", {
+      reason: "not_usable_here",
+    });
   else used.description = String(item.data.description ?? "").slice(0, 200);
   if (item.data.reusable !== true) await ctx.delete(INVENTORY, owned.id);
   await record(ctx, "use", {
@@ -275,7 +298,9 @@ export const MAX_MATERIALS = 3;
  */
 export async function combineInPost(ctx, materials, speaker) {
   if (!speaker)
-    fail(ctx, "INVALID_REQUEST", "no_character", "Combine as a character.");
+    ctx.fail("INVALID_REQUEST", "캐릭터를 확인해 주세요.", {
+      reason: "no_character",
+    });
   if (
     !Array.isArray(materials) ||
     !materials.length ||
@@ -283,7 +308,9 @@ export async function combineInPost(ctx, materials, speaker) {
     materials.some((id) => typeof id !== "string") ||
     new Set(materials).size !== materials.length
   )
-    fail(ctx, "INVALID_REQUEST", "invalid_materials", "Choose 1–3 materials.");
+    ctx.fail("INVALID_REQUEST", "레시피에 맞는 재료를 선택해 주세요.", {
+      reason: "invalid_materials",
+    });
   const owned = await Promise.all(materials.map((id) => ownedItem(ctx, id)));
   if (
     owned.some(
@@ -293,7 +320,9 @@ export async function combineInPost(ctx, materials, speaker) {
           row.data.character !== speaker.character),
     )
   )
-    fail(ctx, "ACCESS_DENIED", "not_owned", "Use the character's own items.");
+    ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
+      reason: "not_owned",
+    });
   const key = owned
     .map((row) => row.data.item)
     .sort()
@@ -315,7 +344,7 @@ export async function combineInPost(ctx, materials, speaker) {
     const cost = amount(recipe.data.cost ?? 0, "Crafting cost");
     const current = await wallet(ctx);
     if (current.balance < cost)
-      fail(ctx, "CONFLICT", "not_enough", "Not enough to combine.");
+      ctx.fail("CONFLICT", "아보가 모자랍니다.", { reason: "not_enough" });
     if (cost) balance = await pay(ctx, current, cost);
     await give(ctx, prize, "craft", speaker.character);
   }
