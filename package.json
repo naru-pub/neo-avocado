@@ -1,6 +1,7 @@
 {
   "name": "neo-avocado",
   "private": true,
+  "license": "GPL-3.0-only",
   "type": "module",
   "scripts": {
     "test": "node --experimental-vm-modules --test tests/*.test.mjs",

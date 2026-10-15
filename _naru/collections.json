@@ -114,9 +114,7 @@
     "neo_avocado_profiles": {
       "read": "world",
       "write": "member",
-      "unique": [
-        "nick"
-      ],
+      "unique": ["nick"],
       "rules": "profiles"
     },
     "neo_avocado_quests": {

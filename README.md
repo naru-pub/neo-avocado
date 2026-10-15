@@ -200,3 +200,9 @@ export async function daily(ctx) {
 오류를 던지고, `run`이 그 메시지를 화면에 그대로 보여 줍니다. 공통 코드는 `_naru/modules/`에 있고 서버 함수가 정적 import합니다.
 번들 생성은 필요하지 않습니다. 자세한 구조는 [_naru/README.md](_naru/README.md)를
 참고하세요.
+
+## 라이선스
+
+[아보카도 에디션](https://avocado-edition-rout.postype.com/)을 옮긴 것이므로 원본과
+같은 GNU GPL v3를 따릅니다([LICENSE](LICENSE)). `vendor/`의 라이브러리는 각자의
+라이선스 파일을 따릅니다.
