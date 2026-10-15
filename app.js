@@ -15,6 +15,8 @@ import {
   collection,
   COLLECTION,
   edit,
+  movedSinceOpening,
+  opening,
   run,
   say,
   show,
@@ -32,6 +34,10 @@ import "./app/calls.js";
 import "./app/content.js";
 import "./app/mypage.js";
 import "./app/couples.js";
+import { openRoute } from "./app/router.js";
+
+/** The address the page was opened at, before anything is shown. */
+const arrivedAt = location.hash;
 import "./app/online.js";
 
 export { diceOf } from "./app/posts.js";
@@ -112,6 +118,8 @@ async function start() {
     await loadBoards();
     await loadLogs();
     listen();
+    // The address it was opened at, unless they have moved on already.
+    if (!movedSinceOpening()) await openRoute(arrivedAt);
   }
 }
 /** A visitor's view: public boards and pages at GnuBoard's guest level 1. */
@@ -119,10 +127,11 @@ async function visit() {
   state.role = "guest";
   state.level = 1;
   show();
-  showTab("home");
+  await opening(() => showTab("home"));
   await loadBoards();
   await loadLogs();
   if (state.boards.length) listen();
+  if (!movedSinceOpening()) await openRoute(arrivedAt);
 }
 $("signIn").onclick = () => run(() => state.naru.members.signIn());
 // The main page, as the original lands on main.php; the logo leads back.

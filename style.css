@@ -1042,3 +1042,48 @@ table.report input[type="number"] {
 .online-list li {
   margin: 6px 0;
 }
+
+/* 멤버목록 by 소속: each 소속's title (or image) across the list. */
+.characters .side-title,
+#characters .side-title {
+  grid-column: 1 / -1;
+  margin: 20px 0 4px;
+  list-style: none;
+  font-size: 16px;
+  font-weight: bold;
+}
+#characters .side-title img {
+  max-height: 60px;
+}
+/* member/viewer.php: one character on its own page. */
+#characterSheet .character.viewer .character-image {
+  max-width: min(100%, 420px);
+  max-height: none;
+}
+.viewer-extras h3 {
+  margin-top: 20px;
+}
+.viewer-money {
+  float: right;
+  color: var(--avocado);
+  font-weight: normal;
+}
+.viewer-inventory {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 0;
+  list-style: none;
+}
+.viewer-inventory li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 80px;
+  text-align: center;
+}
+.viewer-inventory img {
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
+}

@@ -19,6 +19,7 @@ import {
   removeOutfit,
   mainCharacter,
   characterStatus,
+  characterSheet,
   allocateStats,
   useItem,
   assignInventory,
@@ -51,6 +52,7 @@ import * as characterRule from "../_naru/rules/characters.js";
 import * as profileRule from "../_naru/rules/profiles.js";
 import { matches } from "./where.mjs";
 import { nativeRead } from "./native-read.mjs";
+import { onDisplay } from "../_naru/modules/display.js";
 
 const P = "neo_avocado_";
 function fakeCtx({ now = Date.parse("2030-01-01T03:00:00Z"), roll = 0 } = {}) {
@@ -2729,4 +2731,83 @@ test("a members-only board group keeps its boards to its members and moderators"
   table(`${P}board_groups`).get("staff").membersOnly = false;
   table(`${P}members`).set("m-1", { level: 2, role: "member" });
   assert.deepEqual(await listed(), ["plans"]);
+});
+
+test("shop items show and sell only within their dates, hours and weekdays, in Korea", async () => {
+  // 2030-01-04 is a Friday; 15:30 UTC is 00:30 Saturday 01-05 in Korea.
+  const at = Date.parse("2030-01-04T15:30:00Z");
+  assert.equal(onDisplay(undefined, at), true);
+  assert.equal(onDisplay({ from: "2030-01-05" }, at), true);
+  assert.equal(onDisplay({ until: "2030-01-04" }, at), false);
+  assert.equal(onDisplay({ fromHour: 1 }, at), false);
+  assert.equal(onDisplay({ untilHour: 0 }, at), true);
+  assert.equal(onDisplay({ weekdays: ["토", "일"] }, at), true);
+  assert.equal(onDisplay({ weekdays: ["금"] }, at), false);
+  const { ctx, table } = fakeCtx({ now: at });
+  table(`${P}wallets`).set("m-1", { balance: 100 });
+  table(`${P}items`).set("lunch", {
+    name: "점심",
+    price: 1,
+    display: { fromHour: 11, untilHour: 14 },
+  });
+  assert.equal(await refusal(buy(ctx, { item: "lunch" })), "not_on_display");
+  ctx.now = Date.parse("2030-01-05T03:00:00Z"); // 12:00 in Korea
+  assert.equal(await refusal(buy(ctx, { item: "lunch" })), null);
+});
+
+test("a character's viewer shows its experience to members, and its inventory and money when the owner allows", async () => {
+  const { ctx, table } = fakeCtx();
+  table(`${P}characters`).set("hero", { owner: "m-2", name: "용사" });
+  table(`${P}history`).set("h1", {
+    owner: "m-2",
+    kind: "exp",
+    character: "hero",
+    at: 5,
+    expDelta: 10,
+    exp: 10,
+    memo: "첫 모험",
+  });
+  table(`${P}history`).set("h2", {
+    owner: "m-2",
+    kind: "exp",
+    character: "other",
+    at: 6,
+    expDelta: 3,
+    exp: 3,
+  });
+  table(`${P}history`).set("h3", {
+    owner: "m-2",
+    kind: "buy",
+    character: "hero",
+    at: 7,
+  });
+  table(`${P}inventory`).set("i1", {
+    owner: "m-2",
+    item: "potion",
+    character: "hero",
+  });
+  table(`${P}items`).set("potion", {
+    name: "물약",
+    image: "https://example.com/p.png",
+  });
+  table(`${P}wallets`).set("m-2", { balance: 42 });
+  const hidden = await characterSheet(ctx, { character: "hero" });
+  assert.deepEqual(hidden.exp, [
+    { at: 5, delta: 10, exp: 10, memo: "첫 모험" },
+  ]);
+  assert.equal(hidden.inventory, null);
+  assert.equal(hidden.balance, null);
+  table(`${P}settings`).set("community", {
+    viewerInventory: true,
+    viewerMoney: true,
+  });
+  const shown = await characterSheet(ctx, { character: "hero" });
+  assert.deepEqual(shown.inventory, [
+    { name: "물약", image: "https://example.com/p.png" },
+  ]);
+  assert.equal(shown.balance, 42);
+  assert.equal(
+    await refusal(characterSheet(ctx, { character: "nobody" })),
+    "no_character",
+  );
 });

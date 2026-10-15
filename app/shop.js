@@ -16,7 +16,9 @@ import {
   showTab,
   state,
   uploadManaged,
+  route,
 } from "./core.js";
+import { onDisplay } from "../_naru/modules/display.js";
 
 async function loadBalance() {
   const wallet = await collection(COLLECTION.wallets)
@@ -86,14 +88,20 @@ async function loadShopFront() {
       button.textContent = name;
       button.setAttribute("aria-pressed", String(name === state.shopCategory));
       button.onclick = () => {
-        state.shopCategory = name;
-        for (const other of $("shopCategories").children)
-          other.setAttribute("aria-pressed", String(other === button));
-        showCategory();
+        route(`shop/${name}`, { replace: true });
+        showShopCategory(name);
       };
       return button;
     }),
   );
+}
+/** Shows one category's items (a button, or the shop/카테고리 address). */
+export function showShopCategory(name) {
+  state.shopCategory = name;
+  if (!state.shopCategories) return;
+  for (const button of $("shopCategories").children)
+    button.setAttribute("aria-pressed", String(button.textContent === name));
+  showCategory();
 }
 /** The shop's items of the chosen category, from what has been read. */
 function showCategory() {
@@ -103,6 +111,7 @@ function showCategory() {
       .filter(
         (item) =>
           !item.data.hidden &&
+          onDisplay(item.data.display, Date.now()) &&
           (item.data.shopCategory || first) === state.shopCategory,
       )
       .map((item) => shopItem(item)),

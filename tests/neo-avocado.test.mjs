@@ -1499,3 +1499,45 @@ test("before the owner's first sign-in, the page says the site is being prepared
   assert.equal($("welcome").hidden, false);
   assert.match($("status").textContent, /사이트를 준비하고 있습니다/);
 });
+
+test("멤버목록 groups approved characters under each 소속 once there are two", async () => {
+  const character = (id, name, side) => ({
+    id,
+    createdBy: "member-other",
+    data: {
+      name,
+      side,
+      state: "approved",
+      type: "main",
+      owner: "member-other",
+    },
+  });
+  const database = fakeDatabase({
+    [PROFILES]: [me, { id: "member-other", data: { nick: "남" } }],
+    neo_avocado_sides: [
+      { id: "dark", data: { name: "어둠", order: 2 } },
+      { id: "light", data: { name: "빛", order: 1 } },
+    ],
+    [CHARACTERS]: [
+      character("a", "아침", "빛"),
+      character("b", "밤", "어둠"),
+      character("c", "떠돌이", ""),
+    ],
+  });
+  const { $, settle } = await page(database);
+  $("characterFilter").value = "approved";
+  $("tabCharacters").onclick();
+  for (let n = 0; n < 6; n += 1) await settle();
+  const rows = [...$("characters").children].map((row) =>
+    row.classList.contains("side-title")
+      ? `[${row.textContent}]`
+      : row.querySelector(".character-name").textContent,
+  );
+  assert.deepEqual(rows, ["[빛]", "아침", "[어둠]", "밤", "[기타]", "떠돌이"]);
+  // Each character has a 쪽지 button to its owner.
+  assert.ok(
+    [...$("characters").querySelectorAll(".meta button")].some(
+      (button) => button.textContent === "쪽지",
+    ),
+  );
+});

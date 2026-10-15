@@ -213,7 +213,7 @@ $("enterSite").onclick = () => {
   $("intro").close();
 };
 /** Opens what a menu entry names: a board, a content page or a member tab. */
-async function follow(link) {
+export async function follow(link) {
   const [kind, id] = link.split(":");
   if (kind === "board") {
     showTab("logs");

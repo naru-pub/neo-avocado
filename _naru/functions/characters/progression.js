@@ -1,6 +1,11 @@
 import {
   CHARACTERS,
   CHARACTER_STATE,
+  HISTORY,
+  INVENTORY,
+  ITEMS,
+  SETTINGS,
+  WALLETS,
   LEVELS,
   TITLES,
   ownCharacter,
@@ -9,7 +14,56 @@ import {
   characterState,
 } from "../../modules/shared.js";
 
-export const readOnly = ["characterStatus"];
+export const readOnly = ["characterStatus", "characterSheet"];
+
+/**
+ * What the character viewer (member/viewer.php) adds to the profile: the
+ * character's experience history (member/exp.php), and, where the owner turns
+ * them on (ad_use_inven, ad_use_money), its inventory and its owner's money.
+ */
+export async function characterSheet(ctx, { character } = {}) {
+  const profile =
+    typeof character === "string" ? await ctx.get(CHARACTERS, character) : null;
+  if (!profile || profile.data.deleted)
+    ctx.fail("NOT_FOUND", "캐릭터를 확인해 주세요.", {
+      reason: "no_character",
+    });
+  const owner = profile.createdBy ?? profile.data.owner ?? null;
+  const settings = (await ctx.get(SETTINGS, "community"))?.data ?? {};
+  const exp = (
+    await ctx.list(HISTORY, {
+      filter: { kind: "exp", character },
+      sort: [[{ metadata: "createdAt" }, "desc"]],
+      size: 50,
+    })
+  ).documents.map((row) => ({
+    at: row.data.at,
+    delta: row.data.expDelta,
+    exp: row.data.exp,
+    memo: row.data.memo ?? "",
+  }));
+  let inventory = null;
+  if (settings.viewerInventory === true) {
+    const rows = (
+      await ctx.list(INVENTORY, { filter: { character }, size: 100 })
+    ).documents;
+    const items = await ctx.getMany(ITEMS, [
+      ...new Set(rows.map((row) => row.data.item).filter(Boolean)),
+    ]);
+    inventory = rows.map((row) => {
+      const item = items.find((entry) => entry?.id === row.data.item);
+      return {
+        name: row.data.name ?? item?.data.name ?? "",
+        image: item?.data.image ?? null,
+      };
+    });
+  }
+  const balance =
+    settings.viewerMoney === true && owner
+      ? ((await ctx.get(WALLETS, owner))?.data.balance ?? 0)
+      : null;
+  return { exp, inventory, balance };
+}
 
 /** Public character progression is separate from member-editable profile fields. */
 export async function characterStatus(ctx, { character } = {}) {

@@ -269,6 +269,35 @@ try {
   await alice.locator("#shopCategories button", { hasText: "이벤트" }).click();
   await alice.locator("#items li", { hasText: "케이크" }).waitFor();
 
+  // Every page has an address: a character's viewer, a post, a category.
+  const greenId = await alice.evaluate(async (P) => {
+    const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+    const member = await createNaru().members.session();
+    const { documents } = await member.collection(`${P}characters`).list({
+      where: { eq: ["name", "초록"] },
+    });
+    return documents[0].id;
+  }, P);
+  await alice.goto(`${origin}/#/character/${greenId}`);
+  await alice
+    .locator("#characterSheet .character-name", { hasText: "초록" })
+    .waitFor();
+  await alice
+    .locator("#characterSheet h3", { hasText: "경험치 내역" })
+    .waitFor();
+  await alice.reload();
+  await alice
+    .locator("#characterSheet .character-name", { hasText: "초록" })
+    .waitFor();
+  await alice.goto(`${origin}/#/logs/default/1`);
+  await alice.locator("#logFocus .log", { hasText: "첫 로그" }).waitFor();
+  await alice.goBack();
+  await alice
+    .locator("#characterSheet .character-name", { hasText: "초록" })
+    .waitFor();
+  await alice.goto(`${origin}/#/shop/${encodeURIComponent("이벤트")}`);
+  await alice.locator("#items li", { hasText: "케이크" }).waitFor();
+
   // Deleting the post deletes its picture too (a managed upload).
   const file = logPicture.split("/").pop();
   assert.equal((await fetch(`${origin}/media/1/${file}`)).status, 200);

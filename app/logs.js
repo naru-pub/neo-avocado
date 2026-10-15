@@ -22,6 +22,7 @@ import {
   uploadManaged,
   withGuestPassword,
   removeAll,
+  route,
 } from "./core.js";
 import {
   actionItem,
@@ -115,11 +116,14 @@ export async function openLogNumber(number) {
   await preloadNicks([log]);
   $("logFocus").replaceChildren(await logItem(previewOf(log)));
   $("logFocusPanel").hidden = false;
+  // The post's own address (?log=N&single=Y), to share it.
+  route(`logs/${state.board}/${number}`, { replace: true });
   $("logFocusPanel").scrollIntoView?.();
 }
 $("closeFocus").onclick = () => {
   $("logFocus").replaceChildren();
   $("logFocusPanel").hidden = true;
+  route(`logs/${state.board}`, { replace: true });
 };
 /** Lists the current board's logs with `tag` (mmb's hash search). */
 export async function searchTag(tag) {
@@ -654,6 +658,7 @@ $("logInlineFile").onchange = () =>
 $("board").onchange = () =>
   run(async () => {
     state.board = $("board").value;
+    route(`logs/${state.board}`, { replace: true });
     state.tag = null;
     configureBoard();
     await loadLogs();

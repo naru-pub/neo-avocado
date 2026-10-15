@@ -138,3 +138,12 @@ async function loadMailbox({ more = false } = {}) {
   state.messageCursor = page.nextCursor;
   $("moreMessages").hidden = !page.nextCursor;
 }
+
+/** 쪽지 to one member (the member list's button, memo_form.php?me_recv_mb_id). */
+export async function writeTo(member) {
+  showTab("messages");
+  await Promise.all([loadMessageRecipients(), loadMailbox()]);
+  for (const option of $("messageRecipients").options)
+    option.selected = option.value === member;
+  $("messageBody").focus();
+}

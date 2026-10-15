@@ -1,3 +1,4 @@
+import { onDisplay } from "../../modules/display.js";
 import {
   INVENTORY,
   ITEMS,
@@ -36,6 +37,10 @@ export async function buy(
   const listing = typeof item === "string" ? await ctx.get(ITEMS, item) : null;
   if (!listing || listing.data.hidden)
     ctx.fail("NOT_FOUND", "없는 아이템입니다.", { reason: "no_item" });
+  if (!onDisplay(listing.data.display, ctx.now))
+    ctx.fail("CONFLICT", "지금은 진열 기간이 아닙니다.", {
+      reason: "not_on_display",
+    });
   const { price = 0, stock } = listing.data;
   amount(price, "Price");
   if (stock !== undefined) amount(stock, "Stock");

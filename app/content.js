@@ -1,7 +1,7 @@
 // Quests and the site's own pages.
 
 import { renderContent } from "../content-renderer.js";
-import { $, caller, run, showTab, state } from "./core.js";
+import { $, caller, route, run, showTab, state } from "./core.js";
 
 let questCursor = null;
 async function loadQuests(more = false) {
@@ -80,5 +80,9 @@ $("tabContent").onclick = () =>
     showTab("content");
     await loadContentPages();
   });
-$("contentPage").onchange = () => run(() => loadContentBody());
+$("contentPage").onchange = () =>
+  run(async () => {
+    route(`content/${$("contentPage").value}`, { replace: true });
+    await loadContentBody();
+  });
 $("refreshContent").onclick = () => run(() => loadContentPages());

@@ -466,6 +466,48 @@ export function noteVisit(place) {
     });
 }
 
+/**
+ * Every page has an address (#/logs/free/12, #/character/…, #/shop/이벤트),
+ * as the original's pages have URLs: it can be shared, reloaded, and gone
+ * back to. Moving to another page makes a history entry; changes within a
+ * page (a board, a category) replace it. app/router.js opens addresses.
+ */
+let routing = false;
+let moved = false;
+/** Whether the visitor has gone somewhere themselves since the page opened. */
+export const movedSinceOpening = () => moved;
+export function route(path, { replace = false } = {}) {
+  if (routing) return;
+  moved = true;
+  const hash = `#/${path.split("/").map(encodeURIComponent).join("/")}`;
+  if (location.hash === hash) return;
+  history[replace ? "replaceState" : "pushState"](null, "", hash);
+}
+/** While an address is being opened, the page does not write one back. */
+export async function opening(action) {
+  routing = true;
+  try {
+    return await action();
+  } finally {
+    routing = false;
+  }
+}
+/** A view's own address. */
+function viewPath(name) {
+  if (name === "home") return "";
+  if (name === "characters") {
+    const filter = $("characterFilter").value;
+    return filter === "approved"
+      ? "members"
+      : filter === "applicants"
+        ? "applicants"
+        : "characters";
+  }
+  if (name === "myLogs") return "mypage/logs";
+  if (name === "myExp") return "mypage/exp";
+  return name;
+}
+
 /** The views under 마이페이지's own menu (mypage/). */
 const MYPAGE = {
   mypage: "myAccountTab",
@@ -476,10 +518,12 @@ const MYPAGE = {
 };
 export function showTab(name) {
   noteVisit(PLACES[name] ?? name);
+  route(viewPath(name));
   $("mypageNav").hidden = !Object.hasOwn(MYPAGE, name);
   for (const [view, button] of Object.entries(MYPAGE))
     $(button).setAttribute("aria-pressed", String(view === name));
   for (const [view, key] of [
+    ["characterView", "character"],
     ["onlineView", "online"],
     ["mypageView", "mypage"],
     ["myLogsView", "myLogs"],

@@ -20,7 +20,10 @@ import {
   TYPE_NAMES,
   uploadManaged,
   removeAll,
+  route,
+  formatTime,
 } from "./core.js";
+import { writeTo } from "./messages.js";
 
 const CHARACTER_FILTERS = {
   // member/ready.php: characters not yet approved, in either state.
@@ -86,6 +89,16 @@ export async function loadCharacters({ more = false } = {}) {
       ...(where ? { where } : {}),
     }),
   ]);
+  // 멤버목록 by 소속 (member/index.php's 진영별), once there are two.
+  if (
+    !more &&
+    $("characterFilter").value === "approved" &&
+    state.sides.length >= 2
+  ) {
+    await showBySide(where);
+    state.charactersLoaded = true;
+    return;
+  }
   await preloadNicks(page.documents);
   if (!more) $("characters").replaceChildren();
   for (const character of page.documents)
@@ -93,6 +106,44 @@ export async function loadCharacters({ more = false } = {}) {
   state.characterCursor = page.nextCursor;
   state.charactersLoaded = true;
   $("moreCharacters").hidden = !page.nextCursor;
+}
+/** Every approved character under its 소속's title, the rest under 기타. */
+async function showBySide(where) {
+  const characters = await allDocuments(
+    COLLECTION.characters,
+    undefined,
+    where,
+  );
+  await preloadNicks(characters);
+  const sections = [
+    ...state.sides.map((side) => ({
+      side,
+      members: characters.filter((row) => row.data.side === side.data.name),
+    })),
+    {
+      side: null,
+      members: characters.filter(
+        (row) => !state.sides.some((side) => side.data.name === row.data.side),
+      ),
+    },
+  ].filter((section) => section.members.length);
+  const items = [];
+  for (const { side, members } of sections) {
+    const title = document.createElement("li");
+    title.className = "side-title";
+    if (side?.data.image?.startsWith("https://"))
+      title.append(
+        Object.assign(new Image(), {
+          src: side.data.image,
+          alt: side.data.name,
+        }),
+      );
+    else title.textContent = side?.data.name ?? "기타";
+    items.push(title);
+    for (const character of members) items.push(await characterItem(character));
+  }
+  $("characters").replaceChildren(...items);
+  $("moreCharacters").hidden = true;
 }
 /** The owner's custom profile fields (adm/character_article_list.php), read once. */
 async function loadFieldCatalogue() {
@@ -179,7 +230,19 @@ async function characterItem(character) {
   const image = item.querySelector(".character-image");
   if (character.data.image) image.src = character.data.image;
   else image.remove();
-  item.querySelector(".character-name").textContent = character.data.name;
+  const name = document.createElement("a");
+  name.href = `#/character/${encodeURIComponent(character.id)}`;
+  name.textContent = character.data.name;
+  item.querySelector(".character-name").replaceChildren(name);
+  // 쪽지 to another member's owner, as the member list's memo link.
+  const owner = character.createdBy ?? character.data.owner;
+  if (state.member && owner && owner !== state.member.id) {
+    const write = document.createElement("button");
+    write.type = "button";
+    write.textContent = "쪽지";
+    write.onclick = () => run(() => writeTo(owner));
+    item.querySelector(".meta").append(write);
+  }
   item.querySelector(".character-side").textContent = [
     character.data.side,
     character.data.class,
@@ -444,7 +507,14 @@ function wireCharacterDetails(item, character) {
           if (error.code === "NOT_FOUND") return null;
           throw error;
         });
-      li.textContent = `${target?.data.name ?? "삭제된 캐릭터"} · 호감도 ${row.data.affinity}: ${row.data.memo}`;
+      // The other character's page (viewer.php?ch_id=), when it still exists.
+      const name = target
+        ? Object.assign(document.createElement("a"), {
+            href: `#/character/${encodeURIComponent(target.id)}`,
+            textContent: target.data.name,
+          })
+        : "삭제된 캐릭터";
+      li.append(name, ` · 호감도 ${row.data.affinity}: ${row.data.memo}`);
       if (row.data.link && row.data.link.startsWith("https://")) {
         const link = document.createElement("a");
         link.href = row.data.link;
@@ -479,7 +549,13 @@ function wireCharacterDetails(item, character) {
       image.src = clothing.data.image;
       image.alt = clothing.data.name;
       image.className = "outfit-image";
-      li.append(image, clothing.data.name);
+      // closet.php's big viewer: the outfit at full size.
+      const full = document.createElement("a");
+      full.href = clothing.data.image;
+      full.target = "_blank";
+      full.rel = "noopener";
+      full.append(image);
+      li.append(full, clothing.data.name);
       if (mine(character)) {
         const wear = document.createElement("button");
         wear.type = "button";
@@ -681,3 +757,82 @@ $("characterForm").onsubmit = (event) => {
     say(`${name}을(를) 등록했습니다.`);
   });
 };
+
+/**
+ * A character's own page (member/viewer.php): the whole sheet open, a large
+ * picture, and what the viewer adds: the experience history (exp.php) and,
+ * where the owner shows them, the inventory and the owner's money.
+ */
+export async function openCharacter(id) {
+  showTab("character");
+  route(`character/${id}`, { replace: true });
+  $("characterSheet").replaceChildren();
+  if (!state.sides) await loadChoices();
+  const character = await collection(COLLECTION.characters).get(id);
+  await preloadNicks([character]);
+  const item = await characterItem(character);
+  item.classList.add("viewer");
+  const details = item.querySelector(".character-details");
+  details.open = true;
+  details.ontoggle?.();
+  const sheet = await caller().call("characters/progression:characterSheet", {
+    character: id,
+  });
+  const extras = document.createElement("div");
+  extras.className = "viewer-extras";
+  const heading = (text) => {
+    const h3 = document.createElement("h3");
+    h3.textContent = text;
+    return h3;
+  };
+  const exp = document.createElement("ul");
+  exp.className = "viewer-exp";
+  for (const row of sheet.exp) {
+    const li = document.createElement("li");
+    li.textContent = `${formatTime(row.at)} · ${row.delta > 0 ? "+" : ""}${row.delta} (총 ${row.exp})${row.memo ? ` · ${row.memo}` : ""}`;
+    exp.append(li);
+  }
+  if (!sheet.exp.length)
+    exp.append(
+      Object.assign(document.createElement("li"), {
+        textContent: "경험치 내역이 없습니다.",
+      }),
+    );
+  extras.append(heading("경험치 내역"), exp);
+  if (sheet.inventory) {
+    const title = heading("인벤토리");
+    if (sheet.balance !== null) {
+      const money = document.createElement("span");
+      money.className = "viewer-money";
+      money.textContent = `${sheet.balance} 아보`;
+      title.append(" ", money);
+    }
+    const list = document.createElement("ul");
+    list.className = "viewer-inventory";
+    for (const entry of sheet.inventory) {
+      const li = document.createElement("li");
+      if (entry.image?.startsWith("https://"))
+        li.append(
+          Object.assign(new Image(), {
+            src: entry.image,
+            alt: "",
+            loading: "lazy",
+          }),
+        );
+      li.append(entry.name);
+      list.append(li);
+    }
+    if (!sheet.inventory.length)
+      list.append(
+        Object.assign(document.createElement("li"), {
+          textContent: "아이템이 없습니다.",
+        }),
+      );
+    extras.append(title, list);
+  } else if (sheet.balance !== null) {
+    const money = heading("소지금");
+    money.append(` ${sheet.balance} 아보`);
+    extras.append(money);
+  }
+  $("characterSheet").replaceChildren(item, extras);
+}

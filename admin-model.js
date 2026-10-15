@@ -233,6 +233,31 @@ export const models = {
         label: "상점 분류 (기본 설정의 분류 중 하나, 빈칸: 첫 분류)",
         max: 40,
       },
+      {
+        key: "display.from",
+        label: "진열 시작일 (빈칸: 제한 없음)",
+        type: "date",
+      },
+      {
+        key: "display.until",
+        label: "진열 종료일 (빈칸: 제한 없음)",
+        type: "date",
+      },
+      {
+        key: "display.fromHour",
+        label: "진열 시작 시각 (0~23시, 한국 시간, 빈칸: 제한 없음)",
+        type: "optional-number",
+      },
+      {
+        key: "display.untilHour",
+        label: "진열 종료 시각 (0~23시, 그 시각까지 포함)",
+        type: "optional-number",
+      },
+      {
+        key: "display.weekdays",
+        label: "진열 요일 (일, 월, 화… 쉼표로 구분, 빈칸: 매일)",
+        type: "tokens",
+      },
       { key: "price", label: "구매 가격", type: "number", default: 0 },
       { key: "stock", label: "재고 (빈칸: 무제한)", type: "optional-number" },
       {
@@ -610,6 +635,16 @@ export const models = {
         key: "bgm",
         label: "배경음악 (유튜브 재생목록·영상 주소, 빈칸: 끄기)",
         max: 300,
+      },
+      {
+        key: "viewerInventory",
+        label: "캐릭터 보기에 인벤토리 보이기",
+        type: "checkbox",
+      },
+      {
+        key: "viewerMoney",
+        label: "캐릭터 보기에 오너의 소지금 보이기",
+        type: "checkbox",
       },
     ],
   },
@@ -1127,6 +1162,25 @@ export function buildRecord(section, values, previous, references) {
     references.stats.length >= 20
   )
     throw new Error("능력치는 최대 20개입니다.");
+  if (section === "items" && data.display) {
+    const { fromHour, untilHour, weekdays } = data.display;
+    for (const hour of [fromHour, untilHour])
+      if (
+        hour !== undefined &&
+        hour !== null &&
+        !(Number.isInteger(hour) && hour >= 0 && hour <= 23)
+      )
+        throw new Error("진열 시각은 0~23시로 입력하세요.");
+    if (
+      Array.isArray(weekdays) &&
+      weekdays.some(
+        (day) => !["일", "월", "화", "수", "목", "금", "토"].includes(day),
+      )
+    )
+      throw new Error(
+        "진열 요일은 일, 월, 화, 수, 목, 금, 토 중에서 적어 주세요.",
+      );
+  }
   if (section === "character_state") {
     const character = references.characters.find((row) => row.id === id);
     if (!character) throw new Error("존재하는 캐릭터를 선택하세요.");
