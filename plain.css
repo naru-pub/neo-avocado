@@ -163,6 +163,7 @@ body.site:not(.designed) #banners[hidden] {
 }
 .home-welcome {
   grid-column: 1;
+  grid-row: span 2;
   padding: 10px;
 }
 .profile-card {
@@ -225,6 +226,15 @@ body.site:not(.designed) #banners[hidden] {
 }
 .profile-card .control-group li + li button {
   border-left-width: 0;
+}
+.home-banner {
+  grid-column: 2;
+  padding: 10px;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.home-banner p {
+  margin: 0 0 4px;
 }
 #homeView .copyright {
   margin: 30px 0 0;
@@ -332,8 +342,10 @@ body.site.designed #gotoTop {
     grid-template-columns: 1fr;
   }
   .home-welcome,
-  .profile-card {
+  .profile-card,
+  .home-banner {
     grid-column: 1;
+    grid-row: auto;
   }
 }
 @media (max-width: 800px) {

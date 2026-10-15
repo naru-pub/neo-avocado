@@ -233,6 +233,9 @@ try {
       "오늘은 이미 받았습니다.",
   );
   assert.equal(await bob.locator("#balance").textContent(), "100");
+  // What an action said stays with its page.
+  await menu(bob, "로그");
+  assert.equal(await bob.locator("#status").textContent(), "");
 
   // 마이페이지's 로그내역 lists the member's own posts.
   await menu(alice, "마이페이지");

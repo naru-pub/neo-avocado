@@ -529,6 +529,8 @@ const MYPAGE = {
   calls: "myCallsTab",
 };
 export function showTab(name) {
+  // What an action said belongs to the page it was done on.
+  say("");
   noteVisit(PLACES[name] ?? name);
   route(viewPath(name));
   $("mypageNav").hidden = !Object.hasOwn(MYPAGE, name);
