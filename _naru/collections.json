@@ -5,16 +5,18 @@
       "write": "admin"
     },
     "neo_avocado_boards": {
-      "read": "admin",
-      "write": "admin"
+      "read": "world",
+      "write": "admin",
+      "rules": "boards"
     },
     "neo_avocado_calls": {
       "read": "admin",
       "write": "admin"
     },
     "neo_avocado_character_fields": {
-      "read": "admin",
-      "write": "admin"
+      "read": "member",
+      "write": "admin",
+      "rules": "character-fields"
     },
     "neo_avocado_character_state": {
       "read": "admin",
@@ -39,16 +41,18 @@
       "write": "admin"
     },
     "neo_avocado_couples": {
-      "read": "admin",
-      "write": "admin"
+      "read": "member",
+      "write": "admin",
+      "rules": "shown"
     },
     "neo_avocado_design": {
       "read": "admin",
       "write": "admin"
     },
     "neo_avocado_emoticons": {
-      "read": "admin",
-      "write": "admin"
+      "read": "world",
+      "write": "admin",
+      "rules": "shown"
     },
     "neo_avocado_explore": {
       "read": "admin",
@@ -63,12 +67,14 @@
       "write": "admin"
     },
     "neo_avocado_inventory": {
-      "read": "admin",
-      "write": "admin"
+      "read": "member",
+      "write": "admin",
+      "rules": "own"
     },
     "neo_avocado_items": {
-      "read": "admin",
-      "write": "admin"
+      "read": "member",
+      "write": "admin",
+      "rules": "shown"
     },
     "neo_avocado_levels": {
       "read": "admin",
@@ -92,43 +98,50 @@
       "write": "admin"
     },
     "neo_avocado_profiles": {
-      "read": "admin",
+      "read": "world",
       "write": "admin",
       "unique": [
         "nick"
-      ]
+      ],
+      "rules": "profiles"
     },
     "neo_avocado_quests": {
       "read": "admin",
       "write": "admin"
     },
     "neo_avocado_recipes": {
-      "read": "admin",
-      "write": "admin"
+      "read": "member",
+      "write": "admin",
+      "rules": "shown"
     },
     "neo_avocado_relations": {
-      "read": "admin",
-      "write": "admin"
+      "read": "member",
+      "write": "admin",
+      "rules": "shown"
     },
     "neo_avocado_settings": {
-      "read": "admin",
-      "write": "admin"
+      "read": "member",
+      "write": "admin",
+      "rules": "settings"
     },
     "neo_avocado_stat_config": {
       "read": "admin",
       "write": "admin"
     },
     "neo_avocado_titles": {
-      "read": "admin",
-      "write": "admin"
+      "read": "member",
+      "write": "admin",
+      "rules": "shown"
     },
     "neo_avocado_wallets": {
-      "read": "admin",
-      "write": "admin"
+      "read": "member",
+      "write": "admin",
+      "rules": "own"
     },
     "neo_avocado_wardrobe": {
-      "read": "admin",
-      "write": "admin"
+      "read": "member",
+      "write": "admin",
+      "rules": "shown"
     }
   }
 }
