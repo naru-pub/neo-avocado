@@ -2,73 +2,14 @@
 <html lang="ko">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>네오 아보카도 운영</title>
-    <link rel="stylesheet" href="style.css" />
+    <title>운영 화면</title>
+    <!-- The admin page moved to /admin/; this keeps old links and their #/… -->
+    <script>
+      location.replace("admin/" + location.hash);
+    </script>
+    <noscript><meta http-equiv="refresh" content="0; url=admin/" /></noscript>
   </head>
   <body>
-    <header class="top">
-      <h1>커뮤니티 운영</h1>
-      <a href="index.html">커뮤니티로</a>
-    </header>
-    <p id="adminStatus" role="status"></p>
-    <section id="adminWelcome">
-      <p>사이트 소유자의 나루 계정으로 로그인해 운영합니다.</p>
-      <p>
-        처음 설정할 때는 <a href="https://naru.pub/deploys">나루 제어판</a>에서
-        README에 있는 컬렉션과 권한을 먼저 만드세요.
-      </p>
-      <button id="adminSignIn" type="button">운영자 로그인</button>
-    </section>
-    <main id="adminWorkspace" hidden>
-      <button id="adminSignOut" type="button">운영자 로그아웃</button>
-      <label
-        >관리 항목
-        <select id="adminSection"></select
-      ></label>
-      <p id="adminHelp"></p>
-      <label id="holdingsSearchLabel" hidden
-        >캐릭터·타이틀 검색<input id="holdingsSearch" type="search" /><button
-          id="holdingsFind"
-          type="button"
-        >
-          검색
-        </button></label
-      >
-      <button id="adminNew" type="button">새로 등록</button>
-      <div id="adminReport" hidden></div>
-      <ul id="adminRows"></ul>
-      <button id="adminMore" type="button" hidden>더 보기</button>
-      <form id="titleGrantForm" class="card" hidden>
-        <h2 id="titleGrantHeading">타이틀 지급·회수</h2>
-        <label
-          >처리<select id="titleGrantAction">
-            <option value="grant">지급</option>
-            <option value="revoke">회수</option>
-          </select></label
-        >
-        <label
-          ><input id="titleGrantAll" type="checkbox" />승인된 모든 캐릭터</label
-        >
-        <label
-          >대상 캐릭터 (여러 명 선택 가능)<select
-            id="titleGrantCharacters"
-            multiple
-            size="8"
-          ></select
-        ></label>
-        <p id="titleGrantStatus" role="status"></p>
-        <button type="submit">선택한 대상에게 적용</button>
-        <button id="titleGrantCancel" type="button">닫기</button>
-      </form>
-      <form id="adminForm" class="card" hidden>
-        <h2 id="adminFormTitle"></h2>
-        <div id="adminFields"></div>
-        <p id="adminFormStatus" role="status"></p>
-        <button type="submit">저장</button>
-        <button id="adminCancel" type="button">취소</button>
-      </form>
-    </main>
-    <script type="module" src="admin.js"></script>
+    <p><a href="admin/">운영 화면으로 이동</a></p>
   </body>
 </html>

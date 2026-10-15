@@ -23,7 +23,7 @@
    손님도)이 읽고, 캐릭터는 `characters` 규칙이 볼 수 있는 항목만 보여 주며,
    프로필은 닉네임 중복 금지, 나머지는 관리자만 읽고 씁니다. 이미 있는
    컬렉션의 설정을 바꿔야 하면 나루의 데이터베이스 화면에 표시되고, 확인한
-   뒤 적용하기를 누르면 바뀝니다. 그다음 `admin.html`에서 운영자 로그인을
+   뒤 적용하기를 누르면 바뀝니다. 그다음 `admin/`(운영 화면)에서 운영자 로그인을
    누릅니다.
 3. **가입 방식을 정합니다.** 나루의 데이터베이스 → 사이트 회원에서 누구나 가입,
    운영자 승인 후 이용, 신규 가입 중단 중 하나를 고르고, 필요하면 이메일을
@@ -151,7 +151,7 @@ HTML은 [DOMPurify](https://github.com/cure53/DOMPurify)로 정리하여 표시�
 | 퀘스트·안내 페이지     | `app/content.js`                           | `_naru/functions/content/`                                       |
 | 디자인·메뉴·배너       | `app/site.js`                              | `_naru/functions/content/site.js`                                |
 | 새 글·알림 실시간 수신 | `app/live.js`                              |                                                                  |
-| 운영 화면              | `admin.html`, `admin.js`, `admin-model.js` | `_naru/functions/characters/review.js`                           |
+| 운영 화면              | `admin/`, `admin.js`, `admin-model.js` | `_naru/functions/characters/review.js`                           |
 
 `app/core.js`는 모든 화면이 함께 쓰는 것(컬렉션 이름, 상태, 오류 표시, 편집 창)입니다.
 

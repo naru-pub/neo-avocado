@@ -51,6 +51,77 @@ async function run(action) {
     $("adminStatus").textContent = message(error);
   }
 }
+/* -------------------------------------------------------- addresses --- */
+
+/**
+ * Every section, entry and report has an address (#/items, #/items/potion,
+ * #/items/new, #/visits/2026-10-01/2026-10-07/hour), as the site's pages
+ * do: it can be shared, reloaded and gone back to. Choosing a section makes
+ * a history entry; opening an entry or changing a report's filters replaces
+ * it.
+ */
+let routing = false;
+function adminRoute(parts, { replace = true } = {}) {
+  if (routing) return;
+  const hash = `#/${parts
+    .filter((part) => part !== "" && part !== null && part !== undefined)
+    .map((part) => encodeURIComponent(String(part)))
+    .join("/")}`;
+  if (location.hash !== hash)
+    history[replace ? "replaceState" : "pushState"](null, "", hash);
+}
+/** The address's parts, decoded. */
+function addressParts() {
+  return location.hash
+    .replace(/^#\/?/, "")
+    .split("/")
+    .filter(Boolean)
+    .map((part) => {
+      try {
+        return decodeURIComponent(part);
+      } catch {
+        return part;
+      }
+    });
+}
+/** A report's filters, from its address when it was opened by one. */
+let reportFilters = [];
+/** Opens what the address names: a section, an entry in it, or a report. */
+async function openAddress() {
+  const [name, entry, ...filters] = addressParts();
+  routing = true;
+  try {
+    if (name && Object.hasOwn(models, name)) {
+      section = name;
+      $("adminSection").value = name;
+    }
+    $("adminForm").hidden = true;
+    $("titleGrantForm").hidden = true;
+    const model = models[section];
+    reportFilters = model.report && name === section ? [entry, ...filters] : [];
+    await load();
+    if (model.report || name !== section || !entry) return;
+    if (entry === "new") return openForm();
+    const row = await owner
+      .collection(model.collection)
+      .get(entry)
+      .catch((error) => {
+        if (error?.code === "NOT_FOUND") return null;
+        throw error;
+      });
+    if (!row) {
+      $("adminStatus").textContent = "자료를 찾을 수 없습니다.";
+      return;
+    }
+    await openForm(row);
+  } finally {
+    routing = false;
+  }
+}
+addEventListener("hashchange", () => {
+  if (owner) run(openAddress);
+});
+
 async function all(collection) {
   const rows = [];
   for await (const page of owner.collection(collection).pages({ size: 100 }))
@@ -367,6 +438,7 @@ async function openForm(row = null) {
   if (requestedSection !== section || !owner) return;
   selected = row;
   const model = models[section];
+  adminRoute([section, row ? row.id : (model.fixedId ?? "new")]);
   $("adminFormTitle").textContent = `${model.label} ${row ? "수정" : "등록"}`;
   $("adminFormStatus").textContent = "";
   $("adminFields").replaceChildren();
@@ -681,6 +753,7 @@ $("adminForm").onsubmit = async (event) => {
         });
     selected = saved;
     $("adminForm").hidden = true;
+    adminRoute([section]);
     $("adminStatus").textContent = "저장했습니다.";
     await load();
   } catch (error) {
@@ -693,12 +766,14 @@ $("adminForm").onsubmit = async (event) => {
 };
 $("adminCancel").onclick = () => {
   $("adminForm").hidden = true;
+  adminRoute([section]);
 };
 $("adminNew").onclick = () => run(() => openForm());
 $("adminMore").onclick = () => run(() => load({ more: true }));
 $("adminSection").onchange = () =>
   run(async () => {
     section = $("adminSection").value;
+    adminRoute([section], { replace: false });
     $("adminForm").hidden = true;
     $("titleGrantForm").hidden = true;
     await load();
@@ -728,7 +803,8 @@ await run(async () => {
   $("adminWorkspace").hidden = false;
   references.characters = await all("neo_avocado_characters");
   references.profiles = await all("neo_avocado_profiles");
-  await load();
+  await openAddress();
+  adminRoute([section]);
 });
 
 $("titleGrantCancel").onclick = () => {
@@ -821,13 +897,22 @@ function table(headings, rows) {
   }
   return element;
 }
-const today = () => koreanDay(Date.now());
-const daysAgo = (days) => koreanDay(Date.now() - days * 24 * 3600 * 1000);
+// Declared as functions so they exist when the page opens a report by its
+// address, which happens before the module reaches this point.
+function today() {
+  return koreanDay(Date.now());
+}
+function daysAgo(days) {
+  return koreanDay(Date.now() - days * 24 * 3600 * 1000);
+}
 
 /** 접속자 집계 (adm/visit_list.php and its tabs), and deleting old days. */
 function visitsView() {
-  const from = dateInput(daysAgo(6));
-  const to = dateInput(today());
+  const [fromDay, toDay, breakdown] = reportFilters;
+  const day = (value, fallback) =>
+    /^\d{4}-\d{2}-\d{2}$/.test(value ?? "") ? value : fallback;
+  const from = dateInput(day(fromDay, daysAgo(6)));
+  const to = dateInput(day(toDay, today()));
   const by = document.createElement("select");
   for (const [value, text] of VISIT_BREAKDOWNS)
     by.append(new Option(text, value));
@@ -838,7 +923,10 @@ function visitsView() {
   prune.type = "button";
   prune.textContent = "시작일 이전 기록 삭제";
   const output = document.createElement("div");
+  if (VISIT_BREAKDOWNS.some(([value]) => value === breakdown))
+    by.value = breakdown;
   const draw = async () => {
+    adminRoute(["visits", from.value, to.value, by.value]);
     const days = await all("neo_avocado_visits");
     const report = visitReport(days, {
       from: from.value,
@@ -907,13 +995,22 @@ async function activityView() {
       .filter((row) => row.id !== "default")
       .map((row) => new Option(row.data.name, row.id)),
   );
-  const from = dateInput(daysAgo(29));
-  const to = dateInput(today());
+  const [chosen, fromDay, toDay] = reportFilters.map((value) =>
+    value === "all" ? "" : value,
+  );
+  const day = (value, fallback) =>
+    /^\d{4}-\d{2}-\d{2}$/.test(value ?? "") ? value : fallback;
+  if ([...board.options].some((option) => option.value === chosen))
+    board.value = chosen;
+  const from = dateInput(day(fromDay, daysAgo(29)));
+  const to = dateInput(day(toDay, today()));
   const show = document.createElement("button");
   show.type = "button";
   show.textContent = "보기";
   const output = document.createElement("div");
   const draw = async () => {
+    // "all" stands for every board, which has no ID of its own.
+    adminRoute(["activity", board.value || "all", from.value, to.value]);
     const [profiles, members, characters, logs, comments, presence] =
       await Promise.all([
         all("neo_avocado_profiles"),

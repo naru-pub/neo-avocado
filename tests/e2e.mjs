@@ -89,7 +89,7 @@ try {
   // the owner's sign-in only signs in.
   assert.match(log, /_naru\/collections\.json: 36 created, 0 changed/);
   const owner = await person();
-  await owner.goto(`${origin}/admin.html`);
+  await owner.goto(`${origin}/admin/`);
   await owner.locator("#adminSignIn").click();
   await owner.locator("#adminWorkspace").waitFor();
   assert.match(log, /owner signed in: \d+ collections, 0 created/);
@@ -445,6 +445,19 @@ try {
     forged: "ACCESS_DENIED",
     theirs: "ACCESS_DENIED",
   });
+
+  // The admin page has addresses too: an entry's form, and old links to
+  // admin.html carry on to /admin/ with their address.
+  await owner.goto(`${origin}/admin/#/emoticons/smile`);
+  await owner.reload();
+  await owner.locator('#adminFields [name="name"]').waitFor();
+  assert.equal(
+    await owner.locator('#adminFields [name="name"]').inputValue(),
+    "웃음",
+  );
+  await owner.goto(`${origin}/admin.html#/visits`);
+  await owner.waitForURL(/\/admin\/#\/visits/);
+  await owner.locator("#adminReport table.report").waitFor();
 
   // 현재접속자 lists who visited in the last ten minutes.
   await menu(alice, "현재접속자");

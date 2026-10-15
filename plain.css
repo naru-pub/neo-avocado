@@ -60,7 +60,7 @@ body.site:not(.designed) .site-menu li li {
 }
 /* The account controls live on the main page's card, the tabs in the menu. */
 body.site:not(.designed) > .top .account,
-body.site:not(.designed) > .top > a[href="admin.html"],
+body.site:not(.designed) > .top > a[href="admin/"],
 body.site:not(.designed) .tabs {
   display: none;
 }
@@ -183,6 +183,8 @@ body.site:not(.designed) #banners[hidden] {
 }
 .profile-card .control-group button {
   width: 100%;
+  padding: 0 6px;
+  white-space: nowrap;
 }
 .profile-card .control-group li + li button {
   border-left-width: 0;
@@ -284,7 +286,9 @@ body.site.designed #gotoTop {
     padding-top: 20px;
   }
 }
-@media (max-width: 800px) {
+/* The boxes stack where the header turns into a bar, so the card keeps
+   its buttons on one line. */
+@media (max-width: 1024px) {
   .home-boxes {
     grid-template-columns: 1fr;
   }
@@ -292,6 +296,8 @@ body.site.designed #gotoTop {
   .profile-card {
     grid-column: 1;
   }
+}
+@media (max-width: 800px) {
   #gotoTop {
     width: 60px;
     height: 60px;

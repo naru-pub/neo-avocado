@@ -124,7 +124,7 @@ const record = (name, sample) => {
 try {
   // Setup, without delays: a public board, fields, two members, posts.
   const owner = await person();
-  await owner.page.goto(`${origin}/admin.html`);
+  await owner.page.goto(`${origin}/admin/`);
   await owner.page.locator("#adminSignIn").click();
   await owner.page.locator("#adminWorkspace").waitFor();
   await owner.page.evaluate(async (P) => {
