@@ -9,6 +9,3 @@ export function readable() {
 export function canWrite() {
   return false;
 }
-
-// Until Naru reads `readable`: rules exported `scope` before 1.1.0 named it so.
-export const scope = readable;

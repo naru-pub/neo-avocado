@@ -41,6 +41,3 @@ export function canWrite(ctx, { operation, before, after }) {
       JSON.stringify(before.data[key]) === JSON.stringify(after.data[key]),
   );
 }
-
-// Until Naru reads `readable`: rules exported `scope` before 1.1.0 named it so.
-export const scope = readable;

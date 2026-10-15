@@ -127,6 +127,3 @@ export async function canWrite(ctx, { collection, before, after, operation }) {
     (Boolean(data.image) || Boolean(data.text.trim()))
   );
 }
-
-// Until Naru reads `readable`: rules exported `scope` before 1.1.0 named it so.
-export const scope = readable;
