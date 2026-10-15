@@ -11,7 +11,7 @@ import {
 } from "../modules/shared.js";
 const LOGS = `${PREFIX}logs`;
 const COMMENTS = `${PREFIX}comments`;
-export async function scope(ctx, { collection, operation, id, filter }) {
+export async function readable(ctx, { collection, operation, id, filter }) {
   // Visitors (ctx.member null, with world read) have the guest level 1.
   const actor = await communityAccess(ctx);
   if (collection === COMMENTS) {
@@ -127,3 +127,6 @@ export async function canWrite(ctx, { collection, before, after, operation }) {
     (Boolean(data.image) || Boolean(data.text.trim()))
   );
 }
+
+// Until Naru reads `readable`: rules exported `scope` before 1.1.0 named it so.
+export const scope = readable;

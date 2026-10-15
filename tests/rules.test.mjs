@@ -30,12 +30,12 @@ test("boards: each level lists only the boards it may", async () => {
     [`${P}members`]: { senior: { level: 5 } },
   };
   const ids = async (member) =>
-    (await boards.scope(rulesCtx(member, tables))).in?.[1] ?? [];
+    (await boards.readable(rulesCtx(member, tables))).in?.[1] ?? [];
   assert.deepEqual(await ids(null), ["open"]);
   assert.deepEqual(await ids("m-1"), ["open", "members"]);
   assert.deepEqual(await ids("senior"), ["open", "members", "staff"]);
   assert.equal(
-    await boards.scope(rulesCtx(null, { [`${P}boards`]: {} })),
+    await boards.readable(rulesCtx(null, { [`${P}boards`]: {} })),
     false,
   );
   assert.equal(boards.canWrite(), false);
@@ -53,7 +53,7 @@ test("profiles: visitors read nicknames only, members the whole profile", () => 
     profiles.present(rulesCtx("m-2"), { document }),
     document.data,
   );
-  assert.deepEqual(profiles.scope(), { ne: ["deleted", true] });
+  assert.deepEqual(profiles.readable(), { ne: ["deleted", true] });
   assert.ok(!profiles.queryable.includes("commentAlerts"));
 });
 
@@ -91,18 +91,24 @@ test("profiles: a member edits their own nickname and preferences, nothing else"
 });
 
 test("own: a member reads their own wallet and inventory, a visitor nothing", () => {
-  assert.deepEqual(own.scope(rulesCtx("m-1"), { collection: `${P}wallets` }), {
-    eq: [{ metadata: "id" }, "m-1"],
-  });
   assert.deepEqual(
-    own.scope(rulesCtx("m-1"), { collection: `${P}inventory` }),
+    own.readable(rulesCtx("m-1"), { collection: `${P}wallets` }),
+    {
+      eq: [{ metadata: "id" }, "m-1"],
+    },
+  );
+  assert.deepEqual(
+    own.readable(rulesCtx("m-1"), { collection: `${P}inventory` }),
     { eq: ["owner", "m-1"] },
   );
-  assert.equal(own.scope(rulesCtx(null), { collection: `${P}wallets` }), false);
+  assert.equal(
+    own.readable(rulesCtx(null), { collection: `${P}wallets` }),
+    false,
+  );
 });
 
 test("settings: only the community settings, trimmed to what pages use", () => {
-  assert.deepEqual(settings.scope(), {
+  assert.deepEqual(settings.readable(), {
     eq: [{ metadata: "id" }, "community"],
   });
   assert.deepEqual(
@@ -120,10 +126,10 @@ test("settings: only the community settings, trimmed to what pages use", () => {
 });
 
 test("character fields and catalogues hide what members may not see", () => {
-  assert.deepEqual(characterFields.scope(), {
+  assert.deepEqual(characterFields.readable(), {
     all: [{ ne: ["deleted", true] }, { ne: ["visibility", "admin"] }],
   });
-  assert.deepEqual(shown.scope(), { ne: ["deleted", true] });
+  assert.deepEqual(shown.readable(), { ne: ["deleted", true] });
 });
 
 test("the declaration names a rule file for every rule it uses", async () => {

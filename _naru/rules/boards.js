@@ -8,7 +8,7 @@ import {
   withGroup,
 } from "../modules/shared.js";
 
-export async function scope(ctx) {
+export async function readable(ctx) {
   const access = await communityAccess(ctx);
   const [{ documents }, groups] = await Promise.all([
     ctx.list(BOARDS, { size: 100 }),
@@ -26,3 +26,6 @@ export async function scope(ctx) {
 export function canWrite() {
   return false;
 }
+
+// Until Naru reads `readable`: rules exported `scope` before 1.1.0 named it so.
+export const scope = readable;

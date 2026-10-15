@@ -6,7 +6,7 @@
 /** What members may filter on: nothing a visitor cannot already see matters. */
 export const queryable = ["nick", "acceptMessages", "owner"];
 
-export function scope() {
+export function readable() {
   return { ne: ["deleted", true] };
 }
 
@@ -41,3 +41,6 @@ export function canWrite(ctx, { operation, before, after }) {
       JSON.stringify(before.data[key]) === JSON.stringify(after.data[key]),
   );
 }
+
+// Until Naru reads `readable`: rules exported `scope` before 1.1.0 named it so.
+export const scope = readable;

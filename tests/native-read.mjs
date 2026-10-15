@@ -1,6 +1,6 @@
 // What a member's or visitor's native read returns on Naru, for the in-memory
 // fakes: the declaration's read access first, then the collection's rule
-// (scope narrows the rows, present trims each), as _naru/collections.json
+// (readable narrows the rows, present trims each), as _naru/collections.json
 // configures them. Owners and site functions read everything; pages do not.
 import { readFile } from "node:fs/promises";
 import { matches } from "./where.mjs";
@@ -33,7 +33,7 @@ export async function nativeRead(
   const filter = { ...options.filter };
   const where = options.where ?? null;
   const scope = rule
-    ? await rule.scope(ctx, {
+    ? await rule.readable(ctx, {
         collection,
         operation: operation === "get" ? "get" : "list",
         id: id ?? null,

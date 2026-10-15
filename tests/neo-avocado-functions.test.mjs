@@ -47,7 +47,7 @@ import {
   commentCounts,
   moderatePost,
 } from "../_naru/modules/index.js";
-import { scope, canWrite } from "../_naru/rules/community-board.js";
+import { readable, canWrite } from "../_naru/rules/community-board.js";
 import * as characterRule from "../_naru/rules/characters.js";
 import * as profileRule from "../_naru/rules/profiles.js";
 import { matches } from "./where.mjs";
@@ -1499,11 +1499,11 @@ test("the board rule shares the gate's helpers: levels, moderators, secrets and 
   table(`${P}boards`).set("default", { listLevel: 3, readLevel: 2 });
   const list = { collection: `${P}logs`, operation: "list" };
   assert.equal(
-    await scope(ctx, { ...list, filter: { board: "default" } }),
+    await readable(ctx, { ...list, filter: { board: "default" } }),
     false,
   );
   ctx.member = null;
-  assert.equal(await scope(ctx, { ...list, filter: {} }), false);
+  assert.equal(await readable(ctx, { ...list, filter: {} }), false);
   assert.equal(
     await canWrite(ctx, { collection: `${P}logs`, before: null, after: log }),
     false,
@@ -1511,7 +1511,7 @@ test("the board rule shares the gate's helpers: levels, moderators, secrets and 
   ctx.member = { id: "m-1" };
   table(`${P}boards`).set("default", { listLevel: 2, readLevel: 2 });
   assert.deepEqual(
-    await scope(ctx, { ...list, filter: { board: "default" } }),
+    await readable(ctx, { ...list, filter: { board: "default" } }),
     {
       all: [
         { eq: ["board", "default"] },
@@ -1563,9 +1563,9 @@ test("the board rule shares the gate's helpers: levels, moderators, secrets and 
     operation: "list",
     filter: { logId: "log" },
   };
-  assert.equal(await scope(ctx, comments), false);
+  assert.equal(await readable(ctx, comments), false);
   table(`${P}logs`).set("log", log.data);
-  assert.deepEqual(await scope(ctx, comments), { eq: ["logId", "log"] });
+  assert.deepEqual(await readable(ctx, comments), { eq: ["logId", "log"] });
   const comment = {
     id: "comment",
     createdBy: "m-1",
@@ -2577,7 +2577,7 @@ test("the characters rule shows members only the custom fields they may see", as
   // Hidden fields cannot be queried; visitors read nothing.
   assert.ok(!characterRule.queryable.includes("fields"));
   assert.equal(
-    await characterRule.scope(
+    await characterRule.readable(
       { ...ctx, member: null },
       { collection: `${P}characters` },
     ),

@@ -10,7 +10,7 @@ const CHARACTERS = `${PREFIX}characters`;
 /** Fields members may filter and sort on: none that present() hides. */
 export const queryable = ["owner", "name", "side", "state", "type", "deleted"];
 
-export async function scope(ctx, { collection }) {
+export async function readable(ctx, { collection }) {
   if (!ctx.member || collection !== CHARACTERS) return false;
   return { ne: ["deleted", true] };
 }
@@ -36,3 +36,6 @@ export async function present(ctx, { document }) {
 export function canWrite() {
   return false;
 }
+
+// Until Naru reads `readable`: rules exported `scope` before 1.1.0 named it so.
+export const scope = readable;
