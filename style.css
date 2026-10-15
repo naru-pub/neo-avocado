@@ -1000,3 +1000,45 @@ h2 small {
     align-self: center;
   }
 }
+
+/* The owner's reports (접속자 집계, 활동량 관리). */
+.report-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+  margin: 10px 0;
+}
+.report-filters label {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+table.report {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+table.report th,
+table.report td {
+  padding: 6px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+table.report meter {
+  width: 100%;
+  min-width: 80px;
+}
+table.report input[type="number"] {
+  width: 5em;
+}
+#adminReport {
+  overflow-x: auto;
+}
+.online-list {
+  padding-left: 20px;
+}
+.online-list li {
+  margin: 6px 0;
+}

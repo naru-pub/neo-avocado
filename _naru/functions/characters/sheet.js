@@ -1,5 +1,7 @@
 import {
   PREFIX,
+  SIDES,
+  CLASSES,
   deleteCommunityDocument,
   text,
   imageUrl,
@@ -17,6 +19,25 @@ const CHARACTERS = `${PREFIX}characters`;
  * with the `revision` it was read at). Custom fields are checked against
  * their definitions, and the sheet's type and state against the review.
  */
+/**
+ * A value from the owner's list (소속 or 종족), or any short text while the
+ * list is empty. A value the character already has stays, so deleting it
+ * from the list does not stop the member editing the rest.
+ */
+async function listed(ctx, collection, value, kept, label) {
+  const chosen = text(value ?? "", 40);
+  if (!chosen || chosen === kept) return chosen;
+  const { documents } = await ctx.list(collection, { size: 100 });
+  const names = documents
+    .filter((row) => !row.data.deleted)
+    .map((row) => row.data.name);
+  if (names.length && !names.includes(chosen))
+    ctx.fail("INVALID_REQUEST", `${label}을(를) 목록에서 골라 주세요.`, {
+      reason: "invalid_input",
+    });
+  return chosen;
+}
+
 export async function save(
   ctx,
   { id = null, data = {}, revision = null } = {},
@@ -33,7 +54,14 @@ export async function save(
   value = {
     ...value,
     name: text(data.name, 40, true),
-    side: text(data.side ?? "", 40),
+    side: await listed(ctx, SIDES, data.side, previous?.data.side, "소속"),
+    class: await listed(
+      ctx,
+      CLASSES,
+      data.class,
+      previous?.data.class,
+      "종족",
+    ),
     profile: text(data.profile ?? "", 4000),
     type: sheet.type,
     state: sheet.state,

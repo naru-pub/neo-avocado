@@ -21,6 +21,9 @@ export const COLLECTION = {
   boards: `${PREFIX}boards`,
   emoticons: `${PREFIX}emoticons`,
   characterFields: `${PREFIX}character_fields`,
+  sides: `${PREFIX}sides`,
+  classes: `${PREFIX}classes`,
+  boardGroups: `${PREFIX}board_groups`,
 };
 export const SHOP_PAGE = 50;
 export const STATE_NAMES = {
@@ -382,6 +385,87 @@ export async function allDocuments(name, filter, where) {
   } while (after);
   return documents;
 }
+/** Where a member is, as 현재접속자 shows it, for each view. */
+const PLACES = {
+  home: "메인",
+  logs: "로그",
+  characters: "멤버목록",
+  shop: "상점",
+  messages: "쪽지",
+  quests: "퀘스트",
+  content: "안내",
+  calls: "알림",
+  couples: "커플목록",
+  mypage: "마이페이지",
+  myLogs: "마이페이지",
+  myExp: "마이페이지",
+  online: "현재접속자",
+};
+/** The browser, OS and device a page reports with a visit, for statistics. */
+function client() {
+  const agent = navigator.userAgent;
+  const browser = /SamsungBrowser/.test(agent)
+    ? "Samsung"
+    : /Whale/.test(agent)
+      ? "Whale"
+      : /Edg\//.test(agent)
+        ? "Edge"
+        : /Firefox\//.test(agent)
+          ? "Firefox"
+          : /Chrome\//.test(agent)
+            ? "Chrome"
+            : /Safari\//.test(agent)
+              ? "Safari"
+              : "기타";
+  const os = /iPhone|iPad|iPod/.test(agent)
+    ? "iOS"
+    : /Android/.test(agent)
+      ? "Android"
+      : /Windows/.test(agent)
+        ? "Windows"
+        : /Mac OS X/.test(agent)
+          ? "macOS"
+          : /Linux/.test(agent)
+            ? "Linux"
+            : "기타";
+  const device = /iPad|Tablet/.test(agent)
+    ? "태블릿"
+    : /Mobi|iPhone|Android/.test(agent)
+      ? "모바일"
+      : "PC";
+  return { browser, os, device };
+}
+let lastVisit = 0;
+let lastPlace = null;
+/**
+ * Tells Naru where the visitor is (현재접속자, 접속자집계): on the first
+ * page, then when they move on, at most every 30 seconds. Never polls.
+ */
+export function noteVisit(place) {
+  if (!state.naru) return;
+  const now = Date.now();
+  if (place === lastPlace || (lastVisit && now - lastVisit < 30_000)) return;
+  const first = !lastVisit;
+  lastVisit = now;
+  lastPlace = place;
+  let domain = "";
+  try {
+    const from = first && document.referrer ? new URL(document.referrer) : null;
+    if (from && from.host !== location.host) domain = from.hostname;
+  } catch {
+    /* No referrer to count. */
+  }
+  caller()
+    .call("community/presence:seen", {
+      where: place,
+      ...client(),
+      ...(domain ? { domain } : {}),
+    })
+    .catch(() => {
+      /* A visit not counted is no reason to bother anyone. */
+    });
+}
+
 /** The views under 마이페이지's own menu (mypage/). */
 const MYPAGE = {
   mypage: "myAccountTab",
@@ -391,10 +475,12 @@ const MYPAGE = {
   calls: "myCallsTab",
 };
 export function showTab(name) {
+  noteVisit(PLACES[name] ?? name);
   $("mypageNav").hidden = !Object.hasOwn(MYPAGE, name);
   for (const [view, button] of Object.entries(MYPAGE))
     $(button).setAttribute("aria-pressed", String(view === name));
   for (const [view, key] of [
+    ["onlineView", "online"],
     ["mypageView", "mypage"],
     ["myLogsView", "myLogs"],
     ["myExpView", "myExp"],

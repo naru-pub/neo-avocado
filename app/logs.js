@@ -584,13 +584,28 @@ export async function loadBoards() {
     });
   if (!state.boards.some((row) => row.id === state.board))
     state.board = state.boards[0].id;
-  $("board").replaceChildren();
-  for (const row of state.boards) {
-    const option = document.createElement("option");
-    option.value = row.id;
-    option.textContent = row.data.name;
-    $("board").append(option);
-  }
+  // Boards under their group's name (adm/boardgroup_list), ungrouped first.
+  const groups = (await allDocuments(COLLECTION.boardGroups)).sort(
+    (a, b) =>
+      (a.data.order ?? 0) - (b.data.order ?? 0) || (a.id < b.id ? -1 : 1),
+  );
+  const option = (row) => new Option(row.data.name, row.id);
+  const grouped = (row) => groups.some((group) => group.id === row.data.group);
+  $("board").replaceChildren(
+    ...state.boards.filter((row) => !grouped(row)).map(option),
+    ...groups
+      .map((group) => {
+        const boards = state.boards.filter(
+          (row) => row.data.group === group.id,
+        );
+        if (!boards.length) return null;
+        const set = document.createElement("optgroup");
+        set.label = group.data.name;
+        set.append(...boards.map(option));
+        return set;
+      })
+      .filter(Boolean),
+  );
   $("board").value = state.board;
   configureBoard();
 }

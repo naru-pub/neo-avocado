@@ -4,6 +4,11 @@
       "read": "admin",
       "write": "admin"
     },
+    "neo_avocado_board_groups": {
+      "read": "world",
+      "write": "admin",
+      "rules": "shown"
+    },
     "neo_avocado_boards": {
       "read": "world",
       "write": "admin",
@@ -26,6 +31,11 @@
       "read": "member",
       "write": "admin",
       "rules": "characters"
+    },
+    "neo_avocado_classes": {
+      "read": "member",
+      "write": "admin",
+      "rules": "shown"
     },
     "neo_avocado_comments": {
       "read": "world",
@@ -97,6 +107,10 @@
       "read": "admin",
       "write": "admin"
     },
+    "neo_avocado_presence": {
+      "read": "admin",
+      "write": "admin"
+    },
     "neo_avocado_profiles": {
       "read": "world",
       "write": "member",
@@ -124,6 +138,11 @@
       "write": "admin",
       "rules": "settings"
     },
+    "neo_avocado_sides": {
+      "read": "member",
+      "write": "admin",
+      "rules": "shown"
+    },
     "neo_avocado_stat_config": {
       "read": "admin",
       "write": "admin"
@@ -132,6 +151,10 @@
       "read": "member",
       "write": "admin",
       "rules": "shown"
+    },
+    "neo_avocado_visits": {
+      "read": "admin",
+      "write": "admin"
     },
     "neo_avocado_wallets": {
       "read": "member",

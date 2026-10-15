@@ -32,6 +32,7 @@ import "./app/calls.js";
 import "./app/content.js";
 import "./app/mypage.js";
 import "./app/couples.js";
+import "./app/online.js";
 
 export { diceOf } from "./app/posts.js";
 

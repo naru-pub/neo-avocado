@@ -87,6 +87,7 @@ const DEFAULT_MENUS = [
   ["커플목록", "tab:couples", true],
   ["상점", "tab:shop", true],
   ["마이페이지", "tab:mypage", true],
+  ["현재접속자", "tab:online"],
   ["퀘스트", "tab:quests", true],
   ["안내", "tab:content"],
 ].map(([name, link, memberOnly]) => ({
@@ -234,8 +235,13 @@ async function follow(link) {
   // member/ and member/ready.php: the character list, approved or not yet.
   if (id === "members" || id === "applicants") {
     if (!state.member) return say("회원 로그인 후 이용할 수 있습니다.");
-    $("characterFilter").value = id === "members" ? "approved" : "applicants";
-    $("characterFilter").dispatchEvent(new Event("change"));
+    const filter = id === "members" ? "approved" : "applicants";
+    // A list already read under another filter is read again, once.
+    if ($("characterFilter").value !== filter) {
+      $("characterFilter").value = filter;
+      if (state.charactersLoaded)
+        $("characterFilter").dispatchEvent(new Event("change"));
+    }
     return $("tabCharacters").click();
   }
   const tab = $(`tab${id.charAt(0).toUpperCase()}${id.slice(1)}`);

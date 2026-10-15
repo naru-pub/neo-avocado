@@ -118,6 +118,13 @@ export const models = {
         ],
       },
       { key: "enabled", label: "운영 중", type: "checkbox", default: true },
+      {
+        key: "group",
+        label: "게시판 그룹",
+        type: "pick",
+        from: "groups",
+        optional: true,
+      },
       { key: "listLevel", label: "목록 보기 등급", type: "number", default: 2 },
       { key: "readLevel", label: "본문 읽기 등급", type: "number", default: 2 },
       { key: "writeLevel", label: "글쓰기 등급", type: "number", default: 2 },
@@ -159,6 +166,15 @@ export const models = {
           ["moderator", "게시물 운영자"],
         ],
       },
+      {
+        key: "groups",
+        label: "그룹 회원 (그룹 회원만 쓰는 게시판 그룹, 여러 개 선택 가능)",
+        type: "pick",
+        from: "groups",
+        multiple: true,
+      },
+      { key: "warnings", label: "누적 경고", type: "number", default: 0 },
+      { key: "warningNote", label: "경고 내용", type: "textarea", max: 1000 },
       {
         key: "left",
         label: "탈퇴일 (빈칸: 이용 중. 지우면 다시 이용할 수 있습니다)",
@@ -373,6 +389,33 @@ export const models = {
       },
     ],
   },
+  sides: {
+    label: "소속",
+    help: "캐릭터가 고를 소속(세력)입니다. 목록이 비어 있으면 회원이 자유롭게 적습니다. 이름을 바꾸면 이미 고른 캐릭터의 소속은 그대로이니 함께 확인하세요.",
+    fields: [
+      { key: "name", label: "소속 이름", required: true, max: 40 },
+      { key: "image", label: "이미지", type: "url", image: true, max: 2000 },
+      { key: "order", label: "정렬 순서", type: "number", default: 0 },
+    ],
+  },
+  classes: {
+    label: "종족",
+    help: "캐릭터가 고를 종족입니다. 목록이 비어 있으면 회원이 자유롭게 적습니다.",
+    fields: [
+      { key: "name", label: "종족 이름", required: true, max: 40 },
+      { key: "image", label: "이미지", type: "url", image: true, max: 2000 },
+      { key: "order", label: "정렬 순서", type: "number", default: 0 },
+    ],
+  },
+  board_groups: {
+    label: "게시판 그룹",
+    help: "게시판을 묶어 게시판 고르기에서 함께 보여 줍니다. ‘그룹 회원만’을 켜면 그 그룹의 게시판은 회원 등급의 그룹 회원과 게시물 운영자만 이용합니다.",
+    fields: [
+      { key: "name", label: "그룹 이름", required: true, max: 60 },
+      { key: "membersOnly", label: "그룹 회원만", type: "checkbox" },
+      { key: "order", label: "정렬 순서", type: "number", default: 0 },
+    ],
+  },
   couples: {
     label: "커플",
     help: "양쪽 캐릭터와 시작일을 등록합니다.",
@@ -468,8 +511,26 @@ export const models = {
     characterKey: true,
     fields: [
       { key: "approved", label: "승인", type: "checkbox" },
-      { key: "side", label: "공식 세력", max: 40 },
-      { key: "class", label: "공식 종족", max: 40 },
+      {
+        key: "side",
+        label: "공식 소속",
+        type: "pick",
+        from: "sides",
+        valueBy: "name",
+        optional: true,
+        fallbackText: true,
+        max: 40,
+      },
+      {
+        key: "class",
+        label: "공식 종족",
+        type: "pick",
+        from: "classes",
+        valueBy: "name",
+        optional: true,
+        fallbackText: true,
+        max: 40,
+      },
       { key: "exp", label: "경험치", type: "number", default: 0 },
       {
         key: "expNote",
@@ -681,6 +742,19 @@ models.character_review = {
   fields: [],
   help: "신청(수정 완료)·수정 중인 캐릭터를 승인하거나 수정을 요청하고, 메인·서브·NPC와 운영자 전용 항목을 정합니다. 승인하면 공식 기록의 승인도 함께 바뀝니다.",
 };
+models.visits = {
+  label: "접속자 집계",
+  help: "날짜 범위의 접속을 날짜·시간·요일·월·연도·브라우저·운영체제·기기·접속 경로별로 봅니다. 회원 수는 그 기간에 접속한 서로 다른 회원 수입니다. 시작일 이전 기록은 지울 수 있습니다.",
+  report: "visits",
+  readOnly: true,
+};
+models.activity = {
+  label: "활동량 관리",
+  help: "게시판과 기간을 골라 회원별 로그·댓글 수와 최종 접속을 봅니다. 누적 경고와 경고 내용은 여기서 바로 고칩니다.",
+  report: "activity",
+  readOnly: true,
+  collection: `${P}members`,
+};
 models.log_cleanup = {
   label: "삭제 중인 로그 정리",
   collection: `${P}logs`,
@@ -719,6 +793,8 @@ export const scopes = [
     `${P}relations`,
     `${P}wardrobe`,
     // Written only by site functions.
+    `${P}presence`,
+    `${P}visits`,
     `${P}messages`,
     `${P}counters`,
     `${P}calls`,
@@ -752,6 +828,34 @@ function setField(data, key, value) {
   }
   if (value === undefined) delete target[path.at(-1)];
   else target[path.at(-1)] = value;
+}
+/**
+ * A pick from one of the owner's lists (references[field.from]): its ID, or
+ * its name with valueBy "name"; several with `multiple`. With an empty list
+ * and `fallbackText`, any short text.
+ */
+function picked(field, value, references) {
+  const rows = (references[field.from] ?? []).filter(
+    (row) => !row.data.deleted,
+  );
+  const choices = rows.map((row) =>
+    field.valueBy === "name" ? row.data.name : row.id,
+  );
+  if (field.multiple) {
+    const list = Array.isArray(value) ? value : [];
+    if (list.some((entry) => !choices.includes(entry)))
+      throw new Error(`${field.label}을(를) 확인하세요.`);
+    return [...new Set(list)];
+  }
+  if (!value) return field.valueBy === "name" ? "" : null;
+  if (!choices.length && field.fallbackText) {
+    if (typeof value !== "string" || value.length > (field.max ?? 40))
+      throw new Error(`${field.label}을(를) 확인하세요.`);
+    return value.trim();
+  }
+  if (!choices.includes(value))
+    throw new Error(`${field.label}을(를) 선택하세요.`);
+  return value;
 }
 export function buildRecord(section, values, previous, references) {
   const model = models[section];
@@ -819,6 +923,8 @@ export function buildRecord(section, values, previous, references) {
       });
       if (total > field.maxCount || (section === "recipes" && !total))
         throw new Error(`재료는 1~${field.maxCount}개로 설정하세요.`);
+    } else if (field.type === "pick") {
+      result = picked(field, value, references);
     } else if (
       ["item", "stat", "title", "choice", "profile"].includes(field.type)
     ) {

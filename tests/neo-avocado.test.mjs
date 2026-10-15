@@ -54,6 +54,9 @@ function fakeDatabase(rows = {}) {
       "neo_avocado_items",
       "neo_avocado_settings",
       "neo_avocado_couples",
+      "neo_avocado_sides",
+      "neo_avocado_classes",
+      "neo_avocado_board_groups",
     ].map((name) => [
       name,
       (rows[name] ?? []).map((row) => ({
@@ -563,9 +566,15 @@ test("signed out, a visitor reads only the boards the board rule lists, and may 
   // No board is open to guests: nothing but the board list is read, natively.
   assert.equal($("noPublicBoards").hidden, false);
   assert.equal($("logForm").hidden, true);
-  assert.deepEqual(database.visitor.calls, []);
+  // Their one call reports the visit (현재접속자, 접속자집계).
   assert.deepEqual(
-    database.calls.filter(() => true).map((call) => [call.method, call.name]),
+    database.visitor.calls.map((call) => call.name),
+    ["community/presence:seen"],
+  );
+  assert.deepEqual(
+    database.calls
+      .filter((call) => call.method !== "call")
+      .map((call) => [call.method, call.name]),
     [["list", "neo_avocado_boards"]],
   );
   $("signIn").onclick();
@@ -691,6 +700,13 @@ test("logs are read a page at a time, newest first, and comments only when opene
   const listed = database.calls.filter((call) => call.method === "list");
   assert.deepEqual(listed, [
     { method: "list", name: "neo_avocado_boards", size: 100, after: null },
+    // The board groups, for the board picker.
+    {
+      method: "list",
+      name: "neo_avocado_board_groups",
+      size: 100,
+      after: null,
+    },
     {
       method: "list",
       name: LOGS,
@@ -848,6 +864,7 @@ test("characters are read when their tab is first opened, and registered by memb
   );
   $("characterName").value = "카도";
   $("characterSide").value = "갈색단";
+  $("characterClass").value = "인간";
   submit($("characterForm"));
   await settle();
   await settle();
@@ -857,6 +874,7 @@ test("characters are read when their tab is first opened, and registered by memb
     data: {
       name: "카도",
       side: "갈색단",
+      class: "인간",
       profile: "",
       image: null,
       type: "main",

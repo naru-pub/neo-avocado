@@ -45,6 +45,14 @@ export const EXPLORE = `${PREFIX}explore`;
 
 /** Each board's next log number (wr_num), one document per board. */
 export const COUNTERS = `${PREFIX}counters`;
+/** The owner's lists of affiliations and races (adm/side_list, class_list). */
+export const SIDES = `${PREFIX}sides`;
+export const CLASSES = `${PREFIX}classes`;
+/** Board groups (adm/boardgroup_list). */
+export const BOARD_GROUPS = `${PREFIX}board_groups`;
+/** Who is here now, and each day's visits (current_connect, visit_list). */
+export const PRESENCE = `${PREFIX}presence`;
+export const VISITS = `${PREFIX}visits`;
 
 /** Takes the board's next log number, as GnuBoard's wr_num. */
 export async function nextNumber(ctx, board) {
@@ -89,6 +97,10 @@ export async function communityAccess(ctx, id = ctx.member?.id) {
   // clears their leave date.
   if (row?.data.left) return { ...GUEST_ACCESS, role: "member", left: true };
   return {
+    // The board groups whose members-only boards they may use.
+    groups: Array.isArray(row?.data.groups)
+      ? row.data.groups.filter((id) => typeof id === "string")
+      : [],
     level:
       Number.isInteger(row?.data.level) &&
       row.data.level >= 1 &&
@@ -105,7 +117,7 @@ export function author(row) {
 
 export async function boardOf(ctx, id = "default") {
   const found = typeof id === "string" ? await ctx.get(BOARDS, id) : null;
-  if (found) return found;
+  if (found) return withGroup(ctx, found);
   return id === "default"
     ? {
         id,
@@ -126,8 +138,31 @@ export async function boardOf(ctx, id = "default") {
     : null;
 }
 
+/**
+ * A board in a members-only group (gr_use_access) carries the group's ID as
+ * `membersOnly`, for boardAllowed; `groups` is the site's groups, when the
+ * caller has read them already.
+ */
+export async function withGroup(ctx, board, groups) {
+  const id = board.data.group;
+  if (typeof id !== "string" || !id) return board;
+  const group = groups
+    ? groups.find((row) => row.id === id)
+    : await ctx.get(BOARD_GROUPS, id);
+  return group?.data.membersOnly && !group.data.deleted
+    ? { ...board, data: { ...board.data, membersOnly: id } }
+    : board;
+}
+
 export function boardAllowed(board, access, action) {
   if (!board) return false;
+  // A members-only group's boards are its members' (and moderators').
+  if (
+    board.data.membersOnly &&
+    access.role !== "moderator" &&
+    !(access.groups ?? []).includes(board.data.membersOnly)
+  )
+    return false;
   if (access.role === "moderator")
     return (
       action === "read" || action === "list" || board.data.enabled !== false

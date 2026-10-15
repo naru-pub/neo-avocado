@@ -27,10 +27,58 @@ const CHARACTER_FILTERS = {
   applicants: { in: ["state", ["editing", "submitted"]] },
   approved: { eq: ["state", "approved"] },
 };
+/**
+ * The owner's 소속 and 종족 lists (adm/side_list, class_list), in order; while
+ * a list is empty, members write their own.
+ */
+async function loadChoices() {
+  const sorted = (rows) =>
+    rows.sort(
+      (a, b) =>
+        (a.data.order ?? 0) - (b.data.order ?? 0) || (a.id < b.id ? -1 : 1),
+    );
+  [state.sides, state.classes] = await Promise.all([
+    allDocuments(COLLECTION.sides).then(sorted),
+    allDocuments(COLLECTION.classes).then(sorted),
+  ]);
+  choiceField("characterSide", state.sides);
+  choiceField("characterClass", state.classes);
+}
+/** The form's field as a select of the list's names, or free text. */
+function choiceField(id, rows) {
+  const current = $(id);
+  const wanted = rows.length ? "SELECT" : "INPUT";
+  if (current.tagName === wanted && wanted === "INPUT") return;
+  const field = document.createElement(wanted.toLowerCase());
+  field.id = id;
+  if (wanted === "INPUT") field.maxLength = 40;
+  else
+    field.append(
+      new Option("선택 안 함", ""),
+      ...rows.map((row) => new Option(row.data.name, row.data.name)),
+    );
+  current.replaceWith(field);
+}
+/** The edit dialog's field for a list, keeping a value no longer on it. */
+function choiceEdit(name, label, rows, value) {
+  if (!rows?.length) return { name, label, value, max: 40 };
+  const names = rows.map((row) => row.data.name);
+  return {
+    name,
+    label,
+    value: value ?? "",
+    options: [
+      ["", "선택 안 함"],
+      ...(value && !names.includes(value) ? [[value, value]] : []),
+      ...names.map((entry) => [entry, entry]),
+    ],
+  };
+}
 export async function loadCharacters({ more = false } = {}) {
   const where = CHARACTER_FILTERS[$("characterFilter").value];
-  const [, page] = await Promise.all([
+  const [, , page] = await Promise.all([
     loadFieldCatalogue(),
+    more ? null : loadChoices(),
     collection(COLLECTION.characters).list({
       sort: [[{ metadata: "createdAt" }, "desc"]],
       size: CHARACTER_PAGE,
@@ -132,7 +180,12 @@ async function characterItem(character) {
   if (character.data.image) image.src = character.data.image;
   else image.remove();
   item.querySelector(".character-name").textContent = character.data.name;
-  item.querySelector(".character-side").textContent = character.data.side ?? "";
+  item.querySelector(".character-side").textContent = [
+    character.data.side,
+    character.data.class,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   item.querySelector(".character-state").textContent = [
     TYPE_NAMES[character.data.type],
     STATE_NAMES[character.data.state],
@@ -160,7 +213,8 @@ async function characterItem(character) {
           required: true,
           max: 40,
         },
-        { name: "side", label: "소속", value: current.data.side, max: 40 },
+        choiceEdit("side", "소속", state.sides, current.data.side),
+        choiceEdit("class", "종족", state.classes, current.data.class),
         {
           name: "profile",
           label: "프로필",
@@ -612,6 +666,7 @@ $("characterForm").onsubmit = (event) => {
         data: {
           name,
           side: $("characterSide").value.trim(),
+          class: $("characterClass").value.trim(),
           profile: $("characterProfile").value.trim(),
           image,
           type: $("characterType").value,

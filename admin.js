@@ -2,6 +2,12 @@ import { applyTitles, deleteTitle } from "./admin-titles.js";
 import { resumeCleanup } from "./admin-cleanup.js";
 import { config } from "./config.js";
 import {
+  VISIT_BREAKDOWNS,
+  activityReport,
+  koreanDay,
+  visitReport,
+} from "./admin-reports.js";
+import {
   models,
   scopes,
   buildRecord,
@@ -56,6 +62,13 @@ async function load({ more = false } = {}) {
   const model = models[section];
   $("adminHelp").textContent = model.help;
   $("adminNew").hidden = Boolean(model.readOnly);
+  $("adminReport").hidden = !model.report;
+  $("adminRows").hidden = Boolean(model.report);
+  if (model.report) {
+    $("adminMore").hidden = true;
+    $("holdingsSearchLabel").hidden = true;
+    return model.report === "visits" ? visitsView() : activityView();
+  }
   $("holdingsSearchLabel").hidden = !model.holdings;
   let page;
   if (model.holdings) {
@@ -323,6 +336,20 @@ function reviewRow(row) {
   form.append(heading, " ", type, sheet, ...buttons);
   return form;
 }
+/**
+ * An ID for a new row: the section's name and four random characters, which
+ * every section's ID rules accept (a lowercase letter first, then lowercase
+ * letters, digits and underscores).
+ */
+function suggestedId(section) {
+  const prefix = section.replace(/s$/, "").replace(/[^a-z0-9_]/g, "") || "id";
+  const random = crypto
+    .getRandomValues(new Uint32Array(1))[0]
+    .toString(36)
+    .padStart(4, "0")
+    .slice(-4);
+  return `${prefix}_${random}`;
+}
 async function openForm(row = null) {
   const requestedSection = section;
   references = {
@@ -333,6 +360,9 @@ async function openForm(row = null) {
     stats: await all("neo_avocado_stat_config"),
     items: await all("neo_avocado_items"),
     profiles: await all("neo_avocado_profiles"),
+    sides: await all("neo_avocado_sides"),
+    classes: await all("neo_avocado_classes"),
+    groups: await all("neo_avocado_board_groups"),
   };
   if (requestedSection !== section || !owner) return;
   selected = row;
@@ -347,13 +377,17 @@ async function openForm(row = null) {
         ? "캐릭터"
         : model.memberKey
           ? "회원"
-          : "ID (등록 후 변경 불가)",
+          : "ID (등록 후 변경 불가, 미리 정해 둔 값을 바꿔도 됩니다)",
       type: model.characterKey
         ? "character"
         : model.memberKey
           ? "profile"
           : "text",
       required: true,
+      // A new row gets an ID ready to use; it only has to be unique.
+      ...(!row && !model.characterKey && !model.memberKey
+        ? { default: suggestedId(section) }
+        : {}),
     },
     ...model.fields,
   ];
@@ -380,7 +414,7 @@ async function openForm(row = null) {
   for (const field of fields) {
     const value =
       field.key === "id"
-        ? (row?.id ?? model.fixedId)
+        ? (row?.id ?? model.fixedId ?? field.default)
         : section === "quests" && field.key === "images"
           ? (row?.data.images?.join("\n") ?? "")
           : (fieldValue(row?.data, field.key) ?? field.default);
@@ -449,15 +483,22 @@ async function openForm(row = null) {
     }
     const label = document.createElement("label");
     label.textContent = field.label;
-    const isSelect = [
-      "character",
-      "titles",
-      "item",
-      "stat",
-      "title",
-      "choice",
-      "profile",
-    ].includes(field.type);
+    // A pick from an owner's list; free text while that list is empty.
+    const pickRows =
+      field.type === "pick"
+        ? (references[field.from] ?? []).filter((row) => !row.data.deleted)
+        : null;
+    const isSelect =
+      [
+        "character",
+        "titles",
+        "item",
+        "stat",
+        "title",
+        "choice",
+        "profile",
+      ].includes(field.type) ||
+      (field.type === "pick" && (pickRows.length || !field.fallbackText));
     const input = document.createElement(
       isSelect ? "select" : field.type === "textarea" ? "textarea" : "input",
     );
@@ -467,7 +508,7 @@ async function openForm(row = null) {
     if (!isSelect && field.type !== "textarea")
       input.type = ["optional-number", "decimal"].includes(field.type)
         ? "number"
-        : field.type === "tokens"
+        : ["tokens", "pick"].includes(field.type)
           ? "text"
           : (field.type ?? "text");
     if (["number", "optional-number", "decimal"].includes(field.type)) {
@@ -475,34 +516,38 @@ async function openForm(row = null) {
       input.step = field.type === "decimal" ? "any" : "1";
     }
     if (isSelect) {
-      input.multiple = field.type === "titles";
+      input.multiple = field.type === "titles" || Boolean(field.multiple);
       if (field.optional) {
         const option = document.createElement("option");
         option.value = "";
         option.textContent = "선택하지 않음";
         input.append(option);
       }
-      const choices = field.options
-        ? field.options.map(([id, name]) => ({ id, data: { name } }))
-        : references[
-            field.type === "character"
-              ? "characters"
-              : field.type === "stat"
-                ? "stats"
-                : ["title", "titles"].includes(field.type)
-                  ? "titles"
-                  : field.type === "profile"
-                    ? "profiles"
-                    : "items"
-          ];
+      const choices = pickRows
+        ? pickRows.map((row) => ({
+            id: field.valueBy === "name" ? row.data.name : row.id,
+            data: { name: row.data.name },
+          }))
+        : field.options
+          ? field.options.map(([id, name]) => ({ id, data: { name } }))
+          : references[
+              field.type === "character"
+                ? "characters"
+                : field.type === "stat"
+                  ? "stats"
+                  : ["title", "titles"].includes(field.type)
+                    ? "titles"
+                    : field.type === "profile"
+                      ? "profiles"
+                      : "items"
+            ];
       for (const optionRow of choices) {
         const option = document.createElement("option");
         option.value = optionRow.id;
         option.textContent = optionRow.data.name ?? optionRow.data.nick;
-        option.selected =
-          field.type === "titles"
-            ? (value ?? []).includes(optionRow.id)
-            : value === optionRow.id;
+        option.selected = input.multiple
+          ? (value ?? []).includes(optionRow.id)
+          : value === optionRow.id;
         input.append(option);
       }
       if (
@@ -735,3 +780,220 @@ $("holdingsSearch").onkeydown = (event) => {
     run(() => load());
   }
 };
+
+/* ---------------------------------------------------------- reports --- */
+
+/** A labelled control for a report's filter bar. */
+function control(text, element) {
+  const label = document.createElement("label");
+  label.append(text, element);
+  return label;
+}
+function dateInput(value) {
+  const input = document.createElement("input");
+  input.type = "date";
+  input.value = value;
+  return input;
+}
+/** A plain table of `rows` under `headings`. */
+function table(headings, rows) {
+  const element = document.createElement("table");
+  element.className = "report";
+  const head = element.createTHead().insertRow();
+  for (const heading of headings) {
+    const cell = document.createElement("th");
+    cell.textContent = heading;
+    head.append(cell);
+  }
+  const body = element.createTBody();
+  for (const cells of rows) {
+    const row = body.insertRow();
+    for (const value of cells) {
+      const cell = row.insertCell();
+      if (value instanceof Node) cell.append(value);
+      else cell.textContent = String(value);
+    }
+  }
+  if (!rows.length) {
+    const cell = body.insertRow().insertCell();
+    cell.colSpan = headings.length;
+    cell.textContent = "자료가 없습니다.";
+  }
+  return element;
+}
+const today = () => koreanDay(Date.now());
+const daysAgo = (days) => koreanDay(Date.now() - days * 24 * 3600 * 1000);
+
+/** 접속자 집계 (adm/visit_list.php and its tabs), and deleting old days. */
+function visitsView() {
+  const from = dateInput(daysAgo(6));
+  const to = dateInput(today());
+  const by = document.createElement("select");
+  for (const [value, text] of VISIT_BREAKDOWNS)
+    by.append(new Option(text, value));
+  const show = document.createElement("button");
+  show.type = "button";
+  show.textContent = "보기";
+  const prune = document.createElement("button");
+  prune.type = "button";
+  prune.textContent = "시작일 이전 기록 삭제";
+  const output = document.createElement("div");
+  const draw = async () => {
+    const days = await all("neo_avocado_visits");
+    const report = visitReport(days, {
+      from: from.value,
+      to: to.value,
+      by: by.value,
+    });
+    const top = Math.max(1, ...report.rows.map((row) => row.count));
+    const bar = (count) => {
+      const meter = document.createElement("meter");
+      meter.max = top;
+      meter.value = count;
+      return meter;
+    };
+    const summary = document.createElement("p");
+    summary.textContent = `접속 ${report.total}회 · 회원 ${report.members}명 · 손님 접속 ${report.guests}회`;
+    output.replaceChildren(
+      summary,
+      table(
+        ["구분", "접속 수", ""],
+        report.rows.map((row) => [row.label, row.count, bar(row.count)]),
+      ),
+    );
+  };
+  show.onclick = () => run(draw);
+  prune.onclick = () =>
+    run(async () => {
+      if (!from.value) return;
+      const old = (await all("neo_avocado_visits")).filter(
+        (row) => row.data.day < from.value,
+      );
+      if (!old.length) {
+        $("adminStatus").textContent = "지울 기록이 없습니다.";
+        return;
+      }
+      if (
+        !confirm(`${from.value} 이전 ${old.length}일의 접속 기록을 지울까요?`)
+      )
+        return;
+      for (const row of old)
+        await owner.collection("neo_avocado_visits").delete(row.id);
+      $("adminStatus").textContent =
+        `${old.length}일의 접속 기록을 지웠습니다.`;
+      await draw();
+    });
+  const bar = document.createElement("div");
+  bar.className = "report-filters";
+  bar.append(
+    control("시작일", from),
+    control("종료일", to),
+    control("보기", by),
+    show,
+    prune,
+  );
+  $("adminReport").replaceChildren(bar, output);
+  return draw();
+}
+
+/** 활동량 관리 (adm/action_list.php): counts per member, warnings editable. */
+async function activityView() {
+  const boards = await all("neo_avocado_boards");
+  const board = document.createElement("select");
+  board.append(
+    new Option("모든 게시판", ""),
+    new Option("로그 (기본)", "default"),
+    ...boards
+      .filter((row) => row.id !== "default")
+      .map((row) => new Option(row.data.name, row.id)),
+  );
+  const from = dateInput(daysAgo(29));
+  const to = dateInput(today());
+  const show = document.createElement("button");
+  show.type = "button";
+  show.textContent = "보기";
+  const output = document.createElement("div");
+  const draw = async () => {
+    const [profiles, members, characters, logs, comments, presence] =
+      await Promise.all([
+        all("neo_avocado_profiles"),
+        all("neo_avocado_members"),
+        all("neo_avocado_characters"),
+        all("neo_avocado_logs"),
+        all("neo_avocado_comments"),
+        all("neo_avocado_presence"),
+      ]);
+    const rows = activityReport(
+      { profiles, members, characters, logs, comments, presence },
+      { board: board.value, from: from.value, to: to.value },
+    );
+    output.replaceChildren(
+      table(
+        [
+          "닉네임",
+          "대표 캐릭터",
+          "로그",
+          "댓글",
+          "최종 접속",
+          "누적 경고",
+          "경고 내용",
+          "",
+        ],
+        rows.map((row) => {
+          const warnings = document.createElement("input");
+          warnings.type = "number";
+          warnings.min = "0";
+          warnings.value = String(row.warnings);
+          const note = document.createElement("input");
+          note.maxLength = 1000;
+          note.value = row.warningNote;
+          const save = document.createElement("button");
+          save.type = "button";
+          save.textContent = "저장";
+          save.onclick = () =>
+            run(async () => {
+              const count = Number(warnings.value);
+              if (!Number.isSafeInteger(count) || count < 0)
+                throw new Error("누적 경고는 0 이상의 정수입니다.");
+              await owner.collection("neo_avocado_members").set(
+                row.id,
+                {
+                  role: "member",
+                  ...row.member?.data,
+                  warnings: count,
+                  warningNote: note.value.trim(),
+                },
+                row.member
+                  ? { condition: { revision: row.member.revision } }
+                  : { condition: { absent: true } },
+              );
+              $("adminStatus").textContent =
+                `${row.nick}의 경고를 저장했습니다.`;
+              await draw();
+            });
+          return [
+            row.nick,
+            row.mainCharacter,
+            row.logs,
+            row.comments,
+            row.lastSeen ? new Date(row.lastSeen).toLocaleString("ko-KR") : "",
+            warnings,
+            note,
+            save,
+          ];
+        }),
+      ),
+    );
+  };
+  show.onclick = () => run(draw);
+  const bar = document.createElement("div");
+  bar.className = "report-filters";
+  bar.append(
+    control("게시판", board),
+    control("시작일", from),
+    control("종료일", to),
+    show,
+  );
+  $("adminReport").replaceChildren(bar, output);
+  return draw();
+}

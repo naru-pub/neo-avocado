@@ -35,6 +35,7 @@ import {
   posts,
   comments,
   sheet,
+  presence,
   quests,
   contentPages,
   contentPage,
@@ -2623,4 +2624,109 @@ test("history narrows to one kind, as the experience list asks", async () => {
   );
   assert.equal((await history(ctx, {})).documents.length, 2);
   assert.equal(await refusal(history(ctx, { kind: 5 })), "invalid_input");
+});
+
+test("visits record where members are and count each Korean day, bounded", async () => {
+  const { ctx, table } = fakeCtx({ now: Date.parse("2030-01-01T15:30:00Z") });
+  await join(ctx, { nick: "앨리스" });
+  await presence.seen(ctx, {
+    where: "상점",
+    browser: "Chrome",
+    os: "macOS",
+    device: "PC",
+    domain: "twitter.com",
+  });
+  await presence.seen(ctx, {
+    where: "로그",
+    browser: "<script>",
+    os: "x".repeat(500),
+  });
+  assert.deepEqual(table(`${P}presence`).get("m-1"), {
+    nick: "앨리스",
+    where: "로그",
+    at: Date.parse("2030-01-01T15:30:00Z"),
+  });
+  // 15:30 UTC is 00:30 the next day in Korea.
+  const day = table(`${P}visits`).get("2030-01-02");
+  assert.equal(day.total, 2);
+  assert.deepEqual(day.members, { "m-1": 2 });
+  assert.deepEqual(day.hours, { 0: 2 });
+  assert.deepEqual(day.browsers, { Chrome: 1, 기타: 1 });
+  assert.deepEqual(day.os, { macOS: 1, 기타: 1 });
+  assert.deepEqual(day.domains, { "twitter.com": 1 });
+  // A visitor counts as a guest and is not listed as here.
+  ctx.member = null;
+  await presence.seen(ctx, {});
+  assert.equal(table(`${P}visits`).get("2030-01-02").guests, 1);
+  assert.deepEqual(
+    (await presence.online(ctx)).members.map((member) => member.nick),
+    ["앨리스"],
+  );
+  ctx.now += 11 * 60 * 1000;
+  assert.deepEqual((await presence.online(ctx)).members, []);
+  assert.equal(
+    await refusal(presence.seen(ctx, { where: 5 })),
+    "invalid_input",
+  );
+});
+
+test("characters choose 소속 and 종족 from the owner's lists once there are any", async () => {
+  const { ctx, table } = fakeCtx();
+  const data = { name: "하나", type: "main", state: "editing" };
+  const free = await sheet.save(ctx, { data: { ...data, side: "아무거나" } });
+  assert.equal(free.document.data.side, "아무거나");
+  table(`${P}sides`).set("a", { name: "빛" });
+  table(`${P}classes`).set("x", { name: "인간" });
+  assert.equal(
+    await refusal(sheet.save(ctx, { data: { ...data, side: "어둠" } })),
+    "invalid_input",
+  );
+  const chosen = await sheet.save(ctx, {
+    data: { ...data, side: "빛", class: "인간" },
+  });
+  assert.deepEqual(
+    [chosen.document.data.side, chosen.document.data.class],
+    ["빛", "인간"],
+  );
+  // A value the character already has stays when the list changes.
+  table(`${P}sides`).delete("a");
+  table(`${P}sides`).set("b", { name: "그림자" });
+  const kept = await sheet.save(ctx, {
+    id: chosen.document.id,
+    data: { ...data, name: "둘", side: "빛", class: "인간" },
+  });
+  assert.equal(kept.document.data.side, "빛");
+});
+
+test("a members-only board group keeps its boards to its members and moderators", async () => {
+  const { ctx, table } = fakeCtx();
+  table(`${P}board_groups`).set("staff", { name: "운영", membersOnly: true });
+  table(`${P}boards`).set("plans", {
+    name: "계획",
+    kind: "text",
+    group: "staff",
+    listLevel: 2,
+    readLevel: 2,
+    writeLevel: 2,
+    commentLevel: 2,
+  });
+  table(`${P}members`).set("m-1", { level: 2, role: "member" });
+  const listed = async () =>
+    (
+      await nativeRead(ctx, { collection: `${P}boards`, operation: "list" })
+    ).documents.map((row) => row.id);
+  assert.deepEqual(await listed(), []);
+  assert.equal(
+    await refusal(posts.write(ctx, { data: { board: "plans", text: "안녕" } })),
+    "access_denied",
+  );
+  table(`${P}members`).get("m-1").groups = ["staff"];
+  assert.deepEqual(await listed(), ["plans"]);
+  await posts.write(ctx, { data: { board: "plans", text: "안녕" } });
+  // Moderators reach every group; an open group is everyone's.
+  table(`${P}members`).set("m-1", { level: 2, role: "moderator" });
+  assert.deepEqual(await listed(), ["plans"]);
+  table(`${P}board_groups`).get("staff").membersOnly = false;
+  table(`${P}members`).set("m-1", { level: 2, role: "member" });
+  assert.deepEqual(await listed(), ["plans"]);
 });

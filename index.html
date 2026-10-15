@@ -110,6 +110,9 @@
         >
           알림
         </button>
+        <button id="tabOnline" type="button" aria-pressed="false">
+          현재접속자
+        </button>
         <button
           id="tabCouples"
           class="member-only"
@@ -203,6 +206,11 @@
         <h2>경험치 내역 <small>Experience</small></h2>
         <ul id="myExp" class="my-exp"></ul>
         <button id="moreExp" type="button" hidden>더 보기</button>
+      </section>
+      <section id="onlineView" hidden>
+        <h2>현재접속자 <small>Connect</small></h2>
+        <p>최근 10분 안에 다녀간 회원입니다.</p>
+        <ul id="onlineList" class="online-list"></ul>
       </section>
       <section id="couplesView" hidden>
         <h2>커플목록 <small>Couple</small></h2>
@@ -305,6 +313,10 @@
           <label>
             소속
             <input id="characterSide" maxlength="40" />
+          </label>
+          <label>
+            종족
+            <input id="characterClass" maxlength="40" />
           </label>
           <label>
             프로필

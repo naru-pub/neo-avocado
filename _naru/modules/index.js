@@ -1,6 +1,7 @@
 export * from "../functions/community/membership.js";
 export * as posts from "../functions/community/posts.js";
 export * as comments from "../functions/community/comments.js";
+export * as presence from "../functions/community/presence.js";
 export * as sheet from "../functions/characters/sheet.js";
 export * from "../functions/community/messages.js";
 export * from "../functions/community/calls.js";

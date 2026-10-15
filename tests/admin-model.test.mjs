@@ -469,3 +469,124 @@ test("a character's experience change is recorded for its owner in the same batc
     1,
   );
 });
+
+test("visit reports total a date range and break it down as the original's tabs", async () => {
+  const { visitReport } = await import("../admin-reports.js");
+  const days = [
+    {
+      data: {
+        day: "2030-01-05",
+        total: 3,
+        guests: 1,
+        members: { a: 2 },
+        hours: { 9: 2, 21: 1 },
+        browsers: { Chrome: 2, Safari: 1 },
+      },
+    },
+    {
+      data: {
+        day: "2030-01-06",
+        total: 2,
+        guests: 0,
+        members: { a: 1, b: 1 },
+        hours: { 9: 2 },
+        browsers: { Chrome: 2 },
+      },
+    },
+    { data: { day: "2030-02-01", total: 7, guests: 7, members: {} } },
+  ];
+  const january = visitReport(days, {
+    from: "2030-01-01",
+    to: "2030-01-31",
+    by: "day",
+  });
+  assert.deepEqual([january.total, january.guests, january.members], [5, 1, 2]);
+  assert.deepEqual(january.rows, [
+    { label: "2030-01-05", count: 3 },
+    { label: "2030-01-06", count: 2 },
+  ]);
+  assert.deepEqual(
+    visitReport(days, { by: "hour" }).rows.map((row) => row.label),
+    ["09시", "21시"],
+  );
+  // 2030-01-05 is a Saturday, 01-06 a Sunday: Sunday first, as in Korea.
+  assert.deepEqual(visitReport(days, { to: "2030-01-31", by: "week" }).rows, [
+    { label: "일", count: 2 },
+    { label: "토", count: 3 },
+  ]);
+  assert.deepEqual(visitReport(days, { by: "browsers" }).rows, [
+    { label: "Chrome", count: 4 },
+    { label: "Safari", count: 1 },
+  ]);
+  assert.deepEqual(visitReport(days, { by: "month" }).rows, [
+    { label: "2030-01", count: 5 },
+    { label: "2030-02", count: 7 },
+  ]);
+});
+
+test("activity counts each member's posts and comments on a board in a Korean date range", async () => {
+  const { activityReport } = await import("../admin-reports.js");
+  const at = (iso) => iso;
+  const rows = activityReport(
+    {
+      profiles: [
+        { id: "a", data: { nick: "가", mainCharacter: "c1" } },
+        { id: "b", data: { nick: "나" } },
+      ],
+      members: [{ id: "b", data: { warnings: 2, warningNote: "도배" } }],
+      characters: [{ id: "c1", data: { name: "초록" } }],
+      logs: [
+        {
+          id: "l1",
+          createdBy: "a",
+          createdAt: at("2030-01-01T15:30:00Z"),
+          data: { board: "free" },
+        },
+        {
+          id: "l2",
+          createdBy: "b",
+          createdAt: at("2030-01-01T10:00:00Z"),
+          data: { board: "notice" },
+        },
+        {
+          id: "l3",
+          createdBy: "a",
+          createdAt: at("2030-01-05T00:00:00Z"),
+          data: { board: "free", deleted: true },
+        },
+      ],
+      comments: [
+        {
+          id: "m1",
+          createdBy: "b",
+          createdAt: at("2030-01-02T01:00:00Z"),
+          data: { logId: "l1" },
+        },
+        {
+          id: "m2",
+          createdBy: "b",
+          createdAt: at("2030-01-02T01:00:00Z"),
+          data: { logId: "l2" },
+        },
+      ],
+      presence: [{ id: "a", data: { at: 1234 } }],
+    },
+    // 2030-01-01T15:30Z is 01-02 in Korea.
+    { board: "free", from: "2030-01-02", to: "2030-01-31" },
+  );
+  assert.deepEqual(
+    rows.map((row) => [
+      row.nick,
+      row.mainCharacter,
+      row.logs,
+      row.comments,
+      row.lastSeen,
+      row.warnings,
+      row.warningNote,
+    ]),
+    [
+      ["가", "초록", 1, 0, 1234, 0, ""],
+      ["나", "", 0, 1, null, 2, "도배"],
+    ],
+  );
+});

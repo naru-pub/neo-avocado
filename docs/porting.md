@@ -23,6 +23,8 @@ workflows to the port, and says what was left out and why.
 | Private messages and notifications                | `bbs/memo*`, `ajax/*call*`                                                               | Implemented: mailbox, receive preference, costs, live unread notices, new-post notices, `[[nick]]` calls and comment notices (also from guests)                                                                                                                                 |
 | Community administration                          | `adm/admin.menu*.php`                                                                    | Implemented: member status/roles, catalog/economy, cleanup recovery; moderators pin notices and move posts between boards                                                                                                                                                       |
 | Navigation, content, themes and emoticons         | `adm/menu*`, `adm/content*`, `adm/design*`, `adm/banner*`, `adm/intro*`, `adm/emoticon*` | Implemented: the no-design look by default (`head.php` `#no_design_gnb`, `main.php`), responsive; 디자인 사용 switches to the seeded design; two-level menus, main slides and intro, design (title, logo, backgrounds, font, colors as CSS variables), content pages, emoticons |
+| Who is here, visits and activity                  | `bbs/current_connect.php`, `adm/visit_*`, `adm/action_*`                                 | Implemented: 현재접속자 (members seen in ten minutes, and where), daily visit counts with the original's breakdowns and deleting old days, activity per member and board with warnings                                                                                          |
+| Affiliations, races and board groups              | `adm/side_*`, `adm/class_*`, `adm/boardgroup*`                                           | Implemented: the owner's 소속/종족 lists (free text while empty), official ones picked from them; board groups in the board picker, members-only groups for their members and moderators                                                                                        |
 | My page, couples, shop front and music            | `mypage/*`, `member/exp.php`, `bbs/member_leave.php`, `couple`, `shop/skin`, `bgm.php`   | Implemented: account, own characters, own posts, experience history (recorded when the owner changes experience), leaving (soft, as the original), couple list, shop categories with NPC and greeting, YouTube background music                                                 |
 | Browser and server acceptance                     | Naru release checklist                                                                   | 106 unit and page tests, and the e2e suite on naru-dev (a real Chromium against the real edge Worker: owner, members and guests) pass                                                                                                                                           |
 
@@ -31,8 +33,13 @@ workflows to the port, and says what was left out and why.
 - Polls (`lib/poll.lib.php` is included but never rendered) and popup layers
   (commented out of `adm/admin.menu100.php`).
 - Votes (`bo_use_good`), used only by the unused `theme/basic` skin.
-- Threaded comment replies (`wr_comment_reply`), visitor statistics, mail,
-  SMS, RSS and captcha: platform plumbing, or unused by the mmb skin.
+- Threaded comment replies (`wr_comment_reply`), mail, SMS, RSS and captcha:
+  platform plumbing, or unused by the mmb skin.
+- Visitors' IP addresses (`visit_search` by IP): Naru does not give them to
+  site functions. Visits are counted by day, hour, browser, OS, device and
+  referring site instead, and 현재접속자 lists members, not guests.
+- Session, cache and thumbnail file cleanup (`adm/*_file_delete.php`): Naru
+  keeps none of these files.
 - Guest secret posts, guest uploads and guest calls: a guest could never read
   a secret post back, and uploads and calls need a member to answer for them.
 - Inline uploads inside HTML posts: a post keeps one managed upload.

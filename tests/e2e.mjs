@@ -87,7 +87,7 @@ const picture = (name) => ({ name, mimeType: "image/png", buffer: PNG });
 try {
   // _naru/collections.json made every collection as the site started, so
   // the owner's sign-in only signs in.
-  assert.match(log, /_naru\/collections\.json: 31 created, 0 changed/);
+  assert.match(log, /_naru\/collections\.json: 36 created, 0 changed/);
   const owner = await person();
   await owner.goto(`${origin}/admin.html`);
   await owner.locator("#adminSignIn").click();
@@ -391,6 +391,22 @@ try {
     forged: "ACCESS_DENIED",
     theirs: "ACCESS_DENIED",
   });
+
+  // 현재접속자 lists who visited in the last ten minutes.
+  await menu(alice, "현재접속자");
+  await alice.locator("#onlineList li", { hasText: "앨리스" }).waitFor();
+  // The owner's reports: visits counted, and each member's activity.
+  await owner.locator("#adminSection").selectOption("visits");
+  await owner.locator("#adminReport table.report td").first().waitFor();
+  assert.match(
+    await owner.locator("#adminReport p").first().textContent(),
+    /접속 [1-9]\d*회/,
+  );
+  await owner.locator("#adminSection").selectOption("activity");
+  await owner
+    .locator("#adminReport tr", { hasText: "앨리스" })
+    .first()
+    .waitFor();
 
   // Bob leaves the community: from then on he is a guest here.
   await menu(bob, "마이페이지");
