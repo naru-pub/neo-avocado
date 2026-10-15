@@ -466,7 +466,8 @@ async function openForm(row = null) {
       isSelect ? "select" : field.type === "textarea" ? "textarea" : "input",
     );
     input.name = field.key;
-    input.required = Boolean(field.required);
+    // An image field may be filled by an upload instead; buildRecord checks.
+    input.required = Boolean(field.required) && !field.image;
     if (!isSelect && field.type !== "textarea")
       input.type = ["optional-number", "decimal"].includes(field.type)
         ? "number"
@@ -529,10 +530,43 @@ async function openForm(row = null) {
       input.value = row?.id ?? model.fixedId;
       input.disabled = true;
     }
+    if (field.image) input.placeholder = "https://";
     label.append(input);
     $("adminFields").append(label);
+    if (field.image || field.images)
+      $("adminFields").append(imageUpload(field, value));
   }
   $("adminForm").hidden = false;
+}
+
+/**
+ * A file picker beside an image field: saving uploads the file to Naru Media
+ * and its address takes the field's place (quest images: joins the list). The
+ * upload is managed, so Naru keeps it while a document names it and deletes it
+ * once none does: replacing an image or deleting the row frees its file.
+ */
+function imageUpload(field, value) {
+  const upload = document.createElement("label");
+  upload.className = "image-upload";
+  if (
+    field.image &&
+    typeof value === "string" &&
+    value.startsWith("https://")
+  ) {
+    const preview = document.createElement("img");
+    preview.src = value;
+    preview.alt = "";
+    preview.loading = "lazy";
+    upload.append(preview);
+  }
+  upload.append(field.images ? "이미지 파일 올리기 (여러 장)" : "파일 올리기");
+  const file = document.createElement("input");
+  file.type = "file";
+  file.accept = "image/*";
+  file.multiple = Boolean(field.images);
+  file.dataset.uploadFor = field.key;
+  upload.append(file);
+  return upload;
 }
 $("adminForm").onsubmit = async (event) => {
   event.preventDefault();
@@ -560,6 +594,18 @@ $("adminForm").onsubmit = async (event) => {
         count: line.querySelector(".ingredient-count").value,
         consume: line.querySelector(".ingredient-consume")?.checked ?? false,
       }));
+    for (const file of $("adminFields").querySelectorAll("[data-upload-for]")) {
+      if (!file.files?.length) continue;
+      $("adminFormStatus").textContent = "이미지를 올리는 중…";
+      const urls = [];
+      for (const chosen of file.files)
+        urls.push((await owner.media.upload(chosen, { managed: true })).url);
+      const key = file.dataset.uploadFor;
+      values[key] = file.multiple
+        ? [values[key], ...urls].filter(Boolean).join("\n")
+        : urls[0];
+    }
+    $("adminFormStatus").textContent = "";
     const record = buildRecord(section, values, selected, references);
     let saved;
     if (section === "wallets") {

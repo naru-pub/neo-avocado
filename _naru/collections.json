@@ -1,10 +1,25 @@
 {
   "collections": {
-    "neo_avocado_banners": {},
-    "neo_avocado_boards": {},
-    "neo_avocado_calls": {},
-    "neo_avocado_character_fields": {},
-    "neo_avocado_character_state": {},
+    "neo_avocado_banners": {
+      "read": "admin",
+      "write": "admin"
+    },
+    "neo_avocado_boards": {
+      "read": "admin",
+      "write": "admin"
+    },
+    "neo_avocado_calls": {
+      "read": "admin",
+      "write": "admin"
+    },
+    "neo_avocado_character_fields": {
+      "read": "admin",
+      "write": "admin"
+    },
+    "neo_avocado_character_state": {
+      "read": "admin",
+      "write": "admin"
+    },
     "neo_avocado_characters": {
       "read": "member",
       "write": "admin",
@@ -15,25 +30,67 @@
       "write": "admin",
       "rules": "community-board"
     },
-    "neo_avocado_content": {},
-    "neo_avocado_counters": {},
-    "neo_avocado_couples": {},
-    "neo_avocado_design": {},
-    "neo_avocado_emoticons": {},
-    "neo_avocado_explore": {},
-    "neo_avocado_gacha": {},
-    "neo_avocado_history": {},
-    "neo_avocado_inventory": {},
-    "neo_avocado_items": {},
-    "neo_avocado_levels": {},
+    "neo_avocado_content": {
+      "read": "admin",
+      "write": "admin"
+    },
+    "neo_avocado_counters": {
+      "read": "admin",
+      "write": "admin"
+    },
+    "neo_avocado_couples": {
+      "read": "admin",
+      "write": "admin"
+    },
+    "neo_avocado_design": {
+      "read": "admin",
+      "write": "admin"
+    },
+    "neo_avocado_emoticons": {
+      "read": "admin",
+      "write": "admin"
+    },
+    "neo_avocado_explore": {
+      "read": "admin",
+      "write": "admin"
+    },
+    "neo_avocado_gacha": {
+      "read": "admin",
+      "write": "admin"
+    },
+    "neo_avocado_history": {
+      "read": "admin",
+      "write": "admin"
+    },
+    "neo_avocado_inventory": {
+      "read": "admin",
+      "write": "admin"
+    },
+    "neo_avocado_items": {
+      "read": "admin",
+      "write": "admin"
+    },
+    "neo_avocado_levels": {
+      "read": "admin",
+      "write": "admin"
+    },
     "neo_avocado_logs": {
       "read": "world",
       "write": "admin",
       "rules": "community-board"
     },
-    "neo_avocado_members": {},
-    "neo_avocado_menus": {},
-    "neo_avocado_messages": {},
+    "neo_avocado_members": {
+      "read": "admin",
+      "write": "admin"
+    },
+    "neo_avocado_menus": {
+      "read": "admin",
+      "write": "admin"
+    },
+    "neo_avocado_messages": {
+      "read": "admin",
+      "write": "admin"
+    },
     "neo_avocado_profiles": {
       "read": "admin",
       "write": "admin",
@@ -41,13 +98,37 @@
         "nick"
       ]
     },
-    "neo_avocado_quests": {},
-    "neo_avocado_recipes": {},
-    "neo_avocado_relations": {},
-    "neo_avocado_settings": {},
-    "neo_avocado_stat_config": {},
-    "neo_avocado_titles": {},
-    "neo_avocado_wallets": {},
-    "neo_avocado_wardrobe": {}
+    "neo_avocado_quests": {
+      "read": "admin",
+      "write": "admin"
+    },
+    "neo_avocado_recipes": {
+      "read": "admin",
+      "write": "admin"
+    },
+    "neo_avocado_relations": {
+      "read": "admin",
+      "write": "admin"
+    },
+    "neo_avocado_settings": {
+      "read": "admin",
+      "write": "admin"
+    },
+    "neo_avocado_stat_config": {
+      "read": "admin",
+      "write": "admin"
+    },
+    "neo_avocado_titles": {
+      "read": "admin",
+      "write": "admin"
+    },
+    "neo_avocado_wallets": {
+      "read": "admin",
+      "write": "admin"
+    },
+    "neo_avocado_wardrobe": {
+      "read": "admin",
+      "write": "admin"
+    }
   }
 }

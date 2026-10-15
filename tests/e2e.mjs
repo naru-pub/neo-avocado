@@ -116,6 +116,33 @@ try {
       await admin.collection(`${P}character_fields`).set(code, data);
   }, P);
 
+  // An image field in the admin forms takes a file: it goes to Naru Media
+  // as a managed upload and its address is what the row keeps.
+  await owner.locator("#adminSection").selectOption("emoticons");
+  await owner.locator("#adminNew").click();
+  await owner.locator('#adminFields [name="id"]').fill("smile");
+  await owner.locator('#adminFields [name="name"]').fill("웃음");
+  await owner
+    .locator('#adminFields [data-upload-for="image"]')
+    .setInputFiles(picture("smile.png"));
+  await owner.locator('#adminForm [type="submit"]').click();
+  await owner.waitForFunction(
+    () =>
+      document.querySelector("#adminForm").hidden ||
+      /[^…]$/.test(document.querySelector("#adminFormStatus").textContent),
+  );
+  assert.equal(await owner.locator("#adminFormStatus").textContent(), "");
+  const smile = await owner.evaluate(async (P) => {
+    const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+    const admin = await createNaru().auth.session();
+    return (await admin.collection(`${P}emoticons`).get("smile")).data.image;
+  }, P);
+  assert.match(smile, /^https:\/\/media\.naru\.pub\/1\//);
+  assert.equal(
+    (await fetch(`${origin}/media/${new URL(smile).pathname.slice(1)}`)).status,
+    200,
+  );
+
   // Alice joins, makes a character with an owner-only field and an image
   // field, and posts a log with a picture and a tag.
   const alice = await person();

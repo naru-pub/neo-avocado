@@ -35,19 +35,32 @@ export const models = {
         type: "textarea",
         max: 12000,
       },
-      { key: "headerImage", label: "상단 이미지 주소", type: "url", max: 2000 },
-      { key: "footerImage", label: "하단 이미지 주소", type: "url", max: 2000 },
+      {
+        key: "headerImage",
+        label: "상단 이미지",
+        type: "url",
+        image: true,
+        max: 2000,
+      },
+      {
+        key: "footerImage",
+        label: "하단 이미지",
+        type: "url",
+        image: true,
+        max: 2000,
+      },
     ],
   },
   emoticons: {
     label: "이모티콘",
-    help: "댓글에서 입력한 명령어를 그림으로 표시합니다. 예: :웃음:. 이미지 주소는 HTTPS로 입력하세요.",
+    help: "댓글에서 입력한 명령어를 그림으로 표시합니다. 예: :웃음:. 이미지는 파일로 올리거나 HTTPS 주소로 입력합니다.",
     fields: [
       { key: "name", label: "명령어", required: true, max: 40 },
       {
         key: "image",
-        label: "이미지 주소",
+        label: "이미지",
         type: "url",
+        image: true,
         required: true,
         max: 2000,
       },
@@ -82,8 +95,9 @@ export const models = {
       },
       {
         key: "images",
-        label: "이미지 주소 (한 줄에 하나)",
+        label: "이미지 (주소를 한 줄에 하나, 올린 파일은 끝에 추가)",
         type: "textarea",
+        images: true,
         max: 20000,
       },
     ],
@@ -192,7 +206,7 @@ export const models = {
     fields: [
       { key: "name", label: "이름", required: true, max: 80 },
       { key: "description", label: "설명", type: "textarea", max: 2000 },
-      { key: "image", label: "이미지 (HTTPS)", type: "url", max: 2000 },
+      { key: "image", label: "이미지", type: "url", image: true, max: 2000 },
       { key: "price", label: "구매 가격", type: "number", default: 0 },
       { key: "stock", label: "재고 (빈칸: 무제한)", type: "optional-number" },
       {
@@ -374,7 +388,7 @@ export const models = {
     help: "타이틀을 만든 뒤 캐릭터 관리에서 지급합니다.",
     fields: [
       { key: "name", label: "타이틀 이름", required: true, max: 80 },
-      { key: "image", label: "이미지 주소 (HTTPS)", type: "url", max: 2000 },
+      { key: "image", label: "이미지", type: "url", image: true, max: 2000 },
       { key: "description", label: "설명", type: "textarea", max: 2000 },
     ],
   },
@@ -392,7 +406,7 @@ export const models = {
           ["textarea", "텍스트"],
           ["select", "단일 선택"],
           ["url", "링크 (HTTPS)"],
-          ["image", "이미지 주소 (HTTPS)"],
+          ["image", "이미지 (파일 또는 HTTPS 주소)"],
         ],
       },
       {
@@ -514,16 +528,23 @@ const schedule = [
 ];
 models.design = {
   label: "디자인",
-  help: "사이트 이름, 로고, 배경과 색을 정합니다. 이미지는 HTTPS 주소입니다. 회원과 손님 모두에게 적용됩니다.",
+  help: "사이트 이름, 로고, 배경과 색을 정합니다. 이미지는 파일로 올리거나 HTTPS 주소로 입력합니다. 회원과 손님 모두에게 적용됩니다.",
   fixedId: "site",
   fields: [
     { key: "title", label: "사이트 이름", max: 60 },
-    { key: "logo", label: "로고 이미지", type: "url", max: 2000 },
-    { key: "background", label: "배경 이미지", type: "url", max: 2000 },
+    { key: "logo", label: "로고 이미지", type: "url", image: true, max: 2000 },
+    {
+      key: "background",
+      label: "배경 이미지",
+      type: "url",
+      image: true,
+      max: 2000,
+    },
     {
       key: "headerBackground",
       label: "상단 배경 이미지",
       type: "url",
+      image: true,
       max: 2000,
     },
     {
@@ -586,8 +607,21 @@ models.banners = {
         ["intro", "인트로"],
       ],
     },
-    { key: "image", label: "이미지", type: "url", required: true, max: 2000 },
-    { key: "mobileImage", label: "모바일 이미지", type: "url", max: 2000 },
+    {
+      key: "image",
+      label: "이미지",
+      type: "url",
+      image: true,
+      required: true,
+      max: 2000,
+    },
+    {
+      key: "mobileImage",
+      label: "모바일 이미지",
+      type: "url",
+      image: true,
+      max: 2000,
+    },
     { key: "alt", label: "대체 문구", max: 200 },
     { key: "url", label: "링크 (HTTPS)", type: "url", max: 2000 },
     { key: "newWindow", label: "새 창으로 열기", type: "checkbox" },

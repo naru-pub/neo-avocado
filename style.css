@@ -774,3 +774,9 @@ h1 {
 .log-link {
   color: var(--avocado);
 }
+.image-upload img {
+  display: block;
+  max-width: 10rem;
+  max-height: 6rem;
+  margin-bottom: 0.25rem;
+}
