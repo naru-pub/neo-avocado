@@ -2,7 +2,7 @@
 
 import { $, caller, COLLECTION, run, state, stopLive } from "./core.js";
 
-// The topic communityData announces new, publicly listable posts on.
+// The topic community/posts:write announces new, publicly listable posts on.
 const POSTS_TOPIC = COLLECTION.logs;
 export function showUnread(unread) {
   $("tabMessages").textContent = unread ? "쪽지 · 새 쪽지" : "쪽지";

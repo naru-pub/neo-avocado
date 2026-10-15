@@ -8,7 +8,7 @@ import {
   caller,
   COLLECTION,
   COMMENT_PAGE,
-  communityCollection,
+  collection,
   edit,
   formatTime,
   guestCredentials,
@@ -21,6 +21,7 @@ import {
   state,
   uploadManaged,
   withGuestPassword,
+  removeAll,
 } from "./core.js";
 import {
   actionItem,
@@ -40,8 +41,7 @@ const LOG_SORT = [
 const tagOptions = (tag) => ({ where: { has: ["tags", tag] } });
 export async function loadLogs({ more = false } = {}) {
   if (!state.member && !state.boards.length) return $("logs").replaceChildren();
-  const logs = communityCollection(COLLECTION.logs);
-  const page = await logs.list({
+  const page = await collection(COLLECTION.logs).list({
     filter: { board: state.board },
     // Notices (bo_notice) sort first: true above false and unset.
     sort: LOG_SORT,
@@ -58,7 +58,7 @@ export async function loadLogs({ more = false } = {}) {
   $("tagName").textContent = state.tag ? `#${state.tag} 태그가 달린 로그` : "";
   const shown = [];
   for (const log of page.documents) {
-    const item = await logItem(log);
+    const item = await logItem(previewOf(log));
     if (log.data.notice) item.classList.add("notice");
     $("logs").append(item);
     shown.push([log.id, item]);
@@ -85,16 +85,35 @@ async function showCommentCounts(entries) {
       item.querySelector(".comments summary").textContent =
         `댓글 (${counts[id]})`;
 }
+/**
+ * A listed post shows the start of its text (150 characters, an HTML body as
+ * plain text); "본문 보기" reads the whole post.
+ */
+function previewOf(log) {
+  const raw = log.data.text ?? "";
+  if (raw.length <= 150) return log;
+  const text = log.data.format === "html" ? htmlText(raw) : raw;
+  return {
+    ...log,
+    data: { ...log.data, text: text.slice(0, 150), truncated: true },
+  };
+}
+/** The text of an HTML body, for a preview cut short. */
+function htmlText(html) {
+  const holder = document.createElement("div");
+  holder.append(sanitizedFragment(document, html));
+  return holder.textContent.replace(/\s+/g, " ").trim();
+}
 /** Shows log No. `number` of the current board, as the skin's log link (?log=N&single=Y). */
 export async function openLogNumber(number) {
-  const page = await communityCollection(COLLECTION.logs).list({
+  const page = await collection(COLLECTION.logs).list({
     filter: { board: state.board, number },
     size: 1,
   });
   const log = page.documents[0];
   if (!log) return say("자료를 찾을 수 없습니다.");
   await preloadNicks([log]);
-  $("logFocus").replaceChildren(await logItem(log));
+  $("logFocus").replaceChildren(await logItem(previewOf(log)));
   $("logFocusPanel").hidden = false;
   $("logFocusPanel").scrollIntoView?.();
 }
@@ -228,11 +247,12 @@ export async function logItem(log) {
         },
       ],
       async ({ text, title, category, secret = false, password }) => {
-        const saved = await communityCollection(COLLECTION.logs).set(
-          log.id,
-          { ...current.data, text, title, category, secret },
+        const { document: saved } = await caller().call(
+          "community/posts:write",
           {
-            condition: { revision: current.revision },
+            id: log.id,
+            data: { ...current.data, text, title, category, secret },
+            revision: current.revision,
             ...(guestPost ? { guest: { password } } : {}),
           },
         );
@@ -242,7 +262,7 @@ export async function logItem(log) {
   change.onclick = () =>
     log.data.truncated
       ? run(async () =>
-          beginEdit(await communityCollection(COLLECTION.logs).get(log.id)),
+          beginEdit(await collection(COLLECTION.logs).get(log.id)),
         )
       : beginEdit(log);
   if (log.data.truncated && !log.data.locked) {
@@ -251,7 +271,7 @@ export async function logItem(log) {
     expand.textContent = "본문 보기";
     expand.onclick = () =>
       run(async () => {
-        const full = await communityCollection(COLLECTION.logs).get(log.id);
+        const full = await collection(COLLECTION.logs).get(log.id);
         item.replaceWith(
           await logItem({ ...full, data: { ...full.data, truncated: false } }),
         );
@@ -261,12 +281,12 @@ export async function logItem(log) {
   remove.onclick = () =>
     guestPost
       ? withGuestPassword("로그 삭제", async (guest) => {
-          await communityCollection(COLLECTION.logs).delete(log.id, { guest });
+          await removeAll("community/posts:remove", { id: log.id, guest });
           item.remove();
         })
       : run(async () => {
           if (!confirm("이 로그를 지울까요?")) return;
-          await communityCollection(COLLECTION.logs).delete(log.id);
+          await removeAll("community/posts:remove", { id: log.id });
           item.remove();
         });
   // 댓글은 펼쳤을 때 처음 읽는다.
@@ -275,7 +295,7 @@ export async function logItem(log) {
   let cursor;
   const load = (more) =>
     run(async () => {
-      const page = await communityCollection(COLLECTION.comments).list({
+      const page = await collection(COLLECTION.comments).list({
         filter: { logId: log.id },
         sort: [[{ metadata: "createdAt" }, "asc"]],
         size: COMMENT_PAGE,
@@ -377,17 +397,20 @@ export async function logItem(log) {
         return say("조합 재료를 1~3개 선택해 주세요.");
       if (!text && !dice && !action && !used) return;
       const guest = state.member ? null : guestCredentials();
-      const saved = await communityCollection(COLLECTION.comments).add(
+      const { document: saved } = await caller().call(
+        "community/comments:write",
         {
-          logId: log.id,
-          text,
-          dice,
-          ...(character && !guest ? { character } : {}),
-          ...(action && !guest ? { action } : {}),
-          ...(action === "combine" && !guest ? { materials } : {}),
-          ...(used && !guest ? { item: used } : {}),
+          data: {
+            logId: log.id,
+            text,
+            dice,
+            ...(character && !guest ? { character } : {}),
+            ...(action && !guest ? { action } : {}),
+            ...(action === "combine" && !guest ? { materials } : {}),
+            ...(used && !guest ? { item: used } : {}),
+          },
+          ...(guest ? { guest } : {}),
         },
-        guest ? { guest } : {},
       );
       item.querySelector(".comment-list").append(await commentItem(saved));
       form.querySelector(".comment-text").value = "";
@@ -457,11 +480,12 @@ async function commentItem(comment) {
         async ({ text, password }) => {
           if (!text && !comment.data.dice)
             throw new Error("댓글을 입력해 주세요.");
-          const saved = await communityCollection(COLLECTION.comments).set(
-            comment.id,
-            { ...comment.data, text },
+          const { document: saved } = await caller().call(
+            "community/comments:write",
             {
-              condition: { revision: comment.revision },
+              id: comment.id,
+              data: { ...comment.data, text },
+              revision: comment.revision,
               ...(guestComment ? { guest: { password } } : {}),
             },
           );
@@ -476,13 +500,16 @@ async function commentItem(comment) {
     remove.onclick = () =>
       guestComment
         ? withGuestPassword("댓글 삭제", async (guest) => {
-            await communityCollection(COLLECTION.comments).delete(comment.id, {
+            await caller().call("community/comments:remove", {
+              id: comment.id,
               guest,
             });
             item.remove();
           })
         : run(async () => {
-            await communityCollection(COLLECTION.comments).delete(comment.id);
+            await caller().call("community/comments:remove", {
+              id: comment.id,
+            });
             item.remove();
           });
     item.append(" ", remove);
@@ -508,8 +535,8 @@ $("logForm").onsubmit = (event) => {
     say("올리는 중…");
     const image = file ? await uploadManaged(file) : null;
     const character = guest ? "" : $("logCharacter").value;
-    const log = await communityCollection(COLLECTION.logs).add(
-      {
+    const { document: log } = await caller().call("community/posts:write", {
+      data: {
         image: image?.url ?? (address || null),
         text: $("logText").value.trim(),
         board: state.board,
@@ -519,8 +546,8 @@ $("logForm").onsubmit = (event) => {
         ...(character ? { character } : {}),
         ...($("logDice").checked ? { dice: true } : {}),
       },
-      guest ? { guest } : {},
-    );
+      ...(guest ? { guest } : {}),
+    });
     state.ownPosts.add(log.id);
     if (state.newPost === log.id) showNewPost(null);
     $("logs").prepend(await logItem(log));

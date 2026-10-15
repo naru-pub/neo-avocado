@@ -1,7 +1,7 @@
 // Publish as _naru/rules/characters.js and enable it on neo_avocado_characters
 // (member read, admin write): members read character sheets natively, and see
 // only the custom fields they may (public, or owner-visible on their own).
-// Writes stay in the communityData site function.
+// Writes go through the characters/sheet site function.
 import { PREFIX } from "../modules/shared.js";
 import { fieldCatalogue, fieldVisible } from "../modules/characters.js";
 

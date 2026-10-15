@@ -99,7 +99,7 @@
     },
     "neo_avocado_profiles": {
       "read": "world",
-      "write": "admin",
+      "write": "member",
       "unique": [
         "nick"
       ],

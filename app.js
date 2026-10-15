@@ -13,7 +13,6 @@ import {
   caller,
   clearPrivateViews,
   COLLECTION,
-  communityCollection,
   edit,
   run,
   say,
@@ -65,11 +64,15 @@ $("editProfile").onclick = () => {
     ],
     async ({ nick, acceptMessages, commentAlerts }) => {
       if (!nick) throw new Error("닉네임을 입력해 주세요.");
-      const saved = await communityCollection(COLLECTION.profiles).set(
-        state.member.id,
-        { ...profile.data, nick, acceptMessages, commentAlerts },
-        { condition: { revision: profile.revision } },
-      );
+      // A member's own profile is written directly; rules/profiles.js
+      // lets them change their nickname and preferences only.
+      const saved = await state.member
+        .collection(COLLECTION.profiles)
+        .set(
+          state.member.id,
+          { ...profile.data, nick, acceptMessages, commentAlerts },
+          { condition: { revision: profile.revision } },
+        );
       state.nicks.set(state.member.id, Promise.resolve(nick));
       show(saved);
       await loadLogs();

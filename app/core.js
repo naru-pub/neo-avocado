@@ -2,8 +2,6 @@
 // status messages and run(), the community collections and the edit dialog.
 // It imports no other part, so it is always ready before them.
 
-import { sanitizedFragment } from "../content-renderer.js";
-
 const PREFIX = "neo_avocado_";
 export const COLLECTION = {
   profiles: `${PREFIX}profiles`,
@@ -184,9 +182,7 @@ export async function preloadNicks(rows) {
   ].filter((id) => id && !state.nicks.has(id));
   for (let offset = 0; offset < missing.length; offset += 50) {
     const ids = missing.slice(offset, offset + 50);
-    const profiles = await communityCollection(COLLECTION.profiles).getMany(
-      ids,
-    );
+    const profiles = await collection(COLLECTION.profiles).getMany(ids);
     if (state.member !== member) return;
     profiles.forEach((profile, index) =>
       state.nicks.set(
@@ -202,7 +198,7 @@ export async function nickOf(memberId) {
   if (!state.nicks.has(memberId))
     state.nicks.set(
       memberId,
-      communityCollection(COLLECTION.profiles)
+      collection(COLLECTION.profiles)
         .get(memberId)
         .then(
           (profile) => profile.data.nick,
@@ -243,57 +239,21 @@ export function withGuestPassword(title, action) {
   );
 }
 /**
- * A community collection. Reads are the SDK's own (`member.collection()`, or a
- * visitor's `naru.collection()`); the collection rules in _naru/rules/ decide
- * what each reader sees. Writes go through the community/data site function,
- * which checks board levels and guest passwords and numbers posts.
+ * The SDK's collection for whoever is reading: the member, or a visitor. The
+ * collection rules in _naru/rules/ decide what each of them sees. Pages write
+ * through site functions (community/posts, community/comments,
+ * characters/sheet), except a member's own profile.
  */
-export function communityCollection(collection) {
-  const reader = (state.member ?? state.naru).collection(collection);
-  const write = async (operation, id, data, options = {}) =>
-    caller().call("community/data:communityData", {
-      collection,
-      operation,
-      ...(id !== undefined ? { id } : {}),
-      ...(data !== undefined ? { data } : {}),
-      options,
-    });
-  return {
-    get: (id) => reader.get(id),
-    getMany: (ids) => reader.getMany(ids),
-    list: async (options) => {
-      const page = await reader.list(options);
-      if (collection !== COLLECTION.logs) return page;
-      // A list shows each post's start; the whole post is read when opened.
-      return {
-        ...page,
-        documents: page.documents.map((doc) => {
-          const raw = doc.data.text ?? "";
-          if (raw.length <= 150) return doc;
-          const text = doc.data.format === "html" ? htmlText(raw) : raw;
-          return {
-            ...doc,
-            data: { ...doc.data, text: text.slice(0, 150), truncated: true },
-          };
-        }),
-      };
-    },
-    add: async (data, options) =>
-      (await write("add", undefined, data, options)).document,
-    set: async (id, data, options) =>
-      (await write("set", id, data, options)).document,
-    delete: async (id, options = {}) => {
-      let result = await write("delete", id, undefined, options);
-      const { condition, ...rest } = options;
-      while (!result.done) result = await write("delete", id, undefined, rest);
-    },
-  };
+export function collection(name) {
+  return (state.member ?? state.naru).collection(name);
 }
-/** The text of an HTML body, for a preview cut short. */
-function htmlText(html) {
-  const holder = document.createElement("div");
-  holder.append(sanitizedFragment(document, html));
-  return holder.textContent.replace(/\s+/g, " ").trim();
+
+/**
+ * Calls a site function that deletes in bounded steps (a post with its
+ * comments, a character with what hangs off it) until it answers `done`.
+ */
+export async function removeAll(reference, args) {
+  while (!(await caller().call(reference, args)).done);
 }
 export function showAdmission(status) {
   state.admission = status;
@@ -399,11 +359,11 @@ export function stopLive() {
   state.live?.close();
   state.live = null;
 }
-export async function allDocuments(collection, filter, where) {
+export async function allDocuments(name, filter, where) {
   const documents = [];
   let after = null;
   do {
-    const page = await communityCollection(collection).list({
+    const page = await collection(name).list({
       size: 100,
       after,
       ...(filter ? { filter } : {}),

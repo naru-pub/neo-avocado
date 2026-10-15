@@ -29,12 +29,14 @@ collection.
 - `community-board.js`: posts and comments, by board level and secret posts.
 - `characters.js`: characters, with only the custom fields the reader may see.
 - `boards.js`: the boards the reader's level may list.
-- `profiles.js`: nicknames for everyone, whole profiles for members.
+- `profiles.js`: nicknames for everyone, whole profiles for members; a member
+  edits their own nickname and preferences directly (`canWrite`).
 - `own.js`: a member's own wallet and inventory.
 - `settings.js`, `character-fields.js`, `shown.js`: community settings, field
   definitions without admin-only ones, and catalogues without deleted rows.
 
 Rules import `modules/shared.js` for member access, boards and secret
-visibility, so they and the `communityData` function, through which every
-community write goes, share one implementation. Naru publishes rules with the
+visibility, so they and the site functions that write the community
+(`functions/community/posts.js` and `comments.js`, `functions/characters/sheet.js`,
+which start from `modules/community.js`) share one implementation. Naru publishes rules with the
 function revision. Functions and shared modules cannot import a rule.

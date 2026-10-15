@@ -1,5 +1,7 @@
 export * from "../functions/community/membership.js";
-export * from "../functions/community/data.js";
+export * as posts from "../functions/community/posts.js";
+export * as comments from "../functions/community/comments.js";
+export * as sheet from "../functions/characters/sheet.js";
 export * from "../functions/community/messages.js";
 export * from "../functions/community/calls.js";
 export * from "../functions/community/boards.js";

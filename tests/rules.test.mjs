@@ -57,6 +57,39 @@ test("profiles: visitors read nicknames only, members the whole profile", () => 
   assert.ok(!profiles.queryable.includes("commentAlerts"));
 });
 
+test("profiles: a member edits their own nickname and preferences, nothing else", () => {
+  const before = {
+    id: "m-1",
+    data: {
+      owner: "m-1",
+      nick: "아보",
+      acceptMessages: true,
+      commentAlerts: true,
+      mainCharacter: "hero",
+    },
+  };
+  const write = (member, data, operation = "update", id = "m-1") =>
+    profiles.canWrite(rulesCtx(member), {
+      operation,
+      before: { ...before, id },
+      after: { id, data: { ...before.data, ...data } },
+    });
+  assert.equal(write("m-1", { nick: "카도", acceptMessages: false }), true);
+  // Not someone else's, not by a visitor, not made or deleted directly.
+  assert.equal(write("m-2", { nick: "카도" }, "update", "m-1"), false);
+  assert.equal(write(null, { nick: "카도" }), false);
+  assert.equal(write("m-1", {}, "create"), false);
+  assert.equal(write("m-1", {}, "delete"), false);
+  // Fields site functions keep stay as they were.
+  assert.equal(write("m-1", { mainCharacter: "villain" }), false);
+  assert.equal(write("m-1", { owner: "m-2" }), false);
+  // A nickname is 1–20 characters without surrounding spaces.
+  assert.equal(write("m-1", { nick: " 아보" }), false);
+  assert.equal(write("m-1", { nick: "" }), false);
+  assert.equal(write("m-1", { nick: "가".repeat(21) }), false);
+  assert.equal(write("m-1", { commentAlerts: "yes" }), false);
+});
+
 test("own: a member reads their own wallet and inventory, a visitor nothing", () => {
   assert.deepEqual(own.scope(rulesCtx("m-1"), { collection: `${P}wallets` }), {
     eq: [{ metadata: "id" }, "m-1"],

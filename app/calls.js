@@ -4,7 +4,7 @@ import {
   $,
   caller,
   COLLECTION,
-  communityCollection,
+  collection,
   formatTime,
   run,
   showTab,
@@ -34,9 +34,7 @@ async function loadCalls({ more = false } = {}) {
     open.textContent = "글 보기";
     open.onclick = () =>
       run(async () => {
-        const log = await communityCollection(COLLECTION.logs).get(
-          row.data.logId,
-        );
+        const log = await collection(COLLECTION.logs).get(row.data.logId);
         $("callDetail").replaceChildren(await logItem(log));
       });
     li.append(open);

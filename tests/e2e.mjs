@@ -320,6 +320,39 @@ try {
   assert.equal(guestReads.wallets, "ACCESS_DENIED");
   assert.ok(guestReads.profiles.every((keys) => keys.join() === "nick"));
 
+  // A member writes their own profile directly, as rules/profiles.js allows:
+  // nickname and preferences only, and nobody else's.
+  const profileWrites = await bob.evaluate(async (P) => {
+    const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+    const member = await createNaru().members.session();
+    const profiles = member.collection(`${P}profiles`);
+    const settle = (promise) =>
+      promise.then(
+        (saved) => saved.data.nick,
+        (error) => error.code,
+      );
+    const own = await profiles.get(member.id);
+    const renamed = await settle(
+      profiles.set(member.id, { ...own.data, nick: "바뀐밥" }),
+    );
+    const again = await profiles.get(member.id);
+    const forged = await settle(
+      profiles.set(member.id, { ...again.data, owner: "someone" }),
+    );
+    const others = (await profiles.list()).documents.filter(
+      (row) => row.id !== member.id,
+    );
+    const theirs = await settle(
+      profiles.set(others[0].id, { ...others[0].data, nick: "가로채기" }),
+    );
+    return { renamed, forged, theirs };
+  }, P);
+  assert.deepEqual(profileWrites, {
+    renamed: "바뀐밥",
+    forged: "ACCESS_DENIED",
+    theirs: "ACCESS_DENIED",
+  });
+
   assert.deepEqual(errors, []);
   console.log("neo-avocado on naru-dev: every flow passed.");
 } catch (error) {

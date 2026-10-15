@@ -6,7 +6,7 @@ import {
   caller,
   CHARACTER_PAGE,
   COLLECTION,
-  communityCollection,
+  collection,
   edit,
   mine,
   nickOf,
@@ -19,6 +19,7 @@ import {
   STATE_NAMES,
   TYPE_NAMES,
   uploadManaged,
+  removeAll,
 } from "./core.js";
 
 const CHARACTER_FILTERS = {
@@ -30,7 +31,7 @@ export async function loadCharacters({ more = false } = {}) {
   const where = CHARACTER_FILTERS[$("characterFilter").value];
   const [, page] = await Promise.all([
     loadFieldCatalogue(),
-    communityCollection(COLLECTION.characters).list({
+    collection(COLLECTION.characters).list({
       sort: [[{ metadata: "createdAt" }, "desc"]],
       size: CHARACTER_PAGE,
       after: more ? state.characterCursor : null,
@@ -150,9 +151,7 @@ async function characterItem(character) {
   change.onclick = () =>
     run(async () => {
       const catalogue = await loadFieldCatalogue();
-      const current = await communityCollection(COLLECTION.characters).get(
-        character.id,
-      );
+      const current = await collection(COLLECTION.characters).get(character.id);
       const fields = [
         {
           name: "name",
@@ -228,10 +227,9 @@ async function characterItem(character) {
             const uploaded = await uploadManaged(file);
             data.fields[name.slice(7)] = uploaded.url;
           }
-        const saved = await communityCollection(COLLECTION.characters).set(
-          character.id,
-          data,
-          { condition: { revision: current.revision } },
+        const { document: saved } = await caller().call(
+          "characters/sheet:save",
+          { id: character.id, data, revision: current.revision },
         );
         state.speakers = null;
         item.replaceWith(await characterItem(saved));
@@ -240,7 +238,7 @@ async function characterItem(character) {
   remove.onclick = () =>
     run(async () => {
       if (!confirm(`${character.data.name}을(를) 지울까요?`)) return;
-      await communityCollection(COLLECTION.characters).delete(character.id);
+      await removeAll("characters/sheet:remove", { id: character.id });
       state.speakers = null;
       item.remove();
     });
@@ -273,7 +271,7 @@ function wireCharacterDetails(item, character) {
     if (state.fieldCatalogue.length)
       renderFields(
         item.querySelector(".character-fields"),
-        await communityCollection(COLLECTION.characters).get(character.id),
+        await collection(COLLECTION.characters).get(character.id),
       );
     const status = await caller().call(
       "characters/progression:characterStatus",
@@ -367,7 +365,7 @@ function wireCharacterDetails(item, character) {
         couple.data.first === character.id
           ? couple.data.second
           : couple.data.first;
-      const partner = await communityCollection(COLLECTION.characters)
+      const partner = await collection(COLLECTION.characters)
         .get(partnerId)
         .catch((error) => {
           if (error.code === "NOT_FOUND") return null;
@@ -386,7 +384,7 @@ function wireCharacterDetails(item, character) {
     item.querySelector(".relations").replaceChildren();
     for (const row of relations.sort((a, b) => a.data.order - b.data.order)) {
       const li = document.createElement("li");
-      const target = await communityCollection(COLLECTION.characters)
+      const target = await collection(COLLECTION.characters)
         .get(row.data.target)
         .catch((error) => {
           if (error.code === "NOT_FOUND") return null;
@@ -565,7 +563,7 @@ function wireCharacterDetails(item, character) {
   };
   if (character.data.outfit)
     run(async () => {
-      const clothing = await communityCollection(COLLECTION.wardrobe).get(
+      const clothing = await collection(COLLECTION.wardrobe).get(
         character.data.outfit,
       );
       if (clothing.data.character === character.id) {
@@ -608,15 +606,20 @@ $("characterForm").onsubmit = (event) => {
       const uploaded = await uploadManaged(chosen);
       fields[input.dataset.fieldUpload] = uploaded.url;
     }
-    const character = await communityCollection(COLLECTION.characters).add({
-      name,
-      side: $("characterSide").value.trim(),
-      profile: $("characterProfile").value.trim(),
-      image,
-      type: $("characterType").value,
-      state: $("characterState").value,
-      ...(Object.keys(fields).length ? { fields } : {}),
-    });
+    const { document: character } = await caller().call(
+      "characters/sheet:save",
+      {
+        data: {
+          name,
+          side: $("characterSide").value.trim(),
+          profile: $("characterProfile").value.trim(),
+          image,
+          type: $("characterType").value,
+          state: $("characterState").value,
+          ...(Object.keys(fields).length ? { fields } : {}),
+        },
+      },
+    );
     state.speakers = null;
     $("characters").prepend(await characterItem(character));
     $("characterForm").reset?.();

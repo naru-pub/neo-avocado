@@ -31,7 +31,9 @@ import {
   messageStatus,
   membership,
   join,
-  communityData,
+  posts,
+  comments,
+  sheet,
   quests,
   contentPages,
   contentPage,
@@ -44,6 +46,7 @@ import {
 } from "../_naru/modules/index.js";
 import { scope, canWrite } from "../_naru/rules/community-board.js";
 import * as characterRule from "../_naru/rules/characters.js";
+import * as profileRule from "../_naru/rules/profiles.js";
 import { matches } from "./where.mjs";
 import { nativeRead } from "./native-read.mjs";
 
@@ -119,6 +122,45 @@ function fakeCtx({ now = Date.parse("2030-01-01T03:00:00Z"), roll = 0 } = {}) {
 }
 
 /**
+ * A page's write, by collection and operation: posts, comments and characters
+ * through their site functions, profiles directly, as the profiles rule
+ * allows. Nothing else is written by pages.
+ */
+async function communityWrite(
+  ctx,
+  { collection, operation, id, data, options = {} } = {},
+) {
+  const kind = collection.slice(P.length);
+  const args = {
+    ...(id !== undefined ? { id } : {}),
+    ...(data !== undefined ? { data } : {}),
+    revision: options.condition?.revision ?? null,
+    ...(options.guest ? { guest: options.guest } : {}),
+  };
+  const functions = { logs: posts, comments, characters: sheet };
+  if (functions[kind])
+    return operation === "delete"
+      ? functions[kind].remove(ctx, args)
+      : (functions[kind].write ?? functions[kind].save)(ctx, args);
+  if (kind === "profiles" && operation === "set") {
+    const before = await ctx.get(collection, id);
+    const after = { id, data };
+    if (
+      !before ||
+      profileRule.canWrite(ctx, {
+        collection,
+        operation: "update",
+        before,
+        after,
+      }) !== true
+    )
+      throw Object.assign(new Error("Denied."), { code: "ACCESS_DENIED" });
+    return { document: await ctx.set(collection, id, data) };
+  }
+  throw Object.assign(new Error("No write path."), { code: "ACCESS_DENIED" });
+}
+
+/**
  * The reason a function refused with (its ctx.fail details), the code Naru
  * refused a native read with (NOT_FOUND for a document a rule hides), or null.
  */
@@ -156,7 +198,7 @@ test("boards enforce independent levels, secret bodies and parent comment access
     secret: "optional",
   });
   const record = (
-    await communityData(ctx, {
+    await communityWrite(ctx, {
       collection: `${P}logs`,
       operation: "add",
       data: {
@@ -188,7 +230,7 @@ test("boards enforce independent levels, secret bodies and parent comment access
   assert.equal(list.documents.length, 0);
   assert.equal(
     await refusal(
-      communityData(ctx, {
+      communityWrite(ctx, {
         collection: `${P}comments`,
         operation: "add",
         data: { logId: record.id, text: "no" },
@@ -212,7 +254,7 @@ test("boards enforce independent levels, secret bodies and parent comment access
     "private level body",
   );
   const secret = (
-    await communityData(ctx, {
+    await communityWrite(ctx, {
       collection: `${P}logs`,
       operation: "add",
       data: { board: "notes", text: "secret body", secret: true },
@@ -269,7 +311,7 @@ test("board categories, required secrets and previews are validated without trun
   });
   assert.equal(
     await refusal(
-      communityData(ctx, {
+      communityWrite(ctx, {
         collection: `${P}logs`,
         operation: "add",
         data: { board: "notes", text: "x", category: "Unknown" },
@@ -278,7 +320,7 @@ test("board categories, required secrets and previews are validated without trun
     "invalid_input",
   );
   const saved = (
-    await communityData(ctx, {
+    await communityWrite(ctx, {
       collection: `${P}logs`,
       operation: "add",
       data: { board: "notes", text: "x".repeat(2000), category: "Alpha" },
@@ -314,7 +356,7 @@ test("legacy admission fields do not override platform access; profile and role 
   assert.equal(table(`${P}members`).get("m-1").role, "member");
   assert.equal(table(`${P}members`).get("m-1").status, undefined);
   await daily(ctx);
-  const created = await communityData(ctx, {
+  const created = await communityWrite(ctx, {
     collection: `${P}characters`,
     operation: "add",
     data: {
@@ -329,14 +371,15 @@ test("legacy admission fields do not override platform access; profile and role 
   assert.equal(created.document.data.points, undefined);
   assert.equal(
     await refusal(
-      communityData(ctx, {
+      communityWrite(ctx, {
         collection: `${P}members`,
         operation: "set",
         id: "m-1",
         data: { role: "moderator" },
       }),
     ),
-    "access_denied",
+    // No page writes members: the collection is the admin's.
+    "ACCESS_DENIED",
   );
   table(`${P}wallets`).set("m-2", { balance: 999 });
   assert.equal(
@@ -355,7 +398,7 @@ test("legacy admission fields do not override platform access; profile and role 
   assert.equal(table(`${P}profiles`).get("m-1").nick, "Approved by platform");
 });
 
-test("content ownership, parent checks, revisions and moderator boundaries hold at the gateway", async () => {
+test("content ownership, parent checks, revisions and moderator boundaries hold for posts", async () => {
   const { ctx, table } = fakeCtx();
   table(`${P}logs`).set("log", {
     owner: "m-2",
@@ -369,22 +412,22 @@ test("content ownership, parent checks, revisions and moderator boundaries hold 
     data: { image: "https://example.com/x.png", text: "edit", owner: "m-1" },
     options: { condition: { revision: "r1" } },
   };
-  assert.equal(await refusal(communityData(ctx, args)), "not_owned");
+  assert.equal(await refusal(communityWrite(ctx, args)), "not_owned");
   table(`${P}members`).set("m-1", { status: "approved", role: "moderator" });
   assert.equal(
     await refusal(
-      communityData(ctx, {
+      communityWrite(ctx, {
         ...args,
         options: { condition: { revision: "old" } },
       }),
     ),
     "conflict",
   );
-  assert.equal((await communityData(ctx, args)).document.data.owner, "m-2");
+  assert.equal((await communityWrite(ctx, args)).document.data.owner, "m-2");
   table(`${P}characters`).set("other", { owner: "m-2", name: "Other" });
   assert.equal(
     await refusal(
-      communityData(ctx, {
+      communityWrite(ctx, {
         collection: `${P}characters`,
         operation: "delete",
         id: "other",
@@ -394,7 +437,7 @@ test("content ownership, parent checks, revisions and moderator boundaries hold 
   );
   assert.equal(
     await refusal(
-      communityData(ctx, {
+      communityWrite(ctx, {
         collection: `${P}comments`,
         operation: "add",
         data: { logId: "missing", text: "orphan" },
@@ -414,7 +457,7 @@ test("deletion marks durable work, hides partial cleanup and preserves purchased
       text: "reply",
     });
   const deleteLog = async () =>
-    await communityData(ctx, {
+    await communityWrite(ctx, {
       collection: `${P}logs`,
       operation: "delete",
       id: "log",
@@ -445,7 +488,7 @@ test("deletion marks durable work, hides partial cleanup and preserves purchased
   });
   assert.equal(
     (
-      await communityData(ctx, {
+      await communityWrite(ctx, {
         collection: `${P}characters`,
         operation: "delete",
         id: "hero",
@@ -1377,7 +1420,7 @@ test("new posts are broadcast by board and ID only when a base member could list
   });
   const add = async (data) =>
     (
-      await communityData(ctx, {
+      await communityWrite(ctx, {
         collection: `${P}logs`,
         operation: "add",
         data: { text: "hello", ...data },
@@ -1389,7 +1432,7 @@ test("new posts are broadcast by board and ID only when a base member could list
   ]);
   await add({ board: "free", secret: true });
   await add({ board: "staff" });
-  await communityData(ctx, {
+  await communityWrite(ctx, {
     collection: `${P}logs`,
     operation: "set",
     id: post.id,
@@ -1550,7 +1593,7 @@ test("the board rule shares the gate's helpers: levels, moderators, secrets and 
 // Writes go through the community/data function; reads are the SDK's own,
 // through the collection rules (tests/native-read.mjs).
 const gate = (ctx, collection, operation, rest = {}) =>
-  (["get", "getMany", "list"].includes(operation) ? nativeRead : communityData)(
+  (["get", "getMany", "list"].includes(operation) ? nativeRead : communityWrite)(
     ctx,
     { collection: `${P}${collection}`, operation, ...rest },
   );
@@ -2105,7 +2148,7 @@ test("visitors read and post only on level-1 boards, as named guests with a pass
   table(`${P}boards`).set("members", { ...PUBLIC_BOARD, listLevel: 2 });
   table(`${P}profiles`).set("m-1", { nick: "회원", acceptMessages: true });
   table(`${P}wallets`).set("m-1", { balance: 10 });
-  const member = await communityData(ctx, {
+  const member = await communityWrite(ctx, {
     collection: `${P}logs`,
     operation: "add",
     data: { board: "free", text: "회원 글", image: null },
@@ -2153,7 +2196,7 @@ test("visitors read and post only on level-1 boards, as named guests with a pass
     );
   // A guest must name themselves and give a password; no secrets or actions.
   const post = (data, guest) =>
-    communityData(ctx, {
+    communityWrite(ctx, {
       collection: `${P}logs`,
       operation: "add",
       data: { board: "free", image: null, ...data },
@@ -2186,7 +2229,7 @@ test("visitors read and post only on level-1 boards, as named guests with a pass
   assert.equal(await ctx.secretMatches(`${P}logs`, saved.id, "1234"), true);
   // Editing needs the password; a member's post can never be a guest's.
   const edit = (id, password, text = "고침") =>
-    communityData(ctx, {
+    communityWrite(ctx, {
       collection: `${P}logs`,
       operation: "set",
       id,
@@ -2202,7 +2245,7 @@ test("visitors read and post only on level-1 boards, as named guests with a pass
   assert.deepEqual(table(`${P}logs`).get(saved.id).guest, { name: "길손" });
   // A guest comment tells the member author, as a guest.
   sent.length = 0;
-  const comment = await communityData(ctx, {
+  const comment = await communityWrite(ctx, {
     collection: `${P}comments`,
     operation: "add",
     data: { logId: member.document.id, text: "좋아요", action: undefined },
@@ -2214,7 +2257,7 @@ test("visitors read and post only on level-1 boards, as named guests with a pass
   assert.equal(call.nick, "길손 (손님)");
   assert.equal(
     await refusal(
-      communityData(ctx, {
+      communityWrite(ctx, {
         collection: `${P}comments`,
         operation: "add",
         data: { logId: member.document.id, action: "explore" },
@@ -2232,7 +2275,7 @@ test("visitors read and post only on level-1 boards, as named guests with a pass
   });
   assert.equal(
     (
-      await communityData(ctx, {
+      await communityWrite(ctx, {
         collection: `${P}logs`,
         operation: "delete",
         id: saved.id,
@@ -2313,7 +2356,7 @@ test("logs are numbered per board, tagged for search, counted and moderated", as
   table(`${P}boards`).set("free", PUBLIC_BOARD);
   const add = async (data) =>
     (
-      await communityData(ctx, {
+      await communityWrite(ctx, {
         collection: `${P}logs`,
         operation: "add",
         data: { board: "free", image: null, ...data },
@@ -2329,7 +2372,7 @@ test("logs are numbered per board, tagged for search, counted and moderated", as
   assert.deepEqual(first.data.tags, ["봄", "꽃"]);
   assert.equal(first.data.tag1, undefined); // tags are searched with has
   // Editing rewrites tags but keeps the number; members cannot pin.
-  const edited = await communityData(ctx, {
+  const edited = await communityWrite(ctx, {
     collection: `${P}logs`,
     operation: "set",
     id: first.id,
@@ -2388,7 +2431,7 @@ test("HTML boards store longer rich bodies, tag their text and preview it plainl
   table(`${P}boards`).set("rich", { ...PUBLIC_BOARD, html: true });
   const body = `<p style="color:#fff">#소식 ${"가".repeat(3000)}</p>`;
   const saved = (
-    await communityData(ctx, {
+    await communityWrite(ctx, {
       collection: `${P}logs`,
       operation: "add",
       data: { board: "rich", text: body, image: null },
@@ -2409,7 +2452,7 @@ test("HTML boards store longer rich bodies, tag their text and preview it plainl
   assert.equal(row.data.text, saved.data.text);
   // Plain boards keep their 2,000-character limit.
   await assert.rejects(
-    communityData(ctx, {
+    communityWrite(ctx, {
       collection: `${P}logs`,
       operation: "add",
       data: {

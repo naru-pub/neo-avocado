@@ -5,7 +5,7 @@ import {
   allDocuments,
   caller,
   COLLECTION,
-  communityCollection,
+  collection,
   formatTime,
   nickOf,
   run,
@@ -57,7 +57,7 @@ async function loadMessageRecipients() {
     option.textContent = profile.data.nick;
     $("messageRecipients").append(option);
   }
-  const settings = await communityCollection(COLLECTION.settings)
+  const settings = await collection(COLLECTION.settings)
     .get("community")
     .catch((error) => {
       if (error.code === "NOT_FOUND") return null;

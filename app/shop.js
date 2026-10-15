@@ -6,7 +6,7 @@ import {
   allDocuments,
   caller,
   COLLECTION,
-  communityCollection,
+  collection,
   edit,
   formatTime,
   ownCharacters,
@@ -19,7 +19,7 @@ import {
 } from "./core.js";
 
 async function loadBalance() {
-  const wallet = await communityCollection(COLLECTION.wallets)
+  const wallet = await collection(COLLECTION.wallets)
     .get(state.member.id)
     .catch((error) => {
       if (error?.code === "NOT_FOUND") return null;
@@ -57,7 +57,7 @@ async function loadShop() {
   state.shopLoaded = true;
 }
 async function loadItems({ more = false } = {}) {
-  const page = await communityCollection(COLLECTION.items).list({
+  const page = await collection(COLLECTION.items).list({
     sort: [[{ metadata: "createdAt" }, "asc"]],
     size: SHOP_PAGE,
     after: more ? state.itemCursor : null,
@@ -150,7 +150,7 @@ function shopItem(item) {
   return row;
 }
 async function loadInventory({ more = false } = {}) {
-  const page = await communityCollection(COLLECTION.inventory).list({
+  const page = await collection(COLLECTION.inventory).list({
     filter: {
       owner: state.member.id,
       ...(state.inventoryCharacter
@@ -166,7 +166,7 @@ async function loadInventory({ more = false } = {}) {
     ...new Set(page.documents.map((row) => row.data.item)),
   ].filter((id) => id && !state.itemCatalog.has(id));
   if (missing.length) {
-    const items = await communityCollection(COLLECTION.items).getMany(missing);
+    const items = await collection(COLLECTION.items).getMany(missing);
     items.forEach((item, index) => state.itemCatalog.set(missing[index], item));
   }
   for (const owned of page.documents) {
@@ -323,7 +323,7 @@ $("historyPanel").ontoggle = () => {
 };
 $("moreHistory").onclick = () => run(() => loadHistory({ more: true }));
 async function useInventory(owned) {
-  const item = await communityCollection(COLLECTION.items).get(owned.data.item);
+  const item = await collection(COLLECTION.items).get(owned.data.item);
   const effect = item.data.effect;
   if (!effect || item.data.usable === false)
     return say("사용할 수 없는 아이템입니다.");

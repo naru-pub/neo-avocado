@@ -62,7 +62,6 @@ function fakeDatabase(rows = {}) {
       })),
     ]),
   );
-  const gatewayReads = [];
   const collection = (name) => ({
     async getMany(ids) {
       calls.push({ method: "getMany", name, ids });
@@ -216,10 +215,6 @@ function fakeDatabase(rows = {}) {
             .filter((row) => row.data.logId === id).length;
         return { counts };
       }
-      if (name === "community/data:communityRead") {
-        gatewayReads.push(args);
-        name = "community/data:communityData";
-      }
       if (name === "community/membership:membership") {
         const profile = await member
           .collection(PROFILES)
@@ -237,33 +232,32 @@ function fakeDatabase(rows = {}) {
             .collection(PROFILES)
             .set(ME, { nick: args.nick }),
         };
-      if (name === "community/data:communityData") {
-        const handle = member.collection(args.collection);
-        if (args.operation === "getMany")
-          return {
-            documents: await Promise.all(
-              args.options.ids.map((id) =>
-                handle.get(id).catch((error) => {
-                  if (error.code === "NOT_FOUND") return null;
-                  throw error;
-                }),
-              ),
-            ),
-          };
-        if (args.operation === "list")
-          return { ...(await handle.list(args.options)) };
-        if (args.operation === "delete") {
-          await handle.delete(args.id, args.options);
+      // Writes: posts, comments and characters through their functions,
+      // kept in the same store native reads come from.
+      const writes = {
+        "community/posts": LOGS,
+        "community/comments": COMMENTS,
+        "characters/sheet": CHARACTERS,
+      };
+      const [path, operation] = name.split(":");
+      if (writes[path]) {
+        const handle = member.collection(writes[path]);
+        if (operation === "remove") {
+          await handle.delete(args.id, args.guest ? { guest: args.guest } : {});
           return { done: true };
         }
+        const options = {
+          ...(args.revision ? { condition: { revision: args.revision } } : {}),
+          ...(args.guest ? { guest: args.guest } : {}),
+        };
         return {
-          document: await handle[args.operation](
-            ...(args.operation === "add"
-              ? [args.data]
-              : args.operation === "set"
-                ? [args.id, args.data, args.options]
-                : [args.id]),
-          ),
+          document: args.id
+            ? await handle.set(
+                args.id,
+                args.data,
+                Object.keys(options).length ? options : undefined,
+              )
+            : await handle.add(args.data),
         };
       }
       calls.push({ method: "call", name, args });
@@ -290,7 +284,6 @@ function fakeDatabase(rows = {}) {
     store,
     member,
     visitor,
-    gatewayReads,
     signedIn: true,
     answer: (name) =>
       name === "community/messages:messageStatus"
@@ -632,11 +625,9 @@ test("a guest posts with a name and password, and must give the password to edit
   await submit($("logForm"));
   await settle();
   const posted = database.visitor.calls.find(
-    (call) => call.args?.operation === "add",
+    (call) => call.name === "community/posts:write" && !call.args.id,
   );
-  assert.deepEqual(posted.args.options, {
-    guest: { name: "길손", password: "secret1" },
-  });
+  assert.deepEqual(posted.args.guest, { name: "길손", password: "secret1" });
   assert.equal(posted.args.data.secret, false);
   assert.equal(posted.args.data.character, undefined);
   // Editing asks for the password and sends it with the revision.
@@ -645,12 +636,10 @@ test("a guest posts with a name and password, and must give the password to edit
   $("editorFields").querySelector('[name="text"]').value = "고침";
   await submit($("editorForm"));
   const edited = database.visitor.calls.find(
-    (call) => call.args?.operation === "set",
+    (call) => call.name === "community/posts:write" && call.args.id,
   );
-  assert.deepEqual(edited.args.options, {
-    condition: { revision: "r1.1" },
-    guest: { password: "secret1" },
-  });
+  assert.equal(edited.args.revision, "r1.1");
+  assert.deepEqual(edited.args.guest, { password: "secret1" });
   // A member's own collection handles are never touched by a visitor.
   assert.ok(!database.calls.some((call) => call.method === "media.upload"));
 });
@@ -713,7 +702,6 @@ test("logs are read a page at a time, newest first, and comments only when opene
   ]);
   const items = $("logs").querySelectorAll(".log");
   assert.equal(items.length, 10);
-  assert.equal(database.gatewayReads.length, 0);
   assert.equal(items[0].querySelector(".log-text").textContent, "로그 11");
   // 자기 로그에만 삭제가 보인다.
   assert.equal(items[0].querySelector(".delete").hidden, false);
@@ -1073,18 +1061,16 @@ test("post details and comment lists use native reads while deletion stays trans
   full.querySelector(".comments").open = true;
   full.querySelector(".comments").ontoggle();
   await settle();
-  assert.equal(database.gatewayReads.length, 0);
   let deletion;
   const originalCall = database.member.call;
   database.member.call = async (name, args) => {
-    if (name === "community/data:communityData" && args.operation === "delete")
-      deletion = args;
+    if (name === "community/posts:remove") deletion = args;
     return originalCall.call(database.member, name, args);
   };
   await full.querySelector(".delete").onclick();
   await settle();
-  assert.equal(deletion.collection, LOGS);
-  assert.equal(deletion.operation, "delete");
+  // Deleting goes through community/posts:remove, which takes comments too.
+  assert.equal(deletion.id, "long");
 });
 
 test("unread notices and new posts arrive over the live connection instead of a poll", async () => {
@@ -1156,9 +1142,17 @@ test("a function's ctx.fail reason and a duplicate nickname are shown as the pag
   $("daily").onclick();
   await settle();
   assert.equal($("status").textContent, "아보가 모자랍니다.");
-  database.member.call = async () => {
-    throw failure("CONFLICT", "server text", { unique: "nick" });
-  };
+  // A member's profile is written directly; Naru refuses a taken nickname.
+  const collection = database.member.collection;
+  database.member.collection = (name) =>
+    name === PROFILES
+      ? {
+          ...collection(name),
+          set: async () => {
+            throw failure("CONFLICT", "server text", { unique: "nick" });
+          },
+        }
+      : collection(name);
   $("editProfile").onclick();
   $("editorFields").querySelector('[name="nick"]').value = "taken";
   await submit($("editorForm"));
