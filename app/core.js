@@ -59,9 +59,6 @@ export const state = {
   boards: [],
   board: "default",
   tag: null,
-  // Visitors read posts natively until the collections turn out not to be
-  // world-readable; then the gate serves them.
-  visitorNative: true,
   live: null,
   newPost: null,
   ownPosts: new Set(),
@@ -246,97 +243,51 @@ export function withGuestPassword(title, action) {
   );
 }
 /**
- * The advanced part. Elsewhere the page uses the SDK directly; community
- * collections go through this instead, because who may read them depends on
- * the board: members (and, on public boards, visitors) read logs, comments
- * and characters natively, filtered by the collection rules in _naru/rules/,
- * while everything else, and every write, goes through the community/data
- * site function, which checks GnuBoard-style levels and guest passwords.
- * It answers with the same get/list/add/set/delete as `member.collection()`.
+ * A community collection. Reads are the SDK's own (`member.collection()`, or a
+ * visitor's `naru.collection()`); the collection rules in _naru/rules/ decide
+ * what each reader sees. Writes go through the community/data site function,
+ * which checks board levels and guest passwords and numbers posts.
  */
 export function communityCollection(collection) {
-  // The board rule serves members and, where posts are world-readable,
-  // visitors; a visitor falls back to the gate if they are not.
-  // Characters too, for members: the characters rule trims their custom
-  // fields to what the reader may see (SDK 1.1.0 present()).
-  const nativeReads =
-    ((Boolean(state.member) || state.visitorNative) &&
-      [COLLECTION.logs, COLLECTION.comments].includes(collection)) ||
-    (Boolean(state.member) && collection === COLLECTION.characters);
-  const reader = () => (state.member ?? state.naru).collection(collection);
-  const native = async (read, fallback) => {
-    try {
-      return await read(reader());
-    } catch (error) {
-      if (state.member || error?.code !== "ACCESS_DENIED") throw error;
-      state.visitorNative = false;
-      return fallback();
-    }
-  };
-  const invoke = async (operation, id, data, options = {}) => {
-    // Reads go through the gate's read-only export, on the read budget.
-    const gate = ["get", "getMany", "list"].includes(operation)
-      ? "community/data:communityRead"
-      : "community/data:communityData";
-    return caller().call(gate, {
+  const reader = (state.member ?? state.naru).collection(collection);
+  const write = async (operation, id, data, options = {}) =>
+    caller().call("community/data:communityData", {
       collection,
       operation,
       ...(id !== undefined ? { id } : {}),
       ...(data !== undefined ? { data } : {}),
       options,
     });
-  };
   return {
-    getMany: async (ids) =>
-      (await invoke("getMany", undefined, undefined, { ids })).documents,
-    get: async (id) =>
-      nativeReads
-        ? native(
-            (handle) => handle.get(id),
-            async () => (await invoke("get", id)).document,
-          )
-        : (await invoke("get", id)).document,
+    get: (id) => reader.get(id),
+    getMany: (ids) => reader.getMany(ids),
     list: async (options) => {
-      if (!nativeReads) return invoke("list", undefined, undefined, options);
-      const page = await native(
-        (handle) => handle.list(options),
-        () => invoke("list", undefined, undefined, gateOptions(options)),
-      );
-      // Native reads return complete visible posts; trim previews only in this page.
-      return collection === COLLECTION.logs
-        ? {
-            ...page,
-            documents: page.documents.map((doc) => {
-              const raw = doc.data.text ?? "";
-              if (raw.length <= 150) return doc;
-              const text = doc.data.format === "html" ? htmlText(raw) : raw;
-              return {
-                ...doc,
-                data: {
-                  ...doc.data,
-                  text: text.slice(0, 150),
-                  truncated: true,
-                },
-              };
-            }),
-          }
-        : page;
+      const page = await reader.list(options);
+      if (collection !== COLLECTION.logs) return page;
+      // A list shows each post's start; the whole post is read when opened.
+      return {
+        ...page,
+        documents: page.documents.map((doc) => {
+          const raw = doc.data.text ?? "";
+          if (raw.length <= 150) return doc;
+          const text = doc.data.format === "html" ? htmlText(raw) : raw;
+          return {
+            ...doc,
+            data: { ...doc.data, text: text.slice(0, 150), truncated: true },
+          };
+        }),
+      };
     },
     add: async (data, options) =>
-      (await invoke("add", undefined, data, options)).document,
+      (await write("add", undefined, data, options)).document,
     set: async (id, data, options) =>
-      (await invoke("set", id, data, options)).document,
+      (await write("set", id, data, options)).document,
     delete: async (id, options = {}) => {
-      let result = await invoke("delete", id, undefined, options);
+      let result = await write("delete", id, undefined, options);
       const { condition, ...rest } = options;
-      while (!result.done) result = await invoke("delete", id, undefined, rest);
+      while (!result.done) result = await write("delete", id, undefined, rest);
     },
   };
-}
-/** A native list's options as the gate takes them: tags by name, not predicate. */
-function gateOptions(options) {
-  const { where, ...rest } = options;
-  return state.tag && where ? { ...rest, tag: state.tag } : rest;
 }
 /** The text of an HTML body, for a preview cut short. */
 function htmlText(html) {

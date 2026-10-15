@@ -284,6 +284,42 @@ try {
     .filter({ hasText: "고친 손님 글" })
     .waitFor();
 
+  // The collection rules, on the real runtime: a member reads their own
+  // wallet and nobody else's; a visitor reads nicknames and no wallets.
+  const reads = (page, P) =>
+    page.evaluate(async (P) => {
+      const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+      const naru = createNaru();
+      const member = await naru.members.session();
+      const reader = member ?? naru;
+      const settle = (promise) =>
+        promise.then(
+          (value) => value,
+          (error) => error.code,
+        );
+      return {
+        wallets: await settle(
+          reader
+            .collection(`${P}wallets`)
+            .list()
+            .then((page) => page.documents.map((row) => row.id)),
+        ),
+        profiles: await settle(
+          reader
+            .collection(`${P}profiles`)
+            .list()
+            .then((page) => page.documents.map((row) => Object.keys(row.data))),
+        ),
+        me: member?.id ?? null,
+      };
+    }, P);
+  const bobReads = await reads(bob, P);
+  assert.deepEqual(bobReads.wallets, [bobReads.me]);
+  assert.ok(bobReads.profiles.some((keys) => keys.includes("acceptMessages")));
+  const guestReads = await reads(guest, P);
+  assert.equal(guestReads.wallets, "ACCESS_DENIED");
+  assert.ok(guestReads.profiles.every((keys) => keys.join() === "nick"));
+
   assert.deepEqual(errors, []);
   console.log("neo-avocado on naru-dev: every flow passed.");
 } catch (error) {

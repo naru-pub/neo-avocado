@@ -1,8 +1,6 @@
 import {
   PREFIX,
-  BOARDS,
   communityAccess,
-  READ_LIMITS,
   author,
   boardOf,
   boardAllowed,
@@ -12,11 +10,9 @@ import {
   imageUrl,
   nextNumber,
   tagFields,
-  tagWhere,
   TEXT_LIMIT,
   HTML_LIMIT,
   plainText,
-  preview,
 } from "../../modules/shared.js";
 import { memberSheet, presentCharacter } from "../../modules/characters.js";
 import {
@@ -29,35 +25,15 @@ import {
   combineInPost,
 } from "../../modules/roleplay.js";
 
-export const readOnly = ["communityRead"];
-// Visitors read public boards and post on boards open to level 1, as guests.
-export const visitors = ["communityRead", "communityData"];
+// Visitors post on boards open to level 1, as guests.
+export const visitors = ["communityData"];
 
-/** What a visitor may reach: public boards, their posts and authors' nicknames. */
-const GUEST_KINDS = ["boards", "logs", "comments", "profiles", "emoticons"];
-
-/** Collections whose list rows the gate returns unredacted, so `where` is safe. */
-const WHERE_KINDS = [
-  "profiles",
-  "characters",
-  "titles",
-  "couples",
-  "relations",
-  "wardrobe",
-  "recipes",
-  "emoticons",
-];
-
-/** The gate's reads, declared read-only: they cannot write and use the read budget. */
-export async function communityRead(ctx, args = {}) {
-  if (!["get", "getMany", "list"].includes(args?.operation))
-    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-      reason: "invalid_input",
-    });
-  return communityData(ctx, args);
-}
-
-/** Native collection permissions must be admin/admin. This gate owns app authorization. */
+/**
+ * Writes to the community: profiles, characters, posts and comments. Pages
+ * read these collections natively, through the rules in _naru/rules/; every
+ * write comes here, because writing checks board levels and guest passwords,
+ * numbers posts and rolls dice, which a rule cannot do.
+ */
 export async function communityData(
   ctx,
   { collection, operation, id, data, options = {} } = {},
@@ -68,216 +44,13 @@ export async function communityData(
     typeof collection === "string" && collection.startsWith(PREFIX)
       ? collection.slice(PREFIX.length)
       : "";
-  if (!Object.hasOwn(READ_LIMITS, kind))
-    ctx.fail("ACCESS_DENIED", "권한이 없습니다.", { reason: "access_denied" });
-  if (visitor && !GUEST_KINDS.includes(kind))
-    ctx.fail("ACCESS_DENIED", "권한이 없습니다.", { reason: "access_denied" });
-  if (operation === "getMany") {
-    if (!["profiles", "items"].includes(kind))
-      ctx.fail("ACCESS_DENIED", "권한이 없습니다.", {
-        reason: "access_denied",
-      });
-    if (
-      !Array.isArray(options.ids) ||
-      options.ids.length > 50 ||
-      options.ids.some(
-        (id) => typeof id !== "string" || !/^[a-zA-Z0-9_-]{1,64}$/.test(id),
-      )
-    )
-      ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-        reason: "invalid_input",
-      });
-    return {
-      documents: (await ctx.getMany(collection, options.ids)).map((row) =>
-        row?.data.deleted
-          ? null
-          : visitor && row
-            ? { ...row, data: { nick: row.data.nick } }
-            : row,
-      ),
-    };
-  }
-  if (operation === "list") {
-    const query = {
-      filter: options.filter,
-      sort: options.sort,
-      size: Math.min(options.size ?? READ_LIMITS[kind], READ_LIMITS[kind]),
-      after: options.after ?? null,
-    };
-    if (
-      ["wallets", "character_state", "settings"].includes(kind) ||
-      (visitor && kind === "profiles")
-    )
-      ctx.fail("ACCESS_DENIED", "권한이 없습니다.", {
-        reason: "access_denied",
-      });
-    if (options.where !== undefined) {
-      // A predicate can probe fields this gate redacts or hides (secret log
-      // bodies, deleted rows), so it is only for collections returned whole,
-      // and never reaches deleted rows.
-      if (!WHERE_KINDS.includes(kind))
-        ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-          reason: "invalid_input",
-        });
-      query.where = { all: [options.where, { ne: ["deleted", true] }] };
-    }
-    if (kind === "inventory")
-      query.filter = { ...query.filter, owner: ctx.member.id };
-    if (kind === "logs") {
-      const selected = options.board ?? query.filter?.board ?? "default";
-      const board = await boardOf(ctx, selected);
-      if (!boardAllowed(board, access, "list"))
-        ctx.fail("ACCESS_DENIED", "권한이 없습니다.", {
-          reason: "access_denied",
-        });
-      query.filter = { ...query.filter, board: selected };
-      // Tag search builds its own predicate; it never matches secret posts,
-      // whose tags come from bodies the caller may not read.
-      if (options.tag !== undefined) {
-        if (typeof options.tag !== "string" || options.tag.length > 30)
-          ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-            reason: "invalid_input",
-          });
-        query.where = {
-          all: [tagWhere(options.tag), { ne: ["secret", true] }],
-        };
-      }
-    }
-    if (kind === "comments") {
-      const logId = query.filter?.logId;
-      const log =
-        typeof logId === "string"
-          ? await ctx.get(`${PREFIX}logs`, logId)
-          : null;
-      if (!(await logReadable(ctx, log, access)))
-        ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {
-          reason: "document_not_found",
-        });
-    }
-    const page = await ctx.list(collection, query);
-    let documents = page.documents.filter((row) => !row.data.deleted);
-    if (kind === "characters")
-      documents = await Promise.all(
-        documents.map((row) => presentCharacter(ctx, row, { list: true })),
-      );
-    // Admin-only definitions describe values members never see.
-    if (kind === "character_fields")
-      documents = documents.filter((row) => row.data.visibility !== "admin");
-    if (kind === "boards") {
-      documents = documents.filter((row) => boardAllowed(row, access, "list"));
-      if (!options.after && !(await ctx.get(BOARDS, "default"))) {
-        const fallback = await boardOf(ctx);
-        if (boardAllowed(fallback, access, "list")) documents.unshift(fallback);
-      }
-    }
-    if (kind === "logs")
-      documents = await Promise.all(
-        documents.map(async (row) =>
-          (await logReadable(ctx, row, access))
-            ? {
-                ...row,
-                data: {
-                  owner: author(row),
-                  number: row.data.number ?? null,
-                  notice: row.data.notice === true,
-                  tags: row.data.tags ?? [],
-                  ...(row.data.guest ? { guest: row.data.guest } : {}),
-                  ...(row.data.speaker ? { speaker: row.data.speaker } : {}),
-                  ...(row.data.dice
-                    ? { dice: true, rolls: row.data.rolls ?? null }
-                    : {}),
-                  board: row.data.board,
-                  title: row.data.title ?? "",
-                  category: row.data.category ?? "",
-                  image: row.data.image ?? null,
-                  secret: row.data.secret === true,
-                  format: row.data.format === "html" ? "html" : "text",
-                  ...preview(row.data),
-                },
-              }
-            : {
-                id: row.id,
-                createdAt: row.createdAt,
-                createdBy: row.createdBy,
-                data: {
-                  owner: author(row),
-                  number: row.data.number ?? null,
-                  title: row.data.title ?? "비밀글",
-                  locked: true,
-                  secret: Boolean(row.data.secret),
-                },
-              },
-        ),
-      );
-    return {
-      ...page,
-      documents,
-    };
-  }
-  const previous =
-    typeof id === "string"
-      ? kind === "boards"
-        ? await boardOf(ctx, id)
-        : await ctx.get(collection, id)
-      : null;
-  if (operation === "get") {
-    if (!previous || previous.data.deleted)
-      ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {
-        reason: "document_not_found",
-      });
-    if (kind === "boards" && !boardAllowed(previous, access, "list"))
-      ctx.fail("ACCESS_DENIED", "권한이 없습니다.", {
-        reason: "access_denied",
-      });
-    if (kind === "logs" && !(await logReadable(ctx, previous, access)))
-      ctx.fail("ACCESS_DENIED", "권한이 없습니다.", {
-        reason: "access_denied",
-      });
-    if (kind === "comments") {
-      const log = await ctx.get(`${PREFIX}logs`, previous.data.logId);
-      if (!(await logReadable(ctx, log, access)))
-        ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {
-          reason: "document_not_found",
-        });
-    }
-    if (
-      (kind === "wallets" && id !== ctx.member.id) ||
-      (kind === "inventory" && previous.data.owner !== ctx.member.id)
-    )
-      ctx.fail("ACCESS_DENIED", "권한이 없습니다.", {
-        reason: "access_denied",
-      });
-    if (kind === "settings")
-      return id === "community"
-        ? {
-            document: {
-              ...previous,
-              data: {
-                initialStatPoints: previous.data.initialStatPoints ?? 0,
-                messageCost: previous.data.messageCost ?? 0,
-              },
-            },
-          }
-        : ctx.fail("ACCESS_DENIED", "권한이 없습니다.", {
-            reason: "access_denied",
-          });
-    if (kind === "characters")
-      return { document: await presentCharacter(ctx, previous) };
-    if (kind === "character_fields" && previous.data.visibility === "admin")
-      ctx.fail("ACCESS_DENIED", "권한이 없습니다.", {
-        reason: "access_denied",
-      });
-    if (kind === "character_state") {
-      const { purchases, ...publicState } = previous.data;
-      return { document: { ...previous, data: publicState } };
-    }
-    return { document: previous };
-  }
   if (
     !["profiles", "characters", "logs", "comments"].includes(kind) ||
     !["add", "set", "delete"].includes(operation)
   )
     ctx.fail("ACCESS_DENIED", "권한이 없습니다.", { reason: "access_denied" });
+  const previous =
+    typeof id === "string" ? await ctx.get(collection, id) : null;
   if (visitor && !["logs", "comments"].includes(kind))
     ctx.fail("ACCESS_DENIED", "권한이 없습니다.", { reason: "access_denied" });
   if (kind === "profiles" && (operation !== "set" || id !== ctx.member.id))

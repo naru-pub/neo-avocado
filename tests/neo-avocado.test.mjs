@@ -64,6 +64,12 @@ function fakeDatabase(rows = {}) {
   );
   const gatewayReads = [];
   const collection = (name) => ({
+    async getMany(ids) {
+      calls.push({ method: "getMany", name, ids });
+      return ids.map(
+        (id) => store.get(name).find((row) => row.id === id) ?? null,
+      );
+    },
     async get(id) {
       calls.push({ method: "get", name, id });
       const found = store.get(name).find((row) => row.id === id);
@@ -73,6 +79,10 @@ function fakeDatabase(rows = {}) {
     },
     async list(options = {}) {
       calls.push({ method: "list", name, ...options });
+      if (database.unprepared)
+        throw Object.assign(new Error(`Collection ${name} does not exist.`), {
+          code: "NOT_FOUND",
+        });
       const keys = options.sort ?? [[{ metadata: "id" }, "asc"]];
       // Missing values sort lowest, then strings, numbers and booleans.
       const rank = (value) =>
@@ -318,9 +328,18 @@ async function page(database) {
     ["createNaru"],
     function () {
       this.setExport("createNaru", () => ({
-        // Visitors read posts natively only where they are world-readable.
+        // Visitors read what the declaration makes world-readable; posts
+        // only where the test opens them (the board rule decides on Naru).
         collection: (name) => {
-          if (database.visitorWorld) return database.member.collection(name);
+          if (
+            database.visitorWorld ||
+            [
+              "neo_avocado_boards",
+              "neo_avocado_profiles",
+              "neo_avocado_emoticons",
+            ].includes(name)
+          )
+            return database.member.collection(name);
           const denied = async () => {
             throw Object.assign(new Error("Members only"), {
               code: "ACCESS_DENIED",
@@ -538,21 +557,21 @@ test("the shop exposes later pages and crafts selected inventory through the ser
   );
 });
 
-test("signed out, a visitor reads only public boards through the gate and may sign in", async () => {
+test("signed out, a visitor reads only the boards the board rule lists, and may sign in", async () => {
   const database = fakeDatabase();
   database.signedIn = false;
   const { $, settle, window } = await page(database);
   assert.equal($("welcome").hidden, false);
   assert.equal($("community").hidden, false);
   assert.ok(window.document.body.classList.contains("visitor"));
-  // No board is open to guests: nothing but the board list is read.
+  // No board is open to guests: nothing but the board list is read, natively.
   assert.equal($("noPublicBoards").hidden, false);
   assert.equal($("logForm").hidden, true);
+  assert.deepEqual(database.visitor.calls, []);
   assert.deepEqual(
-    database.visitor.calls.map((call) => call.args?.collection ?? call.name),
-    ["neo_avocado_boards"],
+    database.calls.filter(() => true).map((call) => [call.method, call.name]),
+    [["list", "neo_avocado_boards"]],
   );
-  assert.equal(database.calls.length, 1); // the gate's own list of boards
   $("signIn").onclick();
   await settle();
   assert.deepEqual(database.calls.at(-1), { method: "signIn" });
@@ -694,24 +713,22 @@ test("logs are read a page at a time, newest first, and comments only when opene
   ]);
   const items = $("logs").querySelectorAll(".log");
   assert.equal(items.length, 10);
-  assert.equal(
-    database.gatewayReads.some((args) =>
-      [LOGS, COMMENTS].includes(args.collection),
-    ),
-    false,
-  );
+  assert.equal(database.gatewayReads.length, 0);
   assert.equal(items[0].querySelector(".log-text").textContent, "로그 11");
   // 자기 로그에만 삭제가 보인다.
   assert.equal(items[0].querySelector(".delete").hidden, false);
   assert.equal(items[1].querySelector(".delete").hidden, true);
   // 같은 회원의 닉네임은 한 번만 묻는다.
-  const profileGets = database.calls.filter(
-    (call) => call.method === "get" && call.name === PROFILES,
-  );
-  assert.deepEqual(
-    profileGets.map((call) => call.id),
-    [ME, "member-other"],
-  );
+  const askedFor = database.calls
+    .filter((call) => call.name === PROFILES)
+    .flatMap((call) =>
+      call.method === "getMany"
+        ? call.ids
+        : call.method === "get"
+          ? [call.id]
+          : [],
+    );
+  assert.deepEqual(askedFor, [ME, "member-other"]);
   assert.equal(
     database.calls.some((call) => call.name === COMMENTS),
     false,
@@ -1056,12 +1073,7 @@ test("post details and comment lists use native reads while deletion stays trans
   full.querySelector(".comments").open = true;
   full.querySelector(".comments").ontoggle();
   await settle();
-  assert.equal(
-    database.gatewayReads.some((args) =>
-      [LOGS, COMMENTS].includes(args.collection),
-    ),
-    false,
-  );
+  assert.equal(database.gatewayReads.length, 0);
   let deletion;
   const originalCall = database.member.call;
   database.member.call = async (name, args) => {
@@ -1462,40 +1474,11 @@ test("HTML posts render sanitized, without scripts or handlers", async () => {
   assert.equal(body.querySelector("img").hasAttribute("onerror"), false);
 });
 
-test("a visitor falls back to the gate when posts are members-only", async () => {
-  const database = fakeDatabase({
-    neo_avocado_boards: [
-      {
-        id: "free",
-        data: { name: "자유", kind: "text", listLevel: 1, readLevel: 1 },
-      },
-    ],
-    [LOGS]: [{ id: "p", data: { board: "free", text: "공개 글" } }],
-  });
-  database.signedIn = false;
-  const { $ } = await page(database);
-  assert.match($("logs").textContent, /공개 글/);
-  assert.ok(
-    database.visitor.calls.some(
-      (call) =>
-        call.args?.collection === LOGS && call.args.operation === "list",
-    ),
-  );
-});
-
 test("before the owner's first sign-in, the page says the site is being prepared", async () => {
   const database = fakeDatabase();
   database.signedIn = false;
   database.unprepared = true;
   // Collections are missing: every read the visitor makes fails NOT_FOUND.
-  database.visitor.call = async () => {
-    throw Object.assign(
-      new Error("Collection neo_avocado_boards does not exist."),
-      {
-        code: "NOT_FOUND",
-      },
-    );
-  };
   const { $, settle } = await page(database);
   await settle();
   assert.equal($("welcome").hidden, false);

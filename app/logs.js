@@ -36,7 +36,7 @@ const LOG_SORT = [
   ["notice", "desc"],
   [{ metadata: "createdAt" }, "desc"],
 ];
-/** A tag search, as members' native reads and the gate both take it. */
+/** A tag search: logs whose tags hold `tag`. */
 const tagOptions = (tag) => ({ where: { has: ["tags", tag] } });
 export async function loadLogs({ more = false } = {}) {
   if (!state.member && !state.boards.length) return $("logs").replaceChildren();
@@ -540,21 +540,21 @@ export async function loadBoards() {
     $("moreLogs").hidden = true;
     return;
   }
-  if (!state.boards.length)
-    state.boards = [
-      {
-        id: "default",
-        data: {
-          name: "로그",
-          kind: "image",
-          enabled: true,
-          secret: "optional",
-          categories: [],
-          writeLevel: 2,
-          actions: true,
-        },
+  // Posts without a board are on "default", which exists until the admin
+  // stores their own, for members.
+  if (state.member && !state.boards.some((row) => row.id === "default"))
+    state.boards.unshift({
+      id: "default",
+      data: {
+        name: "로그",
+        kind: "image",
+        enabled: true,
+        secret: "optional",
+        categories: [],
+        writeLevel: 2,
+        actions: true,
       },
-    ];
+    });
   if (!state.boards.some((row) => row.id === state.board))
     state.board = state.boards[0].id;
   $("board").replaceChildren();

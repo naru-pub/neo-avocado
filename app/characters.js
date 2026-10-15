@@ -99,7 +99,7 @@ function fieldInput(row, value) {
   input.value = value ?? "";
   return [label, input];
 }
-/** Custom values of a character the gate let the caller see, in catalogue order. */
+/** Custom values of a character the characters rule let the caller see, in catalogue order. */
 function renderFields(list, character) {
   list.replaceChildren();
   for (const row of state.fieldCatalogue ?? []) {
@@ -314,7 +314,7 @@ function wireCharacterDetails(item, character) {
           await refresh();
         },
       );
-    // The gate reads only the character's titles (at most 100 per query).
+    // Only the character's titles are read (at most 100 per query).
     const owned = [...new Set(status.state.titles ?? [])];
     const titles = [];
     for (let i = 0; i < owned.length; i += 100)

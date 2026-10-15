@@ -1,6 +1,6 @@
 // Publish as _naru/rules/community-board.js and enable it on logs/comments.
 // Member levels, roles, boards and secret visibility come from the helpers the
-// site functions use, so native reads and the function gate cannot drift.
+// site functions use, so native reads and the posting function cannot drift.
 import {
   PREFIX,
   author,

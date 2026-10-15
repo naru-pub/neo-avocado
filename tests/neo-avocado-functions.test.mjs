@@ -39,13 +39,13 @@ import {
   seeCalls,
   reviewCharacter,
   site,
-  communityRead,
   commentCounts,
   moderatePost,
 } from "../_naru/modules/index.js";
 import { scope, canWrite } from "../_naru/rules/community-board.js";
 import * as characterRule from "../_naru/rules/characters.js";
 import { matches } from "./where.mjs";
+import { nativeRead } from "./native-read.mjs";
 
 const P = "neo_avocado_";
 function fakeCtx({ now = Date.parse("2030-01-01T03:00:00Z"), roll = 0 } = {}) {
@@ -118,13 +118,17 @@ function fakeCtx({ now = Date.parse("2030-01-01T03:00:00Z"), roll = 0 } = {}) {
   return { ctx, table, sent, released };
 }
 
-/** The reason a function refused with (its ctx.fail details), or null. */
+/**
+ * The reason a function refused with (its ctx.fail details), the code Naru
+ * refused a native read with (NOT_FOUND for a document a rule hides), or null.
+ */
 const refusal = (call) =>
   call.then(
     () => null,
     (error) => {
-      if (!error.details) throw error;
-      return error.details.reason;
+      if (error.details) return error.details.reason;
+      if (error.code) return error.code;
+      throw error;
     },
   );
 
@@ -167,21 +171,21 @@ test("boards enforce independent levels, secret bodies and parent comment access
   assert.equal(record.data.board, "notes");
   assert.equal(
     await refusal(
-      communityData(ctx, {
+      nativeRead(ctx, {
         collection: `${P}logs`,
         operation: "get",
         id: record.id,
       }),
     ),
-    "access_denied",
+    "NOT_FOUND",
   );
-  const list = await communityData(ctx, {
+  const list = await nativeRead(ctx, {
     collection: `${P}logs`,
     operation: "list",
-    options: { board: "notes" },
+    options: { filter: { board: "notes" } },
   });
-  assert.equal(list.documents[0].data.locked, true);
-  assert.equal(list.documents[0].data.text, undefined);
+  // A post the reader may not read is left out of the list.
+  assert.equal(list.documents.length, 0);
   assert.equal(
     await refusal(
       communityData(ctx, {
@@ -199,7 +203,7 @@ test("boards enforce independent levels, secret bodies and parent comment access
   });
   assert.equal(
     (
-      await communityData(ctx, {
+      await nativeRead(ctx, {
         collection: `${P}logs`,
         operation: "get",
         id: record.id,
@@ -222,28 +226,29 @@ test("boards enforce independent levels, secret bodies and parent comment access
   ctx.member.id = "m-2";
   assert.equal(
     await refusal(
-      communityData(ctx, {
+      nativeRead(ctx, {
         collection: `${P}logs`,
         operation: "get",
         id: secret.id,
       }),
     ),
-    "access_denied",
+    "NOT_FOUND",
   );
-  assert.equal(
-    await refusal(
-      communityData(ctx, {
+  // Its comments are hidden with it: the list comes back empty.
+  assert.deepEqual(
+    (
+      await nativeRead(ctx, {
         collection: `${P}comments`,
         operation: "list",
         options: { filter: { logId: secret.id } },
-      }),
-    ),
-    "document_not_found",
+      })
+    ).documents,
+    [],
   );
   table(`${P}members`).get("m-2").role = "moderator";
   assert.equal(
     (
-      await communityData(ctx, {
+      await nativeRead(ctx, {
         collection: `${P}logs`,
         operation: "get",
         id: secret.id,
@@ -281,17 +286,17 @@ test("board categories, required secrets and previews are validated without trun
   ).document;
   assert.equal(saved.data.secret, true);
   const preview = (
-    await communityData(ctx, {
+    await nativeRead(ctx, {
       collection: `${P}logs`,
       operation: "list",
-      options: { board: "notes" },
+      options: { filter: { board: "notes" } },
     })
   ).documents[0];
-  assert.equal(preview.data.text.length, 150);
-  assert.equal(preview.data.truncated, true);
+  // Lists carry the whole post; the page shows the start of it.
+  assert.equal(preview.data.text.length, 2000);
   assert.equal(
     (
-      await communityData(ctx, {
+      await nativeRead(ctx, {
         collection: `${P}logs`,
         operation: "get",
         id: saved.id,
@@ -336,13 +341,13 @@ test("legacy admission fields do not override platform access; profile and role 
   table(`${P}wallets`).set("m-2", { balance: 999 });
   assert.equal(
     await refusal(
-      communityData(ctx, {
+      nativeRead(ctx, {
         collection: `${P}wallets`,
         operation: "get",
         id: "m-2",
       }),
     ),
-    "access_denied",
+    "NOT_FOUND",
   );
   table(`${P}members`).get("m-1").status = "banned";
   await messageStatus(ctx);
@@ -418,13 +423,13 @@ test("deletion marks durable work, hides partial cleanup and preserves purchased
   assert.equal(table(`${P}logs`).get("log").deleted, true);
   assert.equal(
     await refusal(
-      communityData(ctx, {
+      nativeRead(ctx, {
         collection: `${P}comments`,
         operation: "get",
         id: "comment-8",
       }),
     ),
-    "document_not_found",
+    "NOT_FOUND",
   );
   // Ten comments a call: the second finishes it.
   assert.equal((await deleteLog()).done, true);
@@ -1393,7 +1398,7 @@ test("new posts are broadcast by board and ID only when a base member could list
   assert.equal(sent.length, 1);
 });
 
-test("the gate takes where predicates only for collections it returns whole, never reaching deleted rows", async () => {
+test("a where predicate only narrows what the rules show: never deleted rows or others' secrets", async () => {
   const { ctx, table } = fakeCtx();
   table(`${P}characters`).set("mine", { owner: "m-1", name: "Mine" });
   table(`${P}characters`).set("theirs", { owner: "m-2", name: "Theirs" });
@@ -1402,26 +1407,29 @@ test("the gate takes where predicates only for collections it returns whole, nev
     name: "Gone",
     deleted: true,
   });
-  const list = (collection, where) =>
-    communityData(ctx, {
-      collection: `${P}${collection}`,
-      operation: "list",
-      options: { where },
-    });
+  table(`${P}logs`).set("hidden", {
+    board: "default",
+    owner: "m-2",
+    secret: true,
+    text: "guess",
+  });
+  const list = async (collection, where) =>
+    (
+      await nativeRead(ctx, {
+        collection: `${P}${collection}`,
+        operation: "list",
+        options: { where },
+      })
+    ).documents.map((row) => row.id);
+  assert.deepEqual(await list("characters", { eq: ["owner", "m-1"] }), [
+    "mine",
+  ]);
+  // Asking for another member's secret body finds nothing.
   assert.deepEqual(
-    (await list("characters", { eq: ["owner", "m-1"] })).documents.map(
-      (row) => row.id,
-    ),
-    ["mine"],
-  );
-  // Logs are redacted for locked secrets, so a predicate could probe bodies.
-  assert.equal(
-    await refusal(list("logs", { eq: ["text", "guess"] })),
-    "invalid_input",
-  );
-  assert.equal(
-    await refusal(list("inventory", { eq: ["item", "x"] })),
-    "invalid_input",
+    await list("logs", {
+      all: [{ eq: ["board", "default"] }, { eq: ["text", "guess"] }],
+    }),
+    [],
   );
 });
 
@@ -1539,8 +1547,13 @@ test("the board rule shares the gate's helpers: levels, moderators, secrets and 
 
 /* ------------------------------------------------------- roleplay core --- */
 
+// Writes go through the community/data function; reads are the SDK's own,
+// through the collection rules (tests/native-read.mjs).
 const gate = (ctx, collection, operation, rest = {}) =>
-  communityData(ctx, { collection: `${P}${collection}`, operation, ...rest });
+  (["get", "getMany", "list"].includes(operation) ? nativeRead : communityData)(
+    ctx,
+    { collection: `${P}${collection}`, operation, ...rest },
+  );
 const reasonOf = async (promise) => {
   try {
     await promise;
@@ -1753,9 +1766,12 @@ test("custom profile fields validate types and hide owner/admin values from othe
   const other = (await gate(ctx, "characters", "get", { id: created.id }))
     .document;
   assert.deepEqual(other.data.fields, { age: "17", gender: "M" });
-  // Lists carry no custom values at all; field definitions hide admin-only ones.
+  // Lists show the same fields as gets; field definitions hide admin-only ones.
   const listed = (await gate(ctx, "characters", "list")).documents;
-  assert.ok(listed.every((row) => row.data.fields === undefined));
+  assert.deepEqual(listed.find((row) => row.id === created.id).data.fields, {
+    age: "17",
+    gender: "M",
+  });
   assert.deepEqual(
     (await gate(ctx, "character_fields", "list")).documents.map(
       (row) => row.id,
@@ -1764,7 +1780,7 @@ test("custom profile fields validate types and hide owner/admin values from othe
   );
   assert.equal(
     await refusal(gate(ctx, "character_fields", "get", { id: "memo" })),
-    "access_denied",
+    "NOT_FOUND",
   );
 });
 
@@ -2096,7 +2112,7 @@ test("visitors read and post only on level-1 boards, as named guests with a pass
   });
   ctx.member = null;
   ctx.visitor = true;
-  const read = (args) => communityRead(ctx, args);
+  const read = (args) => nativeRead(ctx, args);
   // Boards a guest may list; the members-only board and the default stay hidden.
   const boards = await read({
     collection: `${P}boards`,
@@ -2106,15 +2122,16 @@ test("visitors read and post only on level-1 boards, as named guests with a pass
     boards.documents.map((row) => row.id),
     ["free"],
   );
-  assert.equal(
-    await refusal(
-      read({
+  // The members-only board lists nothing for them.
+  assert.deepEqual(
+    (
+      await read({
         collection: `${P}logs`,
         operation: "list",
-        options: { board: "members" },
-      }),
-    ),
-    "access_denied",
+        options: { filter: { board: "members" } },
+      })
+    ).documents,
+    [],
   );
   // Nicknames reach visitors; nothing else from a profile does.
   assert.deepEqual(
@@ -2132,7 +2149,7 @@ test("visitors read and post only on level-1 boards, as named guests with a pass
       await refusal(
         read({ collection: `${P}${collection}`, operation: "list" }),
       ),
-      "access_denied",
+      "ACCESS_DENIED",
     );
   // A guest must name themselves and give a password; no secrets or actions.
   const post = (data, guest) =>
@@ -2324,10 +2341,10 @@ test("logs are numbered per board, tagged for search, counted and moderated", as
   // The gate's tag search never matches a secret post.
   await add({ text: "#꽃 비밀", secret: true });
   ctx.member = { id: "m-2" };
-  const tagged = await communityRead(ctx, {
+  const tagged = await nativeRead(ctx, {
     collection: `${P}logs`,
     operation: "list",
-    options: { board: "free", tag: "꽃" },
+    options: { filter: { board: "free" }, where: { has: ["tags", "꽃"] } },
   });
   assert.deepEqual(
     tagged.documents.map((row) => row.id),
@@ -2381,15 +2398,15 @@ test("HTML boards store longer rich bodies, tag their text and preview it plainl
   assert.deepEqual(saved.data.tags, ["소식"]);
   ctx.member = { id: "m-2" };
   const [row] = (
-    await communityRead(ctx, {
+    await nativeRead(ctx, {
       collection: `${P}logs`,
       operation: "list",
-      options: { board: "rich" },
+      options: { filter: { board: "rich" } },
     })
   ).documents;
-  assert.equal(row.data.truncated, true);
-  assert.equal(row.data.text.startsWith("#소식 가"), true);
-  assert.equal(row.data.text.length, 150);
+  // The whole body is read; the page previews its text.
+  assert.equal(row.data.format, "html");
+  assert.equal(row.data.text, saved.data.text);
   // Plain boards keep their 2,000-character limit.
   await assert.rejects(
     communityData(ctx, {

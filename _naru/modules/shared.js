@@ -68,14 +68,6 @@ export const plainText = (value) =>
     .replace(/\s+/g, " ")
     .trim();
 
-/** A list preview: at most 150 characters, HTML reduced to its text when cut. */
-export function preview(data) {
-  const raw = data.text ?? "";
-  if (raw.length <= 150) return { text: raw, truncated: false };
-  const text = data.format === "html" ? plainText(raw) : raw;
-  return { text: text.slice(0, 150), truncated: true };
-}
-
 export const MAX_TAGS = 5;
 const TAG = /#([0-9a-zA-Z가-힣_]{1,30})/g;
 
@@ -86,9 +78,6 @@ export function tagFields(text) {
     if (!tags.includes(match[1]) && tags.length < MAX_TAGS) tags.push(match[1]);
   return { tags };
 }
-
-/** A predicate matching logs with `tag`. */
-export const tagWhere = (tag) => ({ has: ["tags", tag] });
 
 /** A visitor's access: level 1, as GnuBoard gives a guest. */
 export const GUEST_ACCESS = Object.freeze({ level: 1, role: "guest" });
@@ -106,27 +95,6 @@ export async function communityAccess(ctx, id = ctx.member?.id) {
     role: row?.data.role === "moderator" ? "moderator" : "member",
   };
 }
-
-export const READ_LIMITS = {
-  emoticons: 50,
-  boards: 5,
-  profiles: 100,
-  characters: 10,
-  logs: 10,
-  comments: 20,
-  wallets: 1,
-  inventory: 50,
-  items: 10,
-  recipes: 10,
-  relations: 10,
-  wardrobe: 20,
-  character_state: 5,
-  titles: 10,
-  couples: 100,
-  settings: 1,
-  gacha: 100,
-  character_fields: 50,
-};
 
 export function author(row) {
   return row?.createdBy ?? row?.data.owner;
