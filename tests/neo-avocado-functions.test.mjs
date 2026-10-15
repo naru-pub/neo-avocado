@@ -2960,3 +2960,32 @@ test("a settlement is settled by a moderator, granting experience and money, the
   );
   assert.equal(await refusal(posts.remove(ctx, { id: request.id })), "settled");
 });
+
+test("a board search reaches every post, 500 a call, continuing from its cursor", async () => {
+  const { ctx, table } = fakeCtx();
+  table(`${P}boards`).set("free", {
+    name: "자유",
+    kind: "text",
+    listLevel: 1,
+    readLevel: 1,
+  });
+  for (let n = 0; n < 650; n += 1)
+    table(`${P}logs`).set(`p${n}`, {
+      board: "free",
+      owner: "m-1",
+      text: n === 649 ? "아주 오래된 보물" : `글 ${n}`,
+    });
+  const first = await posts.search(ctx, { board: "free", text: "보물" });
+  assert.deepEqual(first.documents, []);
+  assert.ok(first.nextCursor);
+  const second = await posts.search(ctx, {
+    board: "free",
+    text: "보물",
+    after: first.nextCursor,
+  });
+  assert.deepEqual(
+    second.documents.map((row) => row.id),
+    ["p649"],
+  );
+  assert.equal(second.nextCursor, null);
+});

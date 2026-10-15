@@ -1431,10 +1431,11 @@ test("calls arrive as live notices and the history marks them seen", async () =>
     true,
   );
   assert.equal($("tabCalls").textContent, "알림");
-  $("calls").querySelector("button").onclick();
-  await settle();
-  await settle();
-  assert.equal($("callDetail").querySelector(".member-call").textContent, "나");
+  // A notification links to the post's own address.
+  assert.equal(
+    $("calls").querySelector("a").getAttribute("href"),
+    "#/post/log-9",
+  );
 });
 
 test("log numbers, @N links, #tags, notices first and comment counts", async () => {

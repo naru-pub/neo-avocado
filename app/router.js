@@ -7,7 +7,9 @@ import {
   loadBoards,
   loadLogs,
   openLogNumber,
+  openPost,
 } from "./logs.js";
+import { openMessage } from "./messages.js";
 import { follow } from "./site.js";
 import { openCharacter } from "./characters.js";
 import { showShopCategory } from "./shop.js";
@@ -31,8 +33,16 @@ export function openRoute(hash = location.hash) {
   const [kind = "", first, second] = parts(hash);
   return opening(async () => {
     if (!kind) return showTab("home");
+    if (kind === "post" && first) {
+      // #/post/<id>, or #/post/<id>/comment/<id>.
+      const [, , , comment] = parts(hash);
+      return openPost(first, {
+        comment: second === "comment" ? comment : null,
+      });
+    }
     if (kind === "logs") {
       $("tabLogs").click();
+      const [, , , third] = parts(hash);
       if (first && first !== state.board) {
         // A board made since the page read its list: read it again, once.
         if (!state.boards.some((row) => row.id === first)) await loadBoards();
@@ -41,11 +51,25 @@ export function openRoute(hash = location.hash) {
         state.board = first;
         $("board").value = first;
         configureBoard();
-        await loadLogs();
       }
-      if (second && Number.isSafeInteger(Number(second)))
-        await openLogNumber(Number(second));
-      return;
+      state.tag = second === "tag" ? third : null;
+      state.search = second === "search" ? third : null;
+      $("searchText").value = state.search ?? "";
+      // The readable form of a post's address: board and number.
+      if (second && Number.isSafeInteger(Number(second))) {
+        await loadLogs();
+        return openLogNumber(Number(second));
+      }
+      $("logFocus").replaceChildren();
+      $("logFocusPanel").hidden = true;
+      return loadLogs({
+        page: second === "page" ? Math.max(1, Number(third) || 1) : 1,
+      });
+    }
+    if (kind === "messages" && first) {
+      if (!state.member) return say("회원 로그인 후 이용할 수 있습니다.");
+      $("tabMessages").click();
+      return openMessage(first);
     }
     if (kind === "character" && first) {
       if (!state.member) return say("회원 로그인 후 이용할 수 있습니다.");

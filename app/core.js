@@ -59,6 +59,8 @@ export const state = {
   tag: null,
   // The board search (skins' 검색), while it is shown.
   search: null,
+  // The board list's page, for its address.
+  logPage: 1,
   live: null,
   newPost: null,
   ownPosts: new Set(),
@@ -478,7 +480,12 @@ export const movedSinceOpening = () => moved;
 export function route(path, { replace = false } = {}) {
   if (routing) return;
   moved = true;
-  const hash = `#/${path.split("/").map(encodeURIComponent).join("/")}`;
+  // A list is taken part by part, so a tag or search with "/" stays one.
+  const parts = Array.isArray(path) ? path : path.split("/");
+  const hash = `#/${parts
+    .filter((part) => part !== "")
+    .map(encodeURIComponent)
+    .join("/")}`;
   if (location.hash === hash) return;
   history[replace ? "replaceState" : "pushState"](null, "", hash);
 }
@@ -494,6 +501,12 @@ export async function opening(action) {
 /** A view's own address. */
 function viewPath(name) {
   if (name === "home") return "";
+  // The board or page shown, so the address names it.
+  if (name === "logs") return `logs/${state.board ?? "default"}`;
+  if (name === "content")
+    return $("contentPage").value
+      ? `content/${$("contentPage").value}`
+      : "content";
   if (name === "characters") {
     const filter = $("characterFilter").value;
     return filter === "approved"

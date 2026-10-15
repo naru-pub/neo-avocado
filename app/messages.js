@@ -12,6 +12,7 @@ import {
   say,
   showTab,
   state,
+  route,
 } from "./core.js";
 import { showUnread } from "./live.js";
 
@@ -84,51 +85,7 @@ async function loadMailbox({ more = false } = {}) {
     open.textContent = `${row.data.readAt === null ? "[안 읽음] " : ""}${await nickOf($("messageBox").value === "inbox" ? row.data.from : row.data.to)} · ${formatTime(row.data.sentAt)} · ${row.data.preview}`;
     open.onclick = () =>
       run(async () => {
-        const result = await caller().call("community/messages:readMessage", {
-          id: row.id,
-        });
-        const message = result.document;
-        showUnread(result.unread);
-        $("messageDetail").replaceChildren();
-        const heading = document.createElement("h3");
-        heading.textContent = `${await nickOf(message.data.from)} → ${await nickOf(message.data.to)}`;
-        const body = document.createElement("p");
-        const receipt = document.createElement("p");
-        receipt.textContent = `보낸 시간 ${formatTime(message.data.sentAt)} · ${message.data.readAt === null ? "아직 읽지 않음" : `읽은 시간 ${formatTime(message.data.readAt)}`}`;
-        body.className = "message-body";
-        body.textContent = message.data.body;
-        const remove = document.createElement("button");
-        remove.type = "button";
-        remove.textContent = "쪽지 삭제";
-        remove.onclick = () =>
-          run(async () => {
-            if (
-              !confirm(
-                "쪽지를 삭제하면 보낸 사람과 받는 사람 모두의 보관함에서 사라집니다. 삭제할까요?",
-              )
-            )
-              return;
-            await caller().call("community/messages:removeMessage", {
-              id: message.id,
-            });
-            await loadMailbox();
-          });
-        $("messageDetail").append(heading, receipt, body, remove);
-        if (message.data.to === state.member.id) {
-          const reply = document.createElement("button");
-          reply.type = "button";
-          reply.textContent = "답장";
-          reply.onclick = () => {
-            const options = [...$("messageRecipients").options];
-            if (!options.some((option) => option.value === message.data.from))
-              return say("상대가 지금은 쪽지를 받지 않습니다.");
-            for (const option of options)
-              option.selected = option.value === message.data.from;
-            $("messageBody").focus();
-          };
-          $("messageDetail").append(" ", reply);
-        }
-        $("messageDetail").hidden = false;
+        const message = await openMessage(row.id);
         if (message.data.to === state.member.id)
           open.textContent = open.textContent.replace(/^\[안 읽음\] /, "");
       });
@@ -146,4 +103,55 @@ export async function writeTo(member) {
   for (const option of $("messageRecipients").options)
     option.selected = option.value === member;
   $("messageBody").focus();
+}
+
+/** One message (memo_view.php), at its address #/messages/<id>. */
+export async function openMessage(id) {
+  const result = await caller().call("community/messages:readMessage", {
+    id,
+  });
+  const message = result.document;
+  showUnread(result.unread);
+  $("messageDetail").replaceChildren();
+  const heading = document.createElement("h3");
+  heading.textContent = `${await nickOf(message.data.from)} → ${await nickOf(message.data.to)}`;
+  const body = document.createElement("p");
+  const receipt = document.createElement("p");
+  receipt.textContent = `보낸 시간 ${formatTime(message.data.sentAt)} · ${message.data.readAt === null ? "아직 읽지 않음" : `읽은 시간 ${formatTime(message.data.readAt)}`}`;
+  body.className = "message-body";
+  body.textContent = message.data.body;
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.textContent = "쪽지 삭제";
+  remove.onclick = () =>
+    run(async () => {
+      if (
+        !confirm(
+          "쪽지를 삭제하면 보낸 사람과 받는 사람 모두의 보관함에서 사라집니다. 삭제할까요?",
+        )
+      )
+        return;
+      await caller().call("community/messages:removeMessage", {
+        id: message.id,
+      });
+      await loadMailbox();
+    });
+  $("messageDetail").append(heading, receipt, body, remove);
+  if (message.data.to === state.member.id) {
+    const reply = document.createElement("button");
+    reply.type = "button";
+    reply.textContent = "답장";
+    reply.onclick = () => {
+      const options = [...$("messageRecipients").options];
+      if (!options.some((option) => option.value === message.data.from))
+        return say("상대가 지금은 쪽지를 받지 않습니다.");
+      for (const option of options)
+        option.selected = option.value === message.data.from;
+      $("messageBody").focus();
+    };
+    $("messageDetail").append(" ", reply);
+  }
+  $("messageDetail").hidden = false;
+  route(["messages", id], { replace: true });
+  return message;
 }

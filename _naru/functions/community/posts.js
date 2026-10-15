@@ -224,11 +224,19 @@ async function readableBoard(ctx, id) {
 }
 
 /**
- * Searches a board (the skins' 검색): the 500 most recent posts the caller
- * may read whose title, text, speaker, guest name or author's nickname holds
- * `text`; up to 50, newest first.
+ * Searches a board (the skins' 검색) over all its posts, 500 at a time:
+ * those the caller may read whose title, text, speaker, guest name or
+ * author's nickname holds `text`, newest first. `after` continues where the
+ * last call's scan stopped (`nextCursor`, null at the board's first post).
  */
-export async function search(ctx, { board: id, text: wanted } = {}) {
+export async function search(
+  ctx,
+  { board: id, text: wanted, after: from = null } = {},
+) {
+  if (from !== null && typeof from !== "string")
+    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+      reason: "invalid_input",
+    });
   if (typeof wanted !== "string" || !wanted.trim() || wanted.length > 40)
     ctx.fail("INVALID_REQUEST", "검색어를 1~40자로 입력해 주세요.", {
       reason: "invalid_input",
@@ -237,7 +245,7 @@ export async function search(ctx, { board: id, text: wanted } = {}) {
   const needle = wanted.trim().toLowerCase();
   const visible = readableBy(ctx, access);
   const rows = [];
-  let after = null;
+  let after = from;
   for (let page = 0; page < 5; page += 1) {
     const result = await ctx.list(LOGS, {
       filter: { board: id },
@@ -271,7 +279,7 @@ export async function search(ctx, { board: id, text: wanted } = {}) {
         typeof value === "string" && value.toLowerCase().includes(needle),
     ),
   );
-  return { documents: found.slice(0, 50) };
+  return { documents: found, nextCursor: after };
 }
 
 /**

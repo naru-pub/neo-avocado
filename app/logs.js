@@ -65,15 +65,34 @@ const logPages = cursorPages((after, includeTotal) =>
       }),
 );
 /** Shows a page of the board: the first unless `page` is given. */
+/**
+ * The list's address: the board, and its page, tag or search
+ * (#/logs/free/page/3, #/logs/free/tag/봄, #/logs/free/search/바다).
+ */
+function logsPath() {
+  const base = ["logs", state.board];
+  if (state.search) return [...base, "search", state.search];
+  if (state.tag) return [...base, "tag", state.tag];
+  if (state.logPage > 1) return [...base, "page", String(state.logPage)];
+  return base;
+}
+/** Writes the list's address, while the list is what is shown. */
+function routeList() {
+  if (!$("logsView").hidden && $("logFocusPanel").hidden)
+    route(logsPath(), { replace: true });
+}
 export async function loadLogs({ page: number = 1 } = {}) {
   if (!state.member && !state.boards.length) return $("logs").replaceChildren();
   if (state.search) return showSearch();
   if (number === 1) logPages.reset();
   const page = await logPages.page(number);
+  state.logPage = page.number;
+  routeList();
   await preloadNicks(page.documents);
   $("logs").replaceChildren();
   if (page.number === 1) showNewPost(null);
   $("tagFilter").hidden = !state.tag;
+  $("searchMore").hidden = true;
   $("tagName").textContent = state.tag ? `#${state.tag} 태그가 달린 로그` : "";
   const shown = [];
   for (const log of page.documents) {
@@ -136,17 +155,42 @@ export async function openLogNumber(number) {
   });
   const log = page.documents[0];
   if (!log) return say("자료를 찾을 수 없습니다.");
-  await preloadNicks([log]);
-  $("logFocus").replaceChildren(await logItem(previewOf(log)));
+  await openPost(log.id, { log });
+}
+/**
+ * One post on its own (?log=N&single=Y), at its permanent address
+ * #/post/<id>, which survives a move to another board; with `comment`, its
+ * comments open at that comment (#/post/<id>/comment/<id>).
+ */
+export async function openPost(id, { comment = null, log = null } = {}) {
+  const post = log ?? (await collection(COLLECTION.logs).get(id));
+  const board = post.data.board ?? "default";
+  showTab("logs");
+  if (board !== state.board && state.boards.some((row) => row.id === board)) {
+    state.board = board;
+    $("board").value = board;
+    configureBoard();
+    await loadLogs();
+  }
+  await preloadNicks([post]);
+  const item = await logItem(post);
+  $("logFocus").replaceChildren(item);
   $("logFocusPanel").hidden = false;
-  // The post's own address (?log=N&single=Y), to share it.
-  route(`logs/${state.board}/${number}`, { replace: true });
-  $("logFocusPanel").scrollIntoView?.();
+  route(["post", post.id, ...(comment ? ["comment", comment] : [])], {
+    replace: true,
+  });
+  if (comment) {
+    const found = await item.showComment(comment);
+    if (!found) say("댓글을 찾을 수 없습니다.");
+  }
+  (
+    $("logFocus").querySelector(".comment.linked") ?? $("logFocusPanel")
+  ).scrollIntoView?.();
 }
 $("closeFocus").onclick = () => {
   $("logFocus").replaceChildren();
   $("logFocusPanel").hidden = true;
-  route(`logs/${state.board}`, { replace: true });
+  route(logsPath(), { replace: true });
 };
 /** Lists the current board's logs with `tag` (mmb's hash search). */
 export async function searchTag(tag) {
@@ -161,21 +205,41 @@ $("clearTag").onclick = () =>
     $("searchText").value = "";
     await loadLogs();
   });
-/** The board's search results (the skins' 검색), newest first. */
-async function showSearch() {
-  const { documents } = await caller().call("community/posts:search", {
-    board: state.board,
-    text: state.search,
-  });
-  await preloadNicks(documents);
-  $("logs").replaceChildren();
-  for (const log of documents)
-    $("logs").append(await logItem(kindOf() === "qna" ? log : previewOf(log)));
+/**
+ * The board's search results (the skins' 검색), newest first, over every
+ * post: the search reads 500 posts a call, going on by itself to 2,000 and
+ * then on request, to the board's first post.
+ */
+let searchFrom = null;
+async function showSearch({ more = false } = {}) {
+  if (!more) {
+    searchFrom = null;
+    $("logs").replaceChildren();
+  }
+  let found = more ? $("logs").children.length : 0;
+  for (let call = 0; call < 4; call += 1) {
+    const page = await caller().call("community/posts:search", {
+      board: state.board,
+      text: state.search,
+      after: searchFrom,
+    });
+    await preloadNicks(page.documents);
+    for (const log of page.documents)
+      $("logs").append(
+        await logItem(kindOf() === "qna" ? log : previewOf(log)),
+      );
+    found += page.documents.length;
+    searchFrom = page.nextCursor;
+    if (!searchFrom) break;
+  }
   $("tagFilter").hidden = false;
   $("tagName").textContent =
-    `‘${state.search}’ 검색 결과 ${documents.length}건${documents.length === 50 ? " (최근 50건까지)" : ""}`;
+    `‘${state.search}’ 검색 결과 ${found}건${searchFrom ? " (이전 글은 더 찾기)" : ""}`;
+  $("searchMore").hidden = !searchFrom;
   $("logPages").hidden = true;
+  routeList();
 }
+$("searchMore").onclick = () => run(() => showSearch({ more: true }));
 $("boardSearch").onsubmit = (event) => {
   event.preventDefault?.();
   run(async () => {
@@ -188,8 +252,13 @@ $("boardSearch").onsubmit = (event) => {
 export async function logItem(log) {
   const item = $("logTemplate").content.firstElementChild.cloneNode(true);
   item.dataset.id = log.id;
-  item.querySelector(".log-number").textContent =
-    `${log.data.notice ? "공지 · " : ""}${log.data.number ? `No. ${log.data.number}` : ""}`;
+  // The post's number links to its permanent address.
+  const number = document.createElement("a");
+  number.href = `#/post/${encodeURIComponent(log.id)}`;
+  number.textContent = log.data.number ? `No. ${log.data.number}` : "링크";
+  item
+    .querySelector(".log-number")
+    .replaceChildren(log.data.notice ? "공지 · " : "", number);
   const pin = item.querySelector(".pin");
   const move = item.querySelector(".move");
   pin.hidden = move.hidden = state.role !== "moderator" || log.data.locked;
@@ -440,6 +509,17 @@ export async function logItem(log) {
   comments.ontoggle = () => {
     if (comments.open && cursor === undefined) load(false);
   };
+  // Opens the comments at one, reading on until it is found.
+  item.showComment = async (id) => {
+    comments.open = true;
+    if (cursor === undefined) await load(false);
+    const find = () =>
+      item.querySelector(`.comment[data-id="${CSS.escape(id)}"]`);
+    while (!find() && cursor) await load(true);
+    const found = find();
+    found?.classList.add("linked");
+    return Boolean(found);
+  };
   item.querySelector(".more-comments").onclick = () => load(true);
   const form = item.querySelector(".comment-form");
   const picker = document.createElement("details");
@@ -561,6 +641,7 @@ export async function logItem(log) {
 async function commentItem(comment) {
   const item = document.createElement("li");
   item.className = "comment";
+  item.dataset.id = comment.id;
   const author = document.createElement("strong");
   author.className = "author";
   author.append(await speakerLabel(comment));
@@ -572,6 +653,13 @@ async function commentItem(comment) {
     item.append(dice, " ");
   }
   item.append(postText(comment.data.text ?? "", await loadEmoticons()));
+  // The comment's own address (#/post/<id>/comment/<id>).
+  const link = document.createElement("a");
+  link.className = "permalink";
+  link.href = `#/post/${encodeURIComponent(comment.data.logId)}/comment/${encodeURIComponent(comment.id)}`;
+  link.title = "댓글 링크";
+  link.textContent = "#";
+  item.append(" ", link);
   for (const action of Array.isArray(comment.data.actions)
     ? comment.data.actions
     : [])

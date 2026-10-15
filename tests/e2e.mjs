@@ -295,6 +295,31 @@ try {
   await alice
     .locator("#characterSheet .character-name", { hasText: "초록" })
     .waitFor();
+  // The board list names its board; a post links to its own address and a
+  // comment to its own, and both survive a reload; so does a tag.
+  await menu(alice, "로그");
+  await alice.waitForURL(/#\/logs\/default$/);
+  await alice
+    .locator("#logs .log", { hasText: "첫 로그" })
+    .locator(".log-number a")
+    .click();
+  await alice.waitForURL(/#\/post\/[^/]+$/);
+  await alice.reload();
+  await alice.locator("#logFocus .log", { hasText: "첫 로그" }).waitFor();
+  await alice.locator("#logFocus .comments > summary").click();
+  const commentLink = await alice
+    .locator("#logFocus .comment", { hasText: "멋져요" })
+    .locator(".permalink")
+    .getAttribute("href");
+  assert.match(commentLink, /^#\/post\/[^/]+\/comment\/[^/]+$/);
+  await alice.goto(`${origin}/${commentLink}`);
+  await alice.reload();
+  await alice
+    .locator("#logFocus .comment.linked", { hasText: "멋져요" })
+    .waitFor();
+  await alice.goto(`${origin}/#/logs/default/tag/${encodeURIComponent("봄")}`);
+  await alice.reload();
+  await alice.locator("#tagName", { hasText: "봄" }).waitFor();
   await alice.goto(`${origin}/#/shop/${encodeURIComponent("이벤트")}`);
   await alice.locator("#items li", { hasText: "케이크" }).waitFor();
 

@@ -73,6 +73,8 @@ export async function loadContentPages() {
   } while (cursor);
   if ([...$("contentPage").options].some((option) => option.value === previous))
     $("contentPage").value = previous;
+  if (!$("contentView").hidden && $("contentPage").value)
+    route(`content/${$("contentPage").value}`, { replace: true });
   await loadContentBody();
 }
 $("tabContent").onclick = () =>

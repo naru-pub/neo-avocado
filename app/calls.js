@@ -1,17 +1,7 @@
 // Notifications: calls and replies to the member.
 
-import {
-  $,
-  caller,
-  COLLECTION,
-  collection,
-  formatTime,
-  run,
-  showTab,
-  state,
-} from "./core.js";
+import { $, caller, formatTime, run, showTab, state } from "./core.js";
 import { showCalls } from "./live.js";
-import { logItem } from "./logs.js";
 
 /** ajax/board_call.php's alarm list: calls and comment notices, newest first. */
 async function loadCalls({ more = false } = {}) {
@@ -29,14 +19,10 @@ async function loadCalls({ more = false } = {}) {
     const li = document.createElement("li");
     li.className = row.data.unread ? "call unread" : "call";
     li.textContent = `${row.data.unread ? "[새 알림] " : ""}${row.data.nick || "이름 없음"}${row.data.speaker ? ` (${row.data.speaker})` : ""}님이 ${row.data.kind === "comment" ? "내 글에 댓글을 남겼습니다" : "호출했습니다"} · ${formatTime(row.data.at)} · ${row.data.preview} `;
-    const open = document.createElement("button");
-    open.type = "button";
+    // The post, at the comment when there is one: their own addresses.
+    const open = document.createElement("a");
+    open.href = `#/post/${encodeURIComponent(row.data.logId)}${row.data.commentId ? `/comment/${encodeURIComponent(row.data.commentId)}` : ""}`;
     open.textContent = "글 보기";
-    open.onclick = () =>
-      run(async () => {
-        const log = await collection(COLLECTION.logs).get(row.data.logId);
-        $("callDetail").replaceChildren(await logItem(log));
-      });
     li.append(open);
     $("calls").append(li);
   }
