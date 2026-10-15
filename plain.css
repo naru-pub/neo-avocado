@@ -13,7 +13,31 @@
   --ink: #000000;
   --line: #000000;
   --surface: transparent;
+  --rule: #ddd;
+  --corner: #222326;
   font-family: initial;
+}
+/* The same page in dark (see style.css): light text and lines on near-black,
+   links in a light blue, as browsers' own dark pages show them. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):has(body.site:not(.designed)) {
+    --avocado: #8ab4f8;
+    --pit: #a0a0a0;
+    --paper: #121212;
+    --ink: #e8e8e8;
+    --line: #9a9a9a;
+    --rule: #333;
+    --corner: #3a3b40;
+  }
+}
+:root[data-theme="dark"]:has(body.site:not(.designed)) {
+  --avocado: #8ab4f8;
+  --pit: #a0a0a0;
+  --paper: #121212;
+  --ink: #e8e8e8;
+  --line: #9a9a9a;
+  --rule: #333;
+  --corner: #3a3b40;
 }
 body.site:not(.designed) {
   line-height: 1.5em;
@@ -67,11 +91,24 @@ body.site:not(.designed) .tabs {
 body.site:not(.designed) #menuToggle {
   display: none;
 }
+/* 화면 모드 sits in the header's top right corner. */
+body.site:not(.designed) > .top {
+  position: relative;
+}
+body.site:not(.designed) > .top .scheme-choice {
+  position: absolute;
+  top: 15px;
+  right: 0;
+}
+/* The owner's design has its own colours. */
+body.site.designed .scheme-choice {
+  display: none;
+}
 
 /* Boxes (.theme-box) and buttons (.ui-btn): no fill, a 1px border. */
 body.site:not(.designed) .card {
   border: 0;
-  border-bottom: 1px solid #ddd;
+  border-bottom: 1px solid var(--rule);
   background: none;
 }
 body.site:not(.designed) button,
@@ -206,7 +243,7 @@ body.site:not(.designed) #banners[hidden] {
   align-items: flex-end;
   justify-content: flex-end;
   padding: 0 8px 14px 0;
-  background: #222326;
+  background: var(--corner);
   clip-path: polygon(100% 0, 100% 100%, 0 100%);
   color: #fff;
   font: bold 14px sans-serif;
@@ -229,21 +266,23 @@ body.site.designed #gotoTop {
     margin: 0 -10px;
     padding: 0 10px;
     background: var(--paper);
-    border-bottom: 1px solid #ddd;
+    border-bottom: 1px solid var(--rule);
   }
   body.site:not(.designed) > .top h1 {
     font-size: 18px;
   }
-  /* Title, then music, then the menu button at the edge. */
-  body.site:not(.designed) > .top .bgm-player {
+  /* Title, then 화면 모드, music and the menu button at the edge. */
+  body.site:not(.designed) > .top .scheme-choice {
+    position: static;
     order: 2;
     margin-left: auto;
   }
-  body.site:not(.designed) #menuToggle {
+  body.site:not(.designed) > .top .bgm-player {
     order: 3;
-    margin-left: auto;
+    margin-left: 8px;
   }
-  body.site:not(.designed) > .top:has(.bgm-player:not([hidden])) #menuToggle {
+  body.site:not(.designed) #menuToggle {
+    order: 4;
     margin-left: 8px;
   }
   body.site:not(.designed) > .top .bar-equalizer {

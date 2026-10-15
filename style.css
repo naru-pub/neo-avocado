@@ -8,8 +8,59 @@
   --ink: #333;
   --line: #ddd;
   --surface: #f7f7f7;
+  /* Colours the palette above doesn't cover, so dark mode can swap them. */
+  --on-avocado: #fff;
+  --control-line: #bbb;
+  --hover: #eee;
+  --strong: #222;
+  --on-strong: #fff;
+  --focus: #555;
+  --quiet: #888;
+  --faint: #aaa;
   font-family: "Dotum", "돋움", "Apple SD Gothic Neo", sans-serif;
   font-size: 12px;
+}
+/* Dark mode: the visitor's choice (scheme.js sets data-theme on <html>), or
+   their system's when they haven't chosen. plain.css darkens the community's
+   plain look the same way; the owner's design (theme.css) keeps its colours. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --avocado: #cfcfcf;
+    --pit: #9a9a9a;
+    --paper: #18191b;
+    --ink: #e4e4e4;
+    --line: #3a3b3e;
+    --surface: #222326;
+    --on-avocado: #111;
+    --control-line: #555;
+    --hover: #2e2f33;
+    --strong: #e4e4e4;
+    --on-strong: #111;
+    --focus: #aaa;
+    --quiet: #777;
+    --faint: #666;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --avocado: #cfcfcf;
+  --pit: #9a9a9a;
+  --paper: #18191b;
+  --ink: #e4e4e4;
+  --line: #3a3b3e;
+  --surface: #222326;
+  --on-avocado: #111;
+  --control-line: #555;
+  --hover: #2e2f33;
+  --strong: #e4e4e4;
+  --on-strong: #111;
+  --focus: #aaa;
+  --quiet: #777;
+  --faint: #666;
+}
+.scheme-choice {
+  width: auto;
 }
 * {
   box-sizing: border-box;
@@ -37,7 +88,7 @@ h1 {
   color: var(--avocado);
 }
 button {
-  border: 1px solid #bbb;
+  border: 1px solid var(--control-line);
   border-radius: 0;
   background: var(--paper);
   color: inherit;
@@ -49,7 +100,7 @@ button {
 button[type="submit"],
 .tabs button[aria-pressed="true"] {
   background: var(--avocado);
-  color: #fff;
+  color: var(--on-avocado);
 }
 .tabs {
   display: flex;
@@ -224,7 +275,7 @@ p {
 input:not([type="checkbox"]),
 textarea,
 select {
-  border: 1px solid #bbb;
+  border: 1px solid var(--control-line);
   border-radius: 0;
   background: var(--paper);
   color: var(--ink);
@@ -243,21 +294,21 @@ input[type="checkbox"] {
   accent-color: var(--avocado);
 }
 :focus-visible {
-  outline: 2px solid #555;
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 button:hover:not(:disabled) {
-  background: #eee;
+  background: var(--hover);
   color: var(--ink);
 }
 button[type="submit"]:hover:not(:disabled) {
-  background: #222;
-  color: #fff;
+  background: var(--strong);
+  color: var(--on-strong);
 }
 [role="status"]:not(:empty) {
   padding: 10px;
   background: var(--surface);
-  border-left: 2px solid #888;
+  border-left: 2px solid var(--quiet);
 }
 #welcome,
 #profileSetup,
@@ -535,7 +586,7 @@ dialog {
 .item-portrait > i {
   font-style: normal;
   font-size: 28px;
-  color: #aaa;
+  color: var(--faint);
 }
 .shop-item > span {
   display: block;

@@ -16,6 +16,9 @@
   --input-ink: #eeeeee;
   --input-line: #222222;
   --menu-width: 200px;
+  /* Kept whatever 화면 모드 the visitor chose: the design is its own. */
+  --quiet: #888;
+  --faint: #aaa;
   background: var(--paper);
 }
 body.site.designed {

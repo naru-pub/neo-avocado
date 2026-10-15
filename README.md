@@ -64,7 +64,9 @@ HTML 글을 쓰며, 스크립트·폼·스타일은 표시하지 않습니다. �
 기본 화면은 원본 아보카도 에디션을 설치한 직후(디자인 사용 꺼짐)와 같습니다:
 흰 바탕, 왼쪽 위 로고, 가운데 세로 메뉴, 메인의 검은 슬라이드 띠와 회원 카드,
 TOP 버튼. 원본과 달리 휴대폰에서는 메뉴가 버튼 뒤로 접히고 상자가 세로로
-쌓입니다. 운영 화면의 **디자인**에서 **디자인 사용**을 켜면 원본의 기본
+쌓입니다. 오른쪽 위의 화면 모드(시스템·라이트·다크)로 방문자가 어두운 화면을
+고를 수 있고, 고르지 않으면 기기 설정을 따릅니다(`scheme.js`, 운영 화면도
+같습니다). 운영 화면의 **디자인**에서 **디자인 사용**을 켜면 원본의 기본
 디자인(어두운 배경, 왼쪽 메뉴)이 되고, 사이트 이름, 로고, 배경, 글꼴과 색을
 정할 수 있습니다. **메뉴**에서 상단 메뉴(2단계까지)를, **메인 슬라이드·인트로**에서
 기간이 있는 배너와 첫 방문 인트로를 정합니다. 메뉴를 만들지 않으면 원본의 기본
@@ -140,17 +142,17 @@ HTML은 [DOMPurify](https://github.com/cure53/DOMPurify)로 정리하여 표시�
 그대로 도는 JavaScript 모듈이고, 서버 함수는 나루가 사이트 소유자 권한으로 실행합니다.
 돈·재고·주사위처럼 회원이 마음대로 정하면 안 되는 값은 서버 함수만 바꿉니다.
 
-| 기능                   | 화면                                       | 서버 함수                                                        |
-| ---------------------- | ------------------------------------------ | ---------------------------------------------------------------- |
-| 로그인·가입·닉네임     | `app.js`                                   | `_naru/functions/community/membership.js`                        |
-| 게시판·로그·댓글       | `app/logs.js`, `app/posts.js`              | `_naru/functions/community/posts.js`, `comments.js`, `boards.js` |
-| 캐릭터                 | `app/characters.js`                        | `_naru/functions/characters/` (`sheet.js`가 등록·수정·삭제)      |
-| 상점·인벤토리·제작     | `app/shop.js`                              | `_naru/functions/economy/`                                       |
-| 쪽지                   | `app/messages.js`                          | `_naru/functions/community/messages.js`                          |
-| 알림(호출)             | `app/calls.js`                             | `_naru/functions/community/calls.js`                             |
-| 퀘스트·안내 페이지     | `app/content.js`                           | `_naru/functions/content/`                                       |
-| 디자인·메뉴·배너       | `app/site.js`                              | `_naru/functions/content/site.js`                                |
-| 새 글·알림 실시간 수신 | `app/live.js`                              |                                                                  |
+| 기능                   | 화면                                   | 서버 함수                                                        |
+| ---------------------- | -------------------------------------- | ---------------------------------------------------------------- |
+| 로그인·가입·닉네임     | `app.js`                               | `_naru/functions/community/membership.js`                        |
+| 게시판·로그·댓글       | `app/logs.js`, `app/posts.js`          | `_naru/functions/community/posts.js`, `comments.js`, `boards.js` |
+| 캐릭터                 | `app/characters.js`                    | `_naru/functions/characters/` (`sheet.js`가 등록·수정·삭제)      |
+| 상점·인벤토리·제작     | `app/shop.js`                          | `_naru/functions/economy/`                                       |
+| 쪽지                   | `app/messages.js`                      | `_naru/functions/community/messages.js`                          |
+| 알림(호출)             | `app/calls.js`                         | `_naru/functions/community/calls.js`                             |
+| 퀘스트·안내 페이지     | `app/content.js`                       | `_naru/functions/content/`                                       |
+| 디자인·메뉴·배너       | `app/site.js`                          | `_naru/functions/content/site.js`                                |
+| 새 글·알림 실시간 수신 | `app/live.js`                          |                                                                  |
 | 운영 화면              | `admin/`, `admin.js`, `admin-model.js` | `_naru/functions/characters/review.js`                           |
 
 `app/core.js`는 모든 화면이 함께 쓰는 것(컬렉션 이름, 상태, 오류 표시, 편집 창)입니다.

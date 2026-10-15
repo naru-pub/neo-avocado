@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="style.css" />
     <link rel="stylesheet" href="plain.css" />
     <link rel="stylesheet" href="theme.css" />
+    <script src="scheme.js"></script>
   </head>
   <body class="site">
     <header class="top">
@@ -31,6 +32,11 @@
         aria-label="사이트 메뉴"
         hidden
       ></nav>
+      <select id="schemeChoice" class="scheme-choice" aria-label="화면 모드">
+        <option value="">시스템</option>
+        <option value="light">라이트</option>
+        <option value="dark">다크</option>
+      </select>
       <!-- templete/txt.bgm.php: the owner's YouTube music, on request. -->
       <div id="bgmPlayer" class="bgm-player" hidden>
         <span class="bar-equalizer" aria-hidden="true"

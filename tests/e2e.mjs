@@ -544,6 +544,41 @@ try {
   await bob.reload();
   await bob.locator("#admissionTitle", { hasText: "탈퇴한 회원" }).waitFor();
 
+  // 화면 모드: the system's by default, then the visitor's choice, kept
+  // across reloads and on the admin page.
+  const night = await (
+    await browser.newContext({ colorScheme: "dark" })
+  ).newPage();
+  night.on("pageerror", (error) => errors.push(error.message));
+  const paper = () =>
+    night.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  await night.goto(`${origin}/`);
+  await night.locator("#homeView").waitFor();
+  assert.equal(await night.locator("#schemeChoice").inputValue(), "");
+  assert.equal(await paper(), "rgb(18, 18, 18)");
+  if (process.env.E2E_SHOTS)
+    await night.screenshot({ path: `${process.env.E2E_SHOTS}/dark.png` });
+  await night.locator("#schemeChoice").selectOption("light");
+  assert.equal(await paper(), "rgb(255, 255, 255)");
+  await night.reload();
+  assert.equal(await night.locator("#schemeChoice").inputValue(), "light");
+  assert.equal(await paper(), "rgb(255, 255, 255)");
+  await night.goto(`${origin}/admin/`);
+  assert.equal(await night.locator("#schemeChoice").inputValue(), "light");
+  assert.equal(await paper(), "rgb(255, 255, 255)");
+  await night.locator("#schemeChoice").selectOption("dark");
+  assert.equal(await paper(), "rgb(24, 25, 27)");
+  if (process.env.E2E_SHOTS) {
+    await night.screenshot({ path: `${process.env.E2E_SHOTS}/admin-dark.png` });
+    await night.setViewportSize({ width: 390, height: 800 });
+    await night.goto(`${origin}/`);
+    await night.locator("#homeView").waitFor();
+    await night.screenshot({
+      path: `${process.env.E2E_SHOTS}/narrow-dark.png`,
+    });
+    await alice.screenshot({ path: `${process.env.E2E_SHOTS}/alice.png` });
+  }
+
   assert.deepEqual(errors, []);
   console.log("neo-avocado on naru-dev: every flow passed.");
 } catch (error) {
