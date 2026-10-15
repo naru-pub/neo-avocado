@@ -162,9 +162,6 @@ function fakeDatabase(rows = {}) {
   });
   const member = {
     id: ME,
-    async membership() {
-      return { id: ME, status: database.platformStatus ?? "approved" };
-    },
     collection,
     media: {
       async upload(file, options) {
@@ -198,6 +195,12 @@ function fakeDatabase(rows = {}) {
     // 서버 함수는 나루에서 돈다. 여기서는 무엇을 불렀는지만 남기고, 테스트가
     // 정한 결과를 돌려준다.
     async call(name, args = null) {
+      // What Naru answers a member the site has not approved.
+      if ((database.platformStatus ?? "approved") !== "approved")
+        throw Object.assign(new Error("Membership is not approved."), {
+          code: "ACCESS_DENIED",
+          details: { membership: database.platformStatus },
+        });
       // The site frame is read on every load; tests that care set database.site.
       if (name === "content/site:site") {
         if (database.unprepared)
@@ -1058,15 +1061,21 @@ test("a live platform ban clears private content after ACCESS_DENIED; board deni
     const { $, settle } = await page(database);
     database.platformStatus = status;
     const call = database.member.call;
-    // Every read a banned member makes is refused; their other calls too.
+    // Every read a banned member makes is refused, saying why; an approved
+    // member's refusal is the board's own, without it.
+    const denied = () =>
+      Object.assign(new Error("denied"), {
+        code: "ACCESS_DENIED",
+        ...(status === "banned" ? { details: { membership: "banned" } } : {}),
+      });
     database.member.call = async (name, args) => {
       if (name.endsWith(":communityRead") || name.endsWith(":membership"))
-        throw Object.assign(new Error("denied"), { code: "ACCESS_DENIED" });
+        throw denied();
       return call.call(database.member, name, args);
     };
     database.member.collection = () => ({
       list: async () => {
-        throw Object.assign(new Error("denied"), { code: "ACCESS_DENIED" });
+        throw denied();
       },
     });
     await $("board").onchange();

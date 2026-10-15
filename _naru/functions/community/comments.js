@@ -97,7 +97,7 @@ export async function write(
       value.character = speaker.character;
       value.speaker = speaker;
     }
-    if (value.dice) value.rolls = rollDice(ctx);
+    if (value.dice) value.rolls = rollDice();
     const actions = [];
     if (data.action === "explore") actions.push(await explore(ctx, speaker));
     if (data.action === "combine")

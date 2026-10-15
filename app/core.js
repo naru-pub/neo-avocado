@@ -97,6 +97,12 @@ export function say(message) {
 export async function uploadManaged(file) {
   return await state.member.media.upload(file, { managed: true });
 }
+/**
+ * "pending" or "banned" when Naru refused the member because the site has not
+ * approved them (or has banned them); null for any other error.
+ */
+export const standing = (error) =>
+  (error?.code === "ACCESS_DENIED" && error.details?.membership) || null;
 export async function run(action) {
   try {
     await action();
@@ -107,20 +113,9 @@ export async function run(action) {
       clearPrivateViews();
       show();
     }
-    if (error?.code === "ACCESS_DENIED" && state.member) {
-      try {
-        const platform = await state.member.membership();
-        if (platform.status !== "approved") {
-          showAdmission(platform.status);
-          return;
-        }
-      } catch (statusError) {
-        if (statusError?.code === "AUTH_REQUIRED") {
-          state.member = null;
-          clearPrivateViews();
-          show();
-        }
-      }
+    if (state.member && standing(error)) {
+      showAdmission(standing(error));
+      return;
     }
     say(
       // A collection that does not exist yet: Naru creates them from

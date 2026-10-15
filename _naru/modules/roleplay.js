@@ -67,8 +67,8 @@ export async function speakerOf(ctx, id) {
 }
 
 /** Two six-sided dice from the server's random source, fixed once posted. */
-export function rollDice(ctx) {
-  return [0, 1].map(() => 1 + Math.floor(ctx.random() * 6));
+export function rollDice() {
+  return [0, 1].map(() => 1 + Math.floor(Math.random() * 6));
 }
 
 const CALL = /\[\[([^[\]\r\n]{1,20})\]\]/g;

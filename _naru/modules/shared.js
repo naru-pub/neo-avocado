@@ -371,7 +371,7 @@ export async function draw(ctx, source = null, collection = GACHA) {
   if (!table.length) return { configured: false, prize: null };
   const total = table.reduce((sum, row) => sum + row.data.weight, 0);
   if (!Number.isFinite(total)) throw new Error("Draw weights are too large.");
-  let roll = ctx.random() * total;
+  let roll = Math.random() * total;
   const won =
     table.find((row) => (roll -= row.data.weight) < 0) ?? table.at(-1);
   if (won.data.item === null) return { configured: true, prize: null };

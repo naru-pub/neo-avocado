@@ -23,6 +23,7 @@ import {
   showAdmission,
   showTab,
   state,
+  standing,
 } from "./app/core.js";
 import { listen } from "./app/live.js";
 import { loadSite } from "./app/site.js";
@@ -96,13 +97,16 @@ async function start() {
   // The site's frame is decoration: without it the default design shows.
   await loadSite().catch((error) => console.error(error));
   if (!state.member) return visit();
-  const platform = await state.member.membership();
-  state.admission = platform.status;
-  if (platform.status !== "approved") {
+  let status;
+  try {
+    status = await caller().call("community/membership:membership");
+  } catch (error) {
+    // Naru's refusal says when the site has not approved this member yet.
+    if (!standing(error)) throw error;
     show();
-    return showAdmission(platform.status);
+    return showAdmission(standing(error));
   }
-  const status = await caller().call("community/membership:membership");
+  state.admission = "approved";
   if (status.left) {
     show();
     return showAdmission("left");

@@ -56,6 +56,8 @@ import { onDisplay } from "../_naru/modules/display.js";
 
 const P = "neo_avocado_";
 function fakeCtx({ now = Date.parse("2030-01-01T03:00:00Z"), roll = 0 } = {}) {
+  // Functions roll with Math.random, the host's on Naru.
+  Math.random = () => roll;
   const store = new Map();
   let added = 0;
   const table = (name) => {
@@ -69,7 +71,6 @@ function fakeCtx({ now = Date.parse("2030-01-01T03:00:00Z"), roll = 0 } = {}) {
   const ctx = {
     member: { id: "m-1" },
     now,
-    random: () => roll,
     notify: (member, data) => sent.push({ member, data }),
     broadcast: (topic, data) => sent.push({ topic, data }),
     fail: (code, message, details) => {
@@ -1724,7 +1725,7 @@ test("dice are rolled by the server once and cannot be rerolled or forged by edi
     })
   ).document;
   assert.deepEqual(comment.data.rolls, [6, 6]);
-  ctx.random = () => 0;
+  Math.random = () => 0;
   const edited = (
     await gate(ctx, "comments", "set", {
       id: comment.id,
@@ -1739,7 +1740,7 @@ test("dice are rolled by the server once and cannot be rerolled or forged by edi
     })
   ).document;
   assert.deepEqual(log.data.rolls, [1, 1]);
-  ctx.random = () => 0.5;
+  Math.random = () => 0.5;
   const kept = (
     await gate(ctx, "logs", "set", {
       id: log.id,
@@ -1957,7 +1958,7 @@ test("exploration is limited per character per Korean day and drops configured i
     drops.map((row) => [row.item, row.character, row.from]),
     [["herb", "hero", "explore"]],
   );
-  ctx.random = () => 0.9;
+  Math.random = () => 0.9;
   assert.equal((await explore()).document.data.actions[0].item, null);
   assert.equal(await reasonOf(explore()), "explore_limit");
   // 2030-01-01 15:00 UTC is midnight in Korea: a new day, counted on request.

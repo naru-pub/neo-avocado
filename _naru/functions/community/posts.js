@@ -127,7 +127,7 @@ export async function write(
     }
     if (data.dice === true) {
       value.dice = true;
-      value.rolls = rollDice(ctx);
+      value.rolls = rollDice();
     }
   }
   calls = guest
