@@ -10,7 +10,8 @@ import { author, communityAccess } from "./shared.js";
  * and password. Members change their own documents, and with `moderated`
  * a moderator changes anyone's. A guest (`guests`) proves a post is theirs
  * with its password (bbs/password_check.php), which Naru keeps as the
- * document's secret.
+ * document's secret. With `owners`, the site owner changes anyone's, as the
+ * original's admin edits every character (adm/character_form_update.php).
  */
 export async function startWrite(
   ctx,
@@ -21,9 +22,11 @@ export async function startWrite(
     revision = null,
     guests = false,
     moderated = false,
+    owners = false,
   },
 ) {
-  if (!ctx.member && !guests)
+  const asOwner = owners && ctx.owner === true;
+  if (!ctx.member && !guests && !asOwner)
     ctx.fail("ACCESS_DENIED", "권한이 없습니다.", { reason: "access_denied" });
   if (id !== null && typeof id !== "string")
     ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
@@ -36,7 +39,9 @@ export async function startWrite(
       reason: "document_not_found",
     });
   let guest = null;
-  if (!ctx.member) {
+  if (asOwner) {
+    // The site owner needs no password or authorship.
+  } else if (!ctx.member) {
     const password = given?.password;
     if (
       typeof password !== "string" ||

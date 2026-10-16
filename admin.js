@@ -96,12 +96,14 @@ async function openAddress() {
       $("adminSection").value = name;
     }
     $("adminForm").hidden = true;
+    $("characterForm").hidden = true;
     $("titleGrantForm").hidden = true;
     const model = models[section];
     reportFilters = model.report && name === section ? [entry, ...filters] : [];
     await load();
     if (model.report || name !== section || !entry) return;
-    if (entry === "new") return openForm();
+    const open = model.review ? openCharacterForm : openForm;
+    if (entry === "new") return open();
     const row = await owner
       .collection(model.collection)
       .get(entry)
@@ -113,7 +115,7 @@ async function openAddress() {
       $("adminStatus").textContent = "자료를 찾을 수 없습니다.";
       return;
     }
-    await openForm(row);
+    await open(row);
   } finally {
     routing = false;
   }
@@ -132,7 +134,9 @@ async function load({ more = false } = {}) {
   const requestedSection = section;
   const model = models[section];
   $("adminHelp").textContent = model.help;
-  $("adminNew").hidden = Boolean(model.readOnly);
+  // The review registers characters too (adm/character_form.php, w='').
+  $("adminNew").hidden = Boolean(model.readOnly) && !model.review;
+  $("adminNew").textContent = model.review ? "새 캐릭터" : "새로 등록";
   $("adminReport").hidden = !model.report;
   $("adminRows").hidden = Boolean(model.report);
   if (model.report) {
@@ -158,6 +162,7 @@ async function load({ more = false } = {}) {
     };
   } else if (model.review) {
     references.fields = await all("neo_avocado_character_fields");
+    references.profiles = await all("neo_avocado_profiles");
     page = await owner.collection(model.collection).list({
       size: 50,
       after: more ? cursor : null,
@@ -437,10 +442,247 @@ function reviewRow(row) {
     button.onclick = () => decide(state);
     return button;
   });
+  // adm/character_list.php's 수정 and 삭제, and the form's 오너아이디.
+  const edit = document.createElement("button");
+  edit.type = "button";
+  edit.textContent = "수정";
+  edit.onclick = () => run(() => openCharacterForm(row));
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.textContent = "삭제";
+  remove.onclick = () =>
+    run(async () => {
+      if (
+        !confirm(
+          `${row.data.name}을(를) 삭제할까요? 관계·옷장·커플·공식 기록도 함께 지웁니다.`,
+        )
+      )
+        return;
+      for (const control of form.querySelectorAll("button,input,select"))
+        control.disabled = true;
+      try {
+        await removeCharacter(row);
+        $("adminStatus").textContent = `${row.data.name}을(를) 삭제했습니다.`;
+        await load();
+      } finally {
+        for (const control of form.querySelectorAll("button,input,select"))
+          control.disabled = false;
+      }
+    });
+  const moveTo = document.createElement("input");
+  moveTo.className = "move-nick";
+  moveTo.placeholder = "닉네임";
+  moveTo.maxLength = 20;
+  moveTo.setAttribute("aria-label", "옮길 회원 닉네임");
+  const move = document.createElement("button");
+  move.type = "button";
+  move.textContent = "회원 변경";
+  move.onclick = () =>
+    run(async () => {
+      const nick = moveTo.value.trim();
+      if (!nick) throw new Error("옮길 회원의 닉네임을 적어 주세요.");
+      for (const control of form.querySelectorAll("button,input,select"))
+        control.disabled = true;
+      try {
+        // Outfits, relations and items follow in bounded steps.
+        let result = await owner.call("characters/sheet:move", {
+          id: row.id,
+          nick,
+          revision: row.revision,
+        });
+        while (!result.done)
+          result = await owner.call("characters/sheet:move", {
+            id: row.id,
+            nick,
+          });
+        $("adminStatus").textContent =
+          `${row.data.name}을(를) ${nick}님에게 옮겼습니다.`;
+        await load();
+      } finally {
+        for (const control of form.querySelectorAll("button,input,select"))
+          control.disabled = false;
+      }
+    });
+  const manage = document.createElement("div");
+  manage.className = "review-manage";
+  manage.append(edit, " ", remove, " ", moveTo, move);
   form.onsubmit = (event) => event.preventDefault();
-  form.append(heading, " ", type, summary, sheet, ...buttons);
+  form.append(heading, " ", type, summary, sheet, ...buttons, manage);
   return form;
 }
+/**
+ * Deletes a character as adm/character_delete.php does, in the function's
+ * bounded steps until it is done.
+ */
+async function removeCharacter(row) {
+  for (let step = 1; ; step++) {
+    const { done } = await owner.call("characters/sheet:remove", {
+      id: row.id,
+    });
+    if (done) return;
+    $("adminStatus").textContent = `${row.data.name} 정리 중… (${step})`;
+  }
+}
+/**
+ * The owner's full form for one character (adm/character_form.php:112-423):
+ * the member it belongs to when new, state, type, 소속, 종족, name, profile,
+ * picture and every custom field. Stats and points stay in 캐릭터 승인·경험치·
+ * 능력치·타이틀. Image fields take a managed upload as the other forms do.
+ */
+async function openCharacterForm(row = null) {
+  const [fields, sides, classes] = await Promise.all([
+    all("neo_avocado_character_fields"),
+    all("neo_avocado_sides"),
+    all("neo_avocado_classes"),
+  ]);
+  references.fields = fields;
+  selected = row;
+  adminRoute([section, row ? row.id : "new"]);
+  $("adminForm").hidden = true;
+  $("characterFormTitle").textContent = row
+    ? `${row.data.name} 수정`
+    : "새 캐릭터";
+  $("characterFormStatus").textContent = "";
+  const box = $("characterFields");
+  box.replaceChildren();
+  const add = (text, input, image = null) => {
+    const label = document.createElement("label");
+    label.append(text, input);
+    box.append(label);
+    if (image) box.append(imageUpload(image, input.value));
+    return input;
+  };
+  const textInput = (name, value, max) => {
+    const input = document.createElement("input");
+    input.name = name;
+    input.value = value ?? "";
+    input.maxLength = max;
+    return input;
+  };
+  const choice = (name, value, options, empty = "선택하지 않음") => {
+    const select = document.createElement("select");
+    select.name = name;
+    if (empty !== null) select.append(new Option(empty, ""));
+    for (const [id, text] of options) select.append(new Option(text, id));
+    if (value && !options.some(([id]) => id === value))
+      select.append(new Option(`${value} (목록에 없음)`, value));
+    select.value = value ?? "";
+    return select;
+  };
+  if (!row) {
+    const nick = add("회원 닉네임", textInput("nick", "", 20));
+    nick.required = true;
+  }
+  add(
+    "상태",
+    choice("state", row?.data.state ?? "editing", Object.entries(STATES), null),
+  );
+  add("캐릭터 종류", choice("type", row?.data.type ?? "main", TYPES, null));
+  // A pick from the owner's list; free text while it is empty.
+  const listed = (name, label, rows, value) => {
+    const names = rows
+      .filter((entry) => !entry.data.deleted)
+      .sort((a, b) => (a.data.order ?? 0) - (b.data.order ?? 0))
+      .map((entry) => [entry.data.name, entry.data.name]);
+    add(
+      label,
+      names.length ? choice(name, value, names) : textInput(name, value, 40),
+    );
+  };
+  listed("side", "소속", sides, row?.data.side);
+  listed("class", "종족", classes, row?.data.class);
+  const name = add("이름", textInput("name", row?.data.name, 40));
+  name.required = true;
+  const profile = document.createElement("textarea");
+  profile.name = "profile";
+  profile.maxLength = 4000;
+  profile.value = row?.data.profile ?? "";
+  add("프로필", profile);
+  const image = textInput("image", row?.data.image, 2000);
+  image.placeholder = "https://";
+  add("이미지", image, { key: "image", image: true });
+  const definitions = fields
+    .filter((field) => !field.data.deleted)
+    .sort((a, b) => (a.data.order ?? 0) - (b.data.order ?? 0));
+  for (const field of definitions) {
+    const value = row?.data.fields?.[field.id] ?? "";
+    const label = `${field.data.label ?? field.id}${field.data.visibility === "admin" ? " (운영자만)" : field.data.visibility === "owner" ? " (오너+운영자)" : ""}`;
+    const key = `field:${field.id}`;
+    const type = field.data.type ?? "text";
+    let input;
+    if (type === "textarea") {
+      input = document.createElement("textarea");
+      input.name = key;
+      input.maxLength = 2000;
+      input.value = value;
+    } else if (type === "select")
+      input = choice(
+        key,
+        value,
+        (field.data.options ?? []).map((option) => [option, option]),
+        "",
+      );
+    else {
+      input = textInput(key, value, type === "text" ? 200 : 2000);
+      if (type === "url" || type === "image") input.placeholder = "https://";
+    }
+    add(label, input, type === "image" ? { key, image: true } : null);
+  }
+  $("characterForm").hidden = false;
+}
+$("characterForm").onsubmit = async (event) => {
+  event.preventDefault();
+  const button = $("characterForm").querySelector('[type="submit"]');
+  button.disabled = true;
+  $("adminSection").disabled = true;
+  try {
+    const values = {};
+    for (const input of $("characterFields").querySelectorAll(
+      "input,select,textarea",
+    ))
+      if (input.name) values[input.name] = input.value;
+    for (const file of $("characterFields").querySelectorAll(
+      "[data-upload-for]",
+    )) {
+      if (!file.files?.length) continue;
+      $("characterFormStatus").textContent = "이미지를 올리는 중…";
+      values[file.dataset.uploadFor] = (
+        await owner.media.upload(file.files[0], { managed: true })
+      ).url;
+    }
+    $("characterFormStatus").textContent = "";
+    const fields = {};
+    for (const [key, value] of Object.entries(values))
+      if (key.startsWith("field:")) fields[key.slice(6)] = value;
+    const row = selected;
+    await owner.call("characters/sheet:save", {
+      ...(row ? { id: row.id, revision: row.revision } : { nick: values.nick }),
+      data: {
+        name: values.name,
+        side: values.side,
+        class: values.class,
+        profile: values.profile,
+        image: values.image.trim(),
+        type: values.type,
+        state: values.state,
+        fields,
+      },
+    });
+    $("characterForm").hidden = true;
+    adminRoute([section]);
+    $("adminStatus").textContent = "저장했습니다.";
+    await load();
+  } catch (error) {
+    $("characterFormStatus").textContent = message(error);
+  } finally {
+    button.disabled = false;
+    $("adminSection").disabled = false;
+  }
+};
+$("characterCancel").onclick = () => {
+  $("characterForm").hidden = true;
+  adminRoute([section]);
+};
 /**
  * An ID for a new row: the section's name and four random characters, which
  * every section's ID rules accept (a lowercase letter first, then lowercase
@@ -802,13 +1044,15 @@ $("adminCancel").onclick = () => {
   $("adminForm").hidden = true;
   adminRoute([section]);
 };
-$("adminNew").onclick = () => run(() => openForm());
+$("adminNew").onclick = () =>
+  run(() => (models[section].review ? openCharacterForm() : openForm()));
 $("adminMore").onclick = () => run(() => load({ more: true }));
 $("adminSection").onchange = () =>
   run(async () => {
     section = $("adminSection").value;
     adminRoute([section], { replace: false });
     $("adminForm").hidden = true;
+    $("characterForm").hidden = true;
     $("titleGrantForm").hidden = true;
     await load();
   });

@@ -4,7 +4,9 @@
 import {
   CHARACTER_FIELDS,
   CHARACTER_STATE,
+  PROFILES,
   author,
+  characterState,
   imageUrl,
   weightedRows,
 } from "./shared.js";
@@ -149,8 +151,12 @@ export async function currentState(ctx, row) {
  * site owner's admin-only fields, which are kept), main/sub type (an NPC stays
  * an NPC) and editing/submitted state (an approved character stays approved).
  * Submitting requires every required field the member can fill.
+ *
+ * The site owner writes every field, type and state, with no required
+ * fields, as the original's admin form (adm/character_form.php:112-423).
  */
 export async function memberSheet(ctx, previous, data) {
+  const owner = ctx.owner === true;
   const catalogue = await fieldCatalogue(ctx);
   const input = data.fields ?? {};
   if (!input || typeof input !== "object" || Array.isArray(input))
@@ -159,7 +165,7 @@ export async function memberSheet(ctx, previous, data) {
     });
   const editable = new Map(
     catalogue
-      .filter((definition) => definition.visibility !== "admin")
+      .filter((definition) => owner || definition.visibility !== "admin")
       .map((definition) => [definition.code, definition]),
   );
   for (const code of Object.keys(input))
@@ -192,25 +198,31 @@ export async function memberSheet(ctx, previous, data) {
       { reason: "fields_too_long" },
     );
   const was = previous?.data.type;
-  const type =
-    was === "npc"
-      ? "npc"
-      : (data.type ?? (CHARACTER_TYPES.includes(was) ? was : "main"));
+  const kept = CHARACTER_TYPES.includes(was) ? was : "main";
+  const type = was === "npc" && !owner ? "npc" : (data.type ?? kept);
   if (
-    !["main", "sub", "npc"].includes(type) ||
-    (type === "npc" && was !== "npc")
+    !CHARACTER_TYPES.includes(type) ||
+    (type === "npc" && was !== "npc" && !owner)
   )
     ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
       reason: "invalid_input",
     });
   const prior = await currentState(ctx, previous);
-  let state =
-    prior === "approved" ? "approved" : (data.state ?? prior ?? "editing");
-  if (prior !== "approved" && !["editing", "submitted"].includes(state))
+  const state = owner
+    ? (data.state ?? prior ?? "editing")
+    : prior === "approved"
+      ? "approved"
+      : (data.state ?? prior ?? "editing");
+  if (
+    owner
+      ? !CHARACTER_STATES.includes(state)
+      : prior !== "approved" && !["editing", "submitted"].includes(state)
+  )
     ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
       reason: "invalid_input",
     });
   if (
+    !owner &&
     state === "submitted" &&
     catalogue.some(
       (definition) =>
@@ -225,4 +237,46 @@ export async function memberSheet(ctx, previous, data) {
       { reason: "missing_fields" },
     );
   return { fields, type, state, catalogue };
+}
+
+/**
+ * Approval and the official record's `approved` flag change together, so
+ * shop and item conditions agree with the applicant list.
+ */
+export async function syncApproval(ctx, row, state) {
+  const official = await characterState(ctx, row.id, author(row));
+  if ((official.data.approved === true) !== (state === "approved"))
+    await ctx.set(CHARACTER_STATE, row.id, {
+      ...official.data,
+      approved: state === "approved",
+    });
+}
+
+/**
+ * The member the site owner names by nickname, as the admin form names the
+ * owner by ID (adm/character_form_update.php:9-13).
+ */
+export async function memberByNick(ctx, nick) {
+  const found =
+    typeof nick === "string" && nick.trim()
+      ? (await ctx.list(PROFILES, { filter: { nick: nick.trim() }, size: 1 }))
+          .documents[0]
+      : null;
+  if (!found)
+    ctx.fail("INVALID_REQUEST", "존재하지 않는 회원 정보 입니다.", {
+      reason: "no_member",
+    });
+  return found;
+}
+
+/**
+ * A member with no main character gets this one, as the admin's save sets
+ * the member's ch_id while it is empty (adm/character_form_update.php:84).
+ */
+export async function claimMain(ctx, profile, character) {
+  if (!profile.data.mainCharacter)
+    await ctx.set(PROFILES, profile.id, {
+      ...profile.data,
+      mainCharacter: character,
+    });
 }

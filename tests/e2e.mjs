@@ -576,6 +576,54 @@ try {
     /^\.\.\/#\/character\//,
   );
 
+  // The owner manages any character as adm/character_form.php: registers
+  // one for a member named by nickname, with every field and a picture,
+  // edits it, gives it to another member and deletes it.
+  await owner.locator("#adminNew", { hasText: "새 캐릭터" }).click();
+  await owner.waitForURL(/#\/character_review\/new$/);
+  const sheetForm = owner.locator("#characterForm");
+  await sheetForm.locator('[name="nick"]').fill("바뀐밥");
+  await sheetForm.locator('[name="name"]').fill("운영자캐");
+  await sheetForm.locator('[name="state"]').selectOption("approved");
+  await sheetForm.locator('[name="type"]').selectOption("npc");
+  await sheetForm.locator('[name="field:age"]').fill("99");
+  await sheetForm.locator('[name="field:diary"]').fill("오너만 보는 일기");
+  await sheetForm
+    .locator('[data-upload-for="field:art"]')
+    .setInputFiles(picture("art.png"));
+  await sheetForm.locator('[type="submit"]').click();
+  const made = owner
+    .locator("#adminRows .review")
+    .filter({ hasText: "운영자캐 · 바뀐밥 · 승인" });
+  await made.waitFor();
+  await made.locator(".review-manage button", { hasText: "수정" }).click();
+  await owner.waitForURL(/#\/character_review\/[^/]+$/);
+  assert.equal(
+    await sheetForm.locator('[name="field:age"]').inputValue(),
+    "99",
+  );
+  assert.match(
+    await sheetForm.locator('[name="field:art"]').inputValue(),
+    /^https:\/\/media\.naru\.pub\/\d+\//,
+  );
+  assert.equal(await sheetForm.locator('[name="type"]').inputValue(), "npc");
+  await sheetForm.locator('[name="profile"]').fill("운영자가 고친 프로필");
+  await sheetForm.locator('[type="submit"]').click();
+  await made
+    .locator(".review-summary", { hasText: "운영자가 고친 프로필" })
+    .waitFor();
+  await made.locator(".move-nick").fill("앨리스");
+  await made.locator("button", { hasText: "회원 변경" }).click();
+  const moved = owner
+    .locator("#adminRows .review")
+    .filter({ hasText: "운영자캐 · 앨리스 · 승인" });
+  await moved.waitFor();
+  await moved.locator("button", { hasText: "삭제" }).click();
+  await moved.waitFor({ state: "detached" });
+  await owner
+    .locator("#adminStatus", { hasText: "운영자캐을(를) 삭제했습니다." })
+    .waitFor();
+
   // 현재접속자 lists who visited in the last ten minutes.
   await menu(alice, "현재접속자");
   await alice.locator("#onlineList li", { hasText: "앨리스" }).waitFor();

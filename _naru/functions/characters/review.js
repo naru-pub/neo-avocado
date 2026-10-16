@@ -1,14 +1,10 @@
-import {
-  CHARACTERS,
-  CHARACTER_STATE,
-  author,
-  characterState,
-} from "../../modules/shared.js";
+import { CHARACTERS } from "../../modules/shared.js";
 import {
   CHARACTER_STATES,
   CHARACTER_TYPES,
   MAX_FIELD_TEXT,
   fieldCatalogue,
+  syncApproval,
 } from "../../modules/characters.js";
 
 /**
@@ -80,13 +76,6 @@ export async function reviewCharacter(
     ...(state !== undefined ? { state } : {}),
     ...(type !== undefined ? { type } : {}),
   });
-  if (state !== undefined) {
-    const official = await characterState(ctx, row.id, author(row));
-    if ((official.data.approved === true) !== (state === "approved"))
-      await ctx.set(CHARACTER_STATE, row.id, {
-        ...official.data,
-        approved: state === "approved",
-      });
-  }
+  if (state !== undefined) await syncApproval(ctx, row, state);
   return { document };
 }

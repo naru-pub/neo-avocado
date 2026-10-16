@@ -3,15 +3,29 @@ import {
   SETTINGS,
   SIDES,
   CLASSES,
+  CHARACTER_STATE,
+  INVENTORY,
+  PROFILES,
+  RELATIONS,
+  WARDROBE,
+  author,
   deleteCommunityDocument,
   text,
   imageUrl,
 } from "../../modules/shared.js";
 import { notDeleted, startValue, startWrite } from "../../modules/community.js";
-import { memberSheet, presentCharacter } from "../../modules/characters.js";
+import {
+  claimMain,
+  memberByNick,
+  memberSheet,
+  presentCharacter,
+  syncApproval,
+} from "../../modules/characters.js";
 
 // A member's character sheets: name, side, profile, picture and the custom
 // fields the admin defines. Members read them natively (rules/characters.js).
+// The site owner edits, deletes, moves and creates any member's, as the
+// original's admin (adm/character_form.php, character_delete.php).
 
 const CHARACTERS = `${PREFIX}characters`;
 
@@ -82,18 +96,30 @@ async function checkPeriod(ctx, previous) {
 /** Characters a member may have unless the owner sets another number. */
 const CHARACTER_LIMIT = 1;
 
+/**
+ * The site owner also saves any member's character, with every field, type
+ * and state, outside the periods and the limit, and registers one for the
+ * member named by `nick`.
+ */
 export async function save(
   ctx,
-  { id = null, data = {}, revision = null } = {},
+  { id = null, data = {}, revision = null, nick = null } = {},
 ) {
-  const { previous } = await startWrite(ctx, CHARACTERS, { id, revision });
+  const { previous } = await startWrite(ctx, CHARACTERS, {
+    id,
+    revision,
+    owners: true,
+  });
   notDeleted(ctx, previous);
   await checkPeriod(ctx, previous);
   if (!data || typeof data !== "object")
     ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
       reason: "invalid_input",
     });
+  // A new character from the admin belongs to the member it names (mb_id).
+  const member = ctx.owner && !previous ? await memberByNick(ctx, nick) : null;
   let value = startValue(ctx, previous, null);
+  if (member) value.owner = member.id;
   const sheet = await memberSheet(ctx, previous, data);
   const catalogue = sheet.catalogue;
   value = {
@@ -113,14 +139,87 @@ export async function save(
   const document = previous
     ? await ctx.set(CHARACTERS, previous.id, value)
     : await ctx.add(CHARACTERS, value);
+  if (ctx.owner) {
+    await syncApproval(ctx, document, value.state);
+    if (member) await claimMain(ctx, member, document.id);
+  }
   return { document: await presentCharacter(ctx, document, { catalogue }) };
 }
 
 /**
  * Deletes one of the member's characters with what hangs off it, in bounded
- * steps: call again until it answers `done`.
+ * steps: call again until it answers `done`. The site owner deletes any
+ * (adm/character_delete.php).
  */
 export async function remove(ctx, { id } = {}) {
-  const { previous } = await startWrite(ctx, CHARACTERS, { id });
+  const { previous } = await startWrite(ctx, CHARACTERS, { id, owners: true });
   return await deleteCommunityDocument(ctx, CHARACTERS, "characters", previous);
+}
+
+/**
+ * The site owner gives a character to the member named by `nick`, as the
+ * admin form changes its mb_id (adm/character_form.php:135), whatever that
+ * member's limit. What the original keeps by character (outfits, relations,
+ * the character's items, its official record) goes with it, in bounded
+ * steps: call again until it answers `done`.
+ */
+export async function move(ctx, { id, nick, revision = null } = {}) {
+  if (!ctx.owner)
+    ctx.fail("ACCESS_DENIED", "권한이 없습니다.", { reason: "access_denied" });
+  const { previous } = await startWrite(ctx, CHARACTERS, {
+    id,
+    revision,
+    owners: true,
+  });
+  notDeleted(ctx, previous);
+  // Who made a document natively cannot change; functions write every
+  // character, so only one from before them could have a maker.
+  if (previous.createdBy)
+    ctx.fail("CONFLICT", "이 캐릭터는 회원을 바꿀 수 없습니다.", {
+      reason: "fixed_owner",
+    });
+  const member = await memberByNick(ctx, nick);
+  let document = previous;
+  const from = author(previous);
+  if (from !== member.id) {
+    document = await ctx.set(CHARACTERS, previous.id, {
+      ...previous.data,
+      owner: member.id,
+    });
+    const before = from ? await ctx.get(PROFILES, from) : null;
+    if (before?.data.mainCharacter === previous.id)
+      await ctx.set(PROFILES, before.id, {
+        ...before.data,
+        mainCharacter: null,
+      });
+    await claimMain(ctx, member, previous.id);
+  }
+  const official = await ctx.get(CHARACTER_STATE, previous.id);
+  if (official && official.data.owner !== member.id)
+    await ctx.set(CHARACTER_STATE, official.id, {
+      ...official.data,
+      owner: member.id,
+    });
+  let remaining = 15;
+  let unfinished = false;
+  for (const collection of [WARDROBE, RELATIONS, INVENTORY]) {
+    if (remaining === 0) {
+      unfinished = true;
+      break;
+    }
+    const page = await ctx.list(collection, {
+      filter: { character: previous.id },
+      where: { ne: ["owner", member.id] },
+      size: remaining,
+    });
+    unfinished ||= Boolean(page.nextCursor);
+    for (const row of page.documents) {
+      remaining--;
+      await ctx.set(collection, row.id, { ...row.data, owner: member.id });
+    }
+  }
+  return {
+    document: await presentCharacter(ctx, document),
+    done: !unfinished,
+  };
 }

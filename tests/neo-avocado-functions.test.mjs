@@ -3397,3 +3397,210 @@ test("a board search reaches every post at once and pages what it finds", async 
   assert.equal(second.documents.length, 5);
   assert.equal(second.nextCursor, null);
 });
+
+test("the owner edits any character fully, outside the member's periods and limit", async () => {
+  const { ctx, table } = roleplayWorld();
+  table(`${P}settings`).set("community", {
+    characterCreation: false,
+    characterEditing: false,
+    characterLimit: 1,
+  });
+  table(`${P}sides`).set("east", { name: "동쪽" });
+  for (const [code, data] of [
+    ["age", { label: "나이", type: "select", options: ["10", "20"] }],
+    ["diary", { label: "일기", type: "textarea", visibility: "owner" }],
+    ["memo", { label: "메모", type: "text", visibility: "admin" }],
+    ["art", { label: "전신", type: "image", required: true }],
+  ])
+    table(`${P}character_fields`).set(code, data);
+  const owner = { ...ctx, member: null, owner: true };
+  // adm/character_form_update.php saves every field, type and state.
+  const saved = await sheet.save(owner, {
+    id: "rival",
+    data: {
+      name: "새 이름",
+      side: "동쪽",
+      class: "",
+      profile: "운영자가 고침",
+      image: "https://example.com/rival.png",
+      type: "npc",
+      state: "submitted",
+      fields: { age: "20", diary: "비밀", memo: "확인" },
+    },
+  });
+  assert.deepEqual(table(`${P}characters`).get("rival"), {
+    owner: "m-2",
+    name: "새 이름",
+    side: "동쪽",
+    class: "",
+    profile: "운영자가 고침",
+    image: "https://example.com/rival.png",
+    type: "npc",
+    state: "submitted",
+    fields: { age: "20", diary: "비밀", memo: "확인" },
+  });
+  assert.equal(saved.document.data.fields.memo, "확인");
+  // Approving from the form approves the official record too.
+  await sheet.save(owner, {
+    id: "rival",
+    data: { name: "새 이름", state: "approved" },
+  });
+  assert.equal(table(`${P}character_state`).get("rival").approved, true);
+  assert.equal(table(`${P}character_state`).get("rival").owner, "m-2");
+  assert.equal(table(`${P}characters`).get("rival").fields.memo, "확인");
+  // Values are checked as a member's: options, the 소속 list, lengths.
+  for (const data of [
+    { name: "x", fields: { age: "30" } },
+    { name: "x", fields: { missing: "1" } },
+    { name: "x", state: "deleted" },
+    { name: "x", type: "test" },
+  ])
+    assert.notEqual(
+      await refusal(sheet.save(owner, { id: "rival", data })),
+      null,
+    );
+  assert.equal(
+    await refusal(
+      sheet.save(owner, { id: "rival", data: { name: "x", side: "서쪽" } }),
+    ),
+    "invalid_input",
+  );
+  await assert.rejects(sheet.save(owner, { id: "rival", data: { name: "" } }));
+  // A member still edits only their own.
+  assert.equal(
+    await refusal(sheet.save(ctx, { id: "rival", data: { name: "탈취" } })),
+    "not_owned",
+  );
+  assert.equal(await refusal(sheet.remove(ctx, { id: "rival" })), "not_owned");
+});
+
+test("the owner registers a character for a member named by nickname", async () => {
+  const { ctx, table } = roleplayWorld();
+  table(`${P}settings`).set("community", {
+    characterCreation: false,
+    characterLimit: 1,
+  });
+  const owner = { ...ctx, member: null, owner: true };
+  const data = { name: "선물", type: "main", state: "approved" };
+  for (const nick of ["없는사람", "", null])
+    assert.equal(await refusal(sheet.save(owner, { nick, data })), "no_member");
+  // 카도 already has Rival and creation is closed: neither stops the owner.
+  const { document } = await sheet.save(owner, { nick: "카도", data });
+  assert.equal(table(`${P}characters`).get(document.id).owner, "m-2");
+  assert.equal(table(`${P}character_state`).get(document.id).approved, true);
+  assert.equal(table(`${P}character_state`).get(document.id).owner, "m-2");
+  // Their first: it becomes their main character, as ch_id is set.
+  assert.equal(table(`${P}profiles`).get("m-2").mainCharacter, document.id);
+  table(`${P}profiles`).set("m-1", { nick: "아보", mainCharacter: "hero" });
+  await sheet.save(owner, { nick: "아보", data });
+  assert.equal(table(`${P}profiles`).get("m-1").mainCharacter, "hero");
+  // Members still meet the switches.
+  assert.equal(
+    await refusal(sheet.save(ctx, { data: { name: "몰래" } })),
+    "creation_closed",
+  );
+});
+
+test("the owner deletes any character with what character_delete.php removes", async () => {
+  const { ctx, table } = roleplayWorld();
+  table(`${P}profiles`).set("m-1", { nick: "아보", mainCharacter: "hero" });
+  for (let n = 0; n < 30; n++)
+    table(`${P}wardrobe`).set(`w${n}`, { owner: "m-1", character: "hero" });
+  table(`${P}relations`).set("r", {
+    owner: "m-2",
+    character: "rival",
+    target: "hero",
+  });
+  table(`${P}inventory`).set("cake", {
+    owner: "m-1",
+    item: "cake",
+    character: "hero",
+  });
+  table(`${P}couples`).set("c", { first: "hero", second: "rival" });
+  const owner = { ...ctx, member: null, owner: true };
+  const first = await sheet.remove(owner, { id: "hero" });
+  assert.equal(first.done, false);
+  assert.equal(table(`${P}characters`).get("hero").deleted, true);
+  let steps = 1;
+  while (!(await sheet.remove(owner, { id: "hero" })).done) steps++;
+  assert.ok(steps < 5);
+  assert.equal(table(`${P}characters`).has("hero"), false);
+  assert.equal(
+    [...table(`${P}wardrobe`).values()].some((row) => row.character === "hero"),
+    false,
+  );
+  assert.equal(table(`${P}relations`).has("r"), false);
+  assert.equal(table(`${P}couples`).has("c"), false);
+  assert.equal(table(`${P}character_state`).has("hero"), false);
+  assert.equal(table(`${P}inventory`).get("cake").character, null);
+  assert.equal(table(`${P}profiles`).get("m-1").mainCharacter, null);
+  assert.equal(table(`${P}characters`).has("rival"), true);
+});
+
+test("the owner moves a character to another member, with what it keeps", async () => {
+  const { ctx, table } = roleplayWorld();
+  table(`${P}settings`).set("community", { characterLimit: 1 });
+  table(`${P}profiles`).set("m-1", { nick: "아보", mainCharacter: "hero" });
+  for (let n = 0; n < 20; n++)
+    table(`${P}wardrobe`).set(`w${n}`, { owner: "m-1", character: "hero" });
+  table(`${P}relations`).set("r", {
+    owner: "m-1",
+    character: "hero",
+    target: "rival",
+  });
+  table(`${P}inventory`).set("linked", {
+    owner: "m-1",
+    item: "cake",
+    character: "hero",
+  });
+  table(`${P}inventory`).set("loose", {
+    owner: "m-1",
+    item: "cake",
+    character: null,
+  });
+  const owner = { ...ctx, member: null, owner: true };
+  assert.equal(
+    await refusal(sheet.move(ctx, { id: "hero", nick: "카도" })),
+    "access_denied",
+  );
+  assert.equal(
+    await refusal(sheet.move(owner, { id: "hero", nick: "없는사람" })),
+    "no_member",
+  );
+  assert.equal(
+    await refusal(sheet.move(owner, { id: "gone", nick: "카도" })),
+    "document_not_found",
+  );
+  // 카도 already has Rival: the owner is not held to the limit.
+  const first = await sheet.move(owner, { id: "hero", nick: "카도" });
+  assert.equal(first.done, false);
+  assert.equal(first.document.data.owner, "m-2");
+  assert.equal(
+    (await sheet.move(owner, { id: "hero", nick: "카도" })).done,
+    true,
+  );
+  assert.equal(table(`${P}characters`).get("hero").owner, "m-2");
+  assert.equal(table(`${P}character_state`).get("hero").owner, "m-2");
+  assert.ok(
+    [...table(`${P}wardrobe`).values()].every((row) => row.owner === "m-2"),
+  );
+  assert.equal(table(`${P}relations`).get("r").owner, "m-2");
+  assert.equal(table(`${P}inventory`).get("linked").owner, "m-2");
+  assert.equal(table(`${P}inventory`).get("loose").owner, "m-1");
+  assert.equal(table(`${P}profiles`).get("m-1").mainCharacter, null);
+  assert.equal(table(`${P}profiles`).get("m-2").mainCharacter, "hero");
+  // The new owner uses it; the former one no longer can.
+  assert.equal(
+    await refusal(
+      outfit(ctx, {
+        character: "hero",
+        name: "옷",
+        image: "https://example.com/o.png",
+      }),
+    ),
+    "not_owned",
+  );
+  ctx.member = { id: "m-2" };
+  await wear(ctx, { character: "hero", outfit: "w0" });
+  assert.equal(table(`${P}characters`).get("hero").outfit, "w0");
+});
