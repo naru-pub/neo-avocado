@@ -1,14 +1,12 @@
 // Shared collection identifiers and transactional domain helpers.
 export { IMAGE_SLOTS, imageSlotsOf, viewerOf } from "./images.js";
 import type { Ctx, Data, Filter, NaruDocument, ReadCtx } from "./naru-types.js";
-import { amount, communitySettings, names, text } from "./access.js";
-import type { Access, Names } from "./access.js";
-import { addHistory, saveWallet, walletOf } from "./members.js";
+import type { Access } from "./access.js";
+import { saveWallet, walletOf } from "./members.js";
+import { record, wallet } from "./economy.js";
 import {
-  characterRow,
   characterState as recordOf,
   ownCharacter as ownRow,
-  saveState,
   sheetOf,
 } from "./characters.js";
 import type {
@@ -36,26 +34,22 @@ export {
   text,
   imageUrl,
   amount,
+  subject,
+  lacking,
+  restrictedFor,
 } from "./access.js";
 export type { Access, Names } from "./access.js";
 export { loginReward } from "./members.js";
+// The economy's helpers (economy.js), for the old code that imports them
+// from here.
+export { pay, record, wallet } from "./economy.js";
 export const PREFIX = "neo_avocado_";
-
-export const INVENTORY = `${PREFIX}inventory`;
-
-export const ITEMS = `${PREFIX}items`;
-
-export const GACHA = `${PREFIX}gacha`;
-
-export const RECIPES = `${PREFIX}recipes`;
 
 export const MESSAGES = `${PREFIX}messages`;
 
 export const BOARDS = `${PREFIX}boards`;
 
 export const CALLS = `${PREFIX}calls`;
-
-export const EXPLORE = `${PREFIX}explore`;
 
 /** Each board's next log number (wr_num), one document per board. */
 export const COUNTERS = `${PREFIX}counters`;
@@ -93,22 +87,6 @@ export function tagFields(text: unknown) {
   for (const match of String(text ?? "").matchAll(TAG))
     if (!tags.includes(match[1]) && tags.length < MAX_TAGS) tags.push(match[1]);
   return { tags };
-}
-
-/** A word with its subject particle: 아보가, 경험치가, 포인트가, 골드가. */
-export function subject(word: string) {
-  const last = word.charCodeAt(word.length - 1);
-  if (last < 0xac00 || last > 0xd7a3) return `${word}이(가)`;
-  return `${word}${(last - 0xac00) % 28 ? "이" : "가"}`;
-}
-/** "아보가 모자랍니다." in the owner's name for money or experience. */
-export async function lacking(ctx: ReadCtx, key: keyof Names) {
-  return `${subject((await names(ctx))[key])} 모자랍니다.`;
-}
-/** What a restricted character is refused for, in the owner's names. */
-export function restrictedFor(named: Names, verb: string) {
-  const kinds = [named.sideTitle, named.classTitle].filter(Boolean);
-  return `이 캐릭터의 ${kinds.join("·") || "조건"}으로는 ${verb} 수 없습니다.`;
 }
 
 export function author(row: NaruDocument | null | undefined) {
@@ -301,15 +279,6 @@ export async function deleteCommunityDocument(
   return { done: !unfinished };
 }
 
-export async function record(
-  ctx: Ctx,
-  kind: string,
-  details: Data,
-  owner: string = ctx.member.id,
-) {
-  await addHistory(ctx, { owner, kind, at: ctx.now, ...details });
-}
-
 /**
  * One of the caller's own characters as a document ({ id, data }, as old
  * code reads it), or null.
@@ -320,50 +289,6 @@ export async function ownCharacter(
 ): Promise<Character | null> {
   const row = await ownRow(ctx, id);
   return row ? sheetOf(row) : null;
-}
-
-export async function weightedRows(
-  ctx: ReadCtx,
-  collection: string,
-  filter?: Filter,
-): Promise<NaruDocument[]> {
-  const rows = [];
-  let after = null;
-  do {
-    const page = await ctx.list(collection, { size: 100, after, filter });
-    rows.push(...page.documents);
-    after = page.nextCursor;
-    if (rows.length > 2000)
-      throw new Error("A draw table may contain at most 2000 entries.");
-  } while (after);
-  return rows;
-}
-
-export const GACHA_COST = 50;
-
-/** The caller's wallet: { balance, lastDaily }. */
-export async function wallet(ctx: ReadCtx): Promise<Data> {
-  const current = await walletOf(ctx, ctx.member.id);
-  amount(current.balance, "Balance");
-  return current;
-}
-
-export async function pay(
-  ctx: Ctx,
-  current: Data,
-  amount: number,
-  changes: Data = {},
-): Promise<number> {
-  const balance = current.balance - amount;
-  if (!Number.isSafeInteger(balance) || balance < 0)
-    throw new Error("Balance is outside its allowed range.");
-  await saveWallet(
-    ctx,
-    ctx.member.id,
-    balance,
-    Object.hasOwn(changes, "lastDaily") ? changes.lastDaily : undefined,
-  );
-  return balance;
 }
 
 /**
@@ -410,62 +335,6 @@ export async function takeBackReward(
   return 2;
 }
 
-export async function give(
-  ctx: Ctx,
-  item: NaruDocument,
-  from: string,
-  character: string | null = null,
-) {
-  return await ctx.add(INVENTORY, {
-    owner: ctx.member.id,
-    item: item.id,
-    name: item.data.name,
-    from,
-    ...(character ? { character } : {}),
-  });
-}
-
-export async function draw(
-  ctx: ReadCtx,
-  source: string | null = null,
-  collection: string = GACHA,
-): Promise<{ configured: boolean; prize: NaruDocument | null }> {
-  const table = (
-    await weightedRows(ctx, collection, source ? { source } : undefined)
-  ).filter((row) => {
-    if ((row.data.source ?? null) !== source) return false;
-    if (
-      typeof row.data.weight !== "number" ||
-      !Number.isFinite(row.data.weight) ||
-      row.data.weight < 0
-    )
-      throw new Error("Draw weights must be finite non-negative numbers.");
-    return row.data.weight > 0;
-  });
-  if (!table.length) return { configured: false, prize: null };
-  const total = table.reduce((sum, row) => sum + row.data.weight, 0);
-  if (!Number.isFinite(total)) throw new Error("Draw weights are too large.");
-  let roll = Math.random() * total;
-  const won =
-    table.find((row) => (roll -= row.data.weight) < 0) ?? table.at(-1);
-  if (won.data.item === null) return { configured: true, prize: null };
-  const prize =
-    typeof won.data.item === "string"
-      ? await ctx.get(ITEMS, won.data.item)
-      : null;
-  if (!prize)
-    throw new Error(`뽑기의 아이템 ${won.data.item}이 상점에 없습니다.`);
-  return { configured: true, prize };
-}
-
-export async function ownedItem(
-  ctx: ReadCtx,
-  id: unknown,
-): Promise<NaruDocument | null> {
-  const owned = typeof id === "string" ? await ctx.get(INVENTORY, id) : null;
-  return owned?.data.owner === ctx.member.id ? owned : null;
-}
-
 /**
  * A character's official record (characters.js's characterState) for the
  * old code: its row, the stat definitions and the record's data. Old code
@@ -480,84 +349,4 @@ export async function characterState(
   data: Progress;
 }> {
   return await recordOf(ctx as Ctx, character);
-}
-
-/** Why `character` may not use `item` under its catalog conditions, or null. */
-/** Fails the call unless `character` meets the item's use requirements. */
-export async function requireUsable(
-  ctx: Ctx,
-  item: NaruDocument,
-  character: string | null,
-) {
-  const requirements = item.data.useRequirements ?? {};
-  if (
-    !requirements.approved &&
-    !requirements.sides?.length &&
-    !requirements.classes?.length &&
-    !requirements.exp &&
-    !requirements.title
-  )
-    return;
-  const sheet = await ownCharacter(ctx, character);
-  if (!sheet)
-    ctx.fail("INVALID_REQUEST", "캐릭터를 확인해 주세요.", {
-      reason: "no_character",
-    });
-  const official = (await characterState(ctx, character)).data;
-  if (requirements.approved && !official.approved)
-    ctx.fail("CONFLICT", "승인된 캐릭터만 할 수 있습니다.", {
-      reason: "not_approved",
-    });
-  for (const [key, field] of [
-    ["sides", "side"],
-    ["classes", "class"],
-  ]) {
-    if (
-      requirements[key] !== undefined &&
-      (!Array.isArray(requirements[key]) ||
-        requirements[key].some((value) => typeof value !== "string"))
-    )
-      throw new Error("Use restrictions must be lists of identifiers.");
-    if (
-      requirements[key]?.length &&
-      // The sheet's own 소속 and 종족 (ch_side, ch_class).
-      !requirements[key].includes(sheet.data[field])
-    )
-      ctx.fail("CONFLICT", restrictedFor(await names(ctx), "사용할"), {
-        reason: "restricted_character",
-      });
-  }
-  if (official.exp < amount(requirements.exp ?? 0, "Use experience"))
-    ctx.fail("CONFLICT", await lacking(ctx, "expName"), {
-      reason: "not_enough_exp",
-    });
-  if (
-    requirements.title &&
-    // A deleted title is taken from its holders with it.
-    !official.titles.includes(requirements.title)
-  )
-    ctx.fail("CONFLICT", "필요한 타이틀이 없습니다.", {
-      reason: "missing_title",
-    });
-}
-
-/**
- * Applies a recovery effect to an owned character, up to the stat's maximum:
- * at full it changes nothing and the item is still used, as set_status
- * clamps (extend/status.lib.php:80) and use_item.php:35 consumes regardless.
- */
-export async function restoreStat(ctx: Ctx, effect: Data, character: string) {
-  const state = await characterState(ctx, character);
-  if (
-    typeof effect.stat !== "string" ||
-    !Object.hasOwn(state.data.stats, effect.stat)
-  )
-    throw new Error("Recovery stat does not exist.");
-  const recovery = amount(effect.amount, "Recovery amount");
-  if (!recovery) throw new Error("Recovery amount must be positive.");
-  const stat = state.data.stats[effect.stat];
-  stat.damage = Math.max(0, stat.damage - recovery);
-  stat.current = Math.max(0, stat.max - stat.damage);
-  await saveState(ctx, character, state.data);
-  return sheetOf(await characterRow(ctx, character));
 }

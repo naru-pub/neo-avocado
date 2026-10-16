@@ -1,20 +1,18 @@
+// The member's own history: what moved their money, items or experience.
+import { signedIn } from "../../modules/access.js";
 import { historyPage } from "../../modules/members.js";
-import type { Ctx } from "../../modules/naru-types.js";
-
-export const readOnly = ["history"];
+import type { QueryCtx } from "../../modules/naru-types.js";
 
 /**
  * The member's own history, newest first: purchases, gifts, crafting and the
  * owner's adjustments, or only one `kind` of it (`exp`: experience changes).
  */
 export async function history(
-  ctx: Ctx,
-  {
-    after = null,
-    size = 20,
-    kind = null,
-  }: { after?: string | null; size?: number; kind?: string | null } = {},
+  ctx: QueryCtx,
+  args: { after?: string | null; size?: number; kind?: string | null } | null,
 ) {
+  const me = signedIn(ctx);
+  const { after = null, size = 20, kind = null } = args ?? {};
   if (
     !Number.isInteger(size) ||
     size < 1 ||
@@ -27,7 +25,7 @@ export async function history(
     });
   return await historyPage(
     ctx,
-    { owner: ctx.member.id, ...(kind ? { kind } : {}) },
+    { owner: me, ...(kind ? { kind } : {}) },
     { size, after },
   );
 }

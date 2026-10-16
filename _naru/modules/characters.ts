@@ -731,7 +731,7 @@ export async function saveSheet(
  * Deletes a character with what hangs off it in the site's tables: its
  * relations either way, outfits, couples and titles (adm/character_delete.php).
  * Its owner's 대표 moves to their oldest remaining character. The items it
- * held go back to its owner's inventory (economy's, not ported yet).
+ * held go back to their owners' own inventory (character_delete.php).
  */
 export async function removeCharacter(ctx: SqlCtx, row: CharacterRow) {
   await ctx.sql`DELETE FROM relations WHERE character_id = ${row.id}`;
@@ -740,6 +740,7 @@ export async function removeCharacter(ctx: SqlCtx, row: CharacterRow) {
   await ctx.sql`DELETE FROM couples WHERE first = ${row.id}`;
   await ctx.sql`DELETE FROM couples WHERE second = ${row.id}`;
   await ctx.sql`DELETE FROM character_titles WHERE character_id = ${row.id}`;
+  await ctx.sql`UPDATE inventory SET character_id = NULL WHERE character_id = ${row.id}`;
   await ctx.sql`DELETE FROM characters WHERE id = ${row.id}`;
   const profile = await profileOf(ctx, row.owner);
   if (profile?.data.mainCharacter === String(row.id))
@@ -749,7 +750,7 @@ export async function removeCharacter(ctx: SqlCtx, row: CharacterRow) {
 /**
  * Gives a character to `member`, as the admin form changes its mb_id
  * (adm/character_form.php:135), with what the original keeps by character:
- * its outfits and relations (and its items, economy's, not ported yet).
+ * its outfits, relations and items.
  */
 export async function moveCharacter(
   ctx: SqlCtx,
@@ -762,6 +763,7 @@ export async function moveCharacter(
   ).rows[0];
   await ctx.sql`UPDATE wardrobe SET owner = ${member.id} WHERE character_id = ${row.id}`;
   await ctx.sql`UPDATE relations SET owner = ${member.id} WHERE character_id = ${row.id}`;
+  await ctx.sql`UPDATE inventory SET owner = ${member.id} WHERE character_id = ${row.id}`;
   const before = await profileOf(ctx, row.owner);
   if (before?.data.mainCharacter === String(row.id))
     await replaceMain(ctx, row.owner, row.id);

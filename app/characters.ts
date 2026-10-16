@@ -2,7 +2,6 @@
 
 import {
   $,
-  caller,
   CHARACTER_PAGE,
   memberSettings,
   mutate,
@@ -20,7 +19,6 @@ import {
   STATE_NAMES,
   TYPE_NAMES,
   uploadMedia,
-  removeAll,
   route,
   formatTime,
   renderPages,
@@ -399,11 +397,8 @@ async function characterItem(character) {
   remove.onclick = () =>
     run(async () => {
       if (!confirm(`${character.data.name}을(를) 지울까요?`)) return;
+      // Its items go back to the member's own inventory with it.
       await mutate("characters/sheet:remove", { id: character.id });
-      // Its items go back to the member's own inventory (economy's).
-      await removeAll("economy/inventory:followCharacter", {
-        character: character.id,
-      });
       state.speakers = null;
       item.remove();
     });
@@ -534,19 +529,13 @@ export async function editCharacter(
           const uploaded = await uploadMedia(file);
           data.fields[name.slice(7)] = uploaded.url;
         }
-      // A 프로필수정 ticket is economy's, which saves the sheet as it spends it.
-      const { document: saved } = ticket
-        ? await caller().call("economy/inventory:useProfileTicket", {
-            ticket,
-            id: character.id,
-            data,
-            revision: current.revision,
-          })
-        : await mutate("characters/sheet:save", {
-            id: character.id,
-            data,
-            revision: current.revision,
-          });
+      // A 프로필수정 ticket is spent by the save it opens.
+      const { document: saved } = await mutate("characters/sheet:save", {
+        id: character.id,
+        data,
+        revision: current.revision,
+        ...(ticket ? { ticket } : {}),
+      });
       state.speakers = null;
       await onSaved(saved);
     },
@@ -1128,14 +1117,8 @@ export async function openCharacter(id) {
   const sheet = await query("characters/progression:characterSheet", {
     character: id,
   });
-  // The inventory, where the owner shows it, is economy's to read.
-  const inventory = sheet.showsInventory
-    ? (
-        await caller().call("economy/inventory:characterInventory", {
-          character: id,
-        })
-      ).inventory
-    : null;
+  // The inventory, where the owner shows it.
+  const inventory = sheet.inventory ?? null;
   const extras = document.createElement("div");
   extras.className = "viewer-extras";
   const heading = (text) => {

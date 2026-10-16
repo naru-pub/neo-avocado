@@ -1,37 +1,46 @@
+// The shop (shop/index.php): buying an item as one's approved character,
+// and the paid gacha (뽑기).
 import { onDisplay } from "../../modules/display.js";
 import {
-  INVENTORY,
-  ITEMS,
-  record,
-  ownCharacter,
   amount,
-  GACHA_COST,
-  wallet,
-  pay,
-  give,
-  draw,
-  ownedItem,
-  characterState,
   lacking,
   names,
   restrictedFor,
-} from "../../modules/shared.js";
-import { saveState, withExp } from "../../modules/characters.js";
+  signedIn,
+} from "../../modules/access.js";
+import {
+  GACHA_COST,
+  draw,
+  give,
+  itemById,
+  ownedItems,
+  pay,
+  record,
+  spend,
+  wallet,
+} from "../../modules/economy.js";
+import {
+  characterState,
+  ownCharacter,
+  saveState,
+  withExp,
+} from "../../modules/characters.js";
 import type { Progress } from "../../modules/characters.js";
-import type { Ctx } from "../../modules/naru-types.js";
+import type { MutationCtx } from "../../modules/naru-types.js";
 
 /**
- * 상점에서 승인된 내 캐릭터로 하나 산다. 재고(stock)가 없으면 무제한이다.
+ * Buys one of an item for one of the member's approved characters
+ * (shop/_ajax.shop_update.php), at the catalogue's price and conditions:
+ * no stock (stock) is no limit; an exchange takes the items it names from
+ * that character's own (`materials`).
  */
 export async function buy(
-  ctx: Ctx,
-  {
-    item,
-    character = null,
-    materials = [],
-  }: { item?: string; character?: string | null; materials?: string[] } = {},
+  ctx: MutationCtx,
+  args: { item?: string; character?: string | null; materials?: string[] },
 ) {
-  const listing = typeof item === "string" ? await ctx.get(ITEMS, item) : null;
+  signedIn(ctx);
+  const { item, character = null, materials = [] } = args ?? {};
+  const listing = await itemById(ctx, item);
   if (!listing || listing.data.hidden)
     ctx.fail("NOT_FOUND", "없는 아이템입니다.", { reason: "no_item" });
   if (!onDisplay(listing.data.display, ctx.now))
@@ -66,7 +75,7 @@ export async function buy(
   for (const [key, field] of [
     ["sides", "side"],
     ["classes", "class"],
-  ]) {
+  ] as const) {
     if (
       requirements[key] !== undefined &&
       (!Array.isArray(requirements[key]) ||
@@ -75,10 +84,7 @@ export async function buy(
       throw new Error(
         "Shop character restrictions must be lists of identifiers.",
       );
-    if (
-      requirements[key]?.length &&
-      !requirements[key].includes(buyer.data[field])
-    )
+    if (requirements[key]?.length && !requirements[key].includes(buyer[field]))
       ctx.fail("CONFLICT", restrictedFor(await names(ctx), "구매할"), {
         reason: "restricted_character",
       });
@@ -128,7 +134,7 @@ export async function buy(
     ctx.fail("INVALID_REQUEST", "레시피에 맞는 재료를 선택해 주세요.", {
       reason: "invalid_materials",
     });
-  const needed = new Map();
+  const needed = new Map<string, { count: number; consume: boolean }>();
   for (const exchange of exchanges) {
     if (typeof exchange.item !== "string" || needed.has(exchange.item))
       throw new Error("Exchange items must have unique identifiers.");
@@ -136,14 +142,12 @@ export async function buy(
     if (!count) throw new Error("Exchange count must be positive.");
     needed.set(exchange.item, { count, consume: exchange.consume === true });
   }
-  const supplied = await Promise.all(materials.map((id) => ownedItem(ctx, id)));
-  if (
-    supplied.some((row) => !row || (row.data.character ?? null) !== character)
-  )
+  const supplied = await ownedItems(ctx, materials);
+  if (supplied.some((row) => !row || row.data.character !== character))
     ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
       reason: "not_owned",
     });
-  const provided = new Map();
+  const provided = new Map<string, number>();
   for (const row of supplied)
     provided.set(row.data.item, (provided.get(row.data.item) ?? 0) + 1);
   if (
@@ -163,10 +167,12 @@ export async function buy(
     if (next.activeTitle === requirements.title) next.activeTitle = null;
   }
   await saveState(ctx, character, next);
-  for (const row of supplied)
-    if (needed.get(row.data.item).consume) await ctx.delete(INVENTORY, row.id);
+  await spend(
+    ctx,
+    supplied.filter((row) => needed.get(row.data.item).consume),
+  );
   if (typeof stock === "number")
-    await ctx.set(ITEMS, listing.id, { ...listing.data, stock: stock - 1 });
+    await ctx.sql`UPDATE items SET stock = stock - 1 WHERE id = ${listing.id}`;
   const owned = await give(ctx, listing, "shop", character);
   await record(ctx, "buy", {
     character,
@@ -179,10 +185,12 @@ export async function buy(
   return { balance, owned };
 }
 
+/** 뽑기: GACHA_COST for a draw from the paid table, for a character or the member. */
 export async function gacha(
-  ctx: Ctx,
-  args: { character?: string | null } = {},
+  ctx: MutationCtx,
+  args: { character?: string | null },
 ) {
+  signedIn(ctx);
   const { character = null } = args ?? {};
   if (character && !(await ownCharacter(ctx, character)))
     ctx.fail("INVALID_REQUEST", "캐릭터를 확인해 주세요.", {
@@ -206,8 +214,5 @@ export async function gacha(
     delta: -GACHA_COST,
     balance,
   });
-  return {
-    balance,
-    owned,
-  };
+  return { balance, owned };
 }

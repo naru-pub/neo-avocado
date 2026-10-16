@@ -4,18 +4,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  buy,
-  gacha,
-  GACHA_COST,
-  sell,
-  gift,
-  craft,
-  useItem,
-  assignInventory,
-  characterInventory,
-  followCharacter,
-  useProfileTicket,
-  history,
   sendMessage,
   conversations,
   conversation,
@@ -24,8 +12,6 @@ import {
   messageStatus,
   posts,
   comments,
-  money,
-  grants,
   callHistory,
   seeCalls,
   commentCounts,
@@ -565,52 +551,6 @@ test("deletion marks durable work, hides partial cleanup and preserves purchased
   assert.equal(table(`${P}logs`).size, 0);
 });
 
-test("a deleted character's items go back to its owner's inventory, a moved one's to its new owner", async () => {
-  const { ctx, table } = fakeCtx();
-  table(`${P}characters`).set("1", { owner: "m-2", name: "Moved" });
-  for (const [id, data] of [
-    ["paid", { owner: "m-1", character: "9", item: "sword" }],
-    ["loose", { owner: "m-1", character: null, item: "sword" }],
-    ["theirs", { owner: "m-3", character: "9", item: "sword" }],
-    ["linked", { owner: "m-1", character: "1", item: "cake" }],
-  ])
-    table(`${P}inventory`).set(id, { name: id, ...data });
-  // Character 9 is gone: the member's own items on it are theirs again.
-  assert.deepEqual(await followCharacter(ctx, { character: "9" }), {
-    done: true,
-  });
-  assert.equal(table(`${P}inventory`).get("paid").character, null);
-  assert.equal(table(`${P}inventory`).get("theirs").character, "9");
-  // A member does not move items after a character that still exists.
-  await followCharacter(ctx, { character: "1" });
-  assert.equal(table(`${P}inventory`).get("linked").owner, "m-1");
-  const owner = { ...ctx, member: null, owner: true };
-  await followCharacter(owner, { character: "1" });
-  assert.equal(table(`${P}inventory`).get("linked").owner, "m-2");
-  assert.equal(table(`${P}inventory`).get("loose").owner, "m-1");
-  await followCharacter(owner, { character: "9" });
-  assert.equal(table(`${P}inventory`).get("theirs").character, null);
-  // Forty a call: a large inventory takes more than one.
-  for (let n = 0; n < 45; n++)
-    table(`${P}inventory`).set(`many-${n}`, {
-      owner: "m-1",
-      character: "8",
-      item: "sword",
-    });
-  assert.deepEqual(await followCharacter(ctx, { character: "8" }), {
-    done: false,
-  });
-  assert.deepEqual(await followCharacter(ctx, { character: "8" }), {
-    done: true,
-  });
-  assert.equal(
-    await refusal(
-      followCharacter({ ...ctx, member: null }, { character: "8" }),
-    ),
-    "access_denied",
-  );
-});
-
 test("private mail checks parties for listing, reading and deletion and marks only recipient reads", async () => {
   const { ctx, table, sent: live } = fakeCtx();
   for (const id of ["m-1", "m-2", "m-3"])
@@ -753,719 +693,6 @@ test("a conversation shows both sides oldest first and reads what the other sent
     "invalid_input",
   );
 });
-test("item use conditions are checked against official state before consuming tickets", async () => {
-  const { ctx, table } = fakeCtx();
-  table(`${P}characters`).set("1", {
-    owner: "m-1",
-    state: "approved",
-    side: "forest",
-    class: "elf",
-  });
-  table(`${P}items`).set("ticket", {
-    name: "Ticket",
-    effect: { type: "create" },
-    useRequirements: {
-      approved: true,
-      sides: ["forest"],
-      classes: ["elf"],
-      exp: 10,
-      title: "winner",
-    },
-  });
-  table(`${P}inventory`).set("ticket-a", {
-    owner: "m-1",
-    item: "ticket",
-    name: "Ticket",
-  });
-  table(`${P}character_state`).set("1", {
-    owner: "m-1",
-    points: 0,
-    exp: 5,
-    stats: {},
-    titles: ["winner"],
-  });
-  const patch = (name, changes) =>
-    table(`${P}${name}`).set("1", {
-      ...table(`${P}${name}`).get("1"),
-      ...changes,
-    });
-  const args = {
-    inventory: "ticket-a",
-    character: "1",
-    data: {
-      name: "Medal",
-      description: "A medal",
-      image: "https://example.com/medal.png",
-    },
-  };
-  assert.equal(await refusal(useItem(ctx, args)), "not_enough_exp");
-  assert.equal(table(`${P}inventory`).has("ticket-a"), true);
-  patch("character_state", { exp: 10 });
-  // 소속 and 종족 are the sheet's (ch_side, ch_class).
-  patch("characters", { class: "human" });
-  assert.equal(await refusal(useItem(ctx, args)), "restricted_character");
-  patch("characters", { class: "elf" });
-  await useItem(ctx, args);
-  assert.equal(table(`${P}inventory`).has("ticket-a"), false);
-});
-
-test("character-linked purchases, exchanges and limits use official state and preserve inventory ownership", async () => {
-  const { ctx, table } = fakeCtx();
-  table(`${P}characters`).set("1", {
-    owner: "m-1",
-    side: "forest",
-    class: "elf",
-  });
-  table(`${P}characters`).set("2", { owner: "m-2" });
-  table(`${P}profiles`).set("m-2", { nick: "Friend" });
-  table(`${P}wallets`).set("m-1", { balance: 100 });
-  table(`${P}items`).set("sword", {
-    name: "Sword",
-    price: 20,
-    stock: 2,
-    requirements: {
-      approved: true,
-      sides: ["forest"],
-      classes: ["elf"],
-      exp: 10,
-      consumeExp: true,
-      title: "winner",
-      consumeTitle: true,
-      limit: 1,
-      items: [{ item: "seed", count: 1, consume: true }],
-    },
-  });
-  table(`${P}inventory`).set("seed", {
-    owner: "m-1",
-    character: "1",
-    item: "seed",
-  });
-  table(`${P}character_state`).set("1", {
-    owner: "m-1",
-    character: "1",
-    points: 0,
-    exp: 20,
-    stats: {},
-    titles: ["winner"],
-    activeTitle: "winner",
-  });
-  const args = { item: "sword", character: "1", materials: ["seed"] };
-  assert.equal(await refusal(buy(ctx, args)), "not_approved");
-  const sheet = (changes) =>
-    table(`${P}characters`).set("1", {
-      ...table(`${P}characters`).get("1"),
-      ...changes,
-    });
-  sheet({ state: "approved" });
-  // The sheet's own 소속 decides.
-  sheet({ side: "city" });
-  assert.equal(await refusal(buy(ctx, args)), "restricted_character");
-  sheet({ side: "forest" });
-  assert.equal(
-    await refusal(buy(ctx, { ...args, materials: ["seed", "seed"] })),
-    "invalid_materials",
-  );
-  assert.equal(table(`${P}wallets`).get("m-1").balance, 100);
-  const result = await buy(ctx, args);
-  assert.equal(result.owned.data.character, "1");
-  assert.equal(result.balance, 80);
-  assert.equal(table(`${P}inventory`).has("seed"), false);
-  assert.equal(table(`${P}character_state`).get("1").exp, 10);
-  assert.deepEqual(table(`${P}character_state`).get("1").titles, []);
-  table(`${P}items`).get("sword").requirements = { limit: 1 };
-  assert.equal(
-    await refusal(buy(ctx, { item: "sword", character: "1" })),
-    "purchase_limit",
-  );
-  assert.equal(
-    await refusal(
-      gift(ctx, {
-        inventory: result.owned.id,
-        recipient: "m-2",
-        character: "1",
-      }),
-    ),
-    "no_character",
-  );
-  await gift(ctx, {
-    inventory: result.owned.id,
-    recipient: "m-2",
-    character: "2",
-  });
-  assert.equal(table(`${P}inventory`).get(result.owned.id).character, "2");
-  assert.equal(
-    await refusal(
-      assignInventory(ctx, {
-        inventory: result.owned.id,
-        character: "1",
-      }),
-    ),
-    "not_owned",
-  );
-});
-
-test("history ignores a caller's owner filter and paginates", async () => {
-  const { ctx, table } = fakeCtx();
-  table(`${P}history`).set("a", { owner: "m-1", kind: "daily" });
-  table(`${P}history`).set("b", { owner: "m-2", memo: "private" });
-  table(`${P}history`).set("c", { owner: "m-1", kind: "buy" });
-  // Newest first.
-  const first = await history(ctx, { owner: "m-2", size: 1 });
-  assert.equal(first.documents[0].data.kind, "buy");
-  assert.equal(
-    (await history(ctx, { after: first.nextCursor, size: 1 })).documents[0].data
-      .kind,
-    "daily",
-  );
-  assert.equal(await refusal(history(ctx, { size: 21 })), "invalid_input");
-});
-
-test("recovery uses the catalog effect, caps health, consumes once and refuses foreign characters", async () => {
-  const { ctx, table } = fakeCtx();
-  table(`${P}characters`).set("1", { owner: "m-1" });
-  table(`${P}characters`).set("2", { owner: "m-2" });
-  table(`${P}stat_config`).set("hp", { name: "HP", initial: 10, max: 100 });
-  table(`${P}character_state`).set("1", {
-    owner: "m-1",
-    character: "1",
-    points: 0,
-    exp: 0,
-    stats: { hp: { allocated: 0, max: 10, current: 3, damage: 7 } },
-  });
-  table(`${P}items`).set("potion", {
-    name: "물약",
-    effect: { type: "restore", stat: "hp", amount: 4 },
-  });
-  table(`${P}inventory`).set("p1", {
-    owner: "m-1",
-    item: "potion",
-    name: "물약",
-  });
-  assert.equal(
-    await refusal(useItem(ctx, { inventory: "p1", character: "2" })),
-    "not_owned",
-  );
-  assert.equal(table(`${P}inventory`).has("p1"), true);
-  await useItem(ctx, {
-    inventory: "p1",
-    character: "1",
-    data: { amount: 99999 },
-  });
-  assert.equal(table(`${P}character_state`).get("1").stats.hp.current, 7);
-  assert.equal(
-    await refusal(useItem(ctx, { inventory: "p1", character: "1" })),
-    "not_owned",
-  );
-  table(`${P}items`).get("potion").reusable = true;
-  table(`${P}inventory`).set("p2", {
-    owner: "m-1",
-    item: "potion",
-    name: "물약",
-  });
-  await useItem(ctx, { inventory: "p2", character: "1" });
-  assert.equal(table(`${P}character_state`).get("1").stats.hp.current, 10);
-  assert.equal(table(`${P}inventory`).has("p2"), true);
-  // At full health it is still used, and the stat stays at its maximum
-  // (set_status clamps; use_item.php consumes regardless).
-  table(`${P}items`).get("potion").reusable = false;
-  await useItem(ctx, { inventory: "p2", character: "1" });
-  assert.equal(table(`${P}character_state`).get("1").stats.hp.current, 10);
-  assert.equal(table(`${P}inventory`).has("p2"), false);
-});
-
-test("draw tickets use their own odds, including misses, rather than the general table", async () => {
-  const { ctx, table } = fakeCtx();
-  table(`${P}items`).set("ticket", { name: "티켓", effect: { type: "draw" } });
-  table(`${P}items`).set("prize", { name: "상" });
-  table(`${P}gacha`).set("general", { item: "missing", weight: 100 });
-  table(`${P}gacha`).set("ticket-prize", {
-    source: "ticket",
-    item: "prize",
-    weight: 1,
-  });
-  table(`${P}inventory`).set("t1", {
-    owner: "m-1",
-    item: "ticket",
-    name: "티켓",
-  });
-  assert.equal(
-    (await useItem(ctx, { inventory: "t1" })).owned.data.item,
-    "prize",
-  );
-  assert.equal(table(`${P}inventory`).has("t1"), false);
-  table(`${P}gacha`).delete("ticket-prize");
-  table(`${P}gacha`).set("ticket-miss", {
-    source: "ticket",
-    item: null,
-    weight: 1,
-  });
-  table(`${P}inventory`).set("t2", {
-    owner: "m-1",
-    item: "ticket",
-    name: "티켓",
-  });
-  assert.equal((await useItem(ctx, { inventory: "t2" })).owned, null);
-  assert.equal(table(`${P}inventory`).has("t2"), false);
-});
-
-test("personal-item and profile tickets cannot inject privileged catalog or character fields", async () => {
-  const { ctx, table } = fakeCtx();
-  table(`${P}items`).set("create", {
-    name: "제작권",
-    reusable: true,
-    effect: { type: "create" },
-  });
-  table(`${P}inventory`).set("ticket", {
-    owner: "m-1",
-    item: "create",
-    name: "제작권",
-  });
-  // The original's form asks for a name, a description and an image.
-  for (const data of [
-    { name: "메달", description: "", image: "https://example.com/m.png" },
-    { name: "메달", description: "메달" },
-  ])
-    assert.equal(
-      await refusal(useItem(ctx, { inventory: "ticket", data })),
-      "invalid_input",
-    );
-  const result = await useItem(ctx, {
-    inventory: "ticket",
-    data: {
-      name: "메달",
-      description: "메달",
-      image: "https://example.com/m.png",
-      effect: { type: "restore", amount: 999 },
-      sellPrice: 999,
-      price: -1,
-    },
-  });
-  const personal = table(`${P}items`).get(result.owned.data.item);
-  assert.equal(personal.name, "메달");
-  assert.equal(personal.sellable, false);
-  assert.equal(personal.effect, undefined);
-  assert.equal(personal.sellPrice, undefined);
-  assert.equal(table(`${P}inventory`).has("ticket"), false);
-});
-
-test("a profile ticket opens the whole sheet of an approved character once while editing is closed", async () => {
-  const { ctx, table } = fakeCtx();
-  table(`${P}settings`).set("community", { characterEditing: false });
-  table(`${P}character_fields`).set("age", {
-    label: "나이",
-    type: "select",
-    options: ["17"],
-  });
-  table(`${P}characters`).set("1", {
-    owner: "m-1",
-    name: "Old",
-    state: "approved",
-    type: "sub",
-  });
-  table(`${P}characters`).set("2", {
-    owner: "m-1",
-    name: "Other",
-    state: "approved",
-  });
-  table(`${P}items`).set("profile", {
-    name: "수정권",
-    effect: { type: "profile" },
-  });
-  table(`${P}items`).set("potion", {
-    name: "물약",
-    effect: { type: "restore", stat: "hp", amount: 1 },
-  });
-  table(`${P}inventory`).set("profile-ticket", {
-    owner: "m-1",
-    item: "profile",
-    name: "수정권",
-  });
-  table(`${P}inventory`).set("bound", {
-    owner: "m-1",
-    item: "profile",
-    name: "수정권",
-    character: "2",
-  });
-  table(`${P}inventory`).set("potion", { owner: "m-1", item: "potion" });
-  table(`${P}inventory`).set("theirs", { owner: "m-2", item: "profile" });
-  // Without a ticket the sheet is the characters/sheet:save mutation's.
-  const save = (ticket, data = {}) =>
-    (ticket ? useProfileTicket : saveSheet)(ctx, {
-      id: "1",
-      data: { name: "New", ...data },
-      ...(ticket ? { ticket } : {}),
-    });
-  // The old partial edit is gone: the ticket is spent by the sheet.
-  assert.equal(
-    await refusal(
-      useItem(ctx, {
-        inventory: "profile-ticket",
-        character: "1",
-        data: { name: "New" },
-      }),
-    ),
-    "use_from_sheet",
-  );
-  assert.equal(await refusal(save(null)), "editing_closed");
-  for (const ticket of ["potion", "theirs", "bound", "missing"])
-    assert.equal(await refusal(save(ticket)), "invalid_ticket");
-  // The sheet is checked as any save: a bad field keeps the ticket.
-  assert.equal(
-    await refusal(save("profile-ticket", { fields: { age: "99" } })),
-    "invalid_field",
-  );
-  assert.equal(table(`${P}inventory`).has("profile-ticket"), true);
-  await save("profile-ticket", {
-    fields: { age: "17" },
-    owner: "m-2",
-    type: "main",
-    state: "editing",
-  });
-  const saved = table(`${P}characters`).get("1");
-  assert.equal(saved.name, "New");
-  assert.equal(saved.owner, "m-1");
-  assert.equal(saved.state, "approved");
-  assert.equal(saved.type, "sub");
-  assert.deepEqual(saved.fields, { age: "17" });
-  assert.equal(table(`${P}inventory`).has("profile-ticket"), false);
-  assert.equal(await refusal(save("profile-ticket")), "invalid_ticket");
-  // A lasting ticket (it_use_ever) stays.
-  table(`${P}items`).set("profile", {
-    ...table(`${P}items`).get("profile"),
-    reusable: true,
-  });
-  table(`${P}inventory`).set("lasting", { owner: "m-1", item: "profile" });
-  await save("lasting", { name: "Again" });
-  assert.equal(table(`${P}characters`).get("1").name, "Again");
-  assert.equal(table(`${P}inventory`).has("lasting"), true);
-});
-
-test("catalog prices and balances cannot create money through invalid arithmetic", async () => {
-  for (const price of [
-    -1,
-    Infinity,
-    NaN,
-    "10",
-    1.5,
-    Number.MAX_SAFE_INTEGER + 1,
-  ]) {
-    const { ctx, table } = fakeCtx();
-    table(`${P}items`).set("bad", { name: "bad", price });
-    table(`${P}wallets`).set("m-1", { balance: 100 });
-    await assert.rejects(async () => await buy(ctx, { item: "bad" }), /Price/);
-    assert.equal(table(`${P}wallets`).get("m-1").balance, 100);
-    assert.equal(table(`${P}inventory`).size, 0);
-  }
-  const { ctx, table } = fakeCtx();
-  table(`${P}wallets`).set("m-1", { balance: Number.MAX_SAFE_INTEGER });
-  table(`${P}profiles`).set("m-1", { nick: "부자" });
-  table(`${P}settings`).set("community", { loginReward: 1 });
-  await assert.rejects(
-    async () => await presence.seen(ctx, { where: "home" }),
-    /Balance/,
-  );
-  assert.equal(
-    table(`${P}wallets`).get("m-1").balance,
-    Number.MAX_SAFE_INTEGER,
-  );
-});
-
-test("selling checks ownership and server price and cannot pay twice", async () => {
-  const { ctx, table } = fakeCtx();
-  table(`${P}items`).set("seed", { name: "씨앗", sellPrice: 12 });
-  table(`${P}inventory`).set("mine", {
-    owner: "m-1",
-    item: "seed",
-    name: "씨앗",
-  });
-  table(`${P}inventory`).set("theirs", {
-    owner: "m-2",
-    item: "seed",
-    name: "씨앗",
-  });
-  assert.equal(
-    await refusal(sell(ctx, { inventory: "theirs", sellPrice: 10000 })),
-    "not_owned",
-  );
-  assert.equal(table(`${P}wallets`).size, 0);
-  assert.deepEqual(await sell(ctx, { inventory: "mine", sellPrice: 10000 }), {
-    balance: 12,
-    name: "씨앗",
-  });
-  assert.equal(table(`${P}inventory`).has("mine"), false);
-  assert.equal(await refusal(sell(ctx, { inventory: "mine" })), "not_owned");
-  assert.equal(table(`${P}wallets`).get("m-1").balance, 12);
-});
-
-test("gifts go to a character, another member's or one's own, keep who sent them and tell the recipient", async () => {
-  const { ctx, table } = fakeCtx();
-  table(`${P}profiles`).set("m-1", { nick: "나" });
-  table(`${P}profiles`).set("m-2", { nick: "친구" });
-  table(`${P}items`).set("seed", { name: "씨앗" });
-  table(`${P}inventory`).set("mine", {
-    owner: "m-1",
-    item: "seed",
-    name: "씨앗",
-    from: "shop",
-  });
-  for (const recipient of ["missing", "m-1", null]) {
-    assert.equal(
-      await refusal(gift(ctx, { inventory: "mine", recipient })),
-      "no_recipient",
-    );
-    assert.equal(table(`${P}inventory`).get("mine").owner, "m-1");
-  }
-  await gift(ctx, { inventory: "mine", recipient: "m-2", memo: "선물" });
-  assert.deepEqual(table(`${P}inventory`).get("mine"), {
-    owner: "m-2",
-    item: "seed",
-    name: "씨앗",
-    from: "shop",
-    sender: "m-1",
-    senderName: "나",
-    memo: "선물",
-    receivedAt: ctx.now,
-    character: null,
-  });
-  // The recipient hears of it by 쪽지 (send_memo), not counted as written.
-  const [notice] = [...table(`${P}messages`).values()];
-  assert.equal(notice.to, "m-2");
-  assert.equal(notice.gift, true);
-  assert.match(notice.body, /나님이 보내신 《씨앗》 아이템이 도착/);
-  assert.equal(
-    await refusal(gift(ctx, { inventory: "mine", recipient: "m-2" })),
-    "not_owned",
-  );
-  assert.equal(await refusal(sell(ctx, { inventory: "mine" })), "not_owned");
-  // To one of the sender's own characters: no 쪽지.
-  table(`${P}characters`).set("5", { owner: "m-1", name: "내캐" });
-  table(`${P}inventory`).set("again", {
-    owner: "m-1",
-    item: "seed",
-    name: "씨앗",
-  });
-  await gift(ctx, { inventory: "again", recipient: "m-1", character: "5" });
-  assert.equal(table(`${P}inventory`).get("again").character, "5");
-  assert.equal(table(`${P}messages`).size, 1);
-});
-
-test("crafting rejects duplicate, foreign, extra and insufficient materials before spending", async () => {
-  const { ctx, table } = fakeCtx();
-  table(`${P}wallets`).set("m-1", { balance: 100 });
-  table(`${P}recipes`).set("recipe", {
-    item: "tree",
-    cost: 20,
-    ingredients: [{ item: "seed", count: 2 }],
-  });
-  table(`${P}items`).set("tree", { name: "나무" });
-  table(`${P}items`).set("seed", { name: "씨앗", craftMaterial: true });
-  table(`${P}inventory`).set("a", { owner: "m-1", item: "seed" });
-  table(`${P}inventory`).set("b", { owner: "m-1", item: "seed" });
-  table(`${P}inventory`).set("foreign", { owner: "m-2", item: "seed" });
-  for (const materials of [
-    ["a"],
-    ["a", "a"],
-    ["a", "b", "b"],
-    ["a", "foreign"],
-    ["a", "missing"],
-    [7],
-    null,
-  ]) {
-    assert.notEqual(
-      await refusal(craft(ctx, { recipe: "recipe", materials })),
-      null,
-    );
-    assert.equal(table(`${P}inventory`).size, 3);
-    assert.equal(table(`${P}wallets`).get("m-1").balance, 100);
-  }
-  const result = await craft(ctx, {
-    recipe: "recipe",
-    materials: ["a", "b"],
-    cost: 0,
-  });
-  assert.equal(result.balance, 80);
-  assert.equal(result.owned.data.item, "tree");
-  assert.equal(table(`${P}inventory`).has("a"), false);
-  assert.equal(table(`${P}inventory`).has("b"), false);
-  assert.equal(table(`${P}inventory`).has("foreign"), true);
-  assert.notEqual(
-    await refusal(craft(ctx, { recipe: "recipe", materials: ["a", "b"] })),
-    null,
-  );
-  assert.equal(table(`${P}wallets`).get("m-1").balance, 80);
-  // Only craft materials go in (it_use_recepi), and a reusable one stays.
-  table(`${P}recipes`).set("tool", {
-    item: "tree",
-    ingredients: [
-      { item: "seed", count: 1 },
-      { item: "shovel", count: 1 },
-    ],
-  });
-  table(`${P}items`).set("shovel", { name: "삽", reusable: true });
-  table(`${P}inventory`).set("c", { owner: "m-1", item: "seed" });
-  table(`${P}inventory`).set("s", { owner: "m-1", item: "shovel" });
-  assert.equal(
-    await refusal(craft(ctx, { recipe: "tool", materials: ["c", "s"] })),
-    "not_material",
-  );
-  table(`${P}items`).get("shovel").craftMaterial = true;
-  await craft(ctx, { recipe: "tool", materials: ["c", "s"] });
-  assert.equal(table(`${P}inventory`).has("c"), false);
-  assert.equal(table(`${P}inventory`).has("s"), true);
-});
-
-test("gacha follows every page and rejects corrupt weights rather than changing odds", async () => {
-  const { ctx, table } = fakeCtx({ roll: 0.75 });
-  table(`${P}wallets`).set("m-1", { balance: GACHA_COST });
-  table(`${P}items`).set("later", { name: "다음 페이지" });
-  table(`${P}items`).set("first", { name: "첫 페이지" });
-  const calls = [];
-  ctx.list = (name, options) => {
-    calls.push(options.after);
-    return options.after === "next"
-      ? {
-          documents: [{ data: { item: "later", weight: 1 } }],
-          nextCursor: null,
-        }
-      : {
-          documents: [{ data: { item: "first", weight: 1 } }],
-          nextCursor: "next",
-        };
-  };
-  assert.equal((await gacha(ctx)).owned.data.name, "다음 페이지");
-  assert.deepEqual(calls, [null, "next"]);
-  table(`${P}wallets`).set("m-1", { balance: GACHA_COST });
-  ctx.list = () => ({
-    documents: [{ data: { item: "first", weight: Infinity } }],
-    nextCursor: null,
-  });
-  await assert.rejects(async () => await gacha(ctx), /weights/);
-  assert.equal(table(`${P}wallets`).get("m-1").balance, GACHA_COST);
-});
-
-/** One of m-1's characters, approved as the owner's review approves it. */
-function approvedCharacter(table, id = "1", official = {}) {
-  table(`${P}characters`).set(id, {
-    owner: "m-1",
-    name: id,
-    state: "approved",
-  });
-  table(`${P}character_state`).set(id, {
-    owner: "m-1",
-    character: id,
-    points: 0,
-    exp: 0,
-    stats: {},
-    titles: [],
-    approved: true,
-    ...official,
-  });
-}
-
-test("buying checks the item, its stock and the balance before taking anything", async () => {
-  const { ctx, table } = fakeCtx();
-  approvedCharacter(table);
-  const character = "1";
-  table(`${P}items`).set("sword", { name: "검", price: 80, stock: 1 });
-  table(`${P}items`).set("potion", { name: "물약", price: 10 });
-  table(`${P}items`).set("secret", { name: "비밀", price: 1, hidden: true });
-  assert.equal(
-    await refusal(buy(ctx, { item: "sword", character })),
-    "not_enough",
-  );
-  assert.equal(table(`${P}wallets`).size, 0);
-  table(`${P}wallets`).set("m-1", { balance: 100 });
-  const bought = await buy(ctx, { item: "sword", character });
-  assert.equal(bought.balance, 20);
-  assert.deepEqual(bought.owned.data, {
-    owner: "m-1",
-    item: "sword",
-    name: "검",
-    from: "shop",
-    character,
-  });
-  assert.equal(table(`${P}items`).get("sword").stock, 0);
-  assert.equal(
-    await refusal(buy(ctx, { item: "sword", character })),
-    "sold_out",
-  );
-  // No stock is no limit.
-  await buy(ctx, { item: "potion", character });
-  assert.equal(table(`${P}items`).get("potion").stock, undefined);
-  for (const item of ["secret", "missing", undefined, 7])
-    assert.equal(await refusal(buy(ctx, { item, character })), "no_item");
-});
-
-test("buying takes an approved character of the member's own, and limits count per character", async () => {
-  const { ctx, table } = fakeCtx();
-  table(`${P}wallets`).set("m-1", { balance: 100 });
-  table(`${P}items`).set("cake", {
-    name: "케이크",
-    price: 1,
-    requirements: { limit: 1 },
-  });
-  // shop/_ajax.shop_update.php:4: no character, or one not approved, buys
-  // nothing; nor does someone else's.
-  assert.equal(await refusal(buy(ctx, { item: "cake" })), "no_character");
-  table(`${P}characters`).set("6", { owner: "m-1", state: "submitted" });
-  assert.equal(
-    await refusal(buy(ctx, { item: "cake", character: "6" })),
-    "not_approved",
-  );
-  approvedCharacter(table, "7");
-  table(`${P}characters`).set("7", {
-    ...table(`${P}characters`).get("7"),
-    owner: "m-2",
-  });
-  assert.equal(
-    await refusal(buy(ctx, { item: "cake", character: "7" })),
-    "no_character",
-  );
-  assert.equal(table(`${P}wallets`).get("m-1").balance, 100);
-  // The limit is each character's (_ajax.shop_update.php:89), not the wallet's.
-  approvedCharacter(table, "1");
-  approvedCharacter(table, "8");
-  await buy(ctx, { item: "cake", character: "1" });
-  assert.equal(
-    await refusal(buy(ctx, { item: "cake", character: "1" })),
-    "purchase_limit",
-  );
-  await buy(ctx, { item: "cake", character: "8" });
-  assert.equal(table(`${P}wallets`).get("m-1").balance, 98);
-  assert.equal(table(`${P}wallets`).get("m-1").purchases, undefined);
-  assert.deepEqual(table(`${P}character_state`).get("1").purchases, {
-    cake: 1,
-  });
-});
-
-test("gacha picks by weight with the server's roll, and costs what it says", async () => {
-  const prize = async (roll) => {
-    const { ctx, table } = fakeCtx({ roll });
-    table(`${P}wallets`).set("m-1", { balance: GACHA_COST });
-    table(`${P}items`).set("common", { name: "흔한 씨앗" });
-    table(`${P}items`).set("rare", { name: "황금 아보카도" });
-    table(`${P}gacha`).set("g1", { item: "common", weight: 9 });
-    table(`${P}gacha`).set("g2", { item: "rare", weight: 1 });
-    table(`${P}gacha`).set("g3", { item: "rare", weight: 0 });
-    const result = await gacha(ctx);
-    assert.equal(result.balance, 0);
-    assert.equal(table(`${P}inventory`).size, 1);
-    return result.owned.data.name;
-  };
-  assert.equal(await prize(0), "흔한 씨앗");
-  assert.equal(await prize(0.89), "흔한 씨앗");
-  assert.equal(await prize(0.9), "황금 아보카도");
-  assert.equal(await prize(0.999), "황금 아보카도");
-  const { ctx, table } = fakeCtx();
-  assert.equal(await refusal(gacha(ctx)), "not_enough");
-  table(`${P}wallets`).set("m-1", { balance: GACHA_COST });
-  assert.equal(await refusal(gacha(ctx)), "empty");
-  // A table naming an item the shop does not have is the owner's mistake,
-  // and fails the call, which Naru then rolls back.
-  table(`${P}gacha`).set("g", { item: "gone", weight: 1 });
-  await assert.rejects(async () => await gacha(ctx), /gone/);
-});
-
 test("new posts are broadcast by board and ID only when a base member could list and read them", async () => {
   const { ctx, table, sent } = fakeCtx();
   table(`${P}boards`).set("staff", {
@@ -1911,13 +1138,13 @@ test("items used in a post are the speaker's own, logged and spent; only a draw 
       character: "1",
       ...extra,
     });
-  own("i-letter", "letter");
-  own("i-box", "box");
-  own("i-ticket", "ticket");
-  own("i-charm", "charm");
+  own("101", "letter");
+  own("102", "box");
+  own("103", "ticket");
+  own("104", "charm");
   // Held by no character: the original's inventory is a character's.
-  own("i-loose", "letter", { character: undefined });
-  table(`${P}inventory`).set("i-theirs", {
+  own("105", "letter", { character: undefined });
+  table(`${P}inventory`).set("106", {
     owner: "m-2",
     item: "letter",
     character: "2",
@@ -1926,10 +1153,10 @@ test("items used in a post are the speaker's own, logged and spent; only a draw 
     gate(ctx, "comments", "add", {
       data: { logId: "thread", text: "uses", item, character },
     });
-  assert.equal(await reasonOf(use("i-theirs")), "not_owned");
-  assert.equal(await reasonOf(use("i-loose")), "wrong_character");
-  assert.equal(await reasonOf(use("i-box", null)), "no_character");
-  const letter = (await use("i-letter")).document;
+  assert.equal(await reasonOf(use("106")), "not_owned");
+  assert.equal(await reasonOf(use("105")), "wrong_character");
+  assert.equal(await reasonOf(use("102", null)), "no_character");
+  const letter = (await use("101")).document;
   assert.deepEqual(letter.data.actions, [
     {
       type: "use",
@@ -1940,8 +1167,8 @@ test("items used in a post are the speaker's own, logged and spent; only a draw 
       description: "A note",
     },
   ]);
-  assert.equal(table(`${P}inventory`).has("i-letter"), false);
-  const box = (await use("i-box")).document;
+  assert.equal(table(`${P}inventory`).has("101"), false);
+  const box = (await use("102")).document;
   assert.deepEqual(box.data.actions[0].prize, { item: "prize", name: "Prize" });
   assert.equal(
     [...table(`${P}inventory`).values()].some(
@@ -1951,19 +1178,19 @@ test("items used in a post are the speaker's own, logged and spent; only a draw 
   );
   // A ticket is only shown used and spent: tickets work from the inventory
   // (write_update.inc.php:126-129 logs any item but 뽑기).
-  const ticket = (await use("i-ticket")).document;
+  const ticket = (await use("103")).document;
   assert.equal(ticket.data.actions[0].effect, "create");
-  assert.equal(table(`${P}inventory`).has("i-ticket"), false);
+  assert.equal(table(`${P}inventory`).has("103"), false);
   // A reusable item (it_use_ever) stays.
-  await use("i-charm");
-  assert.equal(table(`${P}inventory`).has("i-charm"), true);
+  await use("104");
+  assert.equal(table(`${P}inventory`).has("104"), true);
   // A post's item needs an approved character; a comment's does not.
   // Approval is the sheet's state, which the review changes.
   table(`${P}characters`).set("1", {
     ...table(`${P}characters`).get("1"),
     state: "submitted",
   });
-  assert.equal((await use("i-charm")).document.data.actions.length, 1);
+  assert.equal((await use("104")).document.data.actions.length, 1);
   const post = (data) =>
     gate(ctx, "logs", "add", {
       data: {
@@ -1974,7 +1201,7 @@ test("items used in a post are the speaker's own, logged and spent; only a draw 
         ...data,
       },
     });
-  assert.equal(await reasonOf(post({ item: "i-charm" })), "not_approved");
+  assert.equal(await reasonOf(post({ item: "104" })), "not_approved");
 });
 
 test("recovery in a post is logged, not applied: it heals from the inventory only", async () => {
@@ -1990,7 +1217,7 @@ test("recovery in a post is logged, not applied: it heals from the inventory onl
     name: "Potion",
     effect: { type: "restore", stat: "hp", amount: 3 },
   });
-  table(`${P}inventory`).set("i-potion", {
+  table(`${P}inventory`).set("107", {
     owner: "m-1",
     item: "potion",
     name: "Potion",
@@ -2003,13 +1230,13 @@ test("recovery in a post is logged, not applied: it heals from the inventory onl
         image: "https://example.com/p.png",
         text: "",
         character: "1",
-        item: "i-potion",
+        item: "107",
       },
     })
   ).document;
   assert.equal(posted.data.actions[0].effect, "restore");
   assert.equal(posted.data.actions[0].amount, undefined);
-  assert.equal(table(`${P}inventory`).has("i-potion"), false);
+  assert.equal(table(`${P}inventory`).has("107"), false);
   assert.equal(table(`${P}character_state`).get("1").stats.hp.damage, 7);
 });
 
@@ -2173,13 +1400,10 @@ test("visitors read and post only on level-1 boards, as named guests with a pass
     nicks: { "m-1": "회원" },
   });
   assert.equal(await refusal(wallet(ctx)), "sign_in");
-  for (const collection of ["inventory", "messages"])
-    assert.equal(
-      await refusal(
-        read({ collection: `${P}${collection}`, operation: "list" }),
-      ),
-      "ACCESS_DENIED",
-    );
+  assert.equal(
+    await refusal(read({ collection: `${P}messages`, operation: "list" })),
+    "ACCESS_DENIED",
+  );
   // A guest must name themselves and give a password; no secrets or actions.
   const post = (data, guest) =>
     communityWrite(ctx, {
@@ -2416,12 +1640,12 @@ test("a post's 조합 matches recipes by item, charges cost and consumes even on
       character: "1",
       ...extra,
     });
-  own("i-herb", "herb");
+  own("108", "herb");
   // Held by no character: not the speaker's (write.skin.php:238).
-  own("i-loose", "herb", { character: undefined });
-  own("i-water", "water", { character: "1" });
-  own("i-pot", "pot");
-  own("i-other", "herb", { character: "someone-else" });
+  own("105", "herb", { character: undefined });
+  own("109", "water", { character: "1" });
+  own("110", "pot");
+  own("111", "herb", { character: "99" });
   // 조합 is a post's (mmb/write.skin.php), not a comment's.
   assert.equal(
     await reasonOf(
@@ -2430,7 +1654,7 @@ test("a post's 조합 matches recipes by item, charges cost and consumes even on
           logId: "thread",
           text: "",
           action: "combine",
-          materials: ["i-herb"],
+          materials: ["108"],
           character: "1",
         },
       }),
@@ -2448,36 +1672,33 @@ test("a post's 조합 matches recipes by item, charges cost and consumes even on
         character,
       },
     });
-  assert.equal(await reasonOf(combine(["i-herb"], null)), "no_character");
-  assert.equal(await reasonOf(combine(["i-other"])), "not_owned");
-  assert.equal(await reasonOf(combine(["i-loose"])), "not_owned");
-  assert.equal(
-    await reasonOf(combine(["i-herb", "i-herb"])),
-    "invalid_materials",
-  );
-  const made = (await combine(["i-pot", "i-herb", "i-water"])).document;
+  assert.equal(await reasonOf(combine(["108"], null)), "no_character");
+  assert.equal(await reasonOf(combine(["111"])), "not_owned");
+  assert.equal(await reasonOf(combine(["105"])), "not_owned");
+  assert.equal(await reasonOf(combine(["108", "108"])), "invalid_materials");
+  const made = (await combine(["110", "108", "109"])).document;
   assert.equal(made.data.actions[0].success, true);
   assert.equal(made.data.actions[0].name, "Potion");
   assert.equal(table(`${P}wallets`).get("m-1").balance, 0);
-  assert.equal(table(`${P}inventory`).has("i-herb"), false);
-  assert.equal(table(`${P}inventory`).has("i-pot"), true); // reusable
+  assert.equal(table(`${P}inventory`).has("108"), false);
+  assert.equal(table(`${P}inventory`).has("110"), true); // reusable
   assert.ok(
     [...table(`${P}inventory`).values()].some(
       (row) => row.item === "potion" && row.character === "1",
     ),
   );
-  own("i-herb-2", "herb");
-  const missed = (await combine(["i-herb-2", "i-pot"])).document;
+  own("112", "herb");
+  const missed = (await combine(["112", "110"])).document;
   assert.equal(missed.data.actions[0].success, false);
-  assert.equal(table(`${P}inventory`).has("i-herb-2"), false);
+  assert.equal(table(`${P}inventory`).has("112"), false);
   // Only an approved character combines (write.skin.php:196).
   // Approval is the sheet's state, which the review changes.
   table(`${P}characters`).set("1", {
     ...table(`${P}characters`).get("1"),
     state: "submitted",
   });
-  own("i-herb-3", "herb");
-  assert.equal(await reasonOf(combine(["i-herb-3"])), "not_approved");
+  own("113", "herb");
+  assert.equal(await reasonOf(combine(["113"])), "not_approved");
 });
 
 test("사이트공개: visitors read the boards and nicknames while the site is open, and nothing once it is closed", async () => {
@@ -2525,31 +1746,6 @@ test("사이트공개: visitors read the boards and nicknames while the site is 
   assert.deepEqual(await ids("boards"), ["default", "free"]);
 });
 
-test("history narrows to one kind, as the experience list asks", async () => {
-  const { ctx, table } = fakeCtx();
-  table(`${P}history`).set("h1", { owner: "m-1", kind: "buy", at: 1 });
-  table(`${P}history`).set("h2", {
-    owner: "m-1",
-    kind: "exp",
-    at: 2,
-    expDelta: 5,
-    exp: 5,
-  });
-  table(`${P}history`).set("h3", {
-    owner: "m-2",
-    kind: "exp",
-    at: 3,
-    expDelta: 9,
-    exp: 9,
-  });
-  assert.deepEqual(
-    (await history(ctx, { kind: "exp" })).documents.map((row) => row.data.at),
-    [2],
-  );
-  assert.equal((await history(ctx, {})).documents.length, 2);
-  assert.equal(await refusal(history(ctx, { kind: 5 })), "invalid_input");
-});
-
 test("a members-only board group keeps its boards to its members and moderators", async () => {
   const { ctx, table } = fakeCtx();
   // Only the group's board, not the site's 로그.
@@ -2583,70 +1779,6 @@ test("a members-only board group keeps its boards to its members and moderators"
   table(`${P}board_groups`).get("staff").membersOnly = false;
   table(`${P}members`).set("m-1", { level: 2, role: "member" });
   assert.deepEqual(await listed(), ["plans"]);
-});
-
-test("shop items show and sell only within their dates, hours and weekdays, in Korea", async () => {
-  // 2030-01-04 is a Friday; 15:30 UTC is 00:30 Saturday 01-05 in Korea.
-  const at = Date.parse("2030-01-04T15:30:00Z");
-  assert.equal(onDisplay(undefined, at), true);
-  assert.equal(onDisplay({ from: "2030-01-05" }, at), true);
-  assert.equal(onDisplay({ until: "2030-01-04" }, at), false);
-  assert.equal(onDisplay({ fromHour: 1 }, at), false);
-  assert.equal(onDisplay({ untilHour: 0 }, at), true);
-  assert.equal(onDisplay({ weekdays: ["토", "일"] }, at), true);
-  assert.equal(onDisplay({ weekdays: ["금"] }, at), false);
-  const { ctx, table } = fakeCtx({ now: at });
-  approvedCharacter(table);
-  table(`${P}wallets`).set("m-1", { balance: 100 });
-  table(`${P}items`).set("lunch", {
-    name: "점심",
-    price: 1,
-    display: { fromHour: 11, untilHour: 14 },
-  });
-  const args = { item: "lunch", character: "1" };
-  assert.equal(await refusal(buy(ctx, args)), "not_on_display");
-  ctx.now = Date.parse("2030-01-05T03:00:00Z"); // 12:00 in Korea
-  assert.equal(await refusal(buy(ctx, args)), null);
-});
-
-test("a character's page shows its inventory when the owner allows (economy's half of the viewer)", async () => {
-  const { ctx, table } = fakeCtx();
-  table(`${P}characters`).set("1", { owner: "m-2", name: "용사" });
-  table(`${P}inventory`).set("i1", {
-    owner: "m-2",
-    item: "potion",
-    character: "1",
-  });
-  table(`${P}inventory`).set("i2", {
-    owner: "m-2",
-    item: "potion",
-    character: "2",
-  });
-  table(`${P}items`).set("potion", {
-    name: "물약",
-    image: "https://example.com/p.png",
-  });
-  assert.deepEqual(await characterInventory(ctx, { character: "1" }), {
-    inventory: null,
-  });
-  table(`${P}settings`).set("community", { viewerInventory: true });
-  assert.deepEqual(await characterInventory(ctx, { character: "1" }), {
-    inventory: [{ name: "물약", image: "https://example.com/p.png" }],
-  });
-  assert.equal(
-    await refusal(characterInventory(ctx, { character: "nobody" })),
-    "no_character",
-  );
-  table(`${P}settings`).set("community", {
-    viewerInventory: true,
-    siteOpen: false,
-  });
-  assert.equal(
-    await refusal(
-      characterInventory({ ...ctx, member: null }, { character: "1" }),
-    ),
-    "site_closed",
-  );
 });
 
 test("a board search finds titles, text and nicknames among posts the reader may read", async () => {
@@ -2962,7 +2094,7 @@ test("a board search reaches every post at once and pages what it finds", async 
 });
 
 test("기타 항목명 설정 names money, experience, 소속 and 종족 for pages and refusals", async () => {
-  const { NAME_DEFAULTS, subject } =
+  const { NAME_DEFAULTS, subject, lacking } =
     await import("../dist/_naru/modules/shared.js");
   const pages = await import("../dist/app/names.js");
   // The pages show the same defaults before the site's frame arrives.
@@ -2983,10 +2115,7 @@ test("기타 항목명 설정 names money, experience, 소속 and 종족 for pag
   assert.equal(names.sideTitle, "");
   assert.equal(names.classTitle, "");
   assert.equal(names.rankName, "랭킹");
-  assert.equal(
-    await gacha(ctx).catch((error) => error.message),
-    "골드가 모자랍니다.",
-  );
+  assert.equal(await lacking(ctx, "moneyName"), "골드가 모자랍니다.");
   assert.equal(subject("포인트"), "포인트가");
   assert.equal(subject("경험"), "경험이");
   assert.equal(subject("XP"), "XP이(가)");
@@ -3087,50 +2216,6 @@ test("멤버공개 is locked for visitors, and 익명 hides its author from all 
   );
 });
 
-test("화폐관리 sends money to a character's owner, records both sides and tells them", async () => {
-  const { ctx, table, sent: live } = fakeCtx();
-  table(`${P}profiles`).set("m-1", { nick: "나" });
-  table(`${P}profiles`).set("m-2", { nick: "친구" });
-  table(`${P}characters`).set("7", { owner: "m-2", name: "친구캐" });
-  table(`${P}characters`).set("8", { owner: "m-1", name: "내캐" });
-  table(`${P}wallets`).set("m-1", { balance: 1500 });
-  assert.equal(
-    await refusal(money.send(ctx, { character: "7", amount: 2000 })),
-    "not_enough",
-  );
-  assert.equal(
-    await refusal(money.send(ctx, { character: "8", amount: 10 })),
-    "no_recipient",
-  );
-  assert.equal(
-    await refusal(money.send(ctx, { character: "7", amount: 0 })),
-    "invalid_input",
-  );
-  const result = await money.send(ctx, { character: "7", amount: 1000 });
-  assert.deepEqual(result, { balance: 500, nick: "친구" });
-  assert.equal(table(`${P}wallets`).get("m-2").balance, 1000);
-  const [notice] = [...table(`${P}messages`).values()];
-  assert.equal(notice.body, "나님이 1,000 아보 보냈습니다.");
-  assert.deepEqual(live.at(-1), { member: "m-2", data: { unread: true } });
-  // The ledger shows money only: 획득 and 사용.
-  table(`${P}history`).set("exp-only", {
-    owner: "m-1",
-    kind: "exp",
-    at: 1,
-    expDelta: 5,
-  });
-  const ledger = await money.ledger(ctx);
-  assert.deepEqual(
-    ledger.documents.map((row) => [row.data.kind, row.data.delta]),
-    [["moneySent", -1000]],
-  );
-  ctx.member.id = "m-2";
-  assert.deepEqual(
-    (await money.ledger(ctx)).documents.map((row) => row.data.memo),
-    ["[받음] 나님"],
-  );
-});
-
 test("관심 keeps a member's favourite posts, theirs alone, and 경고내역 shows their warnings", async () => {
   const { ctx, table } = roleplayWorld();
   table(`${P}members`).set("m-1", { warnings: 2, warningNote: "도배" });
@@ -3157,156 +2242,6 @@ test("관심 keeps a member's favourite posts, theirs alone, and 경고내역 sh
   );
 });
 
-test("the owner grants money and experience to one or all, and ranks add their bonus points", async () => {
-  const { ctx, table } = fakeCtx();
-  for (const [id, nick] of [
-    ["m-1", "하나"],
-    ["m-2", "둘"],
-  ])
-    table(`${P}profiles`).set(id, { nick });
-  table(`${P}wallets`).set("m-2", { balance: 5 });
-  table(`${P}characters`).set("1", {
-    owner: "m-1",
-    name: "용사",
-    state: "approved",
-  });
-  table(`${P}characters`).set("6", {
-    owner: "m-2",
-    name: "초안",
-    state: "editing",
-  });
-  table(`${P}levels`).set("lv1", { name: "견습", exp: 0, bonusPoints: 0 });
-  table(`${P}levels`).set("lv2", { name: "숙련", exp: 100, bonusPoints: 3 });
-  const call = (args) => grants.grant(ctx, { memo: "이벤트", ...args });
-  assert.equal(
-    await refusal(call({ kind: "money", target: "all", value: 10 })),
-    "owner_only",
-  );
-  ctx.owner = true;
-  // Everyone's money, but never below nothing.
-  const all = await call({ kind: "money", target: "all", value: -10 });
-  assert.deepEqual([all.done, all.granted, all.skipped], [true, 0, 2]);
-  await call({ kind: "money", target: "all", value: 10 });
-  assert.equal(table(`${P}wallets`).get("m-1").balance, 10);
-  assert.equal(table(`${P}wallets`).get("m-2").balance, 15);
-  await call({ kind: "money", target: "one", name: "둘", value: -15 });
-  assert.equal(table(`${P}wallets`).get("m-2").balance, 0);
-  assert.equal(
-    await refusal(
-      call({ kind: "money", target: "one", name: "없음", value: 1 }),
-    ),
-    "no_member",
-  );
-  // Experience to every approved character: reaching 숙련 adds 3 points,
-  // falling back takes them away.
-  await call({ kind: "exp", target: "all", value: 120 });
-  assert.equal(table(`${P}character_state`).get("1").exp, 120);
-  assert.equal(table(`${P}character_state`).get("1").points, 3);
-  assert.equal(table(`${P}character_state`).get("6").exp, 0);
-  await call({ kind: "exp", target: "one", name: "용사", value: -50 });
-  assert.equal(table(`${P}character_state`).get("1").points, 0);
-  const memos = [...table(`${P}history`).values()].filter(
-    (row) => row.actor === "grant",
-  );
-  assert.ok(memos.every((row) => row.memo === "이벤트"));
-});
-
-test("money to everyone leaves out level-1 members, and items go out by count a part at a time", async () => {
-  const { ctx, table } = fakeCtx();
-  ctx.owner = true;
-  for (const [id, nick] of [
-    ["m-1", "하나"],
-    ["m-2", "둘"],
-  ])
-    table(`${P}profiles`).set(id, { nick });
-  // adm/point_update.php:18 gives to mb_level > 1 only.
-  table(`${P}members`).set("m-2", { role: "member", level: 1 });
-  const money = await grants.grant(ctx, {
-    kind: "money",
-    target: "all",
-    value: 10,
-  });
-  assert.deepEqual([money.granted, money.skipped], [1, 0]);
-  assert.equal(table(`${P}wallets`).get("m-1").balance, 10);
-  assert.equal(table(`${P}wallets`).has("m-2"), false);
-
-  for (const [id, owner, state] of [
-    ["1", "m-1", "approved"],
-    ["2", "m-2", "approved"],
-    ["3", "m-2", "editing"],
-  ])
-    table(`${P}characters`).set(id, {
-      owner,
-      name: `캐릭${"abc"[id - 1]}`,
-      state,
-    });
-  table(`${P}items`).set("gem", { name: "보석" });
-  const item = (args) =>
-    grants.grant(ctx, { kind: "item", item: "gem", memo: "선물", ...args });
-  for (const args of [
-    { target: "one", name: "캐릭a", value: 0 },
-    { target: "one", name: "캐릭a", value: 101 },
-    { target: "one", name: "캐릭a", value: 2, after: "x" },
-  ])
-    assert.equal(await refusal(item(args)), "invalid_input");
-  assert.equal(
-    await refusal(item({ target: "one", name: "캐릭a", value: 1, item: "x" })),
-    "no_item",
-  );
-  assert.equal(
-    await refusal(item({ target: "one", name: "없음", value: 1 })),
-    "no_character",
-  );
-  const owned = (character) =>
-    [...table(`${P}inventory`).values()].filter(
-      (row) => row.item === "gem" && row.character === character,
-    );
-  // To one character: 30 take two calls inside the write budget.
-  let result = await item({ target: "one", name: "캐릭a", value: 30 });
-  assert.equal(result.done, false);
-  assert.equal(owned("1").length, 19);
-  result = await item({
-    target: "one",
-    name: "캐릭a",
-    value: 30,
-    after: result.after,
-  });
-  assert.deepEqual([result.done, result.granted], [true, 1]);
-  assert.equal(owned("1").length, 30);
-  assert.deepEqual(owned("1")[0], {
-    owner: "m-1",
-    item: "gem",
-    name: "보석",
-    from: "admin",
-    character: "1",
-  });
-  // To every approved character, 15 each, across calls.
-  let after = null;
-  let granted = 0;
-  for (let calls = 0; ; calls += 1) {
-    assert.ok(calls < 5);
-    result = await item({ target: "all", value: 15, after });
-    granted += result.granted;
-    if (result.done) break;
-    after = result.after;
-  }
-  assert.equal(granted, 2);
-  assert.equal(owned("1").length, 45);
-  assert.equal(owned("2").length, 15);
-  assert.equal(owned("3").length, 0);
-  const history = [...table(`${P}history`).values()].filter(
-    (row) => row.kind === "grant",
-  );
-  assert.deepEqual(
-    history.map((row) => [row.owner, row.character, row.count, row.memo]),
-    [
-      ["m-1", "1", 30, "선물"],
-      ["m-1", "1", 15, "선물"],
-      ["m-2", "2", 15, "선물"],
-    ],
-  );
-});
-
 test("items stay out of posts or 조합 as the owner marks them", async () => {
   const { ctx, table } = roleplayWorld();
   table(`${P}items`).set("note", {
@@ -3318,19 +2253,19 @@ test("items stay out of posts or 조합 as the owner marks them", async () => {
   // Both flags start off (adm/item_form.php:217): an item without them is
   // kept out too.
   table(`${P}items`).set("plain", { name: "평범", effect: { type: "draw" } });
-  table(`${P}inventory`).set("i-plain", {
+  table(`${P}inventory`).set("114", {
     owner: "m-1",
     item: "plain",
     character: "1",
     name: "평범",
   });
-  table(`${P}inventory`).set("i-note", {
+  table(`${P}inventory`).set("115", {
     owner: "m-1",
     item: "note",
     character: "1",
     name: "쪽지",
   });
-  table(`${P}inventory`).set("i-stone", {
+  table(`${P}inventory`).set("116", {
     owner: "m-1",
     item: "stone",
     character: "1",
@@ -3346,14 +2281,14 @@ test("items stay out of posts or 조합 as the owner marks them", async () => {
         ...data,
       },
     });
-  assert.equal(await reasonOf(post({ item: "i-note" })), "not_usable");
-  assert.equal(await reasonOf(post({ item: "i-plain" })), "not_usable");
+  assert.equal(await reasonOf(post({ item: "115" })), "not_usable");
+  assert.equal(await reasonOf(post({ item: "114" })), "not_usable");
   assert.equal(
-    await reasonOf(post({ action: "combine", materials: ["i-plain"] })),
+    await reasonOf(post({ action: "combine", materials: ["114"] })),
     "not_material",
   );
   assert.equal(
-    await reasonOf(post({ action: "combine", materials: ["i-stone"] })),
+    await reasonOf(post({ action: "combine", materials: ["116"] })),
     "not_material",
   );
 });
@@ -3427,7 +2362,7 @@ test("a post may 탐색, and one that recorded 탐색 or 조합 stays but for th
     craftMaterial: true,
     name: "Letter",
   });
-  table(`${P}inventory`).set("i-letter", {
+  table(`${P}inventory`).set("101", {
     owner: "m-1",
     item: "letter",
     name: "Letter",
@@ -3448,7 +2383,7 @@ test("a post may 탐색, and one that recorded 탐색 or 조합 stays but for th
   assert.equal(explored.data.actions[0].item, "herb");
   assert.equal(await reasonOf(posts.remove(ctx, { id: explored.id })), "acted");
   // An item's use alone (wr_item_log) does not keep a post.
-  const used = (await post({ item: "i-letter" })).document;
+  const used = (await post({ item: "101" })).document;
   assert.deepEqual(await posts.remove(ctx, { id: used.id }), { done: true });
   table(`${P}members`).set("m-1", { role: "moderator" });
   assert.deepEqual(await posts.remove(ctx, { id: explored.id }), {

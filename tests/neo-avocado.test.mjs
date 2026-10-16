@@ -428,6 +428,61 @@ function fakeDatabase(rows = {}) {
           }),
         };
       };
+      /**
+       * The economy's queries, answered from the same store: the items the
+       * member may see (the shop's, their own, a recipe's), the recipes
+       * not hidden, and their inventory as asked.
+       */
+      const economyQueries = () => {
+        const inventory = () =>
+          store
+            .get("neo_avocado_inventory")
+            .filter(
+              (row) =>
+                row.data.owner === ME &&
+                (args?.all ||
+                  (args?.character
+                    ? row.data.character === args.character
+                    : !row.data.character)),
+            );
+        const recipes = () =>
+          store
+            .get("neo_avocado_recipes")
+            .filter((row) => row.data.hidden !== true);
+        const items = () => {
+          const known = new Set([
+            ...store
+              .get("neo_avocado_inventory")
+              .filter((row) => row.data.owner === ME)
+              .map((row) => row.data.item),
+            ...recipes().flatMap((row) => [
+              row.data.item,
+              ...(row.data.ingredients ?? []).map((entry) => entry.item),
+            ]),
+          ]);
+          return store
+            .get("neo_avocado_items")
+            .filter((row) => row.data.hidden !== true || known.has(row.id));
+        };
+        return {
+          "economy/shop:shop": () => ({
+            items: items(),
+            recipes: recipes(),
+            inventory: inventory(),
+          }),
+          "economy/inventory:inventory": () => {
+            const rows = inventory();
+            return {
+              inventory: rows,
+              items: store
+                .get("neo_avocado_items")
+                .filter((item) =>
+                  rows.some((row) => row.data.item === item.id),
+                ),
+            };
+          },
+        };
+      };
       if (name === "community/membership:membership") {
         const profile = profileOf(ME);
         return {
@@ -483,6 +538,7 @@ function fakeDatabase(rows = {}) {
             store.get("neo_avocado_wallets").find((row) => row.id === ME)?.data
               .balance ?? 0,
         }),
+        ...economyQueries(),
         ...characterQueries(),
       };
       if (Object.hasOwn(foundation, name)) {
@@ -548,9 +604,7 @@ function fakeDatabase(rows = {}) {
     answer: (name) =>
       name === "community/messages:messageStatus"
         ? { unread: false }
-        : name === "economy/inventory:followCharacter"
-          ? { done: true }
-          : refuse("empty"),
+        : refuse("empty"),
   };
   return database;
 }
@@ -1478,9 +1532,10 @@ test("the shop reads the wallet, items and own inventory when opened, and spends
     "선물하기",
     "캐릭터 이동",
   ]);
+  // The member's own inventory, of no character until one is chosen.
   assert.deepEqual(
-    database.calls.filter((call) => call.name === INVENTORY).at(0).filter,
-    { owner: ME },
+    database.calls.find((call) => call.name === "economy/shop:shop").args,
+    { character: null },
   );
   // A character not yet approved buys nothing either. 종족 is the sheet's
   // (ch_class), not a value in the official record.

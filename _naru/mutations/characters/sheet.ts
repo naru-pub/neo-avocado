@@ -12,12 +12,19 @@ import {
   saveSheet,
 } from "../../modules/characters.js";
 import type { SheetInput } from "../../modules/characters.js";
+import { profileTicket, record, spend } from "../../modules/economy.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
 /**
  * Registers a character (no `id`) or edits one of the member's own (`id`,
  * with the `revision` it was read at). The site owner saves any, and
  * registers one for the member named by `nick`.
+ *
+ * With `ticket`, a member saves with a 프로필수정 ticket (inventory/
+ * use_item.php 27-28, character_form.php:80-84): one of their own, or the
+ * character's, whose item's effect is "profile". It opens an approved
+ * character while editing is closed, and is spent unless it lasts
+ * (it_use_ever; character_form_update.php:268).
  */
 export async function save(
   ctx: MutationCtx,
@@ -26,15 +33,42 @@ export async function save(
     data?: SheetInput;
     revision?: string | null;
     nick?: string | null;
+    /** A 프로필수정 ticket's inventory ID. */
+    ticket?: string;
   } = {},
 ) {
-  const { row, catalogue } = await saveSheet(ctx, args ?? {});
+  const { ticket, ...sheet } = args ?? {};
+  if (ticket === undefined) {
+    const { row, catalogue } = await saveSheet(ctx, sheet);
+    return { document: await presentCharacter(ctx, row, { catalogue }) };
+  }
+  if (!ctx.member)
+    ctx.fail("ACCESS_DENIED", "권한이 없습니다.", { reason: "access_denied" });
+  const character = await characterRow(ctx, sheet.id);
+  const { owned, item } = await profileTicket(ctx, ticket, character);
+  const { row, catalogue } = await saveSheet(
+    ctx,
+    {
+      id: String(character.id),
+      data: sheet.data ?? {},
+      revision: sheet.revision ?? null,
+    },
+    { opened: true },
+  );
+  if (item.data.reusable !== true) await spend(ctx, [owned]);
+  await record(ctx, "use", {
+    item: item.id,
+    inventory: owned.id,
+    character: String(row.id),
+    effect: "profile",
+  });
   return { document: await presentCharacter(ctx, row, { catalogue }) };
 }
 
 /**
- * Deletes one of the member's characters with what hangs off it. The site
- * owner deletes any (adm/character_delete.php).
+ * Deletes one of the member's characters with what hangs off it; the items
+ * it held go back to their owners' own inventory. The site owner deletes
+ * any (adm/character_delete.php).
  */
 export async function remove(ctx: MutationCtx, { id }: { id?: string } = {}) {
   if (!ctx.member && !ctx.owner)
@@ -62,7 +96,7 @@ export async function remove(ctx: MutationCtx, { id }: { id?: string } = {}) {
 /**
  * The site owner gives a character to the member named by `nick`, as the
  * admin form changes its mb_id (adm/character_form.php:135), whatever that
- * member's limit, with its outfits and relations.
+ * member's limit, with its outfits, relations and items.
  */
 export async function move(
   ctx: MutationCtx,

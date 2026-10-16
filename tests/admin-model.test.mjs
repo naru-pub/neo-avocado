@@ -525,7 +525,7 @@ test("profile field definitions validate codes and options; explore misses store
     null,
   );
   assert.ok(!scopes.includes("neo_avocado_character_fields"));
-  assert.ok(scopes.includes("neo_avocado_explore"));
+  assert.ok(!scopes.includes("neo_avocado_explore"));
   assert.equal(models.character_review.collection, "neo_avocado_characters");
 });
 

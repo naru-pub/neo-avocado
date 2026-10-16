@@ -14,9 +14,5 @@ export {
 } from "../functions/community/messages.js";
 export { callHistory, seeCalls } from "../functions/community/calls.js";
 export { commentCounts, moderatePost } from "../functions/community/boards.js";
-export * from "../functions/economy/shop.js";
-export * from "../functions/economy/inventory.js";
-export { history } from "../functions/economy/history.js";
-export { GACHA_COST, loginReward } from "./shared.js";
-export * as money from "../functions/economy/money.js";
-export * as grants from "../functions/economy/grants.js";
+export { deliver } from "../functions/economy/notices.js";
+export { loginReward } from "./shared.js";

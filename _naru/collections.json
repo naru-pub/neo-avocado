@@ -30,25 +30,6 @@
       "write": "admin",
       "rules": "shown"
     },
-    "neo_avocado_explore": {
-      "read": "admin",
-      "write": "admin"
-    },
-    "neo_avocado_gacha": {
-      "read": "admin",
-      "write": "admin"
-    },
-    "neo_avocado_inventory": {
-      "read": "member",
-      "write": "admin",
-      "rules": "own",
-      "indexes": ["owner", "character"]
-    },
-    "neo_avocado_items": {
-      "read": "member",
-      "write": "admin",
-      "rules": "shown"
-    },
     "neo_avocado_logs": {
       "read": "world",
       "write": "admin",
@@ -59,11 +40,6 @@
       "read": "admin",
       "write": "admin",
       "indexes": ["to", "from"]
-    },
-    "neo_avocado_recipes": {
-      "read": "member",
-      "write": "admin",
-      "rules": "shown"
     }
   }
 }

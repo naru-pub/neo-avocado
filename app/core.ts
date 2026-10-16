@@ -9,9 +9,6 @@ const PREFIX = "neo_avocado_";
 export const COLLECTION = {
   logs: `${PREFIX}logs`,
   comments: `${PREFIX}comments`,
-  inventory: `${PREFIX}inventory`,
-  items: `${PREFIX}items`,
-  recipes: `${PREFIX}recipes`,
   boards: `${PREFIX}boards`,
   emoticons: `${PREFIX}emoticons`,
   boardGroups: `${PREFIX}board_groups`,

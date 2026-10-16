@@ -1,9 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as boards from "../dist/_naru/rules/boards.js";
-import * as own from "../dist/_naru/rules/own.js";
 import * as shown from "../dist/_naru/rules/shown.js";
-import { matches } from "./where.mjs";
 import { database, migrations, sqlOf } from "./sql-ctx.mjs";
 import {
   mappingOf,
@@ -72,17 +70,6 @@ test("boards: each level lists only the boards it may", async () => {
   assert.equal(boards.canWrite(), false);
 });
 
-test("own: a member reads their own inventory, a visitor nothing", () => {
-  assert.deepEqual(
-    own.readable(rulesCtx("m-1"), { collection: `${P}inventory` }),
-    { eq: ["owner", "m-1"] },
-  );
-  assert.equal(
-    own.readable(rulesCtx(null), { collection: `${P}inventory` }),
-    false,
-  );
-});
-
 test("사이트공개 off: visitors read no catalogues or boards; members read on", async () => {
   const closed = { [`${P}settings`]: { community: { siteOpen: false } } };
   for (const [rule, collection] of [
@@ -107,52 +94,6 @@ test("사이트공개 off: visitors read no catalogues or boards; members read o
     );
   assert.equal(await boardsOf(closed), false);
   assert.deepEqual(await boardsOf({}), { in: [{ metadata: "id" }, ["open"]] });
-});
-
-test("hidden recipes are no one's to read; hidden items only where the original shows them", async () => {
-  const tables = {
-    [`${P}items`]: {
-      sword: { name: "검" },
-      prize: { name: "경품", hidden: true },
-      elixir: { name: "비약", hidden: true },
-      secret: { name: "비밀", hidden: true },
-      mine: { name: "내 것", hidden: true },
-      gone: { name: "지운 것", deleted: true },
-    },
-    [`${P}recipes`]: {
-      open: { item: "elixir", ingredients: [{ item: "sword", count: 1 }] },
-      closed: { item: "secret", ingredients: [], hidden: true },
-    },
-    [`${P}inventory`]: { a: { owner: "m-1", item: "mine" } },
-  };
-  // A ctx whose lists apply their filter and where, as Naru's do.
-  const base = rulesCtx("m-1", tables);
-  const ctx = {
-    ...base,
-    list: async (name, { filter = {}, where } = {}) => ({
-      documents: (await base.list(name)).documents.filter(
-        (row) =>
-          Object.entries(filter).every(
-            ([key, value]) => row.data[key] === value,
-          ) && matches(row, where),
-      ),
-      nextCursor: null,
-    }),
-  };
-  const read = async (collection, member = "m-1") => {
-    const scope = await shown.readable(
-      { ...ctx, member: member ? { id: member } : null },
-      { collection },
-    );
-    return Object.entries(tables[collection])
-      .map(([id, data]) => ({ id, data }))
-      .filter((row) => matches(row, scope))
-      .map((row) => row.id);
-  };
-  assert.deepEqual(await read(`${P}recipes`), ["open"]);
-  // Shop items, the reader's own, and those of a recipe they can see.
-  assert.deepEqual(await read(`${P}items`), ["sword", "elixir", "mine"]);
-  assert.deepEqual(await read(`${P}items`, "m-2"), ["sword", "elixir"]);
 });
 
 test("the declaration names a rule file for every rule it uses", async () => {

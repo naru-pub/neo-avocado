@@ -1,5 +1,5 @@
-// For the time being: the site's tables (the foundation's and the
-// characters') read and written as the documents of the collections they
+// For the time being: the site's tables (the foundation's, the characters'
+// and the economy's) read and written as the documents of the collections they
 // replaced, for code not ported yet (the admin page, through the owner-only
 // admin/documents query and mutation). It goes when the admin area is
 // ported to its own mutations.
@@ -9,11 +9,13 @@ import type { QueryCtx, SqlValue } from "./naru-types.js";
 const P = "neo_avocado_";
 
 /**
- * How a field is kept: text, a whole number, a 0/1 boolean, JSON, a flag
- * (true as the time it was set), a row's number shown as a string (`ref`),
- * or a time in milliseconds written only with a new row (`created`).
+ * How a field is kept: text, a whole number, any finite number (`num`), a
+ * 0/1 boolean, JSON, a flag (true as the time it was set), a row's number
+ * shown as a string (`ref`), or a time in milliseconds written only with a
+ * new row (`created`).
  */
-type Kind = "text" | "int" | "bool" | "json" | "flag" | "ref" | "created";
+type Kind =
+  "text" | "int" | "num" | "bool" | "json" | "flag" | "ref" | "created";
 /** A document field, its column, how it is kept, and the column's value when the field is missing. */
 type Column = readonly [
   field: string,
@@ -34,6 +36,11 @@ export interface Mapping {
   extra?: string;
   /** The key is made by the table (history). */
   generated?: boolean;
+  /**
+   * The key is a row's number the table makes (inventory): a write naming
+   * no row's number adds a row, one naming a row writes it.
+   */
+  numbered?: boolean;
   /** Members: role and groups are Naru roles. */
   roles?: boolean;
   /** The key also stands in the document (visits' day, profiles' owner). */
@@ -338,6 +345,103 @@ export const MAPPINGS: Record<string, Mapping> = Object.fromEntries(
       ["exp", "exp", "int", 0],
       ["bonusPoints", "bonus_points", "int", 0],
     ]),
+    // The economy's tables (0004_economy.sql).
+    mapping("items", "items", "id", [
+      ["name", "name", "text", ""],
+      ["description", "description", "text", ""],
+      ["effectDescription", "effect_description", "text", ""],
+      ["shopTalk", "shop_talk", "text", ""],
+      ["image", "image", "text", null],
+      ["shopCategory", "shop_category", "text", ""],
+      ["display", "display", "json", null],
+      ["price", "price", "int", 0],
+      ["stock", "stock", "int", null],
+      ["sellPrice", "sell_price", "int", null],
+      ["order", "sort_order", "int", 0],
+      ["hidden", "hidden", "bool", 0],
+      ["sellable", "sellable", "bool", 1],
+      ["giftable", "giftable", "bool", 1],
+      ["usable", "usable", "bool", 1],
+      ["usableInPosts", "usable_in_posts", "bool", 0],
+      ["craftMaterial", "craft_material", "bool", 0],
+      ["reusable", "reusable", "bool", 0],
+      ["effect", "effect", "json", null],
+      ["requirements", "requirements", "json", "{}"],
+      ["useRequirements", "use_requirements", "json", "{}"],
+      ["personal", "personal", "bool", 0],
+    ]),
+    // A gift's sender, senderName, memo and receivedAt (or the owner's
+    // 지급 사유, memo) are its gift JSON.
+    mapping(
+      "inventory",
+      "inventory",
+      "id",
+      [
+        ["owner", "owner", "text", ""],
+        ["item", "item_id", "text", ""],
+        ["name", "name", "text", ""],
+        ["from", "origin", "text", ""],
+        ["character", "character_id", "ref", null],
+      ],
+      { extra: "gift", numbered: true },
+    ),
+    mapping(
+      "recipes",
+      "recipes",
+      "id",
+      [
+        ["name", "name", "text", ""],
+        ["description", "description", "text", ""],
+        ["item", "item_id", "text", ""],
+        ["cost", "cost", "int", 0],
+        ["hidden", "hidden", "bool", 0],
+      ],
+      {
+        select:
+          "(SELECT json_group_array(json_object('item', item_id, 'count', count)) FROM recipe_ingredients WHERE recipe_id = recipes.id) AS ingredients",
+        read(row, data) {
+          data.ingredients = parsed(row.ingredients, []);
+        },
+        after(key, data) {
+          const seen = new Set();
+          const ingredients = (
+            Array.isArray(data.ingredients) ? data.ingredients : []
+          ).filter(
+            (entry) =>
+              typeof entry?.item === "string" &&
+              Number.isSafeInteger(entry.count) &&
+              entry.count > 0 &&
+              !seen.has(entry.item) &&
+              seen.add(entry.item),
+          );
+          return [
+            {
+              text: "DELETE FROM recipe_ingredients WHERE recipe_id = ?",
+              values: [key],
+            },
+            ...ingredients.map((entry) => ({
+              text: "INSERT INTO recipe_ingredients (recipe_id, item_id, count) VALUES (?, ?, ?)",
+              values: [key, entry.item, entry.count],
+            })),
+          ];
+        },
+        cascade: (key) => [
+          {
+            text: "DELETE FROM recipe_ingredients WHERE recipe_id = ?",
+            values: [key],
+          },
+        ],
+      },
+    ),
+    mapping("gacha", "gacha", "id", [
+      ["source", "source", "text", null],
+      ["item", "item_id", "text", null],
+      ["weight", "weight", "num", 1],
+    ]),
+    mapping("explore", "explore", "id", [
+      ["item", "item_id", "text", null],
+      ["weight", "weight", "num", 1],
+    ]),
   ].map((entry) => [entry.collection, entry]),
 );
 
@@ -396,11 +500,15 @@ export function rowOf(
               ? Number.isSafeInteger(value)
                 ? value
                 : fallback
-              : empty(value) && fallback === null
-                ? null
-                : typeof value === "string"
+              : kind === "num"
+                ? typeof value === "number" && Number.isFinite(value)
                   ? value
-                  : (fallback as string | null);
+                  : fallback
+                : empty(value) && fallback === null
+                  ? null
+                  : typeof value === "string"
+                    ? value
+                    : (fallback as string | null);
   }
   if (map.extra) {
     const known = new Set([
@@ -533,7 +641,7 @@ export function keyOf(map: Mapping, id: unknown): SqlValue {
     return map.settings !== true && id !== map.settings.id
       ? null
       : settingsKey(map, id);
-  if (map.generated || map.numeric)
+  if (map.generated || map.numeric || map.numbered)
     return /^[1-9]\d{0,14}$/.test(id) ? Number(id) : null;
   return id;
 }
@@ -561,7 +669,7 @@ export function writeStatements(
   const values: SqlValue[] = Object.values(row);
   const updated = columns.filter((column) => !inserted.has(column));
   let write: Statement;
-  if (map.generated)
+  if (map.generated || (map.numbered && key === null))
     write = {
       text: `INSERT INTO ${map.table} (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")}) RETURNING *`,
       values,

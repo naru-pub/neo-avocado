@@ -9,7 +9,7 @@ Naru SDK 1.1.0 loads their static relative imports directly. No generated runtim
 files or bundling step is needed.
 
 Pages call a function by `"<module/path>:<export>"`, as the SDK takes it:
-`member.call("economy/shop:buy", { item })`. A function that refuses calls
+`member.call("community/posts:write", { data })`. A function that refuses calls
 `ctx.fail(code, "한국어 메시지", { reason })`; its writes roll back and the page
 shows the message. `tests/function-modules.test.mjs` checks that every reference
 names an export and every export is called. Shared modules cannot be called
@@ -28,16 +28,18 @@ collection.
 
 - `community-board.js`: posts and comments, by board level and secret posts.
 - `boards.js`: the boards the reader's level may list.
-- `own.js`: a member's own inventory.
-- `shown.js`: catalogues without deleted rows.
+- `shown.js`: catalogues (emoticons, board groups) without deleted rows.
 
 Profiles, settings, members, wallets and the site's frame are tables now
 (`migrations/0001_foundation.sql`), and so are characters with their
 fields, lists, titles, relations, outfits, couples, stats and ranks
-(`migrations/0003_characters.sql`), read through `queries/` and written
-through `mutations/`; rules and site functions read them with `ctx.sql`
-through `modules/access.js`, `modules/members.js` and
-`modules/characters.js`.
+(`migrations/0003_characters.sql`), and the economy's items, inventory,
+recipes and draw tables (`migrations/0004_economy.sql`), read through
+`queries/` and written through `mutations/`; rules and site functions read
+them with `ctx.sql` through `modules/access.js`, `modules/members.js`,
+`modules/characters.js` and `modules/economy.js`.
+`functions/economy/notices.js` only sends the 쪽지 a gift or money sent
+tells its recipient of, while mail is still a collection.
 
 Rules import `modules/shared.js` for member access, boards and secret
 visibility, so they and the site functions that write the community

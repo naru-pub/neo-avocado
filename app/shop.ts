@@ -1,12 +1,9 @@
 // The shop and inventory: buying, gacha, crafting, gifts and history.
-// Prices and balances are decided by site functions; the page shows results.
+// Prices and balances are decided by the economy's mutations; the page
+// shows results.
 
 import {
   $,
-  allDocuments,
-  caller,
-  COLLECTION,
-  collection,
   edit,
   formatTime,
   ownCharacters,
@@ -19,15 +16,12 @@ import {
   route,
   renderPages,
   query,
+  mutate,
 } from "./core.js";
 import { amountText, expText, moneyText } from "./names.js";
 import { onDisplay } from "../_naru/modules/display.js";
 import { editCharacter } from "./characters.js";
 
-async function loadBalance() {
-  const { balance } = await query("economy/wallet:wallet");
-  $("balance").textContent = amountText(balance);
-}
 async function loadShop() {
   state.ownCharacters = await ownCharacters();
   const selector = $<HTMLSelectElement>("inventoryCharacter");
@@ -47,14 +41,21 @@ async function loadShop() {
   )
     state.inventoryCharacter = null;
   selector.value = state.inventoryCharacter ?? "";
-  // Independent panels, read at once.
-  await Promise.all([
-    loadBalance(),
-    Promise.all([loadShopFront(), loadShopCharacter()]).then(() => loadItems()),
-    loadInventory(),
-    loadRecipes(),
+  // The items, recipes and inventory in one read; the balance, the shop's
+  // front and the chosen character beside it.
+  const [shop, { balance }] = await Promise.all([
+    query("economy/shop:shop", { character: state.inventoryCharacter }),
+    query("economy/wallet:wallet"),
+    loadShopFront(),
+    loadShopCharacter(),
     $<HTMLDetailsElement>("historyPanel").open ? loadHistory() : null,
   ]);
+  $("balance").textContent = amountText(balance);
+  state.itemCatalog.clear();
+  for (const item of shop.items) state.itemCatalog.set(item.id, item);
+  showCategory();
+  showInventory(shop.inventory);
+  showRecipes(shop.recipes);
   state.shopLoaded = true;
 }
 /**
@@ -171,13 +172,6 @@ function showCategory(number = 1) {
       .map((item) => shopItem(item)),
   );
   renderPages($("itemPages"), current, pages, (next) => showCategory(next));
-}
-/** Every item, once: categories and pages are drawn from them. */
-async function loadItems() {
-  const items = await allDocuments(COLLECTION.items);
-  state.itemCatalog.clear();
-  for (const item of items) state.itemCatalog.set(item.id, item);
-  showCategory();
 }
 function itemPortrait(data) {
   const portrait = document.createElement("div");
@@ -323,28 +317,20 @@ function showShopDetail(item) {
   }
   detail.hidden = false;
 }
+/** Reads the chosen character's inventory again, and shows it. */
+async function loadInventory() {
+  const { inventory, items } = await query("economy/inventory:inventory", {
+    character: state.inventoryCharacter,
+  });
+  for (const item of items) state.itemCatalog.set(item.id, item);
+  showInventory(inventory);
+}
 /**
  * The chosen character's inventory (inventory/list.inc.php): gifts one by
  * one with a mark, the rest one slot an item with its count.
  */
-async function loadInventory() {
-  const rows = await allDocuments(COLLECTION.inventory, {
-    owner: state.member.id,
-    ...(state.inventoryCharacter
-      ? { character: state.inventoryCharacter }
-      : {}),
-  });
-  state.inventoryRows = state.inventoryCharacter
-    ? rows
-    : rows.filter((row) => !row.data.character);
-  const missing = [
-    ...new Set(state.inventoryRows.map((row) => row.data.item)),
-  ].filter((id) => id && !state.itemCatalog.has(id));
-  for (let start = 0; start < missing.length; start += 100) {
-    const ids = missing.slice(start, start + 100);
-    const items = await collection(COLLECTION.items).getMany(ids);
-    items.forEach((item, index) => state.itemCatalog.set(ids[index], item));
-  }
+function showInventory(rows) {
+  state.inventoryRows = rows;
   const gifts = state.inventoryRows.filter((row) => row.data.sender);
   const groups = new Map();
   for (const row of state.inventoryRows)
@@ -477,7 +463,7 @@ function showInventoryDetail(owned) {
         },
       ],
       async ({ character }) => {
-        await caller().call("economy/inventory:assignInventory", {
+        await mutate("economy/inventory:assignInventory", {
           inventory: owned.id,
           character: character || null,
         });
@@ -505,12 +491,15 @@ function giveItem(owned) {
         approved: true,
       });
       if (!character) return say("그 이름의 캐릭터를 찾을 수 없습니다.");
-      await state.member.call("economy/inventory:gift", {
+      const sent = await mutate("economy/inventory:gift", {
         inventory: owned.id,
         recipient: character.createdBy ?? character.data.owner,
         character: character.id,
         memo: data.memo,
       });
+      // The recipient's 쪽지 (economy/notices:deliver, while mail is a
+      // collection).
+      if (sent.notice) await state.member.call("economy/notices:deliver");
       say(`${character.data.name}님께 선물이 배송되었습니다.`);
       await loadInventory();
     },
@@ -539,7 +528,7 @@ const HISTORY_NAMES = {
   exp: "변경",
 };
 async function loadHistory({ more = false } = {}) {
-  const page = await caller().call("economy/history:history", {
+  const page = await query("economy/history:history", {
     after: more ? state.historyCursor : null,
     size: 20,
   });
@@ -557,8 +546,8 @@ $("historyPanel").ontoggle = () => {
 };
 $("moreHistory").onclick = () => run(() => loadHistory({ more: true }));
 async function useInventory(owned) {
-  const item = await collection(COLLECTION.items).get(owned.data.item);
-  const effect = item.data.effect;
+  const item = state.itemCatalog.get(owned.data.item);
+  const effect = item?.data.effect;
   if (!effect || item.data.usable === false)
     return say("사용할 수 없는 아이템입니다.");
   const fields = [];
@@ -648,7 +637,7 @@ async function useInventory(owned) {
         const uploaded = await uploadMedia(file);
         data.image = uploaded.url;
       }
-      const result = await caller().call("economy/inventory:useItem", {
+      const result = await mutate("economy/inventory:useItem", {
         inventory: owned.id,
         ...(character || owned.data.character
           ? { character: character || owned.data.character }
@@ -667,10 +656,9 @@ async function useInventory(owned) {
     },
   );
 }
-async function loadRecipes() {
-  state.recipes = await allDocuments(COLLECTION.recipes, undefined, {
-    ne: ["hidden", true],
-  });
+/** The recipes members may craft (the owner's hidden ones are not read). */
+function showRecipes(recipes) {
+  state.recipes = recipes;
   $("recipe").replaceChildren();
   for (const row of state.recipes) {
     const option = document.createElement("option");
@@ -710,12 +698,12 @@ $("craftForm").onsubmit = (event) => {
   );
 };
 /**
- * 서버 함수 하나를 부르고, 결과를 알린 뒤 잔액과 인벤토리를 다시 읽는다. 값을
- * 정하는 것은 서버이므로 페이지는 결과만 보여 준다.
+ * 경제 뮤테이션 하나를 부르고, 결과를 알린 뒤 잔액과 인벤토리를 다시 읽는다.
+ * 값을 정하는 것은 서버이므로 페이지는 결과만 보여 준다.
  */
 function spend(reference, args, success) {
   return run(async () => {
-    const result = await state.member.call(reference, args);
+    const result = await mutate(reference, args);
     say(success(result));
     await loadShop();
   });

@@ -207,7 +207,7 @@ async function loadMyLogs() {
 let expCursor = null;
 async function loadMyExp({ more = false } = {}) {
   const [page, characters] = await Promise.all([
-    caller().call("economy/history:history", {
+    query("economy/history:history", {
       kind: "exp",
       after: more ? expCursor : null,
       size: 20,
@@ -273,7 +273,7 @@ async function loadMyFavorites(page = 1) {
 /** 화폐관리's ledger (mypage/money/index.php): 획득 and 사용, 20 a page. */
 let moneyCursor = null;
 async function loadMyMoney({ more = false } = {}) {
-  const page = await caller().call("economy/money:ledger", {
+  const page = await query("economy/money:ledger", {
     after: more ? moneyCursor : null,
   });
   const body = $("moneyLedger").querySelector("tbody");
@@ -323,10 +323,13 @@ $("moneyForm").onsubmit = (event) => {
       ? await query("characters/sheet:named", { name })
       : { document: null };
     if (!target) return say("상대를 확인할 수 없습니다.");
-    const result = await caller().call("economy/money:send", {
+    const result = await mutate("economy/money:send", {
       character: target.id,
       amount,
     });
+    // The recipient's 쪽지 (economy/notices:deliver, while mail is a
+    // collection).
+    if (result.notice) await state.member.call("economy/notices:deliver");
     $<HTMLFormElement>("moneyForm").reset?.();
     state.shopLoaded = false;
     say(`${result.nick}님께 ${moneyText(state.names, amount)} 보냈습니다.`);

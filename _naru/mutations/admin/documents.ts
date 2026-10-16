@@ -49,14 +49,15 @@ async function write(
   if (
     typeof id !== "string" ||
     !id ||
-    key === null ||
+    (key === null && !map.numbered) ||
     data === null ||
     typeof data !== "object"
   )
     ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
       reason: "invalid_input",
     });
-  // History is only added to: a new row, whatever ID the page made up.
+  // History is only added to: a new row, whatever ID the page made up; an
+  // inventory row is added for an ID that names none.
   const { write: statement, after } = writeStatements(map, key, data, ctx.now);
   const { rows } = await ctx.sql(statement.text, statement.values);
   // A partial row (a character's official record) is its character's.
@@ -73,7 +74,7 @@ async function write(
   }
   return await getDocument(ctx, {
     collection: map.collection,
-    id: map.generated ? String(rows[0][map.key]) : id,
+    id: map.generated || map.numbered ? String(rows[0][map.key]) : id,
   });
 }
 

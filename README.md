@@ -329,7 +329,7 @@ HTML은 [DOMPurify](https://github.com/cure53/DOMPurify)로 정리하여 표시�
 | 로그인·가입·닉네임     | `app.js`                               | `_naru/queries/community/`, `_naru/mutations/community/`         |
 | 게시판·로그·댓글       | `app/logs.js`, `app/posts.js`          | `_naru/functions/community/posts.js`, `comments.js`, `boards.js` |
 | 캐릭터                 | `app/characters.js`, `app/couples.js`  | `_naru/queries/characters/`, `_naru/mutations/characters/`       |
-| 상점·인벤토리·제작     | `app/shop.js`                          | `_naru/functions/economy/`                                       |
+| 상점·인벤토리·제작     | `app/shop.js`                          | `_naru/queries/economy/`, `_naru/mutations/economy/`             |
 | 쪽지                   | `app/messages.js`                      | `_naru/functions/community/messages.js`                          |
 | 알림(호출)             | `app/calls.js`                         | `_naru/functions/community/calls.js`                             |
 | 퀘스트·안내 페이지     | `app/content.js`                       | `_naru/queries/content/`                                         |
@@ -342,7 +342,7 @@ HTML은 [DOMPurify](https://github.com/cure53/DOMPurify)로 정리하여 표시�
 화면은 컬렉션을 SDK로 직접 읽습니다(`member.collection(...)`, 손님은
 `naru.collection(...)`). 누가 무엇을 읽는지는 `_naru/rules/`의 규칙이 정합니다.
 쓰기는 서버 함수(`community/posts:write`, `community/comments:write` 등)로
-합니다. 새 SDK로 옮긴 부분(가입·프로필·접속·사이트 틀·안내 페이지·퀘스트·캐릭터)은 `_naru/migrations/`의 테이블을 쓰고, 화면은
+합니다. 새 SDK로 옮긴 부분(가입·프로필·접속·사이트 틀·안내 페이지·퀘스트·캐릭터·상점과 인벤토리)은 `_naru/migrations/`의 테이블을 쓰고, 화면은
 `query`·`mutate`(`app/core.js`)로 `_naru/queries/`·`_naru/mutations/`를 부릅니다
 (`docs/port.md`).
 
@@ -362,7 +362,7 @@ $("gacha").onclick = () =>
 
 function spend(reference, args, success) {
   return run(async () => {
-    const result = await state.member.call(reference, args);
+    const result = await mutate(reference, args);
     say(success(result));
     await loadShop();
   });
@@ -370,8 +370,10 @@ function spend(reference, args, success) {
 ```
 
 ```js
-// _naru/functions/economy/shop.js (줄임)
-export async function gacha(ctx, { character = null } = {}) {
+// _naru/mutations/economy/shop.js (줄임)
+export async function gacha(ctx, args) {
+  signedIn(ctx);
+  const { character = null } = args ?? {};
   const current = await wallet(ctx);
   if (current.balance < GACHA_COST)
     ctx.fail("CONFLICT", await lacking(ctx, "moneyName"), {
@@ -388,7 +390,7 @@ export async function gacha(ctx, { character = null } = {}) {
 }
 ```
 
-`ctx.fail`은 호출을 멈추고 그때까지의 쓰기를 모두 되돌립니다. `call`은 그 메시지로
+`ctx.fail`은 호출을 멈추고 그때까지의 쓰기를 모두 되돌립니다. `mutate`는 그 메시지로
 오류를 던지고, `run`이 그 메시지를 화면에 그대로 보여 줍니다. 공통 코드는 `_naru/modules/`에 있고 서버 함수가 정적 import합니다.
 번들 생성은 필요하지 않습니다. 자세한 구조는 [_naru/README.md](_naru/README.md)를
 참고하세요.

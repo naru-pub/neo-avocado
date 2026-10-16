@@ -215,6 +215,22 @@ export async function names(ctx: SqlCtx): Promise<Names> {
   return namesOf(await communitySettings(ctx));
 }
 
+/** A word with its subject particle: 아보가, 경험치가, 포인트가, 골드가. */
+export function subject(word: string) {
+  const last = word.charCodeAt(word.length - 1);
+  if (last < 0xac00 || last > 0xd7a3) return `${word}이(가)`;
+  return `${word}${(last - 0xac00) % 28 ? "이" : "가"}`;
+}
+/** "아보가 모자랍니다." in the owner's name for money or experience. */
+export async function lacking(ctx: SqlCtx, key: keyof Names) {
+  return `${subject((await names(ctx))[key])} 모자랍니다.`;
+}
+/** What a restricted character is refused for, in the owner's names. */
+export function restrictedFor(named: Names, verb: string) {
+  const kinds = [named.sideTitle, named.classTitle].filter(Boolean);
+  return `이 캐릭터의 ${kinds.join("·") || "조건"}으로는 ${verb} 수 없습니다.`;
+}
+
 /** A whole, non-negative amount the owner set in 커뮤니티 설정, else 0. */
 export function amountOf(settings: Record<string, any>, key: string): number {
   const value = settings[key];

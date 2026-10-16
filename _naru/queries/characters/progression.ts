@@ -9,6 +9,7 @@ import {
   viewable,
 } from "../../modules/characters.js";
 import { historyPage, walletOf } from "../../modules/members.js";
+import { characterInventory } from "../../modules/economy.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
 
 /** Experience history rows a page (member/exp.php's cf_page_rows). */
@@ -17,9 +18,9 @@ const EXP_PAGE = 20;
 /**
  * What the character viewer adds to the profile: the character's experience
  * history (member/exp.php) a page at a time, newest first, and, where the
- * owner turns it on (ad_use_money), its owner's money; `showsInventory` is
- * whether the owner shows its inventory (ad_use_inven), which economy's
- * inventory:characterInventory answers. A later page (`after`, the
+ * owner turns it on (ad_use_money), its owner's money, and (ad_use_inven)
+ * what it holds, by name and picture (`inventory`, null where the owner
+ * hides it; `showsInventory` says which). A later page (`after`, the
  * `expCursor` of the one before) carries only the history.
  */
 export async function characterSheet(
@@ -63,10 +64,12 @@ export async function characterSheet(
     settings.viewerMoney === true
       ? (await walletOf(ctx, row.owner)).balance
       : null;
+  const showsInventory = settings.viewerInventory === true;
   return {
     exp,
     expCursor,
-    showsInventory: settings.viewerInventory === true,
+    showsInventory,
+    inventory: showsInventory ? await characterInventory(ctx, row.id) : null,
     balance,
   };
 }

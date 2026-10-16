@@ -658,20 +658,12 @@ function reviewRow(row) {
       >("button,input,select"))
         control.disabled = true;
       try {
-        // Outfits and relations go with it; its items (economy's) follow
-        // in bounded steps.
+        // Outfits, relations and items go with it.
         await owner.mutate("characters/sheet:move", {
           id: row.id,
           nick,
           revision: row.revision,
         });
-        while (
-          !(
-            await owner.call("economy/inventory:followCharacter", {
-              character: row.id,
-            })
-          ).done
-        );
         $("adminStatus").textContent =
           `${row.data.name}을(를) ${nick}님에게 옮겼습니다.`;
         await load();
@@ -691,17 +683,10 @@ function reviewRow(row) {
 }
 /**
  * Deletes a character as adm/character_delete.php does; the items it held
- * go back to its owner's inventory (economy's) in bounded steps.
+ * go back to their owners' own inventory.
  */
 async function removeCharacter(row) {
   await owner.mutate("characters/sheet:remove", { id: row.id });
-  for (let step = 1; ; step++) {
-    const { done } = await owner.call("economy/inventory:followCharacter", {
-      character: row.id,
-    });
-    if (done) return;
-    $("adminStatus").textContent = `${row.data.name} 정리 중… (${step})`;
-  }
 }
 /**
  * The owner's full form for one character (adm/character_form.php:112-423):
@@ -1644,8 +1629,8 @@ async function activityView() {
 
 /**
  * 아보·경험치·아이템 지급 (adm/point_list.php, exp_list.php,
- * inventory_list.php): the form, run to the end a part of the recipients a
- * call, and the last grants.
+ * inventory_list.php): the form, one call for all its recipients, and the
+ * last grants.
  */
 async function grantsView() {
   const report = $("adminReport");
@@ -1754,27 +1739,20 @@ async function grantsView() {
       )
         return;
       submit.disabled = true;
-      let after = null;
-      let granted = 0;
-      let skipped = 0;
       try {
-        for (;;) {
-          const result = await owner.call("economy/grants:grant", {
+        // One call gives to everyone it names.
+        const { granted, skipped } = await owner.mutate(
+          "economy/grants:grant",
+          {
             kind: kind.value,
             target: target.value,
             name: name.value.trim(),
             value: amount,
             memo: memo.value.trim(),
-            after,
             ...(kind.value === "item" ? { item: item.value } : {}),
-          });
-          granted += result.granted;
-          skipped += result.skipped;
-          status.textContent = `${granted}명 지급${skipped ? `, ${skipped}명은 가진 것보다 많이 깎을 수 없어 건너뜀` : ""}…`;
-          if (result.done) break;
-          after = result.after;
-        }
-        status.textContent = status.textContent.replace(/…$/, ". 끝났습니다.");
+          },
+        );
+        status.textContent = `${granted}명 지급${skipped ? `, ${skipped}명은 가진 것보다 많이 깎을 수 없어 건너뜀` : ""}. 끝났습니다.`;
         await showLog();
       } finally {
         submit.disabled = false;

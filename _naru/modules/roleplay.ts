@@ -3,28 +3,30 @@
 // in a post, and [[nick]] calls with comment notices.
 import {
   CALLS,
-  EXPLORE,
-  INVENTORY,
-  ITEMS,
-  RECIPES,
   amount,
-  pay,
-  wallet,
-  weightedRows,
   author,
   characterState,
   communityAccess,
-  draw,
-  give,
   kstDay,
   logReadable,
   ownCharacter,
-  ownedItem,
-  record,
-  requireUsable,
   lacking,
 } from "./shared.js";
 import { communitySettings, one } from "./access.js";
+import {
+  draw,
+  give,
+  itemById,
+  itemsByIds,
+  openRecipes,
+  ownedItem,
+  ownedItems,
+  pay,
+  record,
+  requireUsable,
+  spend,
+  wallet,
+} from "./economy.js";
 import { saveState } from "./characters.js";
 import { profileByNick, profileOf } from "./members.js";
 import type { Ctx, NaruDocument } from "./naru-types.js";
@@ -268,7 +270,7 @@ export async function explore(ctx: Ctx, speaker: Speaker | null) {
     ctx.fail("CONFLICT", "이 캐릭터는 오늘 탐색을 모두 했습니다.", {
       reason: "explore_limit",
     });
-  const outcome = await draw(ctx, null, EXPLORE);
+  const outcome = await draw(ctx, null, "explore");
   const prize = outcome.prize;
   if (prize) await give(ctx, prize, "explore", speaker.character);
   await saveState(ctx, speaker.character, {
@@ -323,7 +325,7 @@ export async function useInPost(
     ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
       reason: "not_owned",
     });
-  const item = await ctx.get(ITEMS, owned.data.item);
+  const item = await itemById(ctx, owned.data.item);
   // it_use_mmb_able: an item the owner keeps out of posts is used elsewhere.
   if (!item || item.data.usable === false || item.data.usableInPosts !== true)
     ctx.fail("CONFLICT", "사용할 수 없는 아이템입니다.", {
@@ -353,7 +355,7 @@ export async function useInPost(
       ? { item: outcome.prize.id, name: outcome.prize.data.name }
       : null;
   } else used.description = String(item.data.description ?? "").slice(0, 200);
-  if (item.data.reusable !== true) await ctx.delete(INVENTORY, owned.id);
+  if (item.data.reusable !== true) await spend(ctx, [owned]);
   await record(ctx, "use", {
     item: item.id,
     inventory: owned.id,
@@ -392,15 +394,19 @@ export async function combineInPost(
     ctx.fail("INVALID_REQUEST", "레시피에 맞는 재료를 선택해 주세요.", {
       reason: "invalid_materials",
     });
-  const owned = await Promise.all(materials.map((id) => ownedItem(ctx, id)));
+  const owned = await ownedItems(ctx, materials);
   if (owned.some((row) => !row || row.data.character !== speaker.character))
     ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
       reason: "not_owned",
     });
   await requireApproved(ctx, speaker);
   // it_use_recepi: only craft materials go into 조합.
+  const catalogue = await itemsByIds(
+    ctx,
+    owned.map((row) => row.data.item),
+  );
   for (const row of owned)
-    if ((await ctx.get(ITEMS, row.data.item))?.data.craftMaterial !== true)
+    if (catalogue.get(row.data.item)?.data.craftMaterial !== true)
       ctx.fail("INVALID_REQUEST", "조합 재료로 쓸 수 없는 아이템입니다.", {
         reason: "not_material",
       });
@@ -408,18 +414,14 @@ export async function combineInPost(
     .map((row) => row.data.item)
     .sort()
     .join("||");
-  const recipe = (await weightedRows(ctx, RECIPES)).find((row) => {
-    if (row.data.hidden || !Array.isArray(row.data.ingredients)) return false;
+  const recipe = (await openRecipes(ctx)).find((row) => {
     const needed = [];
     for (const ingredient of row.data.ingredients)
       for (let n = 0; n < (ingredient.count ?? 0) && needed.length < 4; n++)
         needed.push(ingredient.item);
     return needed.sort().join("||") === key;
   });
-  const prize =
-    typeof recipe?.data.item === "string"
-      ? await ctx.get(ITEMS, recipe.data.item)
-      : null;
+  const prize = recipe ? await itemById(ctx, recipe.data.item) : null;
   let balance = null;
   if (prize) {
     const cost = amount(recipe.data.cost ?? 0, "Crafting cost");
@@ -431,13 +433,10 @@ export async function combineInPost(
     if (cost) balance = await pay(ctx, current, cost);
     await give(ctx, prize, "craft", speaker.character);
   }
-  const catalogue = await ctx.getMany(
-    ITEMS,
-    owned.map((row) => row.data.item),
+  await spend(
+    ctx,
+    owned.filter((row) => catalogue.get(row.data.item)?.data.reusable !== true),
   );
-  for (const [index, row] of owned.entries())
-    if (catalogue[index]?.data.reusable !== true)
-      await ctx.delete(INVENTORY, row.id);
   await record(ctx, "craft", {
     character: speaker.character,
     item: prize?.id ?? null,

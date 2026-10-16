@@ -1,9 +1,9 @@
-// For the time being: the owner's SDK handle with the foundation's tables
-// standing in for the collections they replaced (settings, members,
-// profiles, wallets, history, presence, visits, content, menus, banners,
-// quests, design), through the owner-only admin/documents query and
-// mutation. The admin page keeps reading and writing documents until the
-// admin area is ported to mutations of its own; then this goes.
+// For the time being: the owner's SDK handle with the site's tables standing
+// in for the collections they replaced (the foundation's, the characters'
+// and the economy's: modules/documents.js), through the owner-only
+// admin/documents query and mutation. The admin page keeps reading and
+// writing documents until the admin area is ported to mutations of its
+// own; then this goes.
 import { mappingOf } from "./_naru/modules/documents.js";
 
 const notFound = (id) =>
