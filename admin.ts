@@ -291,7 +291,8 @@ async function load({ more = false } = {}) {
   const model = models[section];
   $("adminHelp").textContent = named(model.help);
   // The review registers characters too (adm/character_form.php, w='').
-  $("adminNew").hidden = Boolean(model.readOnly) && !model.review;
+  $("adminNew").hidden =
+    (Boolean(model.readOnly) && !model.review) || Boolean(model.noCreate);
   $("adminNew").textContent = model.review ? "새 캐릭터" : "새로 등록";
   $("adminReport").hidden = !model.report;
   $("adminRows").hidden = Boolean(model.report);

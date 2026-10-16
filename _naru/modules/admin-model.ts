@@ -33,6 +33,8 @@ export interface Model {
   fields?: ModelField[];
   fixedId?: string;
   readOnly?: boolean;
+  /** Rows that only come with something else: nothing to register here. */
+  noCreate?: boolean;
   noDelete?: boolean;
   memberKey?: boolean;
   characterKey?: boolean;
@@ -724,7 +726,9 @@ export const models: Record<string, Model> = {
   },
   character_state: {
     label: "캐릭터 경험치·능력치·타이틀",
-    // A character's record is its row's: it goes with the character.
+    // A character's record is its row's: it comes and goes with the
+    // character, so it is neither registered nor deleted here.
+    noCreate: true,
     noDelete: true,
     help: "소속·종족은 캐릭터 시트의 것 하나뿐이며 상점과 아이템 조건도 그것을 봅니다(‘캐릭터 신청 심사’의 수정에서 고칩니다). 포인트는 기본 능력치 외에 배분할 총 포인트입니다. 승인은 ‘캐릭터 신청 심사’의 신청 상태입니다.",
     characterKey: true,
