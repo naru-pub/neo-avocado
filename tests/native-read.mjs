@@ -6,14 +6,18 @@ import { readFile } from "node:fs/promises";
 import { matches } from "./where.mjs";
 
 const { collections } = JSON.parse(
-  await readFile(new URL("../_naru/collections.json", import.meta.url), "utf8"),
+  await readFile(
+    new URL("../dist/_naru/collections.json", import.meta.url),
+    "utf8",
+  ),
 );
 // A rule module may keep state for the call (characters.js reads the field
 // definitions once a page): load it afresh for each read, as Naru runs it.
 let loads = 0;
 const ruleOf = (name) =>
   import(
-    new URL(`../_naru/rules/${name}.js?read=${loads++}`, import.meta.url).href
+    new URL(`../dist/_naru/rules/${name}.js?read=${loads++}`, import.meta.url)
+      .href
   );
 const denied = (code, message) => Object.assign(new Error(message), { code });
 

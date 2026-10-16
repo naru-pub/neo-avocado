@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applyTitles, deleteTitle } from "../admin-titles.js";
+import { applyTitles, deleteTitle } from "../dist/admin-titles.js";
 const P = "neo_avocado_";
 function fixture(count = 45) {
   const db = new Map(),

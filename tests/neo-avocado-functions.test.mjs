@@ -49,13 +49,13 @@ import {
   site,
   commentCounts,
   moderatePost,
-} from "../_naru/modules/index.js";
-import { readable, canWrite } from "../_naru/rules/community-board.js";
-import * as characterRule from "../_naru/rules/characters.js";
-import * as profileRule from "../_naru/rules/profiles.js";
+} from "../dist/_naru/modules/index.js";
+import { readable, canWrite } from "../dist/_naru/rules/community-board.js";
+import * as characterRule from "../dist/_naru/rules/characters.js";
+import * as profileRule from "../dist/_naru/rules/profiles.js";
 import { matches } from "./where.mjs";
 import { nativeRead } from "./native-read.mjs";
-import { onDisplay } from "../_naru/modules/display.js";
+import { onDisplay } from "../dist/_naru/modules/display.js";
 
 const P = "neo_avocado_";
 function fakeCtx({ now = Date.parse("2030-01-01T03:00:00Z"), roll = 0 } = {}) {
@@ -3755,8 +3755,9 @@ test("the owner moves a character to another member, with what it keeps", async 
 });
 
 test("기타 항목명 설정 names money, experience, 소속 and 종족 for pages and refusals", async () => {
-  const { NAME_DEFAULTS, subject } = await import("../_naru/modules/shared.js");
-  const pages = await import("../app/names.js");
+  const { NAME_DEFAULTS, subject } =
+    await import("../dist/_naru/modules/shared.js");
+  const pages = await import("../dist/app/names.js");
   // The pages show the same defaults before the site's frame arrives.
   assert.deepEqual(pages.NAME_DEFAULTS, NAME_DEFAULTS);
   const { ctx, table } = fakeCtx();

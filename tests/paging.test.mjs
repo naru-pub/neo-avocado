@@ -5,11 +5,11 @@ import { JSDOM } from "jsdom";
 
 // app/core.js wires the page's elements as it loads.
 const { window } = new JSDOM(
-  await readFile(new URL("../index.html", import.meta.url), "utf8"),
+  await readFile(new URL("../dist/index.html", import.meta.url), "utf8"),
 );
 globalThis.document = window.document;
 globalThis.window = window;
-const { cursorPages } = await import("../app/core.js");
+const { cursorPages } = await import("../dist/app/core.js");
 
 /** A list of `count` documents read by cursor, recording each read. */
 function list(count) {

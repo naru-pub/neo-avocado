@@ -4,8 +4,10 @@
   "license": "GPL-3.0-only",
   "type": "module",
   "scripts": {
-    "test": "node --experimental-vm-modules --test tests/*.test.mjs",
-    "test:e2e": "node tests/e2e.mjs",
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc -p .",
+    "test": "npm run build && node --experimental-vm-modules --test tests/*.test.mjs",
+    "test:e2e": "npm run build && node tests/e2e.mjs",
     "format": "prettier --write .",
     "lint": "prettier --check .",
     "vendor:content": "node scripts/vendor-content.mjs",
@@ -13,7 +15,8 @@
   },
   "devDependencies": {
     "jsdom": "^30.0.1",
-    "prettier": "^3.9.6"
+    "prettier": "^3.9.6",
+    "typescript": "5.9.3"
   },
   "dependencies": {
     "dompurify": "^3.4.17"

@@ -16,7 +16,7 @@ if (!repo) throw new Error("Set NARU_REPO_PATH to a Naru checkout.");
 const { chromium } = await import(
   process.env.PLAYWRIGHT_MODULE || "playwright"
 );
-const site = fileURLToPath(new URL("..", import.meta.url));
+const site = fileURLToPath(new URL("../dist/", import.meta.url));
 const port = Number(process.env.E2E_PORT ?? 4300);
 const origin = `http://localhost:${port}`;
 const state = await mkdtemp(join(tmpdir(), "neo-avocado-e2e-"));

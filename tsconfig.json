@@ -1,0 +1,20 @@
+{
+  // The site's pages and its Naru functions, rules and modules. `npm run
+  // build` compiles each file to JavaScript at the same path under dist/,
+  // which is what Naru publishes; this only checks the types.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "noEmit": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": false,
+    "types": []
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules", "dist", "vendor"]
+}

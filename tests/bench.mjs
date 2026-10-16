@@ -17,7 +17,7 @@ const { chromium } = await import(
   process.env.PLAYWRIGHT_MODULE || "playwright"
 );
 const site = resolve(
-  process.argv[2] ?? fileURLToPath(new URL("..", import.meta.url)),
+  process.argv[2] ?? fileURLToPath(new URL("../dist/", import.meta.url)),
 );
 const EDGE_MS = Number(process.env.EDGE_MS ?? 300);
 const CONTROL_MS = Number(process.env.CONTROL_MS ?? 1000);

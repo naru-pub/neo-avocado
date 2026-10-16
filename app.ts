@@ -1,0 +1,212 @@
+// 아보카도 에디션의 뼈대만 나루 회원으로 다시 만든 것: 회원 로그인과 닉네임,
+// 캐릭터 등록, 그림 로그와 댓글, 댓글 주사위, 상점과 뽑기. 회원이 쓰는
+// 컬렉션은 읽기·쓰기 모두 ‘회원’이라 로그인한 회원만 보고, 회원은 자기가 만든
+// 문서만 고치고 지운다. 돈과 아이템은 회원이 읽기만 하고, 사이트의 서버 함수
+// (_naru/functions 아래의 모듈)만 바꾼다.
+//
+// This file signs the visitor or member in and starts the page; each part of
+// the community lives in app/ (core.js is what they share).
+
+import { config } from "./config.js";
+import {
+  $,
+  caller,
+  clearPrivateViews,
+  collection,
+  COLLECTION,
+  edit,
+  movedSinceOpening,
+  opening,
+  run,
+  say,
+  show,
+  showAdmission,
+  showTab,
+  state,
+  standing,
+} from "./app/core.js";
+import { listen } from "./app/live.js";
+import { loadSite } from "./app/site.js";
+import { loadBoards, loadLogs } from "./app/logs.js";
+import { loadCharacters } from "./app/characters.js";
+import "./app/shop.js";
+import "./app/messages.js";
+import "./app/calls.js";
+import "./app/content.js";
+import "./app/mypage.js";
+import "./app/couples.js";
+import { openRoute } from "./app/router.js";
+
+/** The address the page was opened at, before anything is shown. */
+const arrivedAt = location.hash;
+/** Whether the address the page opened at names a board, which reads its own list. */
+const arrivesAtList = () =>
+  !movedSinceOpening() && /^#\/?logs(\/|$)/.test(arrivedAt);
+import "./app/online.js";
+
+export { diceOf } from "./app/posts.js";
+
+async function connect() {
+  const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+  state.naru = createNaru(config.site ? { site: config.site } : undefined);
+}
+$("checkAdmission").onclick = () => run(start);
+$("editProfile").onclick = () => {
+  const profile = state.profile;
+  edit(
+    "프로필 수정",
+    [
+      {
+        name: "nick",
+        label: "닉네임",
+        value: profile.data.nick,
+        required: true,
+        max: 20,
+      },
+      {
+        name: "acceptMessages",
+        label: "다른 회원의 쪽지 받기",
+        type: "checkbox",
+        value: profile.data.acceptMessages !== false,
+      },
+      {
+        name: "commentAlerts",
+        label: "내 글에 달린 댓글 알림 받기",
+        type: "checkbox",
+        value: profile.data.commentAlerts !== false,
+      },
+    ],
+    async ({ nick, acceptMessages, commentAlerts }) => {
+      if (!nick) throw new Error("닉네임을 입력해 주세요.");
+      // A member's own profile is written directly; rules/profiles.js
+      // lets them change their nickname and preferences only.
+      const saved = await state.member
+        .collection(COLLECTION.profiles)
+        .set(
+          state.member.id,
+          { ...profile.data, nick, acceptMessages, commentAlerts },
+          { condition: { revision: profile.revision } },
+        );
+      state.nicks.set(state.member.id, Promise.resolve(nick));
+      show(saved);
+      await loadLogs();
+      if (state.charactersLoaded) await loadCharacters();
+    },
+  );
+};
+async function start() {
+  await connect();
+  state.member = await state.naru.members.session();
+  // The site's frame is decoration: without it the default design shows.
+  await loadSite().catch((error) => console.error(error));
+  if (!state.member) return visit();
+  let status;
+  try {
+    status = await caller().call("community/membership:membership");
+  } catch (error) {
+    // Naru's refusal says when the site has not approved this member yet.
+    if (!standing(error)) throw error;
+    show();
+    return showAdmission(standing(error));
+  }
+  state.admission = "approved";
+  if (status.left) {
+    show();
+    return showAdmission("left");
+  }
+  state.role = status.role;
+  state.owner = status.owner === true;
+  state.level = status.level ?? 2;
+  state.warnings = {
+    count: status.warnings ?? 0,
+    note: status.warningNote ?? "",
+  };
+  const profile = status.profile;
+  show(profile);
+  // Decoration: the card keeps its placeholder if this fails.
+  showMainCharacter(profile).catch((error) => console.error(error));
+  if (profile) {
+    state.nicks.set(state.member.id, Promise.resolve(profile.data.nick));
+    await loadBoards();
+    // Read once: the board the address names, or else the first.
+    if (!arrivesAtList()) await loadLogs();
+    listen();
+    // The address it was opened at, unless they have moved on already.
+    if (!movedSinceOpening()) await openRoute(arrivedAt);
+  }
+}
+/** A visitor's view: public boards and pages at GnuBoard's guest level 1. */
+async function visit() {
+  state.role = "guest";
+  state.owner = false;
+  state.level = 1;
+  show();
+  await opening(() => showTab("home"));
+  // 사이트공개 off: the welcome and sign-in card, and nothing else read.
+  if (state.siteOpen === false) return;
+  await loadBoards();
+  if (!arrivesAtList()) await loadLogs();
+  if (state.boards.length) listen();
+  if (!movedSinceOpening()) await openRoute(arrivedAt);
+}
+$("signIn").onclick = () => run(() => state.naru.members.signIn());
+// The main page, as the original lands on main.php; the logo leads back.
+$("tabHome").onclick = () => showTab("home");
+$("homeLink").onclick = (event) => {
+  event.preventDefault();
+  document.body.classList.remove("open-gnb");
+  showTab("home");
+};
+$("cardSignIn").onclick = () => $("signIn").click();
+$("cardSignOut").onclick = () => $("signOut").click();
+$("cardMessages").onclick = () => $("tabMessages").click();
+$("copyrightYear").textContent = String(new Date().getFullYear());
+$("gotoTop").onclick = (event) => {
+  event.preventDefault();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+};
+/** The card shows the member's main character, as the original's thumbnail. */
+async function showMainCharacter(profile) {
+  const id = profile?.data.mainCharacter;
+  const character = id
+    ? await collection(COLLECTION.characters)
+        .get(id)
+        .catch(() => null)
+    : null;
+  $("cardThumb").replaceChildren(
+    character?.data.image
+      ? Object.assign(new Image(), { src: character.data.image, alt: "" })
+      : "⌘",
+  );
+  if (character) $("cardDescript").textContent = character.data.name;
+}
+$("signOut").onclick = () =>
+  run(async () => {
+    const member = state.member;
+    state.member = null;
+    state.nicks.clear();
+    state.charactersLoaded = false;
+    state.shopLoaded = false;
+    $<HTMLDialogElement>("editor").close();
+    clearPrivateViews();
+    // The page becomes a visitor's at once; revoking the sign-in follows.
+    await visit();
+    await member.signOut();
+    say("로그아웃했습니다.");
+  });
+$("profileForm").onsubmit = (event) => {
+  event.preventDefault?.();
+  run(async () => {
+    const nick = $<HTMLInputElement>("nick").value.trim();
+    if (!nick) return;
+    // 회원 번호를 ID로 쓰는 문서는 그 회원만 만들 수 있다.
+    const joined = await caller().call("community/membership:join", { nick });
+    const profile = joined.profile;
+    state.nicks.set(state.member.id, Promise.resolve(nick));
+    show(profile);
+    await loadBoards();
+    await loadLogs();
+    listen();
+  });
+};
+await run(start);

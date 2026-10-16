@@ -43,11 +43,15 @@
 
 개발할 때는:
 
-- 검사: `npm test`, `npm run lint`
+- 소스는 TypeScript(`.ts`)입니다. `npm run build`가 같은 경로의 JavaScript로
+  `dist/`에 만들고, 나루에는 이 `dist/`가 올라갑니다. main에 푸시하면 GitHub
+  Actions가 검사한 뒤 `dist/`를 `site` 브랜치에 올리고, 나루의 GitHub 앱은 이
+  `site` 브랜치를 배포합니다.
+- 검사: `npm run typecheck`, `npm test`(빌드 후 `dist/`를 검사), `npm run lint`
 - 로컬 나루(naru-dev)에서 실제 Chromium으로 전체 흐름:
   `NARU_REPO_PATH=… PLAYWRIGHT_MODULE=… npm run test:e2e`
-- 직접 써 보기: 나루 저장소의 `control-plane/`에서
-  `pnpm naru-dev ~/Git/neo-avocado --site neo-avocado` 후 http://localhost:4000
+- 직접 써 보기: `npm run build` 후 나루 저장소의 `control-plane/`에서
+  `pnpm naru-dev ~/Git/neo-avocado/dist --site neo-avocado` 후 http://localhost:4000
 
 ## 손님과 공개 게시판
 
@@ -222,8 +226,10 @@ HTML은 [DOMPurify](https://github.com/cure53/DOMPurify)로 정리하여 표시�
 
 ## 코드 둘러보기
 
-기능 하나가 화면 파일 하나와 서버 함수 파일로 나뉘어 있습니다. 화면 쪽은 브라우저에서
-그대로 도는 JavaScript 모듈이고, 서버 함수는 나루가 사이트 소유자 권한으로 실행합니다.
+기능 하나가 화면 파일 하나와 서버 함수 파일로 나뉘어 있습니다. 둘 다 TypeScript로
+쓰고 같은 경로의 JavaScript로 빌드합니다(아래 표의 `.js`는 빌드 결과, 소스는 같은
+이름의 `.ts`). 화면 쪽은 브라우저에서 도는 모듈이고, 서버 함수는 나루가 사이트 소유자
+권한으로 실행합니다.
 돈·재고·주사위처럼 회원이 마음대로 정하면 안 되는 값은 서버 함수만 바꿉니다.
 
 | 기능                   | 화면                                   | 서버 함수                                                        |

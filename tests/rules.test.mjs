@@ -1,12 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import * as boards from "../_naru/rules/boards.js";
-import * as profiles from "../_naru/rules/profiles.js";
-import * as own from "../_naru/rules/own.js";
-import * as settings from "../_naru/rules/settings.js";
-import * as characterFields from "../_naru/rules/character-fields.js";
-import * as shown from "../_naru/rules/shown.js";
-import * as characters from "../_naru/rules/characters.js";
+import * as boards from "../dist/_naru/rules/boards.js";
+import * as profiles from "../dist/_naru/rules/profiles.js";
+import * as own from "../dist/_naru/rules/own.js";
+import * as settings from "../dist/_naru/rules/settings.js";
+import * as characterFields from "../dist/_naru/rules/character-fields.js";
+import * as shown from "../dist/_naru/rules/shown.js";
+import * as characters from "../dist/_naru/rules/characters.js";
 import { matches } from "./where.mjs";
 
 const P = "neo_avocado_";
@@ -226,11 +226,11 @@ test("the declaration names a rule file for every rule it uses", async () => {
   const { readFile, readdir } = await import("node:fs/promises");
   const { collections } = JSON.parse(
     await readFile(
-      new URL("../_naru/collections.json", import.meta.url),
+      new URL("../dist/_naru/collections.json", import.meta.url),
       "utf8",
     ),
   );
-  const files = await readdir(new URL("../_naru/rules", import.meta.url));
+  const files = await readdir(new URL("../dist/_naru/rules", import.meta.url));
   for (const [name, entry] of Object.entries(collections))
     if (entry.rules)
       assert.ok(files.includes(`${entry.rules}.js`), `${name}: ${entry.rules}`);

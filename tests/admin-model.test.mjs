@@ -7,7 +7,7 @@ import {
   walletWrites,
   characterStateWrites,
   titleHoldings,
-} from "../admin-model.js";
+} from "../dist/admin-model.js";
 const references = {
   profiles: [
     { id: "member-a", data: { nick: "A" } },
@@ -391,10 +391,10 @@ test("profile field definitions validate codes and options; explore misses store
 });
 
 test("the site declares every collection it uses, and sign-in asks for them", async () => {
-  const { scopes } = await import("../admin-model.js");
+  const { scopes } = await import("../dist/admin-model.js");
   const { readdir, readFile } = await import("node:fs/promises");
   const files = ["app.js", "admin.js"];
-  for (const name of await readdir(new URL("../app", import.meta.url)))
+  for (const name of await readdir(new URL("../dist/app", import.meta.url)))
     files.push(`app/${name}`);
   for (const dir of [
     "_naru/modules",
@@ -404,12 +404,14 @@ test("the site declares every collection it uses, and sign-in asks for them", as
     "_naru/functions/content",
     "_naru/rules",
   ])
-    for (const name of await readdir(new URL(`../${dir}`, import.meta.url)))
+    for (const name of await readdir(
+      new URL(`../dist/${dir}`, import.meta.url),
+    ))
       files.push(`${dir}/${name}`);
   const used = new Set();
   for (const file of files) {
     const source = await readFile(
-      new URL(`../${file}`, import.meta.url),
+      new URL(`../dist/${file}`, import.meta.url),
       "utf8",
     );
     for (const [, name] of source.matchAll(
@@ -423,7 +425,7 @@ test("the site declares every collection it uses, and sign-in asks for them", as
   );
   const { collections } = JSON.parse(
     await readFile(
-      new URL("../_naru/collections.json", import.meta.url),
+      new URL("../dist/_naru/collections.json", import.meta.url),
       "utf8",
     ),
   );
@@ -471,7 +473,7 @@ test("a character's experience change is recorded for its owner in the same batc
 });
 
 test("visit reports total a date range and break it down as the original's tabs", async () => {
-  const { visitReport } = await import("../admin-reports.js");
+  const { visitReport } = await import("../dist/admin-reports.js");
   const days = [
     {
       data: {
@@ -525,7 +527,7 @@ test("visit reports total a date range and break it down as the original's tabs"
 });
 
 test("activity counts each member's posts and comments on a board in a Korean date range", async () => {
-  const { activityReport } = await import("../admin-reports.js");
+  const { activityReport } = await import("../dist/admin-reports.js");
   const at = (iso) => iso;
   const rows = activityReport(
     {
@@ -592,8 +594,8 @@ test("activity counts each member's posts and comments on a board in a Korean da
 });
 
 test("the admin menu has every section once, in the original's groups and names", async () => {
-  const { menu, sectionLabel } = await import("../admin-model.js");
-  const { NAME_DEFAULTS } = await import("../app/names.js");
+  const { menu, sectionLabel } = await import("../dist/admin-model.js");
+  const { NAME_DEFAULTS } = await import("../dist/app/names.js");
   const listed = menu.flatMap((group) => group.sections);
   assert.deepEqual([...listed].sort(), Object.keys(models).sort());
   assert.equal(new Set(listed).size, listed.length);

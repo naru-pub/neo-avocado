@@ -9,13 +9,16 @@ const pages = [
   "app.js",
   "admin.js",
   "admin-titles.js",
-  ...(await readdir(new URL("../app", import.meta.url))).map(
+  ...(await readdir(new URL("../dist/app", import.meta.url))).map(
     (file) => `app/${file}`,
   ),
 ];
 const references = new Set();
 for (const page of pages) {
-  const source = await readFile(new URL(`../${page}`, import.meta.url), "utf8");
+  const source = await readFile(
+    new URL(`../dist/${page}`, import.meta.url),
+    "utf8",
+  );
   for (const [, reference] of source.matchAll(
     /"((?:community|economy|characters|content)\/[a-z]+:[A-Za-z]+)"/g,
   ))
@@ -25,13 +28,16 @@ for (const page of pages) {
 const modules = [];
 for (const group of ["community", "economy", "characters", "content"])
   for (const file of await readdir(
-    new URL(`../_naru/functions/${group}`, import.meta.url),
+    new URL(`../dist/_naru/functions/${group}`, import.meta.url),
   ))
     modules.push(`${group}/${file.replace(/\.js$/, "")}`);
 
 for (const module of modules)
   test(`${module} exports only functions the pages call`, async () => {
-    const path = new URL(`../_naru/functions/${module}.js`, import.meta.url);
+    const path = new URL(
+      `../dist/_naru/functions/${module}.js`,
+      import.meta.url,
+    );
     const exports = await import(path.href);
     const { readOnly = [], visitors = [], ...callable } = exports;
     const names = Object.keys(callable).sort();
@@ -52,7 +58,7 @@ test("every function the pages call exists", () => {
   return Promise.all(
     modules.map(async (module) => {
       const exports = await import(
-        new URL(`../_naru/functions/${module}.js`, import.meta.url).href
+        new URL(`../dist/_naru/functions/${module}.js`, import.meta.url).href
       );
       for (const [name, value] of Object.entries(exports))
         if (typeof value === "function") known.add(`${module}:${name}`);

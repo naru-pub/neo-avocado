@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resumeCleanup } from "../admin-cleanup.js";
+import { resumeCleanup } from "../dist/admin-cleanup.js";
 const P = "neo_avocado_";
 function fixture() {
   const tables = new Map();

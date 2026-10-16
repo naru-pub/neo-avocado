@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 import { SourceTextModule, SyntheticModule } from "node:vm";
 import { JSDOM } from "jsdom";
 import { matches } from "./where.mjs";
-const root = new URL("../", import.meta.url);
+const root = new URL("../dist/", import.meta.url);
 /** What _naru/collections.json lets visitors read (the rules narrow it on Naru). */
 const WORLD = new Set(
   Object.entries(
