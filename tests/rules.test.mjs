@@ -1,23 +1,52 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as boards from "../dist/_naru/rules/boards.js";
-import * as profiles from "../dist/_naru/rules/profiles.js";
 import * as own from "../dist/_naru/rules/own.js";
-import * as settings from "../dist/_naru/rules/settings.js";
 import * as characterFields from "../dist/_naru/rules/character-fields.js";
 import * as shown from "../dist/_naru/rules/shown.js";
 import * as characters from "../dist/_naru/rules/characters.js";
 import { matches } from "./where.mjs";
+import { database, migrations, sqlOf } from "./sql-ctx.mjs";
+import {
+  mappingOf,
+  rolesOfData,
+  rowOf,
+} from "../dist/_naru/modules/documents.js";
 
 const P = "neo_avocado_";
-/** A rule's ctx: reads over `tables`, as `member` (null for a visitor). */
+const MIGRATIONS = await migrations();
+/**
+ * A rule's ctx: reads over `tables`, as `member` (null for a visitor). The
+ * collections the foundation moved (settings, members) are its tables, read
+ * through ctx.sql as Naru lets a rule; a rule's member carries no roles.
+ */
 function rulesCtx(member, tables = {}) {
+  const db = database(MIGRATIONS);
+  const roles = {};
+  for (const [name, documents] of Object.entries(tables)) {
+    const map = mappingOf(name);
+    if (!map) continue;
+    for (const [id, data] of Object.entries(documents)) {
+      const row = {
+        [map.key]: map.settings ? id : id,
+        ...rowOf(map, data, 0),
+      };
+      const columns = Object.keys(row);
+      db.prepare(
+        `INSERT INTO ${map.table} (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`,
+      ).run(...Object.values(row));
+      if (map.roles) roles[id] = rolesOfData(data);
+    }
+  }
   const rows = (name) =>
     Object.entries(tables[name] ?? {}).map(([id, data]) => ({ id, data }));
   return {
-    member: member ? { id: member } : null,
+    member: member ? { id: member, roles: [] } : null,
     get: async (name, id) => rows(name).find((row) => row.id === id) ?? null,
     list: async (name) => ({ documents: rows(name), nextCursor: null }),
+    sql: sqlOf(db, "query"),
+    rolesOf: async (ids) =>
+      Object.fromEntries(ids.map((id) => [id, roles[id] ?? []])),
   };
 }
 
@@ -29,13 +58,15 @@ test("boards: each level lists only the boards it may", async () => {
       staff: { listLevel: 5 },
       closed: { listLevel: 1, enabled: false },
     },
-    [`${P}members`]: { senior: { level: 5 } },
+    [`${P}members`]: { senior: { level: 5 }, mod: { role: "moderator" } },
   };
   const ids = async (member) =>
     (await boards.readable(rulesCtx(member, tables))).in?.[1] ?? [];
   assert.deepEqual(await ids(null), ["open"]);
   assert.deepEqual(await ids("m-1"), ["open", "members"]);
   assert.deepEqual(await ids("senior"), ["open", "members", "staff"]);
+  // A moderator is the Naru role staff, which a rule asks Naru for.
+  assert.deepEqual(await ids("mod"), ["open", "members", "staff", "closed"]);
   assert.equal(
     await boards.readable(rulesCtx(null, { [`${P}boards`]: {} })),
     false,
@@ -43,146 +74,14 @@ test("boards: each level lists only the boards it may", async () => {
   assert.equal(boards.canWrite(), false);
 });
 
-test("profiles: visitors read nicknames only, members the whole profile", async () => {
-  const document = {
-    id: "m-1",
-    data: { nick: "아보", acceptMessages: false, commentAlerts: true },
-  };
-  assert.deepEqual(profiles.present(rulesCtx(null), { document }), {
-    nick: "아보",
-  });
-  assert.deepEqual(
-    profiles.present(rulesCtx("m-2"), { document }),
-    document.data,
-  );
-  assert.deepEqual(await profiles.readable(rulesCtx(null)), {
-    ne: ["deleted", true],
-  });
-  assert.ok(!profiles.queryable.includes("commentAlerts"));
-});
-
-test("profiles: a member edits their own nickname and preferences, nothing else", async () => {
-  const before = {
-    id: "m-1",
-    data: {
-      owner: "m-1",
-      nick: "아보",
-      acceptMessages: true,
-      commentAlerts: true,
-      mainCharacter: "hero",
-    },
-  };
-  const write = (member, data, operation = "update", id = "m-1", tables) =>
-    profiles.canWrite(rulesCtx(member, tables), {
-      operation,
-      before: { ...before, id },
-      after: { id, data: { ...before.data, ...data } },
-    });
-  assert.equal(
-    await write("m-1", { nick: "카도", acceptMessages: false }),
-    true,
-  );
-  // Not someone else's, not by a visitor, not made or deleted directly.
-  assert.equal(await write("m-2", { nick: "카도" }, "update", "m-1"), false);
-  assert.equal(await write(null, { nick: "카도" }), false);
-  assert.equal(await write("m-1", {}, "create"), false);
-  assert.equal(await write("m-1", {}, "delete"), false);
-  // Fields site functions keep stay as they were.
-  assert.equal(await write("m-1", { mainCharacter: "villain" }), false);
-  assert.equal(await write("m-1", { owner: "m-2" }), false);
-  // A nickname is 1–20 characters without surrounding spaces.
-  assert.equal(await write("m-1", { nick: " 아보" }), false);
-  assert.equal(await write("m-1", { nick: "" }), false);
-  assert.equal(await write("m-1", { nick: "가".repeat(21) }), false);
-  assert.equal(await write("m-1", { commentAlerts: "yes" }), false);
-  // Not a reserved word (cf_prohibit_id): the original's list until the
-  // owner writes their own, matched whole and ignoring case.
-  assert.equal(await write("m-1", { nick: "관리자" }), false);
-  assert.equal(await write("m-1", { nick: "Admin" }), false);
-  assert.equal(await write("m-1", { nick: "관리자님" }), true);
-  const own = {
-    [`${P}settings`]: { community: { reservedNicks: "카도, 별" } },
-  };
-  assert.equal(await write("m-1", { nick: "별" }, "update", "m-1", own), false);
-  assert.equal(
-    await write("m-1", { nick: "관리자" }, "update", "m-1", own),
-    true,
-  );
-  // A nickname taken before it was reserved may stay as preferences change.
-  assert.equal(
-    await profiles.canWrite(rulesCtx("m-1"), {
-      operation: "update",
-      before: { id: "m-1", data: { ...before.data, nick: "운영자" } },
-      after: {
-        id: "m-1",
-        data: { ...before.data, nick: "운영자", acceptMessages: false },
-      },
-    }),
-    true,
-  );
-});
-
-test("own: a member reads their own wallet and inventory, a visitor nothing", () => {
-  assert.deepEqual(
-    own.readable(rulesCtx("m-1"), { collection: `${P}wallets` }),
-    {
-      eq: [{ metadata: "id" }, "m-1"],
-    },
-  );
+test("own: a member reads their own inventory, a visitor nothing", () => {
   assert.deepEqual(
     own.readable(rulesCtx("m-1"), { collection: `${P}inventory` }),
     { eq: ["owner", "m-1"] },
   );
   assert.equal(
-    own.readable(rulesCtx(null), { collection: `${P}wallets` }),
+    own.readable(rulesCtx(null), { collection: `${P}inventory` }),
     false,
-  );
-});
-
-test("settings: only the community settings, trimmed to what pages use", () => {
-  assert.deepEqual(settings.readable(), {
-    eq: [{ metadata: "id" }, "community"],
-  });
-  assert.deepEqual(
-    settings.present(rulesCtx("m-1"), {
-      document: { id: "community", data: { messageCost: 3, secretKey: "x" } },
-    }),
-    {
-      initialStatPoints: 0,
-      messageCost: 3,
-      shopCategories: "일반, 이벤트",
-      shopNpc: null,
-      shopGreeting: "",
-      characterCreation: true,
-      characterEditing: true,
-      characterLimit: 1,
-      stipulation: "",
-      characterNotice: "",
-      reservedNicks:
-        "admin,administrator,관리자,운영자,어드민,주인장,webmaster,웹마스터,sysop,시삽,시샵,manager,매니저,메니저,root,루트,su,guest,방문객",
-    },
-  );
-  // The rules to agree to, for a member about to join.
-  assert.deepEqual(
-    Object.entries(
-      settings.present(rulesCtx("m-1"), {
-        document: {
-          id: "community",
-          data: {
-            stipulation: "규칙",
-            characterNotice: "유의",
-            reservedNicks: "",
-          },
-        },
-      }),
-    ).filter(([key]) =>
-      ["stipulation", "characterNotice", "reservedNicks"].includes(key),
-    ),
-    [
-      ["stipulation", "규칙"],
-      ["characterNotice", "유의"],
-      ["reservedNicks", ""],
-    ],
   );
 });
 
@@ -196,7 +95,7 @@ test("character fields and catalogues hide what members may not see", async () =
   );
 });
 
-test("사이트공개 off: visitors read no characters, fields, catalogues or nicknames; members read on", async () => {
+test("사이트공개 off: visitors read no characters, fields or catalogues; members read on", async () => {
   const closed = { [`${P}settings`]: { community: { siteOpen: false } } };
   for (const [rule, collection] of [
     [characters, "characters"],
@@ -208,7 +107,6 @@ test("사이트공개 off: visitors read no characters, fields, catalogues or ni
     [shown, "wardrobe"],
     [shown, "couples"],
     [shown, "emoticons"],
-    [profiles, "profiles"],
   ]) {
     const scope = (member, tables) =>
       rule.readable(rulesCtx(member, tables), {

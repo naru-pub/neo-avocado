@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import { SourceTextModule, SyntheticModule } from "node:vm";
 import { JSDOM } from "jsdom";
 import { matches } from "./where.mjs";
+import { memberSettings } from "../dist/_naru/modules/access.js";
 const root = new URL("../dist/", import.meta.url);
 /** What _naru/collections.json lets visitors read (the rules narrow it on Naru). */
 const WORLD = new Set(
@@ -81,6 +82,7 @@ function fakeDatabase(rows = {}) {
       "neo_avocado_inventory",
       "neo_avocado_items",
       "neo_avocado_settings",
+      "neo_avocado_wallets",
       "neo_avocado_couples",
       "neo_avocado_sides",
       "neo_avocado_classes",
@@ -224,9 +226,18 @@ function fakeDatabase(rows = {}) {
       database.live = connection;
       return connection;
     },
+    // Queries and mutations: the foundation's answer from the same store
+    // (profiles, settings, wallets), the rest as a function call.
+    query: (name, args = null) => member.call(name, args, "query"),
+    mutate: (name, args = null) => member.call(name, args, "mutate"),
+    subscribe(name, args, onResult) {
+      calls.push({ method: "subscribe", name, args });
+      member.call(name, args, "query").then(onResult);
+      return { close() {} };
+    },
     // 서버 함수는 나루에서 돈다. 여기서는 무엇을 불렀는지만 남기고, 테스트가
     // 정한 결과를 돌려준다.
-    async call(name, args = null) {
+    async call(name, args = null, kind = "call") {
       // What Naru answers a member the site has not approved.
       if ((database.platformStatus ?? "approved") !== "approved")
         throw Object.assign(new Error("Membership is not approved."), {
@@ -257,14 +268,10 @@ function fakeDatabase(rows = {}) {
             .filter((row) => row.data.logId === id).length;
         return { counts };
       }
+      const profileOf = (id) =>
+        store.get(PROFILES).find((row) => row.id === id) ?? null;
       if (name === "community/membership:membership") {
-        const profile = await member
-          .collection(PROFILES)
-          .get(ME)
-          .catch((error) => {
-            if (error.code === "NOT_FOUND") return null;
-            throw error;
-          });
+        const profile = profileOf(ME);
         return {
           status: "approved",
           role: database.role ?? "member",
@@ -275,12 +282,53 @@ function fakeDatabase(rows = {}) {
       }
       if (name === "community/membership:join") {
         database.joined = args;
+        calls.push({ method: kind, name, args });
         return {
           status: "approved",
           profile: await member
             .collection(PROFILES)
             .set(ME, { nick: args.nick }),
         };
+      }
+      const foundation = {
+        "community/profiles:nicks": () => ({
+          nicks: Object.fromEntries(
+            args.ids
+              .map((id) => [id, profileOf(id)?.data.nick])
+              .filter(([, nick]) => nick !== undefined),
+          ),
+        }),
+        "community/profiles:find": () => ({
+          profiles: store
+            .get(PROFILES)
+            .filter((row) => args.nicks.includes(row.data.nick))
+            .map((row) => ({
+              id: row.id,
+              nick: row.data.nick,
+              acceptMessages: row.data.acceptMessages !== false,
+            })),
+        }),
+        "community/profiles:own": () => ({ profile: profileOf(ME) }),
+        "community/profiles:update": async () => ({
+          profile: await member
+            .collection(PROFILES)
+            .set(ME, { ...profileOf(ME)?.data, ...args }),
+        }),
+        "content/site:settings": () =>
+          memberSettings(
+            store
+              .get("neo_avocado_settings")
+              .find((row) => row.id === "community")?.data ?? {},
+          ),
+        "economy/wallet:wallet": () => ({
+          balance:
+            store.get("neo_avocado_wallets").find((row) => row.id === ME)?.data
+              .balance ?? 0,
+        }),
+      };
+      if (Object.hasOwn(foundation, name)) {
+        calls.push({ method: kind, name, args });
+        return JSON.parse(JSON.stringify(await foundation[name]()));
       }
       // Writes: posts, comments and characters through their functions,
       // kept in the same store native reads come from.
@@ -317,11 +365,14 @@ function fakeDatabase(rows = {}) {
   // A visitor's client: function calls only, recorded apart from members'.
   const visitor = {
     calls: [],
-    async call(name, args = null) {
+    async call(name, args = null, kind = "call") {
       if (name !== "content/site:site")
         visitor.calls.push(JSON.parse(JSON.stringify({ name, args })));
-      return member.call(name, args);
+      return member.call(name, args, kind);
     },
+    query: (name, args = null) => visitor.call(name, args, "query"),
+    mutate: (name, args = null) => visitor.call(name, args, "mutate"),
+    subscribe: (...args) => member.subscribe(...args),
     live(options) {
       visitor.calls.push({ name: "live", args: { topics: options.topics } });
       const connection = { options, close() {} };
@@ -384,6 +435,9 @@ async function page(database) {
           return { get: denied, list: denied };
         },
         call: database.visitor.call,
+        query: database.visitor.query,
+        mutate: database.visitor.mutate,
+        subscribe: database.visitor.subscribe,
         live: database.visitor.live,
         members: {
           session: async () => (database.signedIn ? database.member : null),
@@ -502,7 +556,7 @@ test("editing keeps image and metadata and sends the revision, while a conflict 
   assert.match($("editorStatus").textContent, /다른 곳에서 수정/);
 });
 
-test("profile and character edits use their original revisions and preserve extra fields", async () => {
+test("profile edits go through profiles:update, character edits use their original revisions, and both keep extra fields", async () => {
   const database = fakeDatabase({
     [PROFILES]: [{ ...me, data: { nick: "나", mainCharacter: "character" } }],
     [CHARACTERS]: [
@@ -524,6 +578,13 @@ test("profile and character edits use their original revisions and preserve extr
   $("editorFields").querySelector('[name="nick"]').value = "새 이름";
   await submit($("editorForm"));
   assert.equal($("whoami").textContent, "새 이름 님");
+  // The member's own profile changes through profiles:update, which keeps
+  // the rest.
+  assert.deepEqual(
+    database.calls.find((call) => call.name === "community/profiles:update")
+      .args,
+    { nick: "새 이름", acceptMessages: true, commentAlerts: true },
+  );
   assert.equal(database.store.get(PROFILES)[0].data.mainCharacter, "character");
   $("tabCharacters").onclick();
   await settle();
@@ -713,26 +774,24 @@ test("a first visit sets a nickname under the member's own id, then reads the lo
   const database = fakeDatabase();
   const { $, settle, submit } = await page(database);
   assert.equal($("profileSetup").hidden, false);
-  // The profile, and the settings for the rules to agree to (none here).
-  assert.deepEqual(
-    [database.calls.at(0), database.calls.at(1)],
-    [
-      { method: "get", name: PROFILES, id: ME },
-      { method: "get", name: "neo_avocado_settings", id: "community" },
-    ],
-  );
-  assert.equal(database.calls.length, 2);
+  // Membership brought no profile; then the settings for the rules to
+  // agree to (none here).
+  assert.deepEqual(database.calls.at(0), {
+    method: "query",
+    name: "content/site:settings",
+    args: null,
+  });
+  assert.equal(database.calls.length, 1);
   assert.equal($("stipulationBox").hidden, true);
   assert.equal($("characterNoticeBox").hidden, true);
   $("nick").value = " 아보 ";
   submit($("profileForm"));
   await settle();
   assert.equal(database.joined.agreed, false);
-  assert.deepEqual(database.calls.at(2), {
-    method: "set",
-    name: PROFILES,
-    id: ME,
-    data: { nick: "아보" },
+  assert.deepEqual(database.calls.at(1), {
+    method: "mutate",
+    name: "community/membership:join",
+    args: { nick: "아보", agreed: false },
   });
   assert.equal($("community").hidden, false);
   assert.equal($("whoami").textContent, "아보 님");
@@ -927,15 +986,10 @@ test("logs are read a page at a time, newest first, and comments only when opene
   assert.equal(items[1].querySelector(".delete").hidden, true);
   // 같은 회원의 닉네임은 한 번만 묻는다.
   const askedFor = database.calls
-    .filter((call) => call.name === PROFILES)
-    .flatMap((call) =>
-      call.method === "getMany"
-        ? call.ids
-        : call.method === "get"
-          ? [call.id]
-          : [],
-    );
-  assert.deepEqual(askedFor, [ME, "member-other"]);
+    .filter((call) => call.name === "community/profiles:nicks")
+    .flatMap((call) => call.args.ids);
+  // The member's own came with their membership.
+  assert.deepEqual(askedFor, ["member-other"]);
   assert.equal(
     database.calls.some((call) => call.name === COMMENTS),
     false,

@@ -1,17 +1,22 @@
 import {
   CHARACTERS,
   CHARACTER_STATE,
-  HISTORY,
   INVENTORY,
   ITEMS,
-  MEMBERS,
-  PROFILES,
-  WALLETS,
   characterState,
   text,
   withExp,
 } from "../../modules/shared.js";
+import {
+  addHistory,
+  profileByNick,
+  saveWallet,
+  walletOf,
+} from "../../modules/members.js";
 import type { Ctx, NaruDocument } from "../../modules/naru-types.js";
+
+/** Members given money a call, when it goes to everyone. */
+const MONEY_PAGE = 10;
 
 /** Inventory rows and history a call writes, inside its write budget. */
 const ITEM_WRITES = 20;
@@ -67,14 +72,13 @@ export async function grant(
   if (kind === "item")
     return await grantItem(ctx, item, target, name, value, note, after);
   if (kind === "money") {
-    const give = async (profile: NaruDocument) => {
-      const wallet = await ctx.get(WALLETS, profile.id);
-      const balance = (wallet?.data.balance ?? 0) + value;
+    const give = async (member: string) => {
+      const balance = (await walletOf(ctx, member)).balance + value;
       // Taking more than they have is refused, as point_update.php does.
       if (balance < 0) return false;
-      await ctx.set(WALLETS, profile.id, { ...wallet?.data, balance });
-      await ctx.add(HISTORY, {
-        owner: profile.id,
+      await saveWallet(ctx, member, balance);
+      await addHistory(ctx, {
+        owner: member,
         kind: "adjust",
         at: ctx.now,
         delta: value,
@@ -85,39 +89,37 @@ export async function grant(
       return true;
     };
     if (target === "one") {
-      const { documents } = await ctx.list(PROFILES, {
-        filter: { nick: text(name, 20, true) },
-        size: 1,
-      });
-      if (!documents[0])
+      const found = await profileByNick(ctx, text(name, 20, true));
+      if (!found)
         ctx.fail("INVALID_REQUEST", "존재하는 회원이 아닙니다.", {
           reason: "no_member",
         });
-      if (!(await give(documents[0])))
+      if (!(await give(found.id)))
         ctx.fail("CONFLICT", "가진 것보다 많이 깎을 수 없습니다.", {
           reason: "not_enough",
         });
       return { done: true, granted: 1, skipped: 0 };
     }
-    const page = await ctx.list(PROFILES, {
-      where: { ne: ["deleted", true] },
-      size: 10,
-      after,
-    });
+    const { rows } = await ctx.sql<{ member: string; level: number | null }>`
+      SELECT profiles.member, members.level FROM profiles
+      LEFT JOIN members ON members.member = profiles.member
+      WHERE profiles.deleted_at IS NULL AND profiles.member > ${after ?? ""}
+      ORDER BY profiles.member LIMIT ${MONEY_PAGE + 1}`;
+    const page = rows.slice(0, MONEY_PAGE);
+    const next = rows.length > MONEY_PAGE ? page.at(-1).member : null;
     let granted = 0;
     let excluded = 0;
-    for (const profile of page.documents) {
+    for (const row of page) {
       // 전체지급 leaves out level-1 members (adm/point_update.php:18,
       // mb_level > 1); members are level 2 unless the owner says otherwise.
-      const level = (await ctx.get(MEMBERS, profile.id))?.data.level;
-      if (level === 1) excluded += 1;
-      else if (await give(profile)) granted += 1;
+      if (row.level === 1) excluded += 1;
+      else if (await give(row.member)) granted += 1;
     }
     return {
-      done: !page.nextCursor,
-      after: page.nextCursor,
+      done: !next,
+      after: next,
       granted,
-      skipped: page.documents.length - granted - excluded,
+      skipped: page.length - granted - excluded,
     };
   }
   const give = async (character: NaruDocument) => {
@@ -133,7 +135,7 @@ export async function grant(
       character.id,
       await withExp(ctx, current.data, exp),
     );
-    await ctx.add(HISTORY, {
+    await addHistory(ctx, {
       owner: current.data.owner ?? character.data.owner,
       kind: "exp",
       at: ctx.now,
@@ -236,7 +238,7 @@ async function grantItem(
       writes -= 1;
     }
     if (given < count) return false;
-    await ctx.add(HISTORY, {
+    await addHistory(ctx, {
       owner,
       kind: "grant",
       at: ctx.now,

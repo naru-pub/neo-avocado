@@ -2,6 +2,7 @@
 // type checking only: this module exports types and compiles to nothing.
 // Queries and mutations take Naru's own declarations (naru-functions.d.ts,
 // a copy of naru.pub/sdk/1.1.0/functions.d.ts).
+import type { QueryCtx } from "./naru-functions";
 export type {
   QueryCtx,
   MutationCtx,
@@ -84,6 +85,8 @@ export interface AddOptions {
 
 export interface Member {
   id: string;
+  /** The roles the site gave them; a rule's ctx carries none. */
+  roles?: readonly string[];
 }
 
 /** What collection rules may use of the context: reads only. */
@@ -104,6 +107,14 @@ export interface ReadCtx {
   ): Promise<(NaruDocument<T> | null)[]>;
   list<T = Data>(collection: string, options?: ListOptions): Promise<Page<T>>;
   count(collection: string, options?: CountOptions): Promise<number>;
+  /**
+   * The site's tables, read-only in a rule or a read-only function. Naru
+   * hands rules and site functions `sql` as it does queries (its
+   * functions.d.ts declares it on site functions only).
+   */
+  sql: QueryCtx["sql"];
+  /** Members' roles, by ID (a rule's `ctx.member` carries none). */
+  rolesOf: QueryCtx["rolesOf"];
 }
 
 /** The context a site function receives. */

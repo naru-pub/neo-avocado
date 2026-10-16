@@ -329,14 +329,14 @@ HTML은 [DOMPurify](https://github.com/cure53/DOMPurify)로 정리하여 표시�
 
 | 기능                   | 화면                                   | 서버 함수                                                        |
 | ---------------------- | -------------------------------------- | ---------------------------------------------------------------- |
-| 로그인·가입·닉네임     | `app.js`                               | `_naru/functions/community/membership.js`                        |
+| 로그인·가입·닉네임     | `app.js`                               | `_naru/queries/community/`, `_naru/mutations/community/`         |
 | 게시판·로그·댓글       | `app/logs.js`, `app/posts.js`          | `_naru/functions/community/posts.js`, `comments.js`, `boards.js` |
 | 캐릭터                 | `app/characters.js`                    | `_naru/functions/characters/` (`sheet.js`가 등록·수정·삭제)      |
 | 상점·인벤토리·제작     | `app/shop.js`                          | `_naru/functions/economy/`                                       |
 | 쪽지                   | `app/messages.js`                      | `_naru/functions/community/messages.js`                          |
 | 알림(호출)             | `app/calls.js`                         | `_naru/functions/community/calls.js`                             |
-| 퀘스트·안내 페이지     | `app/content.js`                       | `_naru/functions/content/`                                       |
-| 디자인·메뉴·배너       | `app/site.js`                          | `_naru/functions/content/site.js`                                |
+| 퀘스트·안내 페이지     | `app/content.js`                       | `_naru/queries/content/`                                         |
+| 디자인·메뉴·배너       | `app/site.js`                          | `_naru/queries/content/site.js`                                  |
 | 새 글·알림 실시간 수신 | `app/live.js`                          |                                                                  |
 | 운영 화면              | `admin/`, `admin.js`, `admin-model.js` | `_naru/functions/characters/review.js`                           |
 
@@ -345,8 +345,10 @@ HTML은 [DOMPurify](https://github.com/cure53/DOMPurify)로 정리하여 표시�
 화면은 컬렉션을 SDK로 직접 읽습니다(`member.collection(...)`, 손님은
 `naru.collection(...)`). 누가 무엇을 읽는지는 `_naru/rules/`의 규칙이 정합니다.
 쓰기는 서버 함수(`community/posts:write`, `community/comments:write`,
-`characters/sheet:save` 등)로 하고, 회원 자신의 프로필(닉네임·알림 설정)만
-`rules/profiles.js`가 허락하는 대로 직접 씁니다.
+`characters/sheet:save` 등)로 합니다. 새 SDK로 옮긴 부분(가입·프로필·접속·사이트
+틀·안내 페이지·퀘스트)은 `_naru/migrations/`의 테이블을 쓰고, 화면은
+`query`·`mutate`(`app/core.js`)로 `_naru/queries/`·`_naru/mutations/`를 부릅니다
+(`docs/port.md`).
 
 화면은 서버 함수를 `"파일 경로:함수 이름"`으로 부릅니다.
 

@@ -1,6 +1,7 @@
 // A board's own settings for what is written on it (adm/board_form.php):
 // lengths, the site's banned words, and when a post may no longer be edited.
-import { PREFIX, SETTINGS } from "./shared.js";
+import { PREFIX } from "./shared.js";
+import { communitySettings } from "./access.js";
 import type { Access } from "./shared.js";
 import type { Ctx, Data, NaruDocument, Where } from "./naru-types.js";
 
@@ -70,9 +71,7 @@ export function bannedWords(settings: Data | undefined): string[] {
  * or comment is saved.
  */
 export async function checkBannedWords(ctx: Ctx, ...texts: string[]) {
-  const words = bannedWords(
-    (await ctx.get(SETTINGS, "community"))?.data ?? undefined,
-  );
+  const words = bannedWords(await communitySettings(ctx));
   for (const text of texts) {
     const lower = text.toLowerCase();
     const found = words.find((word) => lower.includes(word.toLowerCase()));

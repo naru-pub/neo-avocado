@@ -1,11 +1,9 @@
 import {
   PREFIX,
-  SETTINGS,
   SIDES,
   CLASSES,
   CHARACTER_STATE,
   INVENTORY,
-  PROFILES,
   RELATIONS,
   WARDROBE,
   author,
@@ -21,6 +19,8 @@ import {
   requireUsable,
 } from "../../modules/shared.js";
 import { notDeleted, startValue, startWrite } from "../../modules/community.js";
+import { communitySettings } from "../../modules/access.js";
+import { profileOf } from "../../modules/members.js";
 import {
   claimMain,
   memberByNick,
@@ -84,7 +84,7 @@ async function checkPeriod(
   ticket: NaruDocument | null,
 ) {
   if (ctx.owner) return;
-  const settings = (await ctx.get(SETTINGS, "community"))?.data ?? {};
+  const settings = await communitySettings(ctx);
   if (previous) {
     // An application can always be finished, as the original's viewer
     // offers 수정 on any unapproved character (viewer.php:101); a
@@ -230,7 +230,7 @@ export async function save(
     if (member) await claimMain(ctx, member, document.id);
   } else if (!previous) {
     // A member's first character is their 대표 (character_form_update.php:120).
-    const profile = await ctx.get(PROFILES, ctx.member.id);
+    const profile = await profileOf(ctx, ctx.member.id);
     if (profile) await claimMain(ctx, profile, document.id);
   }
   // The ticket goes unless it lasts (it_use_ever; character_form_update.php:268).
@@ -307,7 +307,7 @@ export async function move(
       ...previous.data,
       owner: member.id,
     });
-    const before = from ? await ctx.get(PROFILES, from) : null;
+    const before = from ? await profileOf(ctx, from) : null;
     if (before?.data.mainCharacter === previous.id)
       await replaceMain(ctx, before, previous.id);
     await claimMain(ctx, member, previous.id);

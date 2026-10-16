@@ -1,10 +1,7 @@
 import {
   PREFIX,
-  PROFILES,
   CHARACTERS,
   CHARACTER_STATE,
-  HISTORY,
-  WALLETS,
   author,
   amount,
   characterState,
@@ -32,6 +29,15 @@ import {
   checkLength,
 } from "../../modules/board-options.js";
 import type { Access } from "../../modules/shared.js";
+import { containing } from "../../modules/access.js";
+import {
+  FAVORITE_LIMIT,
+  addHistory,
+  favoritesOf,
+  profileOf,
+  saveWallet,
+  walletOf,
+} from "../../modules/members.js";
 import { notDeleted, startValue, startWrite } from "../../modules/community.js";
 import {
   speakerOf,
@@ -427,12 +433,14 @@ export async function search(
   const text = wanted.trim();
   // The members and characters named so, up to 100 each.
   const [members, characters] = await Promise.all([
-    ctx.list(PROFILES, { where: { contains: ["nick", text] }, size: 100 }),
+    ctx.sql<{ member: string }>(
+      "SELECT member FROM profiles WHERE nick LIKE ? ESCAPE '\\' LIMIT 100",
+      [containing(text)],
+    ),
     ctx.list(CHARACTERS, { where: { contains: ["name", text] }, size: 100 }),
   ]);
-  const ids = (page: Page) => page.documents.map((row) => row.id);
-  const memberIds = ids(members);
-  const characterIds = ids(characters);
+  const memberIds = members.rows.map((row) => row.member);
+  const characterIds = characters.documents.map((row) => row.id);
   // An author's name finds only what shows it: not 익명 posts or comments.
   const named: Where[] =
     memberIds.length || characterIds.length
@@ -544,9 +552,6 @@ const shown = (ctx: Ctx, access: Access, row: NaruDocument) => ({
   }),
 });
 
-/** 관심로그 (mmb's 관심, mypage/log/log_favorite.php): at most 200. */
-const FAVORITE_LIMIT = 200;
-
 /** Marks a post 관심, or unmarks it; the newest first. */
 export async function favorite(ctx: Ctx, { id }: { id?: string } = {}) {
   const access = await communityAccess(ctx);
@@ -555,19 +560,20 @@ export async function favorite(ctx: Ctx, { id }: { id?: string } = {}) {
     ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {
       reason: "document_not_found",
     });
-  const profile = await ctx.get(PROFILES, ctx.member.id);
-  if (!profile)
+  const member = ctx.member.id;
+  if (!(await profileOf(ctx, member)))
     ctx.fail("CONFLICT", "먼저 닉네임을 등록해 주세요.", {
       reason: "no_profile",
     });
-  const current = Array.isArray(profile.data.favorites)
-    ? profile.data.favorites.filter((entry) => typeof entry === "string")
-    : [];
-  const marked = !current.includes(id);
-  const favorites = marked
-    ? [id, ...current].slice(0, FAVORITE_LIMIT)
-    : current.filter((entry) => entry !== id);
-  await ctx.set(PROFILES, profile.id, { ...profile.data, favorites });
+  const marked = !(
+    await ctx.sql`SELECT 1 FROM favorites WHERE member = ${member} AND post = ${id}`
+  ).rows.length;
+  if (marked) {
+    await ctx.sql`INSERT INTO favorites (member, post) VALUES (${member}, ${id})`;
+    // The oldest go past the limit.
+    await ctx.sql`DELETE FROM favorites WHERE member = ${member} AND id NOT IN (SELECT id FROM favorites WHERE member = ${member} ORDER BY id DESC LIMIT ${FAVORITE_LIMIT})`;
+  } else
+    await ctx.sql`DELETE FROM favorites WHERE member = ${member} AND post = ${id}`;
   return { favorite: marked };
 }
 
@@ -581,10 +587,7 @@ export async function favorites(
       reason: "invalid_input",
     });
   const access = await communityAccess(ctx);
-  const profile = ctx.member ? await ctx.get(PROFILES, ctx.member.id) : null;
-  const ids = Array.isArray(profile?.data.favorites)
-    ? profile.data.favorites
-    : [];
+  const ids = ctx.member ? await favoritesOf(ctx, ctx.member.id) : [];
   const slice = ids.slice((page - 1) * 20, page * 20);
   const rows = slice.length ? await ctx.getMany(LOGS, slice) : [];
   const documents = [];
@@ -824,7 +827,7 @@ export async function settle(
       character,
       await withExp(ctx, current.data, total),
     );
-    await ctx.add(HISTORY, {
+    await addHistory(ctx, {
       owner: current.data.owner ?? owner,
       kind: "exp",
       at: ctx.now,
@@ -840,14 +843,13 @@ export async function settle(
       ctx.fail("INVALID_REQUEST", "회원이 쓴 정산글에만 지급할 수 있습니다.", {
         reason: "invalid_input",
       });
-    const wallet = await ctx.get(WALLETS, owner);
-    const balance = (wallet?.data.balance ?? 0) + money;
+    const balance = (await walletOf(ctx, owner)).balance + money;
     if (!Number.isSafeInteger(balance))
       ctx.fail("INVALID_REQUEST", "지급할 수 있는 금액을 넘었습니다.", {
         reason: "invalid_input",
       });
-    await ctx.set(WALLETS, owner, { ...wallet?.data, balance });
-    await ctx.add(HISTORY, {
+    await saveWallet(ctx, owner, balance);
+    await addHistory(ctx, {
       owner,
       kind: "settle",
       at: ctx.now,

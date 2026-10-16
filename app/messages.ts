@@ -13,6 +13,7 @@ import {
   state,
   route,
   renderPages,
+  query,
 } from "./core.js";
 import { moneyText } from "./names.js";
 import { showUnread } from "./live.js";
@@ -62,26 +63,18 @@ async function recipientsNamed(text) {
     Object.assign(new Error(message), { details: { reason: "recipients" } });
   if (!nicks.length || nicks.length > 20)
     throw refuse("받는 회원 닉네임을 1~20개 적어 주세요.");
-  const { documents } = await collection(COLLECTION.profiles).list({
-    where: { in: ["nick", nicks] },
-    size: 20,
-  });
+  const { profiles } = await query("community/profiles:find", { nicks });
   const missing = nicks.filter(
-    (nick) => !documents.some((profile) => profile.data.nick === nick),
+    (nick) => !profiles.some((profile) => profile.nick === nick),
   );
   if (missing.length)
     throw refuse(`닉네임을 찾을 수 없습니다: ${missing.join(", ")}`);
-  return documents.map((profile) => profile.id);
+  return profiles.map((profile) => profile.id);
 }
 async function loadMessageCost() {
-  const settings = await collection(COLLECTION.settings)
-    .get("community")
-    .catch((error) => {
-      if (error.code === "NOT_FOUND") return null;
-      throw error;
-    });
+  const settings = await query("content/site:settings");
   $("messageCost").textContent =
-    `회원 한 명당 ${moneyText(state.names, settings?.data.messageCost ?? 0)}`;
+    `회원 한 명당 ${moneyText(state.names, settings.messageCost ?? 0)}`;
 }
 /**
  * 쪽지함 (mypage/memo/index.php): one entry a correspondent, newest first,

@@ -300,7 +300,8 @@ test("quest forms validate Korean scheduling and multiline images", () => {
     "https://example.com/a.png",
     "https://example.com/b.png",
   ]);
-  assert.ok(scopes.includes("neo_avocado_quests"));
+  // Quests are a table now: the sign-in does not ask for them.
+  assert.ok(!scopes.includes("neo_avocado_quests"));
   for (const change of [
     { endsAt: "2029-12-31T09:00" },
     { startsAt: "2030-02-30T09:00" },
@@ -539,7 +540,6 @@ test("the site declares every collection it uses, and sign-in asks for them", as
     "_naru/functions/community",
     "_naru/functions/economy",
     "_naru/functions/characters",
-    "_naru/functions/content",
     "_naru/rules",
   ])
     for (const name of await readdir(
@@ -557,8 +557,14 @@ test("the site declares every collection it uses, and sign-in asks for them", as
     ))
       used.add(`neo_avocado_${name}`);
   }
+  // The foundation's tables are reached by queries, not collections.
+  const { mappingOf } = await import("../dist/_naru/modules/documents.js");
   assert.deepEqual(
-    [...used].filter((name) => !scopes.includes(name)),
+    [...used].filter((name) => !scopes.includes(name) && !mappingOf(name)),
+    [],
+  );
+  assert.deepEqual(
+    scopes.filter((name) => mappingOf(name)),
     [],
   );
   const { collections } = JSON.parse(
@@ -571,7 +577,8 @@ test("the site declares every collection it uses, and sign-in asks for them", as
   for (const [name, entry] of Object.entries(collections))
     assert.ok(entry.read && entry.write, `${name} states read and write`);
   assert.equal(collections.neo_avocado_logs.rules, "community-board");
-  assert.deepEqual(collections.neo_avocado_profiles.unique, ["nick"]);
+  // Profiles are a table, nicknames unique there.
+  assert.equal(collections.neo_avocado_profiles, undefined);
 });
 
 test("a character's experience change is recorded for its owner in the same batch", () => {

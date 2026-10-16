@@ -1,17 +1,42 @@
 // Shared collection identifiers and transactional domain helpers.
 export { IMAGE_SLOTS, imageSlotsOf, viewerOf } from "./images.js";
 import type { Ctx, Data, Filter, NaruDocument, ReadCtx } from "./naru-types.js";
+import { communitySettings, names, text } from "./access.js";
+import type { Access, Names } from "./access.js";
+import {
+  addHistory,
+  profileOf,
+  saveWallet,
+  setMainCharacter,
+  walletOf,
+} from "./members.js";
+// What moved to the site's tables (access.js, members.js), for the code
+// that still imports it from here.
+export {
+  CLOSED_ACCESS,
+  GUEST_ACCESS,
+  NAME_DEFAULTS,
+  RESERVED_NICKS,
+  communityAccess,
+  communityAmount,
+  kstDay,
+  kstStamp,
+  names,
+  namesOf,
+  reservedNick,
+  scheduled,
+  siteOpen,
+  text,
+} from "./access.js";
+export type { Access, Names } from "./access.js";
+export { loginReward } from "./members.js";
 export const PREFIX = "neo_avocado_";
-
-export const WALLETS = `${PREFIX}wallets`;
 
 export const INVENTORY = `${PREFIX}inventory`;
 
 export const ITEMS = `${PREFIX}items`;
 
 export const GACHA = `${PREFIX}gacha`;
-
-export const PROFILES = `${PREFIX}profiles`;
 
 export const RECIPES = `${PREFIX}recipes`;
 
@@ -25,17 +50,11 @@ export const CHARACTER_STATE = `${PREFIX}character_state`;
 
 export const STAT_CONFIG = `${PREFIX}stat_config`;
 
-export const SETTINGS = `${PREFIX}settings`;
-
 export const LEVELS = `${PREFIX}levels`;
 
 export const TITLES = `${PREFIX}titles`;
 
-export const HISTORY = `${PREFIX}history`;
-
 export const MESSAGES = `${PREFIX}messages`;
-
-export const MEMBERS = `${PREFIX}members`;
 
 export const BOARDS = `${PREFIX}boards`;
 
@@ -52,9 +71,6 @@ export const SIDES = `${PREFIX}sides`;
 export const CLASSES = `${PREFIX}classes`;
 /** Board groups (adm/boardgroup_list). */
 export const BOARD_GROUPS = `${PREFIX}board_groups`;
-/** Who is here now, and each day's visits (current_connect, visit_list). */
-export const PRESENCE = `${PREFIX}presence`;
-export const VISITS = `${PREFIX}visits`;
 
 /** Takes the board's next log number, as GnuBoard's wr_num. */
 export async function nextNumber(ctx: Ctx, board: string) {
@@ -89,87 +105,6 @@ export function tagFields(text: unknown) {
   return { tags };
 }
 
-/** What a caller may do in the community: their level and role. */
-export interface Access {
-  level: number;
-  role: "guest" | "member" | "moderator";
-  /** A visitor of a closed site. */
-  closed?: boolean;
-  /** A member who left. */
-  left?: boolean;
-  /** The board groups whose members-only boards they may use. */
-  groups?: string[];
-}
-
-/** A visitor's access: level 1, as GnuBoard gives a guest. */
-export const GUEST_ACCESS = Object.freeze({ level: 1, role: "guest" });
-
-/**
- * 사이트공개 (cf_open): whether visitors who are not signed in may see the
- * community. On unless the owner turns it off (the original's install starts
- * with it off, extend/community.config.php sending guests to the login page).
- */
-export async function siteOpen(ctx: ReadCtx): Promise<boolean> {
-  return (await ctx.get(SETTINGS, "community"))?.data.siteOpen !== false;
-}
-
-/**
- * 닉네임 금지 단어 (cf_prohibit_id), as the original installs it
- * (install/install_db.php). The admin's community settings keep the owner's
- * own list, comma-separated; an empty list reserves nothing.
- */
-export const RESERVED_NICKS =
-  "admin,administrator,관리자,운영자,어드민,주인장,webmaster,웹마스터,sysop,시삽,시샵,manager,매니저,메니저,root,루트,su,guest,방문객";
-
-/**
- * Whether a nickname is one of the reserved words (lib/register.lib.php's
- * reserve_mb_nick), ignoring case. The site owner may take one.
- */
-export async function reservedNick(
-  ctx: ReadCtx,
-  nick: string,
-): Promise<boolean> {
-  if (ctx.owner) return false;
-  const saved = (await ctx.get(SETTINGS, "community"))?.data.reservedNicks;
-  const list = typeof saved === "string" ? saved : RESERVED_NICKS;
-  const wanted = nick.trim().toLowerCase();
-  return list
-    .split(",")
-    .some((word) => word.trim() && word.trim().toLowerCase() === wanted);
-}
-
-/**
- * The owner's names (기타 항목명 설정: cf_money, cf_money_pice, cf_exp_name,
- * cf_exp_pice, cf_rank_name, cf_side_title, cf_class_title), the template's
- * own until changed. An empty 소속 or 종족 title hides it, as in the original.
- * names.js keeps the same defaults for the pages.
- */
-export const NAME_DEFAULTS = Object.freeze({
-  moneyName: "아보",
-  moneyUnit: "아보",
-  expName: "경험치",
-  expUnit: "",
-  rankName: "랭킹",
-  sideTitle: "소속",
-  classTitle: "종족",
-});
-/** The owner's names, by the keys of NAME_DEFAULTS. */
-export type Names = { [K in keyof typeof NAME_DEFAULTS]: string };
-export function namesOf(settings: Data = {}): Names {
-  const names = {} as Names;
-  for (const [key, fallback] of Object.entries(NAME_DEFAULTS)) {
-    const value = settings[key];
-    names[key] =
-      typeof value === "string" &&
-      (value.trim() || ["expUnit", "sideTitle", "classTitle"].includes(key))
-        ? value.trim().slice(0, 20)
-        : fallback;
-  }
-  return names;
-}
-export async function names(ctx: ReadCtx): Promise<Names> {
-  return namesOf((await ctx.get(SETTINGS, "community"))?.data);
-}
 /** A word with its subject particle: 아보가, 경험치가, 포인트가, 골드가. */
 export function subject(word: string) {
   const last = word.charCodeAt(word.length - 1);
@@ -214,39 +149,6 @@ export async function lacking(ctx: ReadCtx, key: keyof Names) {
 export function restrictedFor(named: Names, verb: string) {
   const kinds = [named.sideTitle, named.classTitle].filter(Boolean);
   return `이 캐릭터의 ${kinds.join("·") || "조건"}으로는 ${verb} 수 없습니다.`;
-}
-
-/** A visitor of a closed site: below every board's and page's level 1. */
-export const CLOSED_ACCESS = Object.freeze({
-  level: 0,
-  role: "guest",
-  closed: true,
-});
-
-export async function communityAccess(
-  ctx: ReadCtx,
-  id: string | null | undefined = ctx.member?.id,
-): Promise<Access> {
-  // A closed site (cf_open off) shows visitors nothing, as the original
-  // sends them to log in from every page (check_site_auth).
-  if (!id) return (await siteOpen(ctx)) ? GUEST_ACCESS : CLOSED_ACCESS;
-  const row = await ctx.get(MEMBERS, id);
-  // A member who left (bbs/member_leave.php) is a guest until the owner
-  // clears their leave date.
-  if (row?.data.left) return { ...GUEST_ACCESS, role: "member", left: true };
-  return {
-    // The board groups whose members-only boards they may use.
-    groups: Array.isArray(row?.data.groups)
-      ? row.data.groups.filter((id) => typeof id === "string")
-      : [],
-    level:
-      Number.isInteger(row?.data.level) &&
-      row.data.level >= 1 &&
-      row.data.level <= 10
-        ? row.data.level
-        : 2,
-    role: row?.data.role === "moderator" ? "moderator" : "member",
-  };
 }
 
 export function author(row: NaruDocument | null | undefined) {
@@ -444,7 +346,7 @@ export async function deleteCommunityDocument(
     await remove(`${PREFIX}couples`, { second: row.id });
     if (await ctx.get(CHARACTER_STATE, row.id))
       await ctx.delete(CHARACTER_STATE, row.id);
-    const profile = await ctx.get(PROFILES, author(row));
+    const profile = await profileOf(ctx, author(row));
     if (profile?.data.mainCharacter === row.id)
       await replaceMain(ctx, profile, row.id);
   }
@@ -459,7 +361,7 @@ export async function deleteCommunityDocument(
  */
 export async function replaceMain(
   ctx: Ctx,
-  profile: NaruDocument,
+  profile: { id: string },
   removed: string,
 ) {
   const { documents } = await ctx.list(CHARACTERS, {
@@ -470,10 +372,7 @@ export async function replaceMain(
     sort: [[{ metadata: "createdAt" }, "asc"]],
     size: 1,
   });
-  await ctx.set(PROFILES, profile.id, {
-    ...profile.data,
-    mainCharacter: documents[0]?.id ?? null,
-  });
+  await setMainCharacter(ctx, profile.id, documents[0]?.id ?? null);
 }
 
 export async function record(
@@ -482,7 +381,7 @@ export async function record(
   details: Data,
   owner: string = ctx.member.id,
 ) {
-  await ctx.add(HISTORY, { owner, kind, at: ctx.now, ...details });
+  await addHistory(ctx, { owner, kind, at: ctx.now, ...details });
 }
 
 export async function ownCharacter(
@@ -496,16 +395,6 @@ export async function ownCharacter(
     !character.data.deleted
     ? character
     : null;
-}
-
-export function text(value: unknown, max: number, required = false): string {
-  if (
-    typeof value !== "string" ||
-    value.length > max ||
-    (required && !value.trim())
-  )
-    throw new Error("Invalid text input.");
-  return value.trim();
 }
 
 export function imageUrl(value: unknown): string {
@@ -540,71 +429,11 @@ export async function weightedRows(
   return rows;
 }
 
-/** A whole, non-negative amount the owner set in 커뮤니티 설정, else 0. */
-export async function communityAmount(
-  ctx: ReadCtx,
-  key: string,
-): Promise<number> {
-  const value = (await ctx.get(SETTINGS, "community"))?.data[key];
-  return Number.isSafeInteger(value) && value > 0 ? value : 0;
-}
-
-/**
- * The day's first visit pays the 로그인 보상 (common.php:401, cf_login_point),
- * once a Korean day; the original installs it at 0. The wallet keeps the
- * day, so later visits that day pay nothing. A member who left gets none.
- * Answers the new balance, or null when nothing was paid.
- */
-export async function loginReward(ctx: Ctx): Promise<number | null> {
-  const current = await wallet(ctx);
-  const today = kstDay(ctx.now);
-  if (current.lastDaily === today) return null;
-  if ((await ctx.get(MEMBERS, ctx.member.id))?.data.left) return null;
-  const reward = await communityAmount(ctx, "loginReward");
-  const balance = await pay(ctx, current, -reward, { lastDaily: today });
-  if (!reward) return null;
-  // insert_point's memo, "YYYY-MM-DD 첫로그인".
-  await record(ctx, "daily", {
-    delta: reward,
-    balance,
-    memo: `${today} 첫로그인`,
-  });
-  return balance;
-}
-
 export const GACHA_COST = 50;
 
-/** A Korean local "YYYY-MM-DDTHH:mm[:ss]" as milliseconds; null if blank, NaN if malformed. */
-export function kstStamp(value: unknown): number | null {
-  if (!value) return null;
-  if (
-    typeof value !== "string" ||
-    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(value)
-  )
-    return NaN;
-  const stamp = Date.parse(`${value}+09:00`);
-  return Number.isFinite(stamp) &&
-    new Date(stamp + 9 * 3600000).toISOString().slice(0, value.length) === value
-    ? stamp
-    : NaN;
-}
-
-/** Whether `now` is inside a row's optional startsAt (inclusive) and endsAt (exclusive). */
-export function scheduled(data: Data, now: number): boolean {
-  const start = kstStamp(data.startsAt),
-    end = kstStamp(data.endsAt);
-  return (
-    (!data.startsAt || (Number.isFinite(start) && now >= start)) &&
-    (!data.endsAt || (Number.isFinite(end) && now < end))
-  );
-}
-
-export const kstDay = (now: number): string =>
-  new Date(now + 9 * 3600 * 1000).toISOString().slice(0, 10);
-
+/** The caller's wallet: { balance, lastDaily }. */
 export async function wallet(ctx: ReadCtx): Promise<Data> {
-  const found = await ctx.get(WALLETS, ctx.member.id);
-  const current = found ? found.data : { balance: 0, lastDaily: null };
+  const current = await walletOf(ctx, ctx.member.id);
   amount(current.balance, "Balance");
   return current;
 }
@@ -618,11 +447,12 @@ export async function pay(
   const balance = current.balance - amount;
   if (!Number.isSafeInteger(balance) || balance < 0)
     throw new Error("Balance is outside its allowed range.");
-  await ctx.set(WALLETS, ctx.member.id, {
-    ...current,
-    ...changes,
+  await saveWallet(
+    ctx,
+    ctx.member.id,
     balance,
-  });
+    Object.hasOwn(changes, "lastDaily") ? changes.lastDaily : undefined,
+  );
   return balance;
 }
 
@@ -643,7 +473,7 @@ export async function payReward(
   const balance = current.balance + (reward as number);
   if (!Number.isSafeInteger(balance))
     throw new Error("Balance is outside its allowed range.");
-  await ctx.set(WALLETS, ctx.member.id, { ...current, balance });
+  await saveWallet(ctx, ctx.member.id, balance);
   await record(ctx, "board", { delta: reward, balance, memo });
   return reward as number;
 }
@@ -661,14 +491,11 @@ export async function takeBackReward(
   const reward = row.data.reward;
   const owner = author(row);
   if (!Number.isSafeInteger(reward) || reward <= 0 || !owner) return 0;
-  const found = await ctx.get(WALLETS, owner);
-  const before = Number.isSafeInteger(found?.data.balance)
-    ? found.data.balance
-    : 0;
+  const before = (await walletOf(ctx, owner)).balance;
   const taken = Math.min(reward, before);
   if (!taken) return 0;
   const balance = before - taken;
-  await ctx.set(WALLETS, owner, { ...found.data, balance });
+  await saveWallet(ctx, owner, balance);
   await record(ctx, "board", { delta: -taken, balance, memo }, owner);
   return 2;
 }
@@ -746,7 +573,7 @@ export async function characterState(
     owner,
     character,
     points: amount(
-      (await ctx.get(SETTINGS, "community"))?.data.initialStatPoints ?? 0,
+      (await communitySettings(ctx)).initialStatPoints ?? 0,
       "Initial stat points",
     ),
     exp: 0,
@@ -856,39 +683,4 @@ export async function restoreStat(ctx: Ctx, effect: Data, character: string) {
   stat.damage = Math.max(0, stat.damage - recovery);
   stat.current = Math.max(0, stat.max - stat.damage);
   return await ctx.set(CHARACTER_STATE, character, state.data);
-}
-
-/**
- * Whether the reader may see a content page. The original's pages have no
- * read level (bbs/content.php, main.php), so a page without one is everyone's.
- */
-export async function contentReadable(
-  ctx: ReadCtx,
-  row: NaruDocument | null,
-): Promise<boolean> {
-  return (
-    row &&
-    row.data.enabled !== false &&
-    !row.data.deleted &&
-    (await communityAccess(ctx)).level >= (row.data.readLevel ?? 1)
-  );
-}
-
-/**
- * The background music the owner set: a YouTube playlist (`list=…`, or the
- * bare ID) or a single video (`v=…`, youtu.be/…), else null. Only the ID
- * reaches pages, which embed it themselves.
- */
-export function backgroundMusic(value: unknown) {
-  if (typeof value !== "string" || !value.trim()) return null;
-  const text = value.trim();
-  const id = /^[\w-]{10,64}$/;
-  const list = text.match(/[?&]list=([\w-]{10,64})/)?.[1];
-  if (list) return { list };
-  const video =
-    text.match(/[?&]v=([\w-]{11})/)?.[1] ??
-    text.match(/youtu\.be\/([\w-]{11})/)?.[1];
-  if (video) return { video };
-  if (!id.test(text)) return null;
-  return text.length === 11 ? { video: text } : { list: text };
 }

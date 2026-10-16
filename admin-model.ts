@@ -1,4 +1,5 @@
 import { rename } from "./app/names.js";
+import { mappingOf } from "./_naru/modules/documents.js";
 
 // Pure forms/validation shared with tests. Only an SDK owner handle writes these.
 const P = "neo_avocado_";
@@ -1267,9 +1268,9 @@ models.title_holdings = {
 };
 for (const [name, model] of Object.entries(models))
   model.collection ??= `${P}${name}`;
-// The collections the owner's sign-in asks for. Their settings (access, rules,
-// unique fields) are declared in _naru/collections.json, which Naru installs
-// when the site's files arrive.
+// The collections the owner's sign-in asks for (scopes, below) have their
+// settings (access, rules, unique fields) declared in
+// _naru/collections.json, which Naru installs when the site's files arrive.
 /**
  * The admin menu, in the original's groups (adm/admin.menu100–900.php), each
  * section once. The site's own additions sit with what they belong to.
@@ -1325,6 +1326,10 @@ export function sectionLabel(name, names) {
   return rename(models[name].label, names);
 }
 
+/**
+ * The collections the owner's sign-in asks for: the site's tables (the
+ * foundation's, modules/documents.js) are reached by queries instead.
+ */
 export const scopes = [
   ...new Set([
     ...Object.values(models).map((model) => model.collection),
@@ -1340,7 +1345,7 @@ export const scopes = [
     `${P}counters`,
     `${P}calls`,
   ]),
-];
+].filter((name) => !mappingOf(name));
 
 const nonnegative = (value) => {
   if (!Number.isSafeInteger(value) || value < 0)

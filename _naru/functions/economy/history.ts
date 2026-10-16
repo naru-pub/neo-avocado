@@ -1,4 +1,4 @@
-import { HISTORY } from "../../modules/shared.js";
+import { historyPage } from "../../modules/members.js";
 import type { Ctx } from "../../modules/naru-types.js";
 
 export const readOnly = ["history"];
@@ -25,12 +25,9 @@ export async function history(
     ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
       reason: "invalid_input",
     });
-  return {
-    ...(await ctx.list(HISTORY, {
-      filter: { owner: ctx.member.id, ...(kind ? { kind } : {}) },
-      sort: [[{ metadata: "createdAt" }, "desc"]],
-      size,
-      after,
-    })),
-  };
+  return await historyPage(
+    ctx,
+    { owner: ctx.member.id, ...(kind ? { kind } : {}) },
+    { size, after },
+  );
 }

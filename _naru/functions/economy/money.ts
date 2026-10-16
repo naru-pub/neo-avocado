@@ -1,16 +1,19 @@
 import {
   CHARACTERS,
-  HISTORY,
   MESSAGES,
-  PROFILES,
   amount,
   lacking,
   names,
   pay,
   record,
   wallet,
-  WALLETS,
 } from "../../modules/shared.js";
+import {
+  historyPage,
+  profileOf,
+  saveWallet,
+  walletOf,
+} from "../../modules/members.js";
 import type { Ctx } from "../../modules/naru-types.js";
 
 export const readOnly = ["ledger"];
@@ -36,8 +39,8 @@ export async function send(
       ? (target.createdBy ?? target.data.owner)
       : null;
   const [from, to] = await Promise.all([
-    ctx.get(PROFILES, ctx.member.id),
-    recipient ? ctx.get(PROFILES, recipient) : null,
+    profileOf(ctx, ctx.member.id),
+    recipient ? profileOf(ctx, recipient) : null,
   ]);
   if (!to || recipient === ctx.member.id)
     ctx.fail("INVALID_REQUEST", "상대를 확인할 수 없습니다.", {
@@ -50,13 +53,12 @@ export async function send(
     });
   const named = await names(ctx);
   const balance = await pay(ctx, current, sent);
-  const theirs = await ctx.get(WALLETS, recipient);
-  const received = (theirs?.data.balance ?? 0) + sent;
+  const received = (await walletOf(ctx, recipient)).balance + sent;
   if (!Number.isSafeInteger(received))
     ctx.fail("INVALID_REQUEST", "받는 사람이 더 받을 수 없습니다.", {
       reason: "invalid_input",
     });
-  await ctx.set(WALLETS, recipient, { ...theirs?.data, balance: received });
+  await saveWallet(ctx, recipient, received);
   await record(ctx, "moneySent", {
     delta: -sent,
     balance,
@@ -100,11 +102,9 @@ export async function ledger(
     ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
       reason: "invalid_input",
     });
-  return await ctx.list(HISTORY, {
-    filter: { owner: ctx.member.id },
-    where: { gt: ["delta", -Number.MAX_SAFE_INTEGER] },
-    sort: [[{ metadata: "createdAt" }, "desc"]],
-    size: 20,
-    after,
-  });
+  return await historyPage(
+    ctx,
+    { owner: ctx.member.id },
+    { size: 20, after, money: true },
+  );
 }

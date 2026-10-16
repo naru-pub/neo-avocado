@@ -1,6 +1,4 @@
 import {
-  PROFILES,
-  SETTINGS,
   MESSAGES,
   kstDay,
   record,
@@ -11,6 +9,8 @@ import {
   lacking,
 } from "../../modules/shared.js";
 import { callsUnread } from "../../modules/roleplay.js";
+import { communitySettings } from "../../modules/access.js";
+import { profileOf } from "../../modules/members.js";
 import type { Ctx, NaruDocument, Where } from "../../modules/naru-types.js";
 
 export const readOnly = ["messageStatus", "conversations"];
@@ -34,12 +34,12 @@ export async function sendMessage(
       reason: "invalid_recipients",
     });
   const message = text(body, 5000, true);
-  if (!(await ctx.get(PROFILES, ctx.member.id)))
+  if (!(await profileOf(ctx, ctx.member.id)))
     ctx.fail("CONFLICT", "먼저 닉네임을 등록해 주세요.", {
       reason: "no_profile",
     });
   for (const id of recipients) {
-    const recipient = await ctx.get(PROFILES, id);
+    const recipient = await profileOf(ctx, id);
     if (
       id === ctx.member.id ||
       !recipient ||
@@ -49,7 +49,7 @@ export async function sendMessage(
         reason: "no_recipient",
       });
   }
-  const settings = (await ctx.get(SETTINGS, "community"))?.data ?? {};
+  const settings = await communitySettings(ctx);
   // The original makes each send pass a captcha (bbs/memo_form_update.php);
   // here a member may send so many a day (0: no limit), so one account
   // cannot fill the site's storage with mail.

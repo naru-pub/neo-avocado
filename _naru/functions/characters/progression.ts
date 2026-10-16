@@ -1,11 +1,8 @@
 import {
   CHARACTERS,
   CHARACTER_STATE,
-  HISTORY,
   INVENTORY,
   ITEMS,
-  SETTINGS,
-  WALLETS,
   LEVELS,
   TITLES,
   ownCharacter,
@@ -14,6 +11,8 @@ import {
   characterState,
   siteOpen,
 } from "../../modules/shared.js";
+import { communitySettings } from "../../modules/access.js";
+import { historyPage, walletOf } from "../../modules/members.js";
 import type { Ctx } from "../../modules/naru-types.js";
 
 export const readOnly = ["characterStatus", "characterSheet"];
@@ -64,13 +63,12 @@ export async function characterSheet(
       reason: "no_character",
     });
   const owner = profile.createdBy ?? profile.data.owner ?? null;
-  const settings = (await ctx.get(SETTINGS, "community"))?.data ?? {};
-  const page = await ctx.list(HISTORY, {
-    filter: { kind: "exp", character },
-    sort: [[{ metadata: "createdAt" }, "desc"]],
-    size,
-    after,
-  });
+  const settings = await communitySettings(ctx);
+  const page = await historyPage(
+    ctx,
+    { character, kind: "exp" },
+    { size, after },
+  );
   const exp = page.documents.map((row) => ({
     at: row.data.at,
     delta: row.data.expDelta,
@@ -97,7 +95,7 @@ export async function characterSheet(
   }
   const balance =
     settings.viewerMoney === true && owner
-      ? ((await ctx.get(WALLETS, owner))?.data.balance ?? 0)
+      ? (await walletOf(ctx, owner)).balance
       : null;
   return { exp, expCursor, inventory, balance };
 }

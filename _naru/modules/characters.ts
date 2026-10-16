@@ -4,13 +4,14 @@
 import {
   CHARACTER_FIELDS,
   CHARACTER_STATE,
-  PROFILES,
   author,
   characterState,
   imageUrl,
   weightedRows,
 } from "./shared.js";
 import type { Ctx, Data, NaruDocument, ReadCtx } from "./naru-types.js";
+import { profileByNick, setMainCharacter } from "./members.js";
+import type { Profile } from "./members.js";
 
 export const CHARACTER_TYPES = ["main", "sub", "npc"];
 
@@ -303,14 +304,10 @@ export async function syncApproval(ctx: Ctx, row: NaruDocument, state: string) {
  * The member the site owner names by nickname, as the admin form names the
  * owner by ID (adm/character_form_update.php:9-13).
  */
-export async function memberByNick(
-  ctx: Ctx,
-  nick: unknown,
-): Promise<NaruDocument> {
+export async function memberByNick(ctx: Ctx, nick: unknown): Promise<Profile> {
   const found =
     typeof nick === "string" && nick.trim()
-      ? (await ctx.list(PROFILES, { filter: { nick: nick.trim() }, size: 1 }))
-          .documents[0]
+      ? await profileByNick(ctx, nick.trim())
       : null;
   if (!found)
     ctx.fail("INVALID_REQUEST", "존재하지 않는 회원 정보 입니다.", {
@@ -323,14 +320,7 @@ export async function memberByNick(
  * A member with no main character gets this one, as the admin's save sets
  * the member's ch_id while it is empty (adm/character_form_update.php:84).
  */
-export async function claimMain(
-  ctx: Ctx,
-  profile: NaruDocument,
-  character: string,
-) {
+export async function claimMain(ctx: Ctx, profile: Profile, character: string) {
   if (!profile.data.mainCharacter)
-    await ctx.set(PROFILES, profile.id, {
-      ...profile.data,
-      mainCharacter: character,
-    });
+    await setMainCharacter(ctx, profile.id, character);
 }

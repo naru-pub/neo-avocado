@@ -1,5 +1,6 @@
 import { applyTitles, deleteTitle } from "./admin-titles.js";
 import { resumeCleanup } from "./admin-cleanup.js";
+import { withTables } from "./admin-tables.js";
 import { config } from "./config.js";
 import {
   VISIT_BREAKDOWNS,
@@ -1327,8 +1328,10 @@ await run(async () => {
   const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
   naru = createNaru(config.site ? { site: config.site } : undefined);
   renderNav();
-  owner = await naru.auth.session();
-  if (!owner) return;
+  const session = await naru.auth.session();
+  if (!session) return;
+  // The foundation's tables stand in for the collections they replaced.
+  owner = withTables(session);
   $("adminWelcome").hidden = true;
   $("adminWorkspace").hidden = false;
   references.characters = await all("neo_avocado_characters");

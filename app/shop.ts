@@ -18,19 +18,15 @@ import {
   uploadMedia,
   route,
   renderPages,
+  query,
 } from "./core.js";
 import { amountText, expText, moneyText } from "./names.js";
 import { onDisplay } from "../_naru/modules/display.js";
 import { editCharacter } from "./characters.js";
 
 async function loadBalance() {
-  const wallet = await collection(COLLECTION.wallets)
-    .get(state.member.id)
-    .catch((error) => {
-      if (error?.code === "NOT_FOUND") return null;
-      throw error;
-    });
-  $("balance").textContent = amountText(wallet?.data.balance ?? 0);
+  const { balance } = await query("economy/wallet:wallet");
+  $("balance").textContent = amountText(balance);
 }
 async function loadShop() {
   state.ownCharacters = await ownCharacters();
@@ -67,24 +63,18 @@ async function loadShop() {
  * in the first.
  */
 async function loadShopFront() {
-  const settings = await collection(COLLECTION.settings)
-    .get("community")
-    .catch((error) => {
-      if (error?.code === "NOT_FOUND") return null;
-      throw error;
-    });
-  const categories = String(settings?.data.shopCategories ?? "일반, 이벤트")
+  const settings = await query("content/site:settings");
+  const categories = String(settings.shopCategories ?? "일반, 이벤트")
     .split(",")
     .map((name) => name.trim())
     .filter(Boolean);
   state.shopCategories = categories.length ? categories : ["일반"];
   if (!state.shopCategories.includes(state.shopCategory))
     state.shopCategory = state.shopCategories[0];
-  state.shopGreeting = settings?.data.shopGreeting ?? "";
+  state.shopGreeting = settings.shopGreeting ?? "";
   $("shopTalk").textContent = state.shopGreeting;
-  $("shopNpc").hidden = !settings?.data.shopNpc;
-  if (settings?.data.shopNpc)
-    $<HTMLImageElement>("shopNpc").src = settings.data.shopNpc;
+  $("shopNpc").hidden = !settings.shopNpc;
+  if (settings.shopNpc) $<HTMLImageElement>("shopNpc").src = settings.shopNpc;
   $("shopCategories").replaceChildren(
     ...state.shopCategories.map((name) => {
       const button = document.createElement("button");

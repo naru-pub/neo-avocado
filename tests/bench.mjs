@@ -196,7 +196,7 @@ try {
               data: { logId: post.document.id, text: "댓글" },
             });
         }
-        await member.call("community/presence:seen", { where: "home" });
+        await member.mutate("community/presence:seen", { where: "home" });
       },
       { P, nick },
     );

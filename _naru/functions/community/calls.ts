@@ -1,10 +1,10 @@
 import {
   PREFIX,
   CALLS,
-  PROFILES,
   communityAccess,
   logReadable,
 } from "../../modules/shared.js";
+import { profileOf } from "../../modules/members.js";
 import { callsUnread } from "../../modules/roleplay.js";
 import type { Ctx } from "../../modules/naru-types.js";
 
@@ -30,7 +30,7 @@ export async function callHistory(
     ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
       reason: "invalid_input",
     });
-  const profile = await ctx.get(PROFILES, ctx.member.id);
+  const profile = await profileOf(ctx, ctx.member.id);
   const seen = Number.isFinite(profile?.data.callsSeenAt)
     ? profile.data.callsSeenAt
     : 0;
@@ -77,15 +77,11 @@ export async function callHistory(
 
 /** Marks every call seen; the member's other tabs clear their notice too. */
 export async function seeCalls(ctx: Ctx) {
-  const profile = await ctx.get(PROFILES, ctx.member.id);
-  if (!profile)
+  if (!(await profileOf(ctx, ctx.member.id)))
     ctx.fail("CONFLICT", "먼저 닉네임을 등록해 주세요.", {
       reason: "no_profile",
     });
-  await ctx.set(PROFILES, profile.id, {
-    ...profile.data,
-    callsSeenAt: ctx.now,
-  });
+  await ctx.sql`UPDATE profiles SET calls_seen_at = ${ctx.now} WHERE member = ${ctx.member.id}`;
   ctx.notify(ctx.member.id, { calls: false });
   return null;
 }

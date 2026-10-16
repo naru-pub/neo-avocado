@@ -1,7 +1,6 @@
 import {
   INVENTORY,
   ITEMS,
-  PROFILES,
   RECIPES,
   CHARACTERS,
   record,
@@ -19,6 +18,7 @@ import {
   lacking,
   MESSAGES,
 } from "../../modules/shared.js";
+import { profileOf } from "../../modules/members.js";
 import type { Ctx, Data, NaruDocument } from "../../modules/naru-types.js";
 
 /** Selling consumes exactly one owned item; prices always come from the catalog. */
@@ -84,7 +84,7 @@ export async function gift(
   if (
     typeof recipient !== "string" ||
     (self && !character) ||
-    !(await ctx.get(PROFILES, recipient))
+    !(await profileOf(ctx, recipient))
   )
     ctx.fail("INVALID_REQUEST", "받는 회원을 확인해 주세요.", {
       reason: "no_recipient",
@@ -122,9 +122,7 @@ export async function gift(
     ? await ctx.get(CHARACTERS, owned.data.character)
     : null;
   const senderName =
-    from?.data.name ??
-    (await ctx.get(PROFILES, ctx.member.id))?.data.nick ??
-    "";
+    from?.data.name ?? (await profileOf(ctx, ctx.member.id))?.data.nick ?? "";
   const transferred = await ctx.set(INVENTORY, owned.id, {
     ...owned.data,
     owner: recipient,
@@ -137,7 +135,7 @@ export async function gift(
   // The item arrives either way; the note only to a member taking 쪽지.
   if (
     !self &&
-    (await ctx.get(PROFILES, recipient))?.data.acceptMessages !== false
+    (await profileOf(ctx, recipient))?.data.acceptMessages !== false
   ) {
     await ctx.add(MESSAGES, {
       from: ctx.member.id,

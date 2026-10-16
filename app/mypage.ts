@@ -16,6 +16,8 @@ import {
   STATE_NAMES,
   renderPages,
   show,
+  memberSettings,
+  mutate,
 } from "./core.js";
 import { expText, moneyText } from "./names.js";
 import { configureBoard, openLogNumber } from "./logs.js";
@@ -146,11 +148,9 @@ async function loadMyPage() {
   // 신규 캐릭터 등록 shows while the owner allows creation and the member
   // has fewer than the limit (mypage/character/index.php); the server checks
   // the same.
-  const settings = await collection(COLLECTION.settings)
-    .get("community")
-    .catch(() => null);
-  const open = settings?.data.characterCreation !== false;
-  const limit = settings?.data.characterLimit ?? 1;
+  const settings = await memberSettings();
+  const open = settings.characterCreation !== false;
+  const limit = settings.characterLimit ?? 1;
   $("newCharacter").hidden = !open || (limit > 0 && characters.length >= limit);
   $("characterForm").hidden = true;
 }
@@ -387,7 +387,7 @@ $("myLeave").onclick = () =>
       )
     )
       return;
-    await caller().call("community/membership:leave", { confirm: true });
+    await mutate("community/membership:leave", { confirm: true });
     say("탈퇴했습니다.");
     showAdmission("left");
   });

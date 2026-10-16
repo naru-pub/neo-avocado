@@ -10,11 +10,13 @@
 import { config } from "./config.js";
 import {
   $,
-  caller,
   clearPrivateViews,
   collection,
   COLLECTION,
   edit,
+  memberSettings,
+  mutate,
+  query,
   movedSinceOpening,
   opening,
   run,
@@ -78,17 +80,14 @@ $("editProfile").onclick = () => {
     ],
     async ({ nick, acceptMessages, commentAlerts }) => {
       if (!nick) throw new Error("닉네임을 입력해 주세요.");
-      if (nick !== profile.data.nick && reserved(await settings(), nick))
+      if (nick !== profile.data.nick && reserved(await memberSettings(), nick))
         throw new Error(RESERVED);
-      // A member's own profile is written directly; rules/profiles.js
-      // lets them change their nickname and preferences only.
-      const saved = await state.member
-        .collection(COLLECTION.profiles)
-        .set(
-          state.member.id,
-          { ...profile.data, nick, acceptMessages, commentAlerts },
-          { condition: { revision: profile.revision } },
-        );
+      // The member changes their nickname and preferences only.
+      const { profile: saved } = await mutate("community/profiles:update", {
+        nick,
+        acceptMessages,
+        commentAlerts,
+      });
       state.nicks.set(state.member.id, Promise.resolve(nick));
       show(saved);
       await loadLogs();
@@ -96,18 +95,10 @@ $("editProfile").onclick = () => {
     },
   );
 };
-/** The community settings (rules/settings.js), or none while unreadable. */
-const settings = () =>
-  collection(COLLECTION.settings)
-    .get("community")
-    .then(
-      (row) => row.data,
-      () => ({}),
-    );
 const RESERVED = "이미 예약된 단어로 사용할 수 없는 닉네임입니다.";
 /**
  * Whether a nickname is reserved (cf_prohibit_id, lib/register.lib.php);
- * the profiles rule and membership:join refuse it too. The owner may.
+ * profiles:update and membership:join refuse it too. The owner may.
  */
 function reserved(community, nick) {
   if (state.owner) return false;
@@ -122,7 +113,7 @@ function reserved(community, nick) {
  * with a box to tick (register.skin.php), where written.
  */
 async function showAgreements() {
-  const community = await settings();
+  const community = await memberSettings();
   for (const key of ["stipulation", "characterNotice"]) {
     const text = typeof community[key] === "string" ? community[key] : "";
     $(`${key}Text`).textContent = text;
@@ -138,7 +129,7 @@ async function start() {
   if (!state.member) return visit();
   let status;
   try {
-    status = await caller().call("community/membership:membership");
+    status = await query("community/membership:membership");
   } catch (error) {
     // Naru's refusal says when the site has not approved this member yet.
     if (!standing(error)) throw error;
@@ -227,10 +218,8 @@ async function showMainCharacter(profile) {
   }
   $("cardThumb").replaceChildren("⌘");
   if (!profile) return;
-  const settings = await collection(COLLECTION.settings)
-    .get("community")
-    .catch(() => null);
-  const open = settings?.data.characterCreation !== false;
+  const settings = await memberSettings();
+  const open = settings.characterCreation !== false;
   $("cardDescript").textContent = open
     ? "보유중인 캐릭터가 없습니다."
     : "캐릭터 생성기간이 아닙니다.";
@@ -263,7 +252,7 @@ $("profileForm").onsubmit = (event) => {
     const nick = $<HTMLInputElement>("nick").value.trim();
     if (!nick) return;
     // 회원 번호를 ID로 쓰는 문서는 그 회원만 만들 수 있다.
-    const joined = await caller().call("community/membership:join", {
+    const joined = await mutate("community/membership:join", {
       nick,
       // The boxes shown are required, so the form is sent only once ticked.
       agreed: !$("stipulationBox").hidden || !$("characterNoticeBox").hidden,

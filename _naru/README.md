@@ -29,11 +29,14 @@ collection.
 - `community-board.js`: posts and comments, by board level and secret posts.
 - `characters.js`: characters, with only the custom fields the reader may see.
 - `boards.js`: the boards the reader's level may list.
-- `profiles.js`: nicknames for everyone, whole profiles for members; a member
-  edits their own nickname and preferences directly (`canWrite`).
-- `own.js`: a member's own wallet and inventory.
-- `settings.js`, `character-fields.js`, `shown.js`: community settings, field
-  definitions without admin-only ones, and catalogues without deleted rows.
+- `own.js`: a member's own inventory.
+- `character-fields.js`, `shown.js`: field definitions without admin-only
+  ones, and catalogues without deleted rows.
+
+Profiles, settings, members, wallets and the site's frame are tables now
+(`migrations/0001_foundation.sql`), read through `queries/` and written
+through `mutations/`; rules and site functions read them with `ctx.sql`
+through `modules/access.js` and `modules/members.js`.
 
 Rules import `modules/shared.js` for member access, boards and secret
 visibility, so they and the site functions that write the community

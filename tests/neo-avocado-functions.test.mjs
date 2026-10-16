@@ -30,40 +30,137 @@ import {
   readMessage,
   removeMessage,
   messageStatus,
-  membership,
-  join,
-  leave,
   posts,
   comments,
   money,
   grants,
   sheet,
-  presence,
-  quests,
-  contentPages,
-  contentPage,
   callHistory,
   seeCalls,
   reviewCharacter,
-  site,
   commentCounts,
   moderatePost,
 } from "../dist/_naru/modules/index.js";
 import { readable, canWrite } from "../dist/_naru/rules/community-board.js";
 import * as characterRule from "../dist/_naru/rules/characters.js";
-import * as profileRule from "../dist/_naru/rules/profiles.js";
 import { matches } from "./where.mjs";
 import { nativeRead } from "./native-read.mjs";
 import { onDisplay } from "../dist/_naru/modules/display.js";
+// The foundation's queries and mutations, which the old functions' tests
+// still use to join, visit and read the site's frame.
+import { membership } from "../dist/_naru/queries/community/membership.js";
+import { join, leave } from "../dist/_naru/mutations/community/membership.js";
+import { seen } from "../dist/_naru/mutations/community/presence.js";
+import { online } from "../dist/_naru/queries/community/presence.js";
+import { site } from "../dist/_naru/queries/content/site.js";
+import { nicks } from "../dist/_naru/queries/community/profiles.js";
+import { wallet } from "../dist/_naru/queries/economy/wallet.js";
+import {
+  dataOf,
+  mappingOf,
+  rolesOfData,
+  rowOf,
+  settingsKey,
+} from "../dist/_naru/modules/documents.js";
+import { database, migrations, sqlOf } from "./sql-ctx.mjs";
 
+const presence = { seen, online };
 const P = "neo_avocado_";
+const MIGRATIONS = await migrations();
+
+/**
+ * One of the foundation's tables as the Map of documents the old tests
+ * set up and inspect: get and set whole documents, keyed by ID. History
+ * numbers its own rows, whatever ID a test gives.
+ */
+function tableView(db, roles, map) {
+  const keyOf = (id) => (map.settings ? settingsKey(map, id) : id);
+  const where = map.settings && map.settings !== true ? ` WHERE key = ?` : "";
+  const scope = map.settings && map.settings !== true ? [map.settings.key] : [];
+  const idOf = (row) =>
+    map.settings
+      ? map.settings === true
+        ? row.key
+        : map.settings.id
+      : String(row[map.key]);
+  const document = (row) => {
+    const id = idOf(row);
+    const data = dataOf(map, row, roles.get(id) ?? []);
+    if (map.table === "profiles") {
+      // As profiles:own shows it: no 대표 is null.
+      data.mainCharacter ??= null;
+      const favorites = db
+        .prepare("SELECT post FROM favorites WHERE member = ? ORDER BY id DESC")
+        .all(id)
+        .map((entry) => entry.post);
+      if (favorites.length) data.favorites = favorites;
+    }
+    return data;
+  };
+  const all = () =>
+    db
+      .prepare(`SELECT * FROM ${map.table}${where} ORDER BY rowid`)
+      .all(...scope);
+  const view = {
+    get(id) {
+      const row = db
+        .prepare(`SELECT * FROM ${map.table} WHERE ${map.key} = ?`)
+        .get(keyOf(id));
+      return row ? document(row) : undefined;
+    },
+    has: (id) => view.get(id) !== undefined,
+    set(id, data) {
+      const row = rowOf(map, data, Date.now());
+      if (!map.generated) row[map.key] = keyOf(id);
+      const columns = Object.keys(row);
+      db.prepare(
+        `INSERT OR REPLACE INTO ${map.table} (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`,
+      ).run(...Object.values(row));
+      if (map.roles) roles.set(id, rolesOfData(data, roles.get(id) ?? []));
+      if (map.table === "profiles" && Array.isArray(data.favorites)) {
+        db.prepare("DELETE FROM favorites WHERE member = ?").run(id);
+        for (const post of [...data.favorites].reverse())
+          db.prepare("INSERT INTO favorites (member, post) VALUES (?, ?)").run(
+            id,
+            post,
+          );
+      }
+      return view;
+    },
+    delete(id) {
+      db.prepare(`DELETE FROM ${map.table} WHERE ${map.key} = ?`).run(
+        keyOf(id),
+      );
+      if (map.roles) roles.set(id, rolesOfData({}, roles.get(id) ?? []));
+      return true;
+    },
+    get size() {
+      return all().length;
+    },
+    keys: () => all().map(idOf)[Symbol.iterator](),
+    values: () => all().map(document)[Symbol.iterator](),
+    entries: () =>
+      all()
+        .map((row) => [idOf(row), document(row)])
+        [Symbol.iterator](),
+    [Symbol.iterator]: () => view.entries(),
+  };
+  return view;
+}
+
 function fakeCtx({ now = Date.parse("2030-01-01T03:00:00Z"), roll = 0 } = {}) {
   // Functions roll with Math.random, the host's on Naru.
   Math.random = () => roll;
   const store = new Map();
   let added = 0;
+  // The site's tables, and members' roles, as Naru keeps them.
+  const db = database(MIGRATIONS);
+  const roles = new Map();
   const table = (name) => {
-    if (!store.has(name)) store.set(name, new Map());
+    if (!store.has(name)) {
+      const map = mappingOf(name);
+      store.set(name, map ? tableView(db, roles, map) : new Map());
+    }
     return store.get(name);
   };
   // What ctx.notify/broadcast and ctx.media.delete sent or queued.
@@ -132,6 +229,13 @@ function fakeCtx({ now = Date.parse("2030-01-01T03:00:00Z"), roll = 0 } = {}) {
       return await ctx.set(name, id, data);
     },
     delete: async (name, id) => table(name).delete(id),
+    sql: sqlOf(db),
+    rolesOf: async (ids) =>
+      Object.fromEntries(ids.map((id) => [id, roles.get(id) ?? []])),
+    setRoles: async (member, list) => {
+      roles.set(member, [...new Set(list)].sort());
+      return null;
+    },
   };
   // A 로그 board ("default"), as the owner would make one: the original
   // installs no boards. Tests that need others set them.
@@ -149,7 +253,7 @@ function fakeCtx({ now = Date.parse("2030-01-01T03:00:00Z"), roll = 0 } = {}) {
   });
   // Tests give one member several characters; the limit has its own test.
   const settingsTable = table(`${P}settings`);
-  const set = settingsTable.set.bind(settingsTable);
+  const set = settingsTable.set;
   settingsTable.set = (id, data) =>
     set(id, id === "community" ? { characterLimit: 0, ...data } : data);
   settingsTable.set("community", {});
@@ -158,8 +262,8 @@ function fakeCtx({ now = Date.parse("2030-01-01T03:00:00Z"), roll = 0 } = {}) {
 
 /**
  * A page's write, by collection and operation: posts, comments and characters
- * through their site functions, profiles directly, as the profiles rule
- * allows. Nothing else is written by pages.
+ * through their site functions. Nothing else is written by pages as
+ * documents.
  */
 async function communityWrite(
   ctx,
@@ -177,21 +281,6 @@ async function communityWrite(
     return operation === "delete"
       ? functions[kind].remove(ctx, args)
       : (functions[kind].write ?? functions[kind].save)(ctx, args);
-  if (kind === "profiles" && operation === "set") {
-    const before = await ctx.get(collection, id);
-    const after = { id, data };
-    if (
-      !before ||
-      (await profileRule.canWrite(ctx, {
-        collection,
-        operation: "update",
-        before,
-        after,
-      })) !== true
-    )
-      throw Object.assign(new Error("Denied."), { code: "ACCESS_DENIED" });
-    return { document: await ctx.set(collection, id, data) };
-  }
   throw Object.assign(new Error("No write path."), { code: "ACCESS_DENIED" });
 }
 
@@ -208,53 +297,6 @@ const refusal = (call) =>
       throw error;
     },
   );
-
-test("the day's first visit pays the login reward once per Korean day, and joining the sign-up reward once", async () => {
-  const { ctx, table } = fakeCtx();
-  // The original installs both at 0: nothing is paid, and nothing recorded.
-  await join(ctx, { nick: "앨리스" });
-  await presence.seen(ctx, { where: "home" });
-  assert.equal(table(`${P}wallets`).get("m-1").balance, 0);
-  assert.equal(table(`${P}history`).size, 0);
-  table(`${P}settings`).set("community", {
-    loginReward: 100,
-    signupReward: 30,
-  });
-  // The day was already marked; the next Korean day pays.
-  await presence.seen(ctx, { where: "home", visit: true });
-  assert.equal(table(`${P}wallets`).get("m-1").balance, 0);
-  // 2030-01-01 15:00 UTC is already 2 January in Korea.
-  ctx.now = Date.parse("2030-01-01T15:00:00Z");
-  await presence.seen(ctx, { where: "home" });
-  await presence.seen(ctx, { where: "shop", visit: true });
-  assert.equal(table(`${P}wallets`).get("m-1").balance, 100);
-  assert.equal(table(`${P}wallets`).get("m-1").lastDaily, "2030-01-02");
-  assert.deepEqual(
-    [...table(`${P}history`).values()].map(({ kind, delta, memo }) => ({
-      kind,
-      delta,
-      memo,
-    })),
-    [{ kind: "daily", delta: 100, memo: "2030-01-02 첫로그인" }],
-  );
-  // Changing the nickname is no new sign-up.
-  await join(ctx, { nick: "앨리스2" });
-  assert.equal(table(`${P}wallets`).get("m-1").balance, 100);
-  // A new member is paid on joining, once.
-  ctx.member = { id: "m-2" };
-  await presence.seen(ctx, { where: "home" });
-  assert.equal(table(`${P}wallets`).get("m-2"), undefined);
-  await join(ctx, { nick: "밥" });
-  assert.equal(table(`${P}wallets`).get("m-2").balance, 30);
-  await presence.seen(ctx, { where: "home" });
-  assert.equal(table(`${P}wallets`).get("m-2").balance, 130);
-  // A member who left is paid nothing.
-  ctx.member = { id: "m-3" };
-  await join(ctx, { nick: "캐럴" });
-  table(`${P}members`).set("m-3", { role: "member", left: "2030-01-02" });
-  await presence.seen(ctx, { where: "home" });
-  assert.equal(table(`${P}wallets`).get("m-3").balance, 30);
-});
 
 test("boards enforce independent levels, secret bodies and parent comment access", async () => {
   const { ctx, table } = fakeCtx();
@@ -359,7 +401,7 @@ test("boards enforce independent levels, secret bodies and parent comment access
     ).documents,
     [],
   );
-  table(`${P}members`).get("m-2").role = "moderator";
+  table(`${P}members`).set("m-2", { role: "moderator" });
   assert.equal(
     (
       await nativeRead(ctx, {
@@ -912,11 +954,13 @@ test("history ignores a caller's owner filter, paginates, and titles require act
   table(`${P}history`).set("a", { owner: "m-1", kind: "daily" });
   table(`${P}history`).set("b", { owner: "m-2", memo: "private" });
   table(`${P}history`).set("c", { owner: "m-1", kind: "buy" });
+  // Newest first.
   const first = await history(ctx, { owner: "m-2", size: 1 });
-  assert.equal(first.documents[0].id, "a");
+  assert.equal(first.documents[0].data.kind, "buy");
   assert.equal(
-    (await history(ctx, { after: first.nextCursor, size: 1 })).documents[0].id,
-    "c",
+    (await history(ctx, { after: first.nextCursor, size: 1 })).documents[0].data
+      .kind,
+    "daily",
   );
   assert.equal(await refusal(history(ctx, { size: 21 })), "invalid_input");
 });
@@ -1738,92 +1782,6 @@ test("gacha picks by weight with the server's roll, and costs what it says", asy
   // and fails the call, which Naru then rolls back.
   table(`${P}gacha`).set("g", { item: "gone", weight: 1 });
   await assert.rejects(async () => await gacha(ctx), /gone/);
-});
-
-test("quest reads enforce Korean start/end boundaries, categories and pagination", async () => {
-  const { ctx, table } = fakeCtx();
-  ctx.now = Date.parse("2030-01-01T00:00:00Z");
-  table(`${P}quests`).set("active", {
-    name: "Active",
-    type: "daily",
-    startsAt: "2030-01-01T09:00",
-    endsAt: "2030-01-01T10:00",
-    images: [],
-  });
-  table(`${P}quests`).set("future", {
-    type: "daily",
-    startsAt: "2030-01-01T10:00",
-  });
-  table(`${P}quests`).set("ended", {
-    type: "daily",
-    endsAt: "2030-01-01T09:00",
-  });
-  table(`${P}quests`).set("corrupt", {
-    type: "daily",
-    startsAt: "2030-02-30T09:00",
-  });
-  table(`${P}quests`).set("weekly", { type: "weekly", images: [] });
-  assert.deepEqual(
-    (await quests(ctx, { type: "daily" })).documents.map((row) => row.id),
-    ["active"],
-  );
-  assert.deepEqual(
-    (await quests(ctx, { type: "weekly" })).documents.map((row) => row.id),
-    ["weekly"],
-  );
-  assert.equal(await refusal(quests(ctx, { type: "bad" })), "invalid_input");
-  for (let i = 0; i < 60; i++)
-    table(`${P}quests`).set(`extra${i}`, { type: "weekly" });
-  const page = await quests(ctx, { type: "weekly" });
-  assert.equal(page.documents.length, 50);
-  assert.equal(
-    (await quests(ctx, { type: "weekly", after: page.nextCursor })).documents
-      .length,
-    11,
-  );
-});
-
-test("content read levels and publication protect both metadata and selected bodies", async () => {
-  const { ctx, table } = fakeCtx();
-  table(`${P}content`).set("guide", {
-    name: "Guide",
-    body: "Desktop",
-    mobileBody: "Mobile",
-    enabled: true,
-    readLevel: 2,
-    format: "html",
-  });
-  table(`${P}content`).set("restricted", {
-    name: "Restricted",
-    body: "Private",
-    readLevel: 5,
-  });
-  table(`${P}content`).set("draft", {
-    name: "Draft",
-    body: "Secret",
-    enabled: false,
-  });
-  assert.deepEqual((await contentPages(ctx)).documents, [
-    { id: "guide", data: { name: "Guide" } },
-  ]);
-  assert.equal((await contentPage(ctx, { id: "guide" })).page.body, "Desktop");
-  assert.equal(
-    (await contentPage(ctx, { id: "guide", mobile: true })).page.body,
-    "Mobile",
-  );
-  assert.equal(
-    await refusal(contentPage(ctx, { id: "restricted" })),
-    "document_not_found",
-  );
-  assert.equal(
-    await refusal(contentPage(ctx, { id: "draft" })),
-    "document_not_found",
-  );
-  table(`${P}members`).set("m-1", { level: 5 });
-  assert.equal(
-    (await contentPage(ctx, { id: "restricted" })).page.body,
-    "Private",
-  );
 });
 
 test("new posts are broadcast by board and ID only when a base member could list and read them", async () => {
@@ -2716,18 +2674,12 @@ test("visitors read and post only on level-1 boards, as named guests with a pass
     ).documents,
     [],
   );
-  // Nicknames reach visitors; nothing else from a profile does.
-  assert.deepEqual(
-    (
-      await read({
-        collection: `${P}profiles`,
-        operation: "getMany",
-        options: { ids: ["m-1"] },
-      })
-    ).documents[0].data,
-    { nick: "회원" },
-  );
-  for (const collection of ["wallets", "inventory", "messages"])
+  // Nicknames reach visitors; nothing else from a profile does, nor a wallet.
+  assert.deepEqual(await nicks(ctx, { ids: ["m-1"] }), {
+    nicks: { "m-1": "회원" },
+  });
+  assert.equal(await refusal(wallet(ctx)), "sign_in");
+  for (const collection of ["inventory", "messages"])
     assert.equal(
       await refusal(
         read({ collection: `${P}${collection}`, operation: "list" }),
@@ -2826,95 +2778,6 @@ test("visitors read and post only on level-1 boards, as named guests with a pass
   );
   assert.equal(table(`${P}logs`).has(saved.id), false);
   assert.equal(table(`${P}comments`).has("guest-comment"), false);
-});
-
-test("the site frame shows only safe design values and menus/banners a reader may see", async () => {
-  const { ctx, table } = fakeCtx({ now: Date.parse("2030-01-01T03:00:00Z") });
-  table(`${P}design`).set("site", {
-    title: "아보카도",
-    logo: "javascript:alert(1)",
-    background: "https://cdn.example/bg.png",
-    mobileBackground: "http://cdn.example/m.png",
-    mobileLogo: "https://cdn.example/m-logo.png",
-    backgroundColor: "red;}",
-    backgroundRepeat: "space;}",
-    backgroundPosition: "center bottom",
-    font: "comic",
-    colors: { accent: "#123456", ink: "red;}" },
-  });
-  table(`${P}menus`).set("a", { name: "공지", link: "board:notice", order: 2 });
-  table(`${P}menus`).set("b", {
-    name: "소개",
-    link: "content:about",
-    order: 1,
-  });
-  table(`${P}menus`).set("c", { name: "운영", link: "tab:shop", level: 2 });
-  table(`${P}menus`).set("d", { name: "나쁜", link: "javascript:alert(1)" });
-  table(`${P}menus`).set("e", {
-    name: "꺼짐",
-    link: "board:x",
-    enabled: false,
-  });
-  table(`${P}banners`).set("now", {
-    image: "https://cdn.example/1.png",
-    startsAt: "2030-01-01T11:00",
-    endsAt: "2030-01-01T13:00",
-  });
-  table(`${P}banners`).set("later", {
-    image: "https://cdn.example/2.png",
-    startsAt: "2030-01-01T13:00",
-  });
-  table(`${P}banners`).set("intro", {
-    image: "https://cdn.example/3.png",
-    place: "intro",
-  });
-  ctx.member = null;
-  const frame = await site(ctx);
-  assert.deepEqual(frame.design, {
-    // 디자인 사용 is off unless the owner turns it on.
-    enabled: false,
-    title: "아보카도",
-    description: "",
-    favicon: null,
-    logo: null,
-    mobileLogo: "https://cdn.example/m-logo.png",
-    background: "https://cdn.example/bg.png",
-    // Only HTTPS pictures, a #rrggbb colour and the listed choices.
-    mobileBackground: null,
-    backgroundColor: null,
-    backgroundRepeat: "repeat",
-    backgroundPosition: "center bottom",
-    headerBackground: null,
-    font: "sans",
-    colors: { accent: "#123456" },
-  });
-  assert.deepEqual(
-    frame.menus.map((menu) => menu.id),
-    ["b", "a"],
-  );
-  // No background music until the owner sets a YouTube link; only its ID
-  // reaches pages.
-  assert.equal(frame.bgm, null);
-  table(`${P}settings`).set("community", {
-    bgm: "https://www.youtube.com/playlist?list=PLx0sYbCqOb8TBPRdmBHs5Iftvv9TPboYG",
-  });
-  assert.deepEqual((await site(ctx)).bgm, {
-    list: "PLx0sYbCqOb8TBPRdmBHs5Iftvv9TPboYG",
-  });
-  table(`${P}settings`).set("community", { bgm: "javascript:alert(1)" });
-  assert.equal((await site(ctx)).bgm, null);
-  assert.deepEqual(
-    frame.banners.map((banner) => [banner.id, banner.place]),
-    [
-      ["intro", "intro"],
-      ["now", "main"],
-    ],
-  );
-  ctx.member = { id: "m-1" };
-  assert.deepEqual(
-    (await site(ctx)).menus.map((menu) => menu.id),
-    ["c", "b", "a"],
-  );
 });
 
 test("logs are numbered per board, tagged for search, counted and moderated", async () => {
@@ -3220,9 +3083,9 @@ test("사이트공개: visitors read characters and the viewer while the site is
     "character_fields",
     "sides",
     "boards",
-    "profiles",
   ])
     assert.deepEqual(await ids(collection), [], collection);
+  assert.deepEqual(await nicks(ctx, { ids: ["m-1"] }), { nicks: {} });
   assert.deepEqual(await ids("logs", { filter: { board: "free" } }), []);
   assert.equal(
     await refusal(characterStatus(ctx, { character: "hero" })),
@@ -3282,25 +3145,6 @@ test("the viewer's experience history comes a page at a time (member/exp.php)", 
   );
 });
 
-test("a member who leaves becomes a guest until the owner clears the date", async () => {
-  const { ctx, table } = fakeCtx({ now: Date.parse("2030-01-01T16:00:00Z") });
-  await join(ctx, { nick: "떠날이" });
-  table(`${P}members`).get("m-1").level = 5;
-  assert.equal(await refusal(leave(ctx, {})), "invalid_input");
-  assert.deepEqual(await leave(ctx, { confirm: true }), { left: true });
-  // The date is Korea's: 01:00 the next day there.
-  assert.equal(table(`${P}members`).get("m-1").left, "2030-01-02");
-  const left = await membership(ctx);
-  assert.equal(left.left, true);
-  assert.equal(left.level, 1);
-  assert.equal(await refusal(leave(ctx, { confirm: true })), "left");
-  assert.equal(await refusal(join(ctx, { nick: "다시" })), "left");
-  // Their profile stays; the owner clears the date to let them back.
-  assert.equal(table(`${P}profiles`).get("m-1").nick, "떠날이");
-  delete table(`${P}members`).get("m-1").left;
-  assert.equal((await membership(ctx)).level, 5);
-});
-
 test("history narrows to one kind, as the experience list asks", async () => {
   const { ctx, table } = fakeCtx();
   table(`${P}history`).set("h1", { owner: "m-1", kind: "buy", at: 1 });
@@ -3319,64 +3163,11 @@ test("history narrows to one kind, as the experience list asks", async () => {
     exp: 9,
   });
   assert.deepEqual(
-    (await history(ctx, { kind: "exp" })).documents.map((row) => row.id),
-    ["h2"],
+    (await history(ctx, { kind: "exp" })).documents.map((row) => row.data.at),
+    [2],
   );
   assert.equal((await history(ctx, {})).documents.length, 2);
   assert.equal(await refusal(history(ctx, { kind: 5 })), "invalid_input");
-});
-
-test("visits record where members are and count each Korean day, bounded", async () => {
-  const { ctx, table } = fakeCtx({ now: Date.parse("2030-01-01T15:30:00Z") });
-  await join(ctx, { nick: "앨리스" });
-  await presence.seen(ctx, {
-    where: "상점",
-    visit: true,
-    browser: "Chrome",
-    os: "macOS",
-    device: "PC",
-    domain: "twitter.com",
-  });
-  await presence.seen(ctx, {
-    where: "로그",
-    visit: true,
-    browser: "<script>",
-    os: "x".repeat(500),
-  });
-  assert.deepEqual(table(`${P}presence`).get("m-1"), {
-    nick: "앨리스",
-    where: "로그",
-    at: Date.parse("2030-01-01T15:30:00Z"),
-  });
-  // 15:30 UTC is 00:30 the next day in Korea.
-  const day = table(`${P}visits`).get("2030-01-02");
-  assert.equal(day.total, 2);
-  assert.deepEqual(day.members, { "m-1": 2 });
-  assert.deepEqual(day.hours, { 0: 2 });
-  assert.deepEqual(day.browsers, { Chrome: 1, 기타: 1 });
-  assert.deepEqual(day.os, { macOS: 1, 기타: 1 });
-  assert.deepEqual(day.domains, { "twitter.com": 1 });
-  // Moving between pages says where a member is, and counts nothing.
-  await presence.seen(ctx, { where: "마이페이지" });
-  assert.equal(table(`${P}presence`).get("m-1").where, "마이페이지");
-  assert.equal(table(`${P}visits`).get("2030-01-02").total, 2);
-  // A visitor counts as a guest and is not listed as here.
-  ctx.member = null;
-  await presence.seen(ctx, { visit: true });
-  await presence.seen(ctx, {});
-  assert.equal(table(`${P}visits`).get("2030-01-02").guests, 1);
-  assert.deepEqual(
-    (await presence.online(ctx)).members.map((member) => member.nick),
-    ["앨리스"],
-  );
-  ctx.now += 11 * 60 * 1000;
-  assert.deepEqual((await presence.online(ctx)).members, []);
-  // Who is here is for members: Naru refuses visitors an export not listed.
-  assert.deepEqual(presence.visitors, ["seen"]);
-  assert.equal(
-    await refusal(presence.seen(ctx, { where: 5 })),
-    "invalid_input",
-  );
 });
 
 test("the owner's switches open and close creating and editing characters, and limit them", async () => {
@@ -3536,7 +3327,7 @@ test("a members-only board group keeps its boards to its members and moderators"
     await refusal(posts.write(ctx, { data: { board: "plans", text: "안녕" } })),
     "access_denied",
   );
-  table(`${P}members`).get("m-1").groups = ["staff"];
+  table(`${P}members`).set("m-1", { groups: ["staff"] });
   assert.deepEqual(await listed(), ["plans"]);
   await posts.write(ctx, { data: { board: "plans", text: "안녕" } });
   // Moderators reach every group; an open group is everyone's.
@@ -4329,12 +4120,10 @@ test("관심 keeps a member's favourite posts, theirs alone, and 경고내역 sh
     (await posts.favorites(ctx)).documents.map((row) => row.id),
     ["thread"],
   );
-  // Another member reads the profile without them.
-  const shown = profileRule.present(
-    { member: { id: "m-2" } },
-    { document: { id: "m-1", data: table(`${P}profiles`).get("m-1") } },
-  );
-  assert.equal(shown.favorites, undefined);
+  // They are the member's own: another's nicknames carry none.
+  assert.deepEqual(await nicks(ctx, { ids: ["m-1"] }), {
+    nicks: { "m-1": table(`${P}profiles`).get("m-1").nick },
+  });
   assert.deepEqual(await posts.favorite(ctx, { id: "thread" }), {
     favorite: false,
   });
@@ -4343,32 +4132,6 @@ test("관심 keeps a member's favourite posts, theirs alone, and 경고내역 sh
     await refusal(posts.favorite(ctx, { id: "missing" })),
     "document_not_found",
   );
-});
-
-test("the site's frame says what a character's page shows, and the owner is not 현재접속자", async () => {
-  const { ctx, table } = fakeCtx();
-  assert.deepEqual((await site(ctx)).viewer, {
-    exp: true,
-    rank: true,
-    stats: true,
-    titles: true,
-    closet: true,
-  });
-  table(`${P}settings`).set("profile", { showStats: false, showCloset: false });
-  assert.deepEqual((await site(ctx)).viewer, {
-    exp: true,
-    rank: true,
-    stats: false,
-    titles: true,
-    closet: false,
-  });
-  table(`${P}profiles`).set("m-1", { nick: "운영자" });
-  ctx.owner = true;
-  await presence.seen(ctx, { where: "home" });
-  assert.deepEqual((await presence.online(ctx)).members, []);
-  ctx.owner = false;
-  await presence.seen(ctx, { where: "home" });
-  assert.equal((await presence.online(ctx)).members.length, 1);
 });
 
 test("the owner grants money and experience to one or all, and ranks add their bonus points", async () => {
@@ -4583,61 +4346,6 @@ test("items stay out of posts or 조합 as the owner marks them, and stats keep 
     "below_minimum",
   );
   await allocateStats(fresh.ctx, { character: "hero", allocation: { hp: 3 } });
-});
-
-test("a readable site_main page takes the home's place, and is not an 안내 page", async () => {
-  const { ctx, table } = fakeCtx();
-  assert.equal((await site(ctx)).main, false);
-  // Without a read level a page is everyone's, as the original's have none.
-  table(`${P}content`).set("site_main", {
-    name: "메인",
-    body: "<p>환영합니다</p>",
-  });
-  table(`${P}content`).set("rules", {
-    name: "규칙",
-    body: "...",
-    readLevel: 1,
-  });
-  assert.equal((await site(ctx)).main, true);
-  assert.deepEqual(
-    (await contentPages(ctx)).documents.map((row) => row.id),
-    ["rules"],
-  );
-  ctx.member = null;
-  assert.equal((await site(ctx)).main, true);
-  assert.equal(
-    (await contentPage(ctx, { id: "site_main" })).page.body,
-    "<p>환영합니다</p>",
-  );
-});
-
-test("joining refuses reserved nicknames and asks agreement to the owner's rules", async () => {
-  const { ctx, table } = fakeCtx();
-  // The original's cf_prohibit_id until the owner writes their own.
-  assert.equal(await refusal(join(ctx, { nick: "운영자" })), "reserved_nick");
-  assert.equal(await refusal(join(ctx, { nick: "ADMIN" })), "reserved_nick");
-  table(`${P}settings`).set("community", {
-    reservedNicks: "별, 달",
-    stipulation: "서로 존중합니다.",
-    characterNotice: "",
-  });
-  assert.equal(await refusal(join(ctx, { nick: "달" })), "reserved_nick");
-  assert.equal(await refusal(join(ctx, { nick: "아보" })), "not_agreed");
-  assert.equal(table(`${P}profiles`).has("m-1"), false);
-  ctx.now += 1000;
-  await join(ctx, { nick: "운영자", agreed: true });
-  assert.equal(table(`${P}profiles`).get("m-1").nick, "운영자");
-  assert.deepEqual(table(`${P}members`).get("m-1"), {
-    role: "member",
-    requestedAt: ctx.now,
-    agreedAt: ctx.now,
-  });
-  // The site's owner may take a reserved word.
-  ctx.member.id = "m-2";
-  ctx.owner = true;
-  table(`${P}settings`).set("community", { reservedNicks: "별" });
-  await join(ctx, { nick: "별" });
-  assert.equal(table(`${P}members`).get("m-2").agreedAt, undefined);
 });
 
 test("mail beyond a hundred messages stays in the 쪽지함, and a conversation pages back", async () => {

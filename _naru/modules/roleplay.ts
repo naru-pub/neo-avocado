@@ -7,8 +7,6 @@ import {
   EXPLORE,
   INVENTORY,
   ITEMS,
-  PROFILES,
-  SETTINGS,
   TITLES,
   RECIPES,
   amount,
@@ -28,6 +26,8 @@ import {
   requireUsable,
   lacking,
 } from "./shared.js";
+import { communitySettings } from "./access.js";
+import { profileByNick, profileOf } from "./members.js";
 import type { Ctx, NaruDocument } from "./naru-types.js";
 
 /** Who a post or comment speaks as (speakerOf). */
@@ -141,8 +141,7 @@ export async function resolveCalls(
   let saved = text;
   for (const nick of calledNicks(text)) {
     if (already.includes(nick)) continue;
-    const found = (await ctx.list(PROFILES, { filter: { nick }, size: 1 }))
-      .documents[0];
+    const found = await profileByNick(ctx, nick);
     if (!found) saved = saved.split(`[[${nick}]]`).join("[[???]]");
     else if (
       found.id !== ctx.member.id &&
@@ -187,7 +186,7 @@ export async function deliverCalls(
   },
 ): Promise<string[]> {
   const from = ctx.member?.id ?? null;
-  const me = from && !anonymous ? await ctx.get(PROFILES, from) : null;
+  const me = from && !anonymous ? await profileOf(ctx, from) : null;
   const preview = text.replace(/\[\[|\]\]/g, "").slice(0, 100);
   const sent = new Set<string>();
   const send = async (to: string, kind: "call" | "comment") => {
@@ -215,7 +214,7 @@ export async function deliverCalls(
   for (const recipient of recipients) await send(recipient.id, "call");
   const owner = author(log);
   if (notifyAuthor && owner && !sent.has(owner)) {
-    const profile = await ctx.get(PROFILES, owner);
+    const profile = await profileOf(ctx, owner);
     if (profile && profile.data.commentAlerts !== false)
       await send(owner, "comment");
   }
@@ -224,7 +223,7 @@ export async function deliverCalls(
 
 /** Whether the member has calls newer than they last looked (profile.callsSeenAt). */
 export async function callsUnread(ctx: Ctx): Promise<boolean> {
-  const profile = await ctx.get(PROFILES, ctx.member.id);
+  const profile = await profileOf(ctx, ctx.member.id);
   const seen = Number.isFinite(profile?.data.callsSeenAt)
     ? profile.data.callsSeenAt
     : 0;
@@ -247,7 +246,7 @@ export async function explore(ctx: Ctx, speaker: Speaker | null) {
       reason: "no_character",
     });
   const limit = amount(
-    (await ctx.get(SETTINGS, "community"))?.data.exploreLimit ?? 0,
+    (await communitySettings(ctx)).exploreLimit ?? 0,
     "Explore limit",
   );
   if (!limit)

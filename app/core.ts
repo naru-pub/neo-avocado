@@ -7,11 +7,9 @@ import { imageSlotsOf, viewerOf } from "../_naru/modules/images.js";
 
 const PREFIX = "neo_avocado_";
 export const COLLECTION = {
-  profiles: `${PREFIX}profiles`,
   characters: `${PREFIX}characters`,
   logs: `${PREFIX}logs`,
   comments: `${PREFIX}comments`,
-  wallets: `${PREFIX}wallets`,
   inventory: `${PREFIX}inventory`,
   items: `${PREFIX}items`,
   recipes: `${PREFIX}recipes`,
@@ -20,7 +18,6 @@ export const COLLECTION = {
   characterState: `${PREFIX}character_state`,
   titles: `${PREFIX}titles`,
   couples: `${PREFIX}couples`,
-  settings: `${PREFIX}settings`,
   boards: `${PREFIX}boards`,
   emoticons: `${PREFIX}emoticons`,
   characterFields: `${PREFIX}character_fields`,
@@ -211,19 +208,15 @@ export const ownCharacters = async () =>
 /** Resolve the distinct authors for a page in bounded batches before rendering. */
 export async function preloadNicks(rows) {
   const member = state.member;
-  const missing = [
-    ...new Set(rows.map((row) => row.createdBy ?? row.data.owner)),
+  const missing: string[] = [
+    ...new Set<string>(rows.map((row) => row.createdBy ?? row.data.owner)),
   ].filter((id) => id && !state.nicks.has(id));
-  for (let offset = 0; offset < missing.length; offset += 50) {
-    const ids = missing.slice(offset, offset + 50);
-    const profiles = await collection(COLLECTION.profiles).getMany(ids);
+  for (let offset = 0; offset < missing.length; offset += 100) {
+    const ids = missing.slice(offset, offset + 100);
+    const { nicks } = await query("community/profiles:nicks", { ids });
     if (state.member !== member) return;
-    profiles.forEach((profile, index) =>
-      state.nicks.set(
-        ids[index],
-        Promise.resolve(profile?.data.nick ?? "이름 없음"),
-      ),
-    );
+    for (const id of ids)
+      state.nicks.set(id, Promise.resolve(nicks[id] ?? "이름 없음"));
   }
 }
 /** 글쓴이의 닉네임. 처음 보는 회원만 한 번 묻는다. */
@@ -232,15 +225,19 @@ export async function nickOf(memberId) {
   if (!state.nicks.has(memberId))
     state.nicks.set(
       memberId,
-      collection(COLLECTION.profiles)
-        .get(memberId)
-        .then(
-          (profile) => profile.data.nick,
-          () => "이름 없음",
-        ),
+      query("community/profiles:nicks", { ids: [memberId] }).then(
+        ({ nicks }) => nicks[memberId] ?? "이름 없음",
+        () => "이름 없음",
+      ),
     );
   return state.nicks.get(memberId);
 }
+/**
+ * The community settings members' pages need (content/site:settings), or
+ * none while they cannot be read.
+ */
+export const memberSettings = (): Promise<Record<string, any>> =>
+  query("content/site:settings").catch(() => ({}));
 /** Who calls site functions: the signed-in member, else the visitor's client. */
 export const caller = () => state.member ?? state.naru;
 /**
@@ -292,7 +289,7 @@ export function withGuestPassword(title, action) {
  * The SDK's collection for whoever is reading: the member, or a visitor. The
  * collection rules in _naru/rules/ decide what each of them sees. Pages write
  * through site functions (community/posts, community/comments,
- * characters/sheet), except a member's own profile.
+ * characters/sheet) and mutations.
  */
 export function collection(name) {
   return (state.member ?? state.naru).collection(name);
@@ -546,16 +543,14 @@ export function noteVisit(place) {
   } catch {
     /* No referrer to count. */
   }
-  caller()
-    .call("community/presence:seen", {
-      where: place,
-      ...(visit
-        ? { visit: true, ...client(), ...(domain ? { domain } : {}) }
-        : {}),
-    })
-    .catch(() => {
-      /* A visit not counted is no reason to bother anyone. */
-    });
+  mutate("community/presence:seen", {
+    where: place,
+    ...(visit
+      ? { visit: true, ...client(), ...(domain ? { domain } : {}) }
+      : {}),
+  }).catch(() => {
+    /* A visit not counted is no reason to bother anyone. */
+  });
 }
 
 /**

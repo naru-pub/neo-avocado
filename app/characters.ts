@@ -7,6 +7,8 @@ import {
   CHARACTER_PAGE,
   COLLECTION,
   collection,
+  memberSettings,
+  query,
   edit,
   type EditField,
   mine,
@@ -419,7 +421,7 @@ async function characterItem(character) {
   change.hidden =
     !mine(character) ||
     (character.data.state === "approved" &&
-      (await communitySettings())?.data.characterEditing === false);
+      (await communitySettings()).characterEditing === false);
   change.onclick = () =>
     run(() =>
       editCharacter(character, async (saved) => {
@@ -1094,10 +1096,7 @@ function viewerFigures(character, outfit) {
 }
 /** The owner's community settings, read once a page load. */
 let settingsRead;
-const communitySettings = () =>
-  (settingsRead ??= collection(COLLECTION.settings)
-    .get("community")
-    .catch(() => null));
+const communitySettings = () => (settingsRead ??= memberSettings());
 
 /**
  * mypage/character/character_form.php: the registration form, with the
@@ -1164,7 +1163,7 @@ $("characterForm").onsubmit = (event) => {
     state.speakers = null;
     // A first character became the member's 대표 on the server.
     if (state.profile && !state.profile.data.mainCharacter)
-      show(await collection(COLLECTION.profiles).get(state.member.id));
+      show((await query("community/profiles:own")).profile);
     // The lists read it again when next shown; 마이페이지 shows it now.
     state.charactersLoaded = false;
     $<HTMLFormElement>("characterForm").reset?.();
