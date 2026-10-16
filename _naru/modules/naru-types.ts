@@ -83,6 +83,8 @@ export interface ReadCtx {
   member: Member | null;
   /** Whether the caller is the site owner. */
   owner?: boolean;
+  /** Whether the caller is a visitor: neither a member nor the owner. */
+  visitor?: boolean;
   get<T = Data>(
     collection: string,
     id: string,
@@ -123,14 +125,15 @@ export interface Ctx extends ReadCtx {
     id: string,
     secret: string,
   ): Promise<boolean>;
-  media?: { delete(id: string): unknown };
 }
 
 /** A rule's `readable(ctx, args)`. */
 export interface ReadArgs {
   collection: string;
-  operation: "get" | "list";
+  operation: "get" | "list" | "getMany";
   id?: string | null;
+  /** A batch read's IDs, without repeats (getMany only). */
+  ids?: string[];
   filter?: Filter;
   /** The caller's own predicate, or null. */
   where?: Where | null;

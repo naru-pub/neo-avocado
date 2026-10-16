@@ -46,9 +46,11 @@ export async function readable(
   if (typeof boardId !== "string") return false;
   const target = await boardOf(ctx, boardId);
   // Lists return complete documents, so listing must also permit body reads.
+  // A batch read (getMany) is held to the same: it names no board, so it
+  // reads the default one like a list.
   if (
     !boardAllowed(target, actor, "read") ||
-    (operation === "list" && !boardAllowed(target, actor, "list"))
+    (operation !== "get" && !boardAllowed(target, actor, "list"))
   )
     return false;
   // A visitor asking by #tag is not shown a 멤버공개 post's: its tags are

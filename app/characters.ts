@@ -19,7 +19,7 @@ import {
   state,
   STATE_NAMES,
   TYPE_NAMES,
-  uploadManaged,
+  uploadMedia,
   removeAll,
   route,
   formatTime,
@@ -550,11 +550,11 @@ export async function editCharacter(
           data[name] = value;
       for (const [name, file] of Object.entries(values))
         if (name.startsWith("imageUpload:") && file)
-          data[name.slice(12)] = (await uploadManaged(file)).url;
+          data[name.slice(12)] = (await uploadMedia(file)).url;
       // An uploaded file replaces the field's address with its own.
       for (const [name, file] of Object.entries(values))
         if (name.startsWith("upload:") && file) {
-          const uploaded = await uploadManaged(file);
+          const uploaded = await uploadMedia(file);
           data.fields[name.slice(7)] = uploaded.url;
         }
       const { document: saved } = await caller().call("characters/sheet:save", {
@@ -868,7 +868,7 @@ function wireCharacterDetails(item, character) {
               },
             ],
             async ({ name, image, file }) => {
-              const uploaded = file ? await uploadManaged(file) : null;
+              const uploaded = file ? await uploadMedia(file) : null;
               await caller().call("characters/wardrobe:editOutfit", {
                 id: clothing.id,
                 name,
@@ -983,7 +983,7 @@ function wireCharacterDetails(item, character) {
         },
       ],
       async ({ name, image, file }) => {
-        const uploaded = file ? await uploadManaged(file) : null;
+        const uploaded = file ? await uploadMedia(file) : null;
         if (uploaded) image = uploaded.url;
         await caller().call("characters/wardrobe:outfit", {
           character: character.id,
@@ -1120,7 +1120,7 @@ $("characterForm").onsubmit = (event) => {
     )) {
       const file = input.files?.[0];
       const value = file
-        ? (await uploadManaged(file)).url
+        ? (await uploadMedia(file)).url
         : input.type === "file"
           ? ""
           : input.value.trim();
@@ -1140,7 +1140,7 @@ $("characterForm").onsubmit = (event) => {
     )) {
       const chosen = input.files?.[0];
       if (!chosen) continue;
-      const uploaded = await uploadManaged(chosen);
+      const uploaded = await uploadMedia(chosen);
       fields[input.dataset.fieldUpload] = uploaded.url;
     }
     const { document: character } = await caller().call(

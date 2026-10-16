@@ -284,7 +284,7 @@ export async function write(
         );
     if (reward) value.reward = reward;
   }
-  // Uploads are managed (SDK 1.1.0): Naru records which documents name them.
+  // Naru records which documents name an upload; no ID needs keeping.
   delete value.imageId;
   const document = previous
     ? await ctx.set(LOGS, previous.id, value)

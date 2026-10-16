@@ -19,7 +19,7 @@ import {
   say,
   showTab,
   state,
-  uploadManaged,
+  uploadMedia,
   withGuestPassword,
   removeAll,
   route,
@@ -1065,7 +1065,7 @@ $("logForm").onsubmit = (event) => {
     if (!file && !address && kindOf() === "image")
       return say("그림을 골라 주세요.");
     say("올리는 중…");
-    const image = file ? await uploadManaged(file) : null;
+    const image = file ? await uploadMedia(file) : null;
     const character = guest ? "" : $<HTMLSelectElement>("logCharacter").value;
     const action = guest ? "" : $<HTMLSelectElement>("logAction").value;
     const materials =
@@ -1243,7 +1243,7 @@ $("logInlineFile").onchange = () =>
     const file = $<HTMLInputElement>("logInlineFile").files?.[0];
     if (!file) return;
     say("그림을 올리는 중…");
-    const uploaded = await uploadManaged(file);
+    const uploaded = await uploadMedia(file);
     const area = $<HTMLTextAreaElement>("logText");
     area.setRangeText(
       `<img src="${uploaded.url}" alt="">`,

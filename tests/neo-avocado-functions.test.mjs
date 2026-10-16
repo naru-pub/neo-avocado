@@ -1928,6 +1928,17 @@ test("the board rule shares the gate's helpers: levels, moderators, secrets and 
     await readable(ctx, { ...list, filter: { board: "default" } }),
     false,
   );
+  // A batch read is held to the list level too, as it was when it came
+  // as a list (SDK 1.1.0 names it getMany).
+  assert.equal(
+    await readable(ctx, {
+      collection: `${P}logs`,
+      operation: "getMany",
+      ids: ["a"],
+      filter: {},
+    }),
+    false,
+  );
   ctx.member = null;
   assert.equal(await readable(ctx, { ...list, filter: {} }), false);
   assert.equal(

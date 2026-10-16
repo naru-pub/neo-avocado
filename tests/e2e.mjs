@@ -146,7 +146,7 @@ try {
   }, P);
 
   // An image field in the admin forms takes a file: it goes to Naru Media
-  // as a managed upload and its address is what the row keeps.
+  // and its address is what the row keeps.
   await adminMenu(owner, "게시판관리", "이모티콘");
   await owner.locator("#adminNew").click();
   await owner.locator('#adminFields [name="id"]').fill("smile");

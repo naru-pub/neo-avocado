@@ -393,7 +393,7 @@ export async function deleteCommunityDocument(
   if (!row.data.deleted)
     await ctx.set(collection, row.id, { ...row.data, deleted: true });
   let unfinished = false;
-  // 25 writes, less the marker, the parent's delete and the character's
+  // 25 writes (a quarter of a call's 100 operations), less the marker, the parent's delete and the character's
   // state and profile fix-ups: what the children may spend.
   let remaining = 25 - 1 - 1 - 2;
   // A comment's reward is taken back as it goes (bbs/delete.php:100-104):

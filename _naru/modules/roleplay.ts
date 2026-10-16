@@ -105,7 +105,7 @@ export function rollDice(): number[] {
 const CALL = /\[\[([^[\]\r\n]{1,20})\]\]/g;
 /**
  * The original calls everyone a text names. Each call here is a notice row
- * written within the function's 25 writes, beside the post, its number, its
+ * written within the 25 writes the function keeps to, beside the post, its number, its
  * reward and its 조합 or 탐색 and item (up to 13), so a text calls at most
  * this many members: more than a scene names.
  */

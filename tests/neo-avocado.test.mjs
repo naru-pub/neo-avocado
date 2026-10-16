@@ -1010,7 +1010,7 @@ test("a log uploads its picture, then saves the stored URL", async () => {
     ["media.upload", "add"].includes(call.method),
   );
   assert.deepEqual(writes, [
-    { method: "media.upload", name: "log.png", options: { managed: true } },
+    { method: "media.upload", name: "log.png" },
     {
       method: "add",
       name: LOGS,

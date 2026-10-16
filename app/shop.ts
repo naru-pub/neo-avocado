@@ -15,7 +15,7 @@ import {
   SHOP_PAGE,
   showTab,
   state,
-  uploadManaged,
+  uploadMedia,
   route,
   renderPages,
 } from "./core.js";
@@ -661,7 +661,7 @@ async function useInventory(owned) {
       if (effect.type === "create" && !file && !data.image)
         throw new Error("이미지 주소를 넣거나 이미지 파일을 골라 주세요.");
       if (file) {
-        const uploaded = await uploadManaged(file);
+        const uploaded = await uploadMedia(file);
         data.image = uploaded.url;
       }
       const result = await caller().call("economy/inventory:useItem", {
