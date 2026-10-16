@@ -45,8 +45,9 @@
 
 - 소스는 TypeScript(`.ts`)입니다. `npm run build`가 같은 경로의 JavaScript로
   `dist/`에 만들고, 나루에는 이 `dist/`가 올라갑니다. main에 푸시하면 GitHub
-  Actions가 검사한 뒤 `dist/`를 `site` 브랜치에 올리고, 나루의 GitHub 앱은 이
-  `site` 브랜치를 배포합니다.
+  Actions가 검사한 뒤 `dist/`를 나루의 GitHub Actions 배포로 올립니다
+  (`scripts/deploy-naru.mjs`). 나루 배포 설정에 이 저장소와 `refs/heads/main`의
+  GitHub Actions 배포 대상이 있어야 합니다.
 - 검사: `npm run typecheck`, `npm test`(빌드 후 `dist/`를 검사), `npm run lint`
 - 로컬 나루(naru-dev)에서 실제 Chromium으로 전체 흐름:
   `NARU_REPO_PATH=… PLAYWRIGHT_MODULE=… npm run test:e2e`

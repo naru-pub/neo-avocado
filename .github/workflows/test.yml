@@ -1,8 +1,8 @@
 name: Test
 
 # The sources are TypeScript; Naru publishes their build. Every push is
-# type-checked and tested; a push to main also builds the site into the
-# `site` branch, which Naru's GitHub app deploys.
+# type-checked and tested; a push to main also builds the site and deploys
+# it to Naru through its GitHub Actions deploy (scripts/deploy-naru.mjs).
 on:
   push:
   pull_request:
@@ -25,12 +25,15 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
-  publish:
+  deploy:
     needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
+      # Naru's GitHub CI deploy checks this run's OIDC token against the
+      # site's GitHub Actions target (naru-pub/neo-avocado, refs/heads/main).
+      id-token: write
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -39,15 +42,4 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      # One commit of the built site, replacing the last: what Naru deploys.
-      - name: Push dist to the site branch
-        working-directory: dist
-        env:
-          TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git init -q -b site
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -q -m "Build of ${GITHUB_SHA}"
-          git push -q -f "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" site
+      - run: node scripts/deploy-naru.mjs dist neo-avocado
