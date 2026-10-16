@@ -338,6 +338,40 @@ function reviewRow(row) {
     )?.data.nick ?? "알 수 없는 회원";
   const heading = document.createElement("strong");
   heading.textContent = `${row.data.name} · ${nick} · ${STATES[row.data.state] ?? "상태 없음(이전 캐릭터)"}`;
+  // What the member wrote, as the application shows it: picture, 소속,
+  // 종족 and 프로필, and the character's own page on the site.
+  const summary = document.createElement("div");
+  summary.className = "review-summary";
+  if (
+    typeof row.data.image === "string" &&
+    row.data.image.startsWith("https://")
+  ) {
+    const portrait = document.createElement("img");
+    portrait.src = row.data.image;
+    portrait.alt = row.data.name ?? "";
+    portrait.loading = "lazy";
+    portrait.className = "review-portrait";
+    summary.append(portrait);
+  }
+  const basics = document.createElement("dl");
+  for (const [label, value] of [
+    ["소속", row.data.side],
+    ["종족", row.data.class],
+    ["프로필", row.data.profile],
+  ]) {
+    const term = document.createElement("dt");
+    term.textContent = label;
+    const detail = document.createElement("dd");
+    detail.textContent = value || "—";
+    detail.style.whiteSpace = "pre-wrap";
+    basics.append(term, detail);
+  }
+  const page = document.createElement("a");
+  page.href = `../#/character/${encodeURIComponent(row.id)}`;
+  page.target = "_blank";
+  page.rel = "noopener";
+  page.textContent = "사이트에서 캐릭터 보기 (회원 로그인 필요)";
+  summary.append(basics, page);
   const sheet = document.createElement("dl");
   const definitions = references.fields
     .filter((field) => !field.data.deleted)
@@ -404,7 +438,7 @@ function reviewRow(row) {
     return button;
   });
   form.onsubmit = (event) => event.preventDefault();
-  form.append(heading, " ", type, sheet, ...buttons);
+  form.append(heading, " ", type, summary, sheet, ...buttons);
   return form;
 }
 /**

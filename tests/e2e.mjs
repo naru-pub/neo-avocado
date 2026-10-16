@@ -154,6 +154,7 @@ try {
   await menu(alice, "신청자목록");
   await alice.locator('#characterFields [data-field="age"]').waitFor();
   await alice.locator("#characterName").fill("초록");
+  await alice.locator("#characterProfile").fill("숲에서 온 초록");
   await alice.locator('#characterFields [data-field="age"]').fill("17");
   await alice
     .locator('#characterFields [data-field="diary"]')
@@ -461,6 +462,20 @@ try {
   await owner.goto(`${origin}/admin.html#/visits`);
   await owner.waitForURL(/\/admin\/#\/visits/);
   await owner.locator("#adminReport table.report").waitFor();
+
+  // Reviewing an application shows what the member wrote, with a link to
+  // the character's page on the site.
+  await owner.goto(`${origin}/admin/#/character_review`);
+  const application = owner
+    .locator("#adminRows .review")
+    .filter({ hasText: "초록" });
+  await application
+    .locator(".review-summary", { hasText: "숲에서 온 초록" })
+    .waitFor();
+  assert.match(
+    await application.locator(".review-summary a").getAttribute("href"),
+    /^\.\.\/#\/character\//,
+  );
 
   // 현재접속자 lists who visited in the last ten minutes.
   await menu(alice, "현재접속자");

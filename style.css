@@ -1185,3 +1185,23 @@ body.site:not(.designed) .pages .page {
 .log.settled .log-title {
   color: var(--pit);
 }
+
+/* The admin's review: the application's picture beside what it says. */
+.review-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+  margin: 8px 0;
+}
+.review-summary dl {
+  flex: 1;
+  min-width: 200px;
+  margin: 0;
+}
+.review-portrait {
+  width: 120px;
+  max-height: 160px;
+  object-fit: cover;
+  border: 1px solid var(--line);
+}
