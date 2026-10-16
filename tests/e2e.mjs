@@ -96,7 +96,7 @@ const picture = (name) => ({ name, mimeType: "image/png", buffer: PNG });
 try {
   // _naru/collections.json made every collection as the site started, so
   // the owner's sign-in only signs in.
-  assert.match(log, /_naru\/collections\.json: 24 created, 0 changed/);
+  assert.match(log, /_naru\/collections\.json: 13 created, 0 changed/);
   const owner = await person();
   await owner.goto(`${origin}/admin/`);
   await owner.locator("#adminSignIn").click();
@@ -137,6 +137,7 @@ try {
       secret: "optional",
       categories: [],
     });
+    // Profile fields are a table too (0003_characters.sql).
     for (const [code, data] of [
       ["age", { label: "나이", type: "text", visibility: "public", order: 1 }],
       [
@@ -145,7 +146,11 @@ try {
       ],
       ["art", { label: "전신", type: "image", visibility: "public", order: 3 }],
     ])
-      await admin.collection(`${P}character_fields`).set(code, data);
+      await admin.mutate("admin/documents:set", {
+        collection: `${P}character_fields`,
+        id: code,
+        data,
+      });
   }, P);
 
   // An image field in the admin forms takes a file: it goes to Naru Media
@@ -306,11 +311,17 @@ try {
   await owner.evaluate(async (P) => {
     const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
     const admin = await createNaru().auth.session();
-    const { documents } = await admin.collection(`${P}characters`).list();
-    await admin.collection(`${P}couples`).set("pair", {
-      first: documents[0].id,
-      second: documents[documents.length - 1].id,
-      since: "2030-01-01",
+    const { documents } = await admin.query("admin/documents:list", {
+      collection: `${P}characters`,
+    });
+    await admin.mutate("admin/documents:set", {
+      collection: `${P}couples`,
+      id: "pair",
+      data: {
+        first: documents[0].id,
+        second: documents[documents.length - 1].id,
+        since: "2030-01-01",
+      },
     });
     // Shop categories: the event item shows under 이벤트 only.
     await admin.mutate("admin/documents:set", {
@@ -337,10 +348,10 @@ try {
   const greenId = await alice.evaluate(async (P) => {
     const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
     const member = await createNaru().members.session();
-    const { documents } = await member.collection(`${P}characters`).list({
-      where: { eq: ["name", "초록"] },
+    const { document } = await member.query("characters/sheet:named", {
+      name: "초록",
     });
-    return documents[0].id;
+    return document.id;
   }, P);
   await alice.goto(`${origin}/#/character/${greenId}`);
   await alice
@@ -406,7 +417,7 @@ try {
     async ({ id }) => {
       const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
       const admin = await createNaru().auth.session();
-      await admin.call("characters/review:reviewCharacter", {
+      await admin.mutate("characters/review:reviewCharacter", {
         character: id,
         state: "approved",
       });
@@ -570,7 +581,11 @@ try {
             (error) => error.code,
           );
       return {
-        characters: await ids("characters"),
+        // Characters are a query's, which reads the closed site's setting.
+        characters: await naru.query("characters/sheet:list").then(
+          (page) => page.documents.map((row) => row.id),
+          (error) => error.code,
+        ),
         boards: await ids("boards"),
         logs: await ids("logs", { filter: { board: "free" } }),
         // Nicknames are a query's, which reads the closed site's setting.
