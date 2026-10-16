@@ -400,13 +400,34 @@ export async function deleteCommunityDocument(
       await ctx.delete(CHARACTER_STATE, row.id);
     const profile = await ctx.get(PROFILES, author(row));
     if (profile?.data.mainCharacter === row.id)
-      await ctx.set(PROFILES, profile.id, {
-        ...profile.data,
-        mainCharacter: null,
-      });
+      await replaceMain(ctx, profile, row.id);
   }
   if (!unfinished) await ctx.delete(collection, row.id);
   return { done: !unfinished };
+}
+
+/**
+ * A member whose 대표 goes (deleted, or given to another member) gets their
+ * oldest remaining character instead, or none: the original picks the first
+ * character whenever the member's ch_id names none (extend/character.lib.php:5-12).
+ */
+export async function replaceMain(
+  ctx: Ctx,
+  profile: NaruDocument,
+  removed: string,
+) {
+  const { documents } = await ctx.list(CHARACTERS, {
+    filter: { owner: profile.id },
+    where: {
+      all: [{ ne: ["deleted", true] }, { ne: [{ metadata: "id" }, removed] }],
+    },
+    sort: [[{ metadata: "createdAt" }, "asc"]],
+    size: 1,
+  });
+  await ctx.set(PROFILES, profile.id, {
+    ...profile.data,
+    mainCharacter: documents[0]?.id ?? null,
+  });
 }
 
 export async function record(
@@ -651,7 +672,8 @@ export async function requireUsable(
     !requirements.title
   )
     return;
-  if (!(await ownCharacter(ctx, character)))
+  const sheet = await ownCharacter(ctx, character);
+  if (!sheet)
     ctx.fail("INVALID_REQUEST", "캐릭터를 확인해 주세요.", {
       reason: "no_character",
     });
@@ -672,7 +694,8 @@ export async function requireUsable(
       throw new Error("Use restrictions must be lists of identifiers.");
     if (
       requirements[key]?.length &&
-      !requirements[key].includes(official[field])
+      // The sheet's own 소속 and 종족 (ch_side, ch_class).
+      !requirements[key].includes(sheet.data[field])
     )
       ctx.fail("CONFLICT", restrictedFor(await names(ctx), "사용할"), {
         reason: "restricted_character",

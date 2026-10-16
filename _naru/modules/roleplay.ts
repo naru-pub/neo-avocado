@@ -90,12 +90,15 @@ export async function speakerOf(
       ? await ctx.get(WARDROBE, character.data.outfit)
       : null;
   const worn = outfit?.data.character === character.id ? outfit : null;
+  // A title out of use (ti_use) is shown nowhere (extend/title.lib.php:7).
+  const shownTitle =
+    title && !title.data.deleted && title.data.enabled !== false;
   return {
     character: character.id,
     name: character.data.name,
     type: character.data.type ?? "main",
-    title: title && !title.data.deleted ? title.data.name : null,
-    titleImage: title && !title.data.deleted ? https(title.data.image) : null,
+    title: shownTitle ? title.data.name : null,
+    titleImage: shownTitle ? https(title.data.image) : null,
     portrait: https(worn?.data.image) ?? https(character.data.image),
   };
 }

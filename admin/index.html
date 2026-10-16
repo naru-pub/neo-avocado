@@ -47,6 +47,19 @@
             검색
           </button></label
         >
+        <!-- adm/character_list.php's search, filters, counts and 선택승인. -->
+        <form id="reviewTools" hidden>
+          <p id="reviewStates"></p>
+          <select id="reviewSide" aria-label="소속"></select>
+          <select id="reviewClass" aria-label="종족"></select>
+          <select id="reviewField" aria-label="검색 대상">
+            <option value="name">캐릭터 이름</option>
+            <option value="nick">오너 닉네임</option>
+          </select>
+          <input id="reviewSearch" type="search" aria-label="검색어" />
+          <button type="submit">검색</button>
+          <button id="reviewApprove" type="button">선택 승인</button>
+        </form>
         <button id="adminNew" type="button">새로 등록</button>
         <div id="adminReport" hidden></div>
         <ul id="adminRows"></ul>

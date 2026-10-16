@@ -138,7 +138,7 @@ test("character fields and catalogues hide what members may not see", async () =
   });
   assert.deepEqual(
     await shown.readable(rulesCtx("m-1"), { collection: `${P}titles` }),
-    { ne: ["deleted", true] },
+    { all: [{ ne: ["deleted", true] }, { ne: ["enabled", false] }] },
   );
 });
 

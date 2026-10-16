@@ -29,6 +29,31 @@ export async function outfit(
   return { document };
 }
 
+/**
+ * Renames an outfit or changes its picture's address, as the closet's
+ * address update (mypage/character/cloest_path_update.php).
+ */
+export async function editOutfit(
+  ctx: Ctx,
+  { id, name, image }: { id?: string; name?: string; image?: string } = {},
+) {
+  const clothing = typeof id === "string" ? await ctx.get(WARDROBE, id) : null;
+  if (
+    !clothing ||
+    clothing.data.owner !== ctx.member.id ||
+    !(await ownCharacter(ctx, clothing.data.character))
+  )
+    ctx.fail("ACCESS_DENIED", "내 캐릭터만 바꿀 수 있습니다.", {
+      reason: "not_owned",
+    });
+  const document = await ctx.set(WARDROBE, clothing.id, {
+    ...clothing.data,
+    name: text(name, 80, true),
+    image: imageUrl(image),
+  });
+  return { document };
+}
+
 export async function wear(
   ctx: Ctx,
   { character, outfit }: { character?: string; outfit?: string | null } = {},
@@ -68,7 +93,7 @@ export async function removeOutfit(ctx: Ctx, { id }: { id?: string } = {}) {
       reason: "not_owned",
     });
   if (character.data.outfit === clothing.id)
-    ctx.fail("CONFLICT", "사용 중인 의상은 먼저 기본 두상으로 바꿔 주세요.", {
+    ctx.fail("CONFLICT", "사용 중인 의상은 먼저 기본 전신으로 바꿔 주세요.", {
       reason: "outfit_in_use",
     });
   await ctx.delete(WARDROBE, clothing.id);

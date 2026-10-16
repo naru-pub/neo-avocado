@@ -59,7 +59,8 @@ export async function buy(
     ctx.fail("CONFLICT", "품절입니다.", { reason: "sold_out" });
   // Buying is a character's, and only an approved one's
   // (shop/_ajax.shop_update.php:4, shop.item.skin.php:24).
-  if (!(await ownCharacter(ctx, character)))
+  const buyer = await ownCharacter(ctx, character);
+  if (!buyer)
     ctx.fail("INVALID_REQUEST", "구매할 내 캐릭터를 골라 주세요.", {
       reason: "no_character",
     });
@@ -74,6 +75,8 @@ export async function buy(
       reason: "not_enough",
     });
   const requirements = listing.data.requirements ?? {};
+  // A character has one 소속 and 종족, the member's pick on its sheet
+  // (ch_side, ch_class; shop/_ajax.shop_update.php:108-115).
   for (const [key, field] of [
     ["sides", "side"],
     ["classes", "class"],
@@ -88,7 +91,7 @@ export async function buy(
       );
     if (
       requirements[key]?.length &&
-      !requirements[key].includes(progression.data[field])
+      !requirements[key].includes(buyer.data[field])
     )
       ctx.fail("CONFLICT", restrictedFor(await names(ctx), "구매할"), {
         reason: "restricted_character",

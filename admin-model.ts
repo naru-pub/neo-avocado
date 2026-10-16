@@ -553,6 +553,8 @@ export const models: Record<string, Model> = {
     help: "타이틀을 만든 뒤 캐릭터 관리에서 지급합니다.",
     fields: [
       { key: "name", label: "타이틀 이름", required: true, max: 80 },
+      // ti_use: a title out of use is shown nowhere (extend/title.lib.php:7).
+      { key: "enabled", label: "사용", type: "checkbox", default: true },
       { key: "image", label: "이미지", type: "url", image: true, max: 2000 },
       { key: "description", label: "설명", type: "textarea", max: 2000 },
     ],
@@ -580,6 +582,12 @@ export const models: Record<string, Model> = {
         type: "tokens",
       },
       { key: "help", label: "도움말", max: 200 },
+      // ar_text: a unit shown after a one-line value (character_form.php:331).
+      {
+        key: "suffix",
+        label: "단위 (한 줄 텍스트 뒤에 붙음, 예: cm)",
+        max: 20,
+      },
       {
         key: "order",
         label: "순서 (작을수록 먼저)",
@@ -619,30 +627,10 @@ export const models: Record<string, Model> = {
   },
   character_state: {
     label: "캐릭터 승인·경험치·능력치·타이틀",
-    help: "공식 세력·종족은 회원이 적은 프로필과 별도로 관리합니다. 포인트는 기본 능력치 외에 배분할 총 포인트입니다. 승인은 ‘캐릭터 신청 심사’에서 바꾸면 신청 상태와 함께 바뀝니다.",
+    help: "소속·종족은 캐릭터 시트의 것 하나뿐이며 상점과 아이템 조건도 그것을 봅니다(‘캐릭터 신청 심사’의 수정에서 고칩니다). 포인트는 기본 능력치 외에 배분할 총 포인트입니다. 승인은 ‘캐릭터 신청 심사’에서 바꾸면 신청 상태와 함께 바뀝니다.",
     characterKey: true,
     fields: [
       { key: "approved", label: "승인", type: "checkbox" },
-      {
-        key: "side",
-        label: "공식 소속",
-        type: "pick",
-        from: "sides",
-        valueBy: "name",
-        optional: true,
-        fallbackText: true,
-        max: 40,
-      },
-      {
-        key: "class",
-        label: "공식 종족",
-        type: "pick",
-        from: "classes",
-        valueBy: "name",
-        optional: true,
-        fallbackText: true,
-        max: 40,
-      },
       { key: "exp", label: "경험치", type: "number", default: 0 },
       {
         key: "expNote",
@@ -1029,7 +1017,7 @@ models.character_review = {
   review: true,
   readOnly: true,
   fields: [],
-  help: "신청(수정 완료)·수정 중인 캐릭터를 승인하거나 수정을 요청하고, 메인·서브·NPC와 운영자 전용 항목을 정합니다. 승인하면 공식 기록의 승인도 함께 바뀝니다. 수정으로 어느 캐릭터든 이름·소속·종족·프로필·이미지·모든 추가 항목·종류·상태를 고치고(생성·수정 기간과 회원당 캐릭터 수와 상관없이), 삭제하면 관계·옷장·커플·공식 기록을 함께 지우며, 회원 변경으로 닉네임을 적은 회원에게 옮기고(옷장·관계·캐릭터의 아이템·공식 기록도 함께), 새 캐릭터로 회원 대신 등록합니다. 능력치와 포인트는 캐릭터 승인·경험치·능력치·타이틀에서 고칩니다.",
+  help: "캐릭터 이름이나 오너 닉네임으로 찾고, 소속·종족과 상태(인원 수와 함께)로 거르며, 체크한 캐릭터를 선택 승인으로 한 번에 승인합니다. 신청(수정 완료)·수정 중인 캐릭터를 승인하거나 수정을 요청하고, 메인·서브·NPC와 운영자 전용 항목을 정합니다. 승인하면 공식 기록의 승인도 함께 바뀝니다. 수정으로 어느 캐릭터든 이름·소속·종족·프로필·이미지·모든 추가 항목·종류·상태를 고치고(생성·수정 기간과 회원당 캐릭터 수와 상관없이), 삭제하면 관계·옷장·커플·공식 기록을 함께 지우며, 회원 변경으로 닉네임을 적은 회원에게 옮기고(옷장·관계·캐릭터의 아이템·공식 기록도 함께), 새 캐릭터로 회원 대신 등록합니다. 능력치와 포인트는 캐릭터 승인·경험치·능력치·타이틀에서 고칩니다.",
 };
 models.visits = {
   label: "접속자 집계",
@@ -1633,4 +1621,41 @@ export function titleHoldings(states, characters, titles, query = "") {
           .toLocaleLowerCase()
           .includes(needle),
     );
+}
+
+/** The review's states, as the original's 수정중, 신청, 승인. */
+export const REVIEW_STATES = ["editing", "submitted", "approved"];
+
+/**
+ * The review list (adm/character_list.php:107-140): characters whose name or
+ * owner's nickname has `text`, of a 소속 and 종족, then of a state, with how
+ * many of each state the search leaves. A character from before states
+ * counts as none of them.
+ */
+export function characterReview(
+  rows,
+  profiles,
+  { field = "name", text = "", state = "", side = "", kind = "" } = {},
+) {
+  const needle = text.trim().toLocaleLowerCase();
+  const nick = (row) =>
+    profiles.find((profile) => profile.id === (row.createdBy ?? row.data.owner))
+      ?.data.nick ?? "";
+  const searched = rows.filter(
+    (row) =>
+      !row.data.deleted &&
+      (!needle ||
+        String(field === "nick" ? nick(row) : (row.data.name ?? ""))
+          .toLocaleLowerCase()
+          .includes(needle)) &&
+      (!side || row.data.side === side) &&
+      (!kind || row.data.class === kind),
+  );
+  const counts = { all: searched.length };
+  for (const value of REVIEW_STATES)
+    counts[value] = searched.filter((row) => row.data.state === value).length;
+  return {
+    rows: state ? searched.filter((row) => row.data.state === state) : searched,
+    counts,
+  };
 }

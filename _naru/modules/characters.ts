@@ -46,6 +46,8 @@ export interface FieldDefinition {
   type: string;
   options: string[];
   help: string;
+  /** A unit shown after a one-line value (ar_text). */
+  suffix: string;
   order: number;
   visibility: string;
   required: boolean;
@@ -85,6 +87,7 @@ export async function fieldCatalogue(ctx: ReadCtx): Promise<FieldDefinition[]> {
         ? row.data.options.filter((option) => typeof option === "string")
         : [],
       help: typeof row.data.help === "string" ? row.data.help : "",
+      suffix: typeof row.data.suffix === "string" ? row.data.suffix : "",
       order: Number.isFinite(row.data.order) ? row.data.order : 0,
       visibility: FIELD_VISIBILITY.includes(row.data.visibility)
         ? row.data.visibility
@@ -189,8 +192,8 @@ export async function currentState(
 
 /**
  * The sheet fields a member may write: custom values they may see (never the
- * site owner's admin-only fields, which are kept), main/sub type (an NPC stays
- * an NPC) and editing/submitted state (an approved character stays approved).
+ * site owner's admin-only fields, which are kept; nor the type, which stays,
+ * main for a new character) and editing/submitted state (an approved character stays approved).
  * Submitting requires every required field the member can fill.
  *
  * The site owner writes every field, type and state, with no required
@@ -242,13 +245,12 @@ export async function memberSheet(
       "추가 프로필 항목은 합쳐서 6,000자까지입니다.",
       { reason: "fields_too_long" },
     );
+  // 메인·서브·NPC (ch_type) is the admin's: a member's form keeps it hidden
+  // and a new one is main (character_form.php:77,96), whatever they send.
   const was = previous?.data.type;
   const kept = CHARACTER_TYPES.includes(was) ? was : "main";
-  const type = was === "npc" && !owner ? "npc" : (data.type ?? kept);
-  if (
-    !CHARACTER_TYPES.includes(type) ||
-    (type === "npc" && was !== "npc" && !owner)
-  )
+  const type = owner ? (data.type ?? kept) : kept;
+  if (!CHARACTER_TYPES.includes(type))
     ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
       reason: "invalid_input",
     });

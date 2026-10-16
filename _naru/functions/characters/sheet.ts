@@ -14,6 +14,11 @@ import {
   imageUrl,
   names,
   communityAccess,
+  replaceMain,
+  ITEMS,
+  ownedItem,
+  record,
+  requireUsable,
 } from "../../modules/shared.js";
 import { notDeleted, startValue, startWrite } from "../../modules/community.js";
 import {
@@ -73,15 +78,21 @@ async function listed(
  * creation is open and below the limit, and edits an approved character only
  * while editing is.
  */
-async function checkPeriod(ctx: Ctx, previous: NaruDocument | null) {
+async function checkPeriod(
+  ctx: Ctx,
+  previous: NaruDocument | null,
+  ticket: NaruDocument | null,
+) {
   if (ctx.owner) return;
   const settings = (await ctx.get(SETTINGS, "community"))?.data ?? {};
   if (previous) {
     // An application can always be finished, as the original's viewer
-    // offers 수정 on any unapproved character (viewer.php:101).
+    // offers 수정 on any unapproved character (viewer.php:101); a
+    // 프로필수정 ticket opens an approved one (character_form.php:80-84).
     if (
       settings.characterEditing === false &&
-      previous.data.state === "approved"
+      previous.data.state === "approved" &&
+      !ticket
     )
       ctx.fail("ACCESS_DENIED", "현재 캐릭터 수정 기간이 아닙니다.", {
         reason: "editing_closed",
@@ -107,6 +118,37 @@ async function checkPeriod(ctx: Ctx, previous: NaruDocument | null) {
       });
   }
 }
+/**
+ * A 프로필수정 ticket of the member's for `character`: one in their own
+ * inventory, or the character's, whose item's effect is "profile"
+ * (inventory/use_item.php:27-28). Its use conditions apply as to any item.
+ */
+async function profileTicket(
+  ctx: Ctx,
+  id: unknown,
+  character: NaruDocument | null,
+) {
+  if (id === null || id === undefined) return null;
+  const owned = ctx.member ? await ownedItem(ctx, id) : null;
+  const item = owned ? await ctx.get(ITEMS, owned.data.item) : null;
+  if (
+    !owned ||
+    !character ||
+    !item ||
+    item.data.effect?.type !== "profile" ||
+    item.data.usable === false ||
+    (owned.data.character && owned.data.character !== character.id)
+  )
+    ctx.fail(
+      "CONFLICT",
+      "이 캐릭터에 쓸 수 있는 프로필 수정 아이템이 아닙니다.",
+      {
+        reason: "invalid_ticket",
+      },
+    );
+  await requireUsable(ctx, item, character.id);
+  return { owned, item };
+}
 /** Characters a member may have unless the owner sets another number. */
 const CHARACTER_LIMIT = 1;
 
@@ -122,12 +164,15 @@ export async function save(
     data = {},
     revision = null,
     nick = null,
+    ticket = null,
   }: {
     id?: string | null;
     data?: SheetInput;
     revision?: string | null;
     /** The member a new character from the site owner belongs to. */
     nick?: string | null;
+    /** A 프로필수정 item (inventory ID) the save spends. */
+    ticket?: string | null;
   } = {},
 ) {
   const { previous } = await startWrite(ctx, CHARACTERS, {
@@ -136,7 +181,8 @@ export async function save(
     owners: true,
   });
   notDeleted(ctx, previous);
-  await checkPeriod(ctx, previous);
+  const used = await profileTicket(ctx, ticket, previous);
+  await checkPeriod(ctx, previous, used?.owned ?? null);
   if (!data || typeof data !== "object")
     ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
       reason: "invalid_input",
@@ -186,6 +232,17 @@ export async function save(
     // A member's first character is their 대표 (character_form_update.php:120).
     const profile = await ctx.get(PROFILES, ctx.member.id);
     if (profile) await claimMain(ctx, profile, document.id);
+  }
+  // The ticket goes unless it lasts (it_use_ever; character_form_update.php:268).
+  if (used) {
+    if (used.item.data.reusable !== true)
+      await ctx.delete(INVENTORY, used.owned.id);
+    await record(ctx, "use", {
+      item: used.item.id,
+      inventory: used.owned.id,
+      character: document.id,
+      effect: "profile",
+    });
   }
   return { document: await presentCharacter(ctx, document, { catalogue }) };
 }
@@ -252,10 +309,7 @@ export async function move(
     });
     const before = from ? await ctx.get(PROFILES, from) : null;
     if (before?.data.mainCharacter === previous.id)
-      await ctx.set(PROFILES, before.id, {
-        ...before.data,
-        mainCharacter: null,
-      });
+      await replaceMain(ctx, before, previous.id);
     await claimMain(ctx, member, previous.id);
   }
   const official = await ctx.get(CHARACTER_STATE, previous.id);
