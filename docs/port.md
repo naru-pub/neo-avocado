@@ -79,13 +79,21 @@ name(ctx, args)`. Pages call them as `query("<area>/<module>:<name>", args)`
   Keep the comments that name the PHP file a rule comes from.
 - One query per page view where a page used to chain several reads.
 - Loops that called again until `done` become one call.
-- Each area deletes what it replaced: its `_naru/functions/`, its rules,
-  its entries in `_naru/collections.json`, and the old tests for them.
-  Pages stop using `collection()`, `call()` and `removeAll()`.
+- Nothing of the old design is left: no `_naru/functions/`, rules or
+  `_naru/collections.json`, and pages use no `collection()`, `call()` or
+  `batch()`; `tests/admin-model.test.mjs` checks no page or server code
+  names a collection.
+- The owner's admin (`admin/`) is `_naru/queries/admin/<section>` and
+  `_naru/mutations/admin/<section>`: `list`, `get`, `save` and `remove`
+  where the section has them, each calling `ownerOnly` first. `save` takes
+  the form's values and checks them with `buildRecord`
+  (`_naru/modules/admin-model.ts`), the forms' own rules; values left out
+  keep the record's. Writes that go together are one mutation.
 
 ## Tests
 
-- Server code is tested with `tests/sql-ctx.mjs`: `await testSite()` gives a
+- Server code is tested with `tests/sql-ctx.mjs` (one suite per area, and
+  `tests/admin.test.mjs` for the owner's): `await testSite()` gives a
   database with every migration applied; `site.query(name, args, who)` and
   `site.mutate(...)` call the built code (`who` is `{ member: "m-1" }`,
   `{ owner: true }`, or nothing for a visitor); `site.run`/`site.rows` set

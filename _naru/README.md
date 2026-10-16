@@ -4,7 +4,8 @@
 writing ones, grouped by community, economy, characters, content and admin;
 `modules/` holds what they share (`access.js`: who may do what and the
 owner's settings; `boards.js`, `characters.js`, `economy.js`, `mail.js`,
-`members.js`: each area's rows). They are ordinary JavaScript modules that
+`members.js`: each area's rows; `admin.js` and `admin-model.js`: the
+owner's admin). They are ordinary JavaScript modules that
 Naru SDK 1.1.0 loads by their static relative imports; nothing is bundled.
 
 Pages call them by `"<module/path>:<export>"`:
@@ -22,6 +23,18 @@ mail (`0005`). There are no collections, rules or site functions. Nothing is
 pushed to pages: they subscribe to `community/inbox:status` (unread 쪽지 and
 calls) and `community/posts:latest`, and Naru answers again when a mutation
 writes a table those read.
+
+`admin/` is the owner's: one module per section of the admin page
+(`admin/boards`, `admin/members`, `admin/items`, …) with `list`, `get`,
+`save` and `remove` where the section has them, each refusing anyone but
+the owner. A save takes the form's values and checks them with the
+section's model (`modules/admin-model.js`, which the page draws its forms
+from), so the forms' rules hold whoever calls; values left out keep the
+record's own. Changes that go together are one mutation: a balance and its
+history entry, a character's record (at its version) and its experience
+history, a title given to or taken from many characters. The reports
+(`admin/visits:report`, `admin/activity:report`), the character review and
+회원 관리 are queries that search, filter and count in SQL.
 
 Deploy the entire site together through GitHub or a template install. If
 editing individual files, save shared dependencies first. Naru validates and
