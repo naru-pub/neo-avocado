@@ -1,13 +1,19 @@
-// For the time being: the foundation's tables read and written as the
-// documents of the collections they replaced, for code not ported yet (the
-// admin page, through the owner-only admin/documents query and mutation).
-// It goes when the admin area is ported to its own mutations.
+// For the time being: the site's tables (the foundation's and the
+// characters') read and written as the documents of the collections they
+// replaced, for code not ported yet (the admin page, through the owner-only
+// admin/documents query and mutation). It goes when the admin area is
+// ported to its own mutations.
 import { GROUP_ROLE, STAFF, parsed } from "./access.js";
 import type { QueryCtx, SqlValue } from "./naru-types.js";
 
 const P = "neo_avocado_";
 
-type Kind = "text" | "int" | "bool" | "json" | "flag";
+/**
+ * How a field is kept: text, a whole number, a 0/1 boolean, JSON, a flag
+ * (true as the time it was set), a row's number shown as a string (`ref`),
+ * or a time in milliseconds written only with a new row (`created`).
+ */
+type Kind = "text" | "int" | "bool" | "json" | "flag" | "ref" | "created";
 /** A document field, its column, how it is kept, and the column's value when the field is missing. */
 type Column = readonly [
   field: string,
@@ -34,6 +40,35 @@ export interface Mapping {
   keyField?: string;
   /** How lists are ordered. */
   order: string;
+  /** The key is a row's number (characters), its ID the number as a string. */
+  numeric?: boolean;
+  /**
+   * The row is another collection's too (a character's official record is
+   * its sheet's row): a write changes only these columns of a row that
+   * must exist, and there is no deleting it.
+   */
+  partial?: boolean;
+  /**
+   * The row counts its writes in `version`, the revision its own code
+   * checks: a document's revision is it, and a write adds one.
+   */
+  versioned?: boolean;
+  /** What a list or get selects besides the row's columns. */
+  select?: string;
+  /** Fields made from the row beyond its columns. */
+  read?: (row: Record<string, SqlValue>, data: Record<string, any>) => void;
+  /** Columns made from the document beyond its fields. */
+  write?: (data: Record<string, any>, row: Record<string, SqlValue>) => void;
+  /** Statements after a write (a character's titles). */
+  after?: (key: SqlValue, data: Record<string, any>) => Statement[];
+  /** Statements before a delete (a title leaves the characters holding it). */
+  cascade?: (key: SqlValue) => Statement[];
+}
+
+/** One SQL statement and its values. */
+export interface Statement {
+  text: string;
+  values: SqlValue[];
 }
 
 const mapping = (
@@ -172,6 +207,137 @@ export const MAPPINGS: Record<string, Mapping> = Object.fromEntries(
       ["endsAt", "ends_at", "text", null],
       ["images", "images", "json", "[]"],
     ]),
+    // The characters' tables (0003_characters.sql).
+    mapping(
+      "characters",
+      "characters",
+      "id",
+      [
+        ["owner", "owner", "text", ""],
+        ["name", "name", "text", ""],
+        ["side", "side", "text", ""],
+        ["class", "class", "text", ""],
+        ["profile", "profile", "text", ""],
+        ["type", "type", "text", "main"],
+        ["state", "state", "text", "editing"],
+        ["image", "image", "text", null],
+        ["head", "head", "text", null],
+        ["body", "body", "text", null],
+        ["outfit", "outfit", "ref", null],
+        ["fields", "fields", "json", "{}"],
+        ["createdAt", "created_at", "created", 0],
+      ],
+      { numeric: true, versioned: true },
+    ),
+    mapping(
+      "character_state",
+      "characters",
+      "id",
+      [
+        ["exp", "exp", "int", 0],
+        ["points", "points", "int", null],
+        ["stats", "stats", "json", "{}"],
+        ["activeTitle", "active_title", "text", null],
+        ["purchases", "purchases", "json", "{}"],
+      ],
+      {
+        numeric: true,
+        partial: true,
+        versioned: true,
+        select:
+          "(SELECT json_group_array(title_id) FROM character_titles WHERE character_id = characters.id) AS titles",
+        read(row, data) {
+          data.owner = row.owner;
+          data.character = String(row.id);
+          data.approved = row.state === "approved";
+          data.titles = parsed<string[]>(row.titles, []);
+          if (row.explore_day)
+            data.explore = { day: row.explore_day, count: row.explore_count };
+        },
+        write(data, row) {
+          row.explore_day =
+            typeof data.explore?.day === "string" ? data.explore.day : null;
+          row.explore_count = Number.isSafeInteger(data.explore?.count)
+            ? data.explore.count
+            : 0;
+        },
+        after(key, data) {
+          if (!Array.isArray(data.titles)) return [];
+          const titles = [
+            ...new Set(data.titles.filter((id) => typeof id === "string")),
+          ] as string[];
+          return [
+            {
+              text: "DELETE FROM character_titles WHERE character_id = ?",
+              values: [key],
+            },
+            ...titles.map((title) => ({
+              text: "INSERT INTO character_titles (character_id, title_id) VALUES (?, ?)",
+              values: [key, title],
+            })),
+          ];
+        },
+      },
+    ),
+    ...["sides", "classes"].map((name) =>
+      mapping(name, name, "id", [
+        ["name", "name", "text", ""],
+        ["image", "image", "text", null],
+        ["level", "level", "int", 1],
+        ["order", "sort_order", "int", 0],
+      ]),
+    ),
+    mapping(
+      "titles",
+      "titles",
+      "id",
+      [
+        ["name", "name", "text", ""],
+        ["enabled", "enabled", "bool", 1],
+        ["image", "image", "text", null],
+        ["description", "description", "text", ""],
+      ],
+      {
+        cascade: (key) => [
+          {
+            text: "DELETE FROM character_titles WHERE title_id = ?",
+            values: [key],
+          },
+          {
+            text: "UPDATE characters SET active_title = NULL WHERE active_title = ?",
+            values: [key],
+          },
+        ],
+      },
+    ),
+    mapping("couples", "couples", "id", [
+      ["first", "first", "ref", 0],
+      ["second", "second", "ref", 0],
+      ["since", "since", "text", null],
+      ["order", "sort_order", "int", 0],
+    ]),
+    mapping("character_fields", "character_fields", "id", [
+      ["label", "label", "text", ""],
+      ["type", "type", "text", "text"],
+      ["options", "options", "json", "[]"],
+      ["help", "help", "text", ""],
+      ["suffix", "suffix", "text", ""],
+      ["order", "sort_order", "int", 0],
+      ["visibility", "visibility", "text", "public"],
+      ["required", "required", "bool", 0],
+    ]),
+    mapping("stat_config", "stats", "id", [
+      ["name", "name", "text", ""],
+      ["initial", "initial", "int", 0],
+      ["max", "max", "int", 999],
+      ["min", "min", "int", 0],
+      ["help", "help", "text", ""],
+    ]),
+    mapping("levels", "levels", "id", [
+      ["name", "name", "text", ""],
+      ["exp", "exp", "int", 0],
+      ["bonusPoints", "bonus_points", "int", 0],
+    ]),
   ].map((entry) => [entry.collection, entry]),
 );
 
@@ -199,6 +365,18 @@ export function rowOf(
   const row: Record<string, SqlValue> = {};
   for (const [field, column, kind, fallback] of map.columns) {
     const value = data?.[field];
+    if (kind === "created") {
+      row[column] = now;
+      continue;
+    }
+    if (kind === "ref") {
+      const number = typeof value === "number" ? value : Number(value);
+      row[column] =
+        value !== null && value !== "" && Number.isSafeInteger(number)
+          ? number
+          : fallback;
+      continue;
+    }
     row[column] =
       kind === "bool"
         ? value === undefined || value === null
@@ -234,6 +412,7 @@ export function rowOf(
       if (!known.has(key) && value !== undefined) extra[key] = value;
     row[map.extra] = JSON.stringify(extra);
   }
+  map.write?.(data ?? {}, row);
   return row;
 }
 
@@ -248,13 +427,15 @@ export function dataOf(
   if (map.keyField) data[map.keyField] = row[map.key];
   for (const [field, column, kind, fallback] of map.columns) {
     const value = row[column];
-    if (value === null || value === undefined) continue;
+    if (value === null || value === undefined || kind === "created") continue;
     data[field] =
-      kind === "bool" || kind === "flag"
-        ? kind === "flag" || value !== 0
-        : kind === "json"
-          ? parsed(value, fallback === "[]" ? [] : {})
-          : value;
+      kind === "ref"
+        ? String(value)
+        : kind === "bool" || kind === "flag"
+          ? kind === "flag" || value !== 0
+          : kind === "json"
+            ? parsed(value, fallback === "[]" ? [] : {})
+            : value;
   }
   if (map.roles) {
     data.role = roles.includes(STAFF) ? "moderator" : "member";
@@ -262,6 +443,7 @@ export function dataOf(
       .filter((role) => role.startsWith(GROUP_ROLE))
       .map((role) => role.slice(GROUP_ROLE.length));
   }
+  map.read?.(row, data);
   return data;
 }
 
@@ -328,8 +510,75 @@ export async function documentsOf(
         : map.settings.id
       : String(row[map.key]);
     const data = dataOf(map, row, roles[id] ?? []);
-    return { id, data, revision: revisionOf(data), createdBy: null };
+    const created = map.columns.find(([, , kind]) => kind === "created");
+    return {
+      id,
+      data,
+      revision: map.versioned ? String(row.version) : revisionOf(data),
+      createdBy: null,
+      ...(created
+        ? { createdAt: new Date(Number(row[created[1]])).toISOString() }
+        : {}),
+    };
   });
+}
+
+/**
+ * A document ID's key in its table: a settings row's key, a row's number
+ * (history, characters), or the ID itself; null when it names no row.
+ */
+export function keyOf(map: Mapping, id: unknown): SqlValue {
+  if (typeof id !== "string") return null;
+  if (map.settings)
+    return map.settings !== true && id !== map.settings.id
+      ? null
+      : settingsKey(map, id);
+  if (map.generated || map.numeric)
+    return /^[1-9]\d{0,14}$/.test(id) ? Number(id) : null;
+  return id;
+}
+
+/** The SELECT reading a mapping's rows, before any WHERE. */
+export const selectOf = (map: Mapping) =>
+  `SELECT *${map.select ? `, ${map.select}` : ""} FROM ${map.table}`;
+
+/**
+ * The statements that write a document's data to its row: an upsert (only
+ * an update of a `partial` row, which must exist), then the mapping's own.
+ * A table that numbers its rows (history) always adds one.
+ */
+export function writeStatements(
+  map: Mapping,
+  key: SqlValue,
+  data: Record<string, any>,
+  now: number,
+): { write: Statement; after: Statement[] } {
+  const row = rowOf(map, data, now);
+  const inserted = new Set(
+    map.columns.filter(([, , kind]) => kind === "created").map(([, c]) => c),
+  );
+  const columns = Object.keys(row);
+  const values: SqlValue[] = Object.values(row);
+  const updated = columns.filter((column) => !inserted.has(column));
+  let write: Statement;
+  if (map.generated)
+    write = {
+      text: `INSERT INTO ${map.table} (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")}) RETURNING *`,
+      values,
+    };
+  else if (map.partial)
+    write = {
+      text: `UPDATE ${map.table} SET ${updated.map((column) => `${column} = ?`).join(", ")}${map.versioned ? ", version = version + 1" : ""} WHERE ${map.key} = ? RETURNING *`,
+      values: [...updated.map((column) => row[column]), key],
+    };
+  else
+    write = {
+      text: `INSERT INTO ${map.table} (${map.key}, ${columns.join(", ")}) VALUES (?, ${columns.map(() => "?").join(", ")})
+     ON CONFLICT (${map.key}) DO UPDATE SET ${updated.map((column) => `${column} = excluded.${column}`).join(", ")}${map.versioned ? `, version = ${map.table}.version + 1` : ""}
+     RETURNING *`,
+      values: [key, ...values],
+    };
+  return { write, after: map.after?.(key, data) ?? [] };
 }
 
 /** One document, or null. */
@@ -338,21 +587,10 @@ export async function getDocument(
   { collection, id }: { collection?: string; id?: string } = {},
 ) {
   const map = ownerMapping(ctx, collection);
-  if (
-    typeof id !== "string" ||
-    (map.settings && map.settings !== true && id !== map.settings.id) ||
-    // History's IDs are its row numbers.
-    (map.generated && !/^\d{1,15}$/.test(id))
-  )
-    return null;
-  const key = map.settings
-    ? settingsKey(map, id)
-    : map.generated
-      ? Number(id)
-      : id;
-  const { rows } = await ctx.sql(
-    `SELECT * FROM ${map.table} WHERE ${map.key} = ?`,
-    [key],
-  );
+  const key = keyOf(map, id);
+  if (key === null) return null;
+  const { rows } = await ctx.sql(`${selectOf(map)} WHERE ${map.key} = ?`, [
+    key,
+  ]);
   return (await documentsOf(ctx, map, rows))[0] ?? null;
 }

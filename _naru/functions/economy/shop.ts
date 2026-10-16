@@ -2,8 +2,6 @@ import { onDisplay } from "../../modules/display.js";
 import {
   INVENTORY,
   ITEMS,
-  CHARACTER_STATE,
-  TITLES,
   record,
   ownCharacter,
   amount,
@@ -17,9 +15,10 @@ import {
   lacking,
   names,
   restrictedFor,
-  withExp,
 } from "../../modules/shared.js";
-import type { Ctx, Data } from "../../modules/naru-types.js";
+import { saveState, withExp } from "../../modules/characters.js";
+import type { Progress } from "../../modules/characters.js";
+import type { Ctx } from "../../modules/naru-types.js";
 
 /**
  * 상점에서 승인된 내 캐릭터로 하나 산다. 재고(stock)가 없으면 무제한이다.
@@ -52,7 +51,7 @@ export async function buy(
       reason: "no_character",
     });
   const progression = await characterState(ctx, character);
-  if (progression.data.approved !== true)
+  if (!progression.data.approved)
     ctx.fail("CONFLICT", "승인된 캐릭터만 할 수 있습니다.", {
       reason: "not_approved",
     });
@@ -91,8 +90,8 @@ export async function buy(
     });
   if (
     requirements.title &&
-    (!progression.data.titles?.includes(requirements.title) ||
-      (await ctx.get(TITLES, requirements.title))?.data.deleted)
+    // A deleted title is taken from its holders with it.
+    !progression.data.titles.includes(requirements.title)
   )
     ctx.fail("CONFLICT", "필요한 타이틀이 없습니다.", {
       reason: "missing_title",
@@ -156,14 +155,14 @@ export async function buy(
     });
   const debit = requirements.consumeMoney === false ? 0 : price;
   const balance = await pay(ctx, current, debit);
-  let next: Data = { ...progression.data, purchases: counts };
+  let next: Progress = { ...progression.data, purchases: counts };
   if (requirements.consumeExp)
     next = await withExp(ctx, next, next.exp - expPrice);
   if (requirements.consumeTitle && requirements.title) {
     next.titles = next.titles.filter((id) => id !== requirements.title);
     if (next.activeTitle === requirements.title) next.activeTitle = null;
   }
-  await ctx.set(CHARACTER_STATE, character, next);
+  await saveState(ctx, character, next);
   for (const row of supplied)
     if (needed.get(row.data.item).consume) await ctx.delete(INVENTORY, row.id);
   if (typeof stock === "number")

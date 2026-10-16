@@ -1,15 +1,22 @@
 // Shared collection identifiers and transactional domain helpers.
 export { IMAGE_SLOTS, imageSlotsOf, viewerOf } from "./images.js";
 import type { Ctx, Data, Filter, NaruDocument, ReadCtx } from "./naru-types.js";
-import { communitySettings, names, text } from "./access.js";
+import { amount, communitySettings, names, text } from "./access.js";
 import type { Access, Names } from "./access.js";
+import { addHistory, saveWallet, walletOf } from "./members.js";
 import {
-  addHistory,
-  profileOf,
-  saveWallet,
-  setMainCharacter,
-  walletOf,
-} from "./members.js";
+  characterRow,
+  characterState as recordOf,
+  ownCharacter as ownRow,
+  saveState,
+  sheetOf,
+} from "./characters.js";
+import type {
+  Character,
+  CharacterRow,
+  Progress,
+  StatDefinition,
+} from "./characters.js";
 // What moved to the site's tables (access.js, members.js), for the code
 // that still imports it from here.
 export {
@@ -27,6 +34,8 @@ export {
   scheduled,
   siteOpen,
   text,
+  imageUrl,
+  amount,
 } from "./access.js";
 export type { Access, Names } from "./access.js";
 export { loginReward } from "./members.js";
@@ -40,25 +49,9 @@ export const GACHA = `${PREFIX}gacha`;
 
 export const RECIPES = `${PREFIX}recipes`;
 
-export const CHARACTERS = `${PREFIX}characters`;
-
-export const RELATIONS = `${PREFIX}relations`;
-
-export const WARDROBE = `${PREFIX}wardrobe`;
-
-export const CHARACTER_STATE = `${PREFIX}character_state`;
-
-export const STAT_CONFIG = `${PREFIX}stat_config`;
-
-export const LEVELS = `${PREFIX}levels`;
-
-export const TITLES = `${PREFIX}titles`;
-
 export const MESSAGES = `${PREFIX}messages`;
 
 export const BOARDS = `${PREFIX}boards`;
-
-export const CHARACTER_FIELDS = `${PREFIX}character_fields`;
 
 export const CALLS = `${PREFIX}calls`;
 
@@ -66,9 +59,6 @@ export const EXPLORE = `${PREFIX}explore`;
 
 /** Each board's next log number (wr_num), one document per board. */
 export const COUNTERS = `${PREFIX}counters`;
-/** The owner's lists of affiliations and races (adm/side_list, class_list). */
-export const SIDES = `${PREFIX}sides`;
-export const CLASSES = `${PREFIX}classes`;
 /** Board groups (adm/boardgroup_list). */
 export const BOARD_GROUPS = `${PREFIX}board_groups`;
 
@@ -111,36 +101,6 @@ export function subject(word: string) {
   if (last < 0xac00 || last > 0xd7a3) return `${word}이(가)`;
   return `${word}${(last - 0xac00) % 28 ? "이" : "가"}`;
 }
-/**
- * The stat points the ranks reached at `exp` add (lv_add_state, summed as
- * extend/rank.lib.php's get_rank_exp does between two ranks).
- */
-async function rankBonus(ctx: ReadCtx, exp: number) {
-  let total = 0;
-  for (const row of await weightedRows(ctx, LEVELS))
-    if (Number(row.data.exp ?? 0) <= exp)
-      total += Number.isSafeInteger(row.data.bonusPoints)
-        ? row.data.bonusPoints
-        : 0;
-  return total;
-}
-
-/**
- * A character's official record with experience moved to `exp`: reaching a
- * rank adds its bonus points, falling below one takes them back
- * (extend/exp.lib.php's insert_exp), never below none.
- */
-export async function withExp(ctx: ReadCtx, current: Data, exp: number) {
-  amount(exp, "Experience");
-  const before = current.exp ?? 0;
-  const bonus = (await rankBonus(ctx, exp)) - (await rankBonus(ctx, before));
-  return {
-    ...current,
-    exp,
-    points: Math.max(0, (current.points ?? 0) + bonus),
-  };
-}
-
 /** "아보가 모자랍니다." in the owner's name for money or experience. */
 export async function lacking(ctx: ReadCtx, key: keyof Names) {
   return `${subject((await names(ctx))[key])} 모자랍니다.`;
@@ -277,10 +237,11 @@ export async function logReadable(
 }
 
 /**
- * Deletes a log with its comments, or a character with what hangs off it, in
- * bounded batches: a call writes at most 25 times, so a large one is marked
- * deleted and finished by calling again. Their uploads stay: Naru deletes
- * media only when asked, and marks unreferenced uploads in its library.
+ * Deletes a log with its comments in bounded batches: a call writes at most
+ * 25 times, so a large one is marked deleted and finished by calling again.
+ * Its uploads stay: Naru deletes media only when asked, and marks
+ * unreferenced uploads in its library. (A character is deleted at once by
+ * the characters/sheet:remove mutation.)
  */
 export async function deleteCommunityDocument(
   ctx: Ctx,
@@ -288,15 +249,15 @@ export async function deleteCommunityDocument(
   kind: string,
   row: NaruDocument,
 ): Promise<{ done: boolean }> {
-  if (!["logs", "characters"].includes(kind)) {
+  if (kind !== "logs") {
     await ctx.delete(collection, row.id);
     return { done: true };
   }
   if (!row.data.deleted)
     await ctx.set(collection, row.id, { ...row.data, deleted: true });
   let unfinished = false;
-  // 25 writes (a quarter of a call's 100 operations), less the marker, the parent's delete and the character's
-  // state and profile fix-ups: what the children may spend.
+  // 25 writes (a quarter of a call's 100 operations), less the marker and
+  // the parent's delete, and two kept spare: what the children may spend.
   let remaining = 25 - 1 - 1 - 2;
   // A comment's reward is taken back as it goes (bbs/delete.php:100-104):
   // up to two writes more for each.
@@ -328,51 +289,16 @@ export async function deleteCommunityDocument(
       else await ctx.delete(target, child.id);
     }
   };
-  if (kind === "logs") {
-    const board = (await ctx.get(BOARDS, row.data.board ?? "default"))?.data;
-    await remove(`${PREFIX}comments`, { logId: row.id }, false, (child) =>
-      takeBackReward(
-        ctx,
-        child,
-        `${board?.name ?? "게시판"} ${row.data.number ?? ""} 댓글삭제`,
-      ),
-    );
-  } else {
-    await remove(RELATIONS, { character: row.id });
-    await remove(RELATIONS, { target: row.id });
-    await remove(WARDROBE, { character: row.id });
-    await remove(INVENTORY, { character: row.id }, true);
-    await remove(`${PREFIX}couples`, { first: row.id });
-    await remove(`${PREFIX}couples`, { second: row.id });
-    if (await ctx.get(CHARACTER_STATE, row.id))
-      await ctx.delete(CHARACTER_STATE, row.id);
-    const profile = await profileOf(ctx, author(row));
-    if (profile?.data.mainCharacter === row.id)
-      await replaceMain(ctx, profile, row.id);
-  }
+  const board = (await ctx.get(BOARDS, row.data.board ?? "default"))?.data;
+  await remove(`${PREFIX}comments`, { logId: row.id }, false, (child) =>
+    takeBackReward(
+      ctx,
+      child,
+      `${board?.name ?? "게시판"} ${row.data.number ?? ""} 댓글삭제`,
+    ),
+  );
   if (!unfinished) await ctx.delete(collection, row.id);
   return { done: !unfinished };
-}
-
-/**
- * A member whose 대표 goes (deleted, or given to another member) gets their
- * oldest remaining character instead, or none: the original picks the first
- * character whenever the member's ch_id names none (extend/character.lib.php:5-12).
- */
-export async function replaceMain(
-  ctx: Ctx,
-  profile: { id: string },
-  removed: string,
-) {
-  const { documents } = await ctx.list(CHARACTERS, {
-    filter: { owner: profile.id },
-    where: {
-      all: [{ ne: ["deleted", true] }, { ne: [{ metadata: "id" }, removed] }],
-    },
-    sort: [[{ metadata: "createdAt" }, "asc"]],
-    size: 1,
-  });
-  await setMainCharacter(ctx, profile.id, documents[0]?.id ?? null);
 }
 
 export async function record(
@@ -384,32 +310,16 @@ export async function record(
   await addHistory(ctx, { owner, kind, at: ctx.now, ...details });
 }
 
+/**
+ * One of the caller's own characters as a document ({ id, data }, as old
+ * code reads it), or null.
+ */
 export async function ownCharacter(
   ctx: ReadCtx,
   id: unknown,
-): Promise<NaruDocument | null> {
-  const character =
-    typeof id === "string" ? await ctx.get(CHARACTERS, id) : null;
-  return character &&
-    (character.createdBy ?? character.data.owner) === ctx.member.id &&
-    !character.data.deleted
-    ? character
-    : null;
-}
-
-export function imageUrl(value: unknown): string {
-  const url = text(value, 2000, true);
-  // QuickJS has no URL constructor. Browser images must use HTTPS, with no
-  // credentials, whitespace, data payloads or script schemes.
-  if (!/^https:\/\/[^\s/@?#:]+(?::\d{1,5})?(?:[/?#][^\s]*)?$/.test(url))
-    throw new Error("An image must have an HTTPS address.");
-  return url;
-}
-
-export function amount(value: unknown, label: string): number {
-  if (!Number.isSafeInteger(value) || (value as number) < 0)
-    throw new Error(`${label} must be a non-negative safe integer.`);
-  return value as number;
+): Promise<Character | null> {
+  const row = await ownRow(ctx, id);
+  return row ? sheetOf(row) : null;
 }
 
 export async function weightedRows(
@@ -556,54 +466,20 @@ export async function ownedItem(
   return owned?.data.owner === ctx.member.id ? owned : null;
 }
 
+/**
+ * A character's official record (characters.js's characterState) for the
+ * old code: its row, the stat definitions and the record's data. Old code
+ * writes it back with saveState.
+ */
 export async function characterState(
-  ctx: ReadCtx,
+  ctx: Ctx | ReadCtx,
   character: string,
-  owner: string | null = ctx.member.id,
 ): Promise<{
-  existing: NaruDocument | null;
-  definitions: NaruDocument[];
-  data: Data;
+  existing: CharacterRow;
+  definitions: StatDefinition[];
+  data: Progress;
 }> {
-  const definitions = await weightedRows(ctx, STAT_CONFIG);
-  if (definitions.length > 20)
-    throw new Error("At most 20 stats may be configured.");
-  const existing = await ctx.get(CHARACTER_STATE, character);
-  const current = existing?.data ?? {
-    owner,
-    character,
-    points: amount(
-      (await communitySettings(ctx)).initialStatPoints ?? 0,
-      "Initial stat points",
-    ),
-    exp: 0,
-    stats: {},
-    titles: [],
-  };
-  amount(current.points, "Stat points");
-  amount(current.exp, "Experience");
-  const stats = {};
-  for (const definition of definitions) {
-    const key = definition.id;
-    if (
-      !/^[a-z][a-z0-9_]{0,31}$/.test(key) ||
-      ["constructor", "prototype"].includes(key)
-    )
-      throw new Error("Invalid stat identifier.");
-    const base = amount(definition.data.initial ?? 0, "Initial stat value");
-    const limit = amount(definition.data.max ?? 999, "Stat maximum");
-    if (base > limit) throw new Error("Initial stat exceeds maximum.");
-    const saved = Object.hasOwn(current.stats, key) ? current.stats[key] : null;
-    const allocated = amount(saved?.allocated ?? 0, "Allocated points");
-    const max = base + allocated;
-    if (!Number.isSafeInteger(max) || max > limit)
-      throw new Error("Stat exceeds maximum.");
-    const value = amount(saved?.current ?? max, "Current stat");
-    if (value > max) throw new Error("Current stat exceeds maximum.");
-    const damage = amount(saved?.damage ?? max - value, "Stat damage");
-    stats[key] = { allocated, max, damage, current: Math.max(0, max - damage) };
-  }
-  return { existing, definitions, data: { ...current, stats } };
+  return await recordOf(ctx as Ctx, character);
 }
 
 /** Why `character` may not use `item` under its catalog conditions, or null. */
@@ -628,7 +504,7 @@ export async function requireUsable(
       reason: "no_character",
     });
   const official = (await characterState(ctx, character)).data;
-  if (requirements.approved && official.approved !== true)
+  if (requirements.approved && !official.approved)
     ctx.fail("CONFLICT", "승인된 캐릭터만 할 수 있습니다.", {
       reason: "not_approved",
     });
@@ -657,8 +533,8 @@ export async function requireUsable(
     });
   if (
     requirements.title &&
-    (!official.titles?.includes(requirements.title) ||
-      (await ctx.get(TITLES, requirements.title))?.data.deleted)
+    // A deleted title is taken from its holders with it.
+    !official.titles.includes(requirements.title)
   )
     ctx.fail("CONFLICT", "필요한 타이틀이 없습니다.", {
       reason: "missing_title",
@@ -682,5 +558,6 @@ export async function restoreStat(ctx: Ctx, effect: Data, character: string) {
   const stat = state.data.stats[effect.stat];
   stat.damage = Math.max(0, stat.damage - recovery);
   stat.current = Math.max(0, stat.max - stat.damage);
-  return await ctx.set(CHARACTER_STATE, character, state.data);
+  await saveState(ctx, character, state.data);
+  return sheetOf(await characterRow(ctx, character));
 }

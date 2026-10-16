@@ -472,7 +472,7 @@ $("reviewApprove").onclick = () =>
     let approved = 0;
     try {
       for (const box of chosen) {
-        await owner.call("characters/review:reviewCharacter", {
+        await owner.mutate("characters/review:reviewCharacter", {
           character: box.value,
           revision: box.dataset.revision,
           state: "approved",
@@ -578,7 +578,7 @@ function reviewRow(row) {
       >("button,input,select"))
         control.disabled = true;
       try {
-        await owner.call("characters/review:reviewCharacter", {
+        await owner.mutate("characters/review:reviewCharacter", {
           character: row.id,
           revision: row.revision,
           type: type.value,
@@ -658,17 +658,20 @@ function reviewRow(row) {
       >("button,input,select"))
         control.disabled = true;
       try {
-        // Outfits, relations and items follow in bounded steps.
-        let result = await owner.call("characters/sheet:move", {
+        // Outfits and relations go with it; its items (economy's) follow
+        // in bounded steps.
+        await owner.mutate("characters/sheet:move", {
           id: row.id,
           nick,
           revision: row.revision,
         });
-        while (!result.done)
-          result = await owner.call("characters/sheet:move", {
-            id: row.id,
-            nick,
-          });
+        while (
+          !(
+            await owner.call("economy/inventory:followCharacter", {
+              character: row.id,
+            })
+          ).done
+        );
         $("adminStatus").textContent =
           `${row.data.name}을(를) ${nick}님에게 옮겼습니다.`;
         await load();
@@ -687,13 +690,14 @@ function reviewRow(row) {
   return form;
 }
 /**
- * Deletes a character as adm/character_delete.php does, in the function's
- * bounded steps until it is done.
+ * Deletes a character as adm/character_delete.php does; the items it held
+ * go back to its owner's inventory (economy's) in bounded steps.
  */
 async function removeCharacter(row) {
+  await owner.mutate("characters/sheet:remove", { id: row.id });
   for (let step = 1; ; step++) {
-    const { done } = await owner.call("characters/sheet:remove", {
-      id: row.id,
+    const { done } = await owner.call("economy/inventory:followCharacter", {
+      character: row.id,
     });
     if (done) return;
     $("adminStatus").textContent = `${row.data.name} 정리 중… (${step})`;
@@ -838,7 +842,7 @@ $("characterForm").onsubmit = async (event) => {
     for (const [key, value] of Object.entries(values))
       if (key.startsWith("field:")) fields[key.slice(6)] = value;
     const row = selected;
-    await owner.call("characters/sheet:save", {
+    await owner.mutate("characters/sheet:save", {
       ...(row ? { id: row.id, revision: row.revision } : { nick: values.nick }),
       data: {
         name: values.name,

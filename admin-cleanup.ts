@@ -5,18 +5,12 @@ interface CleanupTarget {
   filter: Record<string, unknown>;
   detach?: boolean;
 }
+// A character is deleted at once by the characters/sheet:remove mutation:
+// only a log's comments are left to finish.
 export const cleanupTargets = (kind, id): CleanupTarget[] => {
   if (kind === "logs")
     return [{ collection: `${P}comments`, filter: { logId: id } }];
-  if (kind !== "characters") throw new Error("지원하지 않는 정리 항목입니다.");
-  return [
-    { collection: `${P}relations`, filter: { character: id } },
-    { collection: `${P}relations`, filter: { target: id } },
-    { collection: `${P}wardrobe`, filter: { character: id } },
-    { collection: `${P}inventory`, filter: { character: id }, detach: true },
-    { collection: `${P}couples`, filter: { first: id } },
-    { collection: `${P}couples`, filter: { second: id } },
-  ];
+  throw new Error("지원하지 않는 정리 항목입니다.");
 };
 /**
  * One revision-guarded, bounded batch; retrying never discards money/history.
@@ -60,36 +54,6 @@ export async function resumeCleanup(owner, kind, id) {
             }),
       });
     }
-  }
-  if (kind === "characters") {
-    let state;
-    try {
-      state = await owner.collection(`${P}character_state`).get(id);
-    } catch (error) {
-      if (error.code !== "NOT_FOUND") throw error;
-    }
-    if (state)
-      operations.push({
-        collection: `${P}character_state`,
-        delete: { id, condition: { revision: state.revision } },
-      });
-    let profile;
-    try {
-      profile = await owner
-        .collection(`${P}profiles`)
-        .get(parent.data.owner ?? parent.createdBy);
-    } catch (error) {
-      if (error.code !== "NOT_FOUND") throw error;
-    }
-    if (profile?.data.mainCharacter === id)
-      operations.push({
-        collection: `${P}profiles`,
-        set: {
-          id: profile.id,
-          data: { ...profile.data, mainCharacter: null },
-          condition: { revision: profile.revision },
-        },
-      });
   }
   operations.push({
     collection,

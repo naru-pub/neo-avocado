@@ -1,7 +1,5 @@
 import {
   PREFIX,
-  CHARACTERS,
-  CHARACTER_STATE,
   author,
   amount,
   characterState,
@@ -19,7 +17,6 @@ import {
   names,
   presentPost,
   logReadable,
-  withExp,
   payReward,
   takeBackReward,
 } from "../../modules/shared.js";
@@ -30,6 +27,7 @@ import {
 } from "../../modules/board-options.js";
 import type { Access } from "../../modules/shared.js";
 import { containing } from "../../modules/access.js";
+import { saveState, withExp } from "../../modules/characters.js";
 import {
   FAVORITE_LIMIT,
   addHistory,
@@ -437,10 +435,13 @@ export async function search(
       "SELECT member FROM profiles WHERE nick LIKE ? ESCAPE '\\' LIMIT 100",
       [containing(text)],
     ),
-    ctx.list(CHARACTERS, { where: { contains: ["name", text] }, size: 100 }),
+    ctx.sql<{ id: number }>(
+      "SELECT id FROM characters WHERE name LIKE ? ESCAPE '\\' LIMIT 100",
+      [containing(text)],
+    ),
   ]);
   const memberIds = members.rows.map((row) => row.member);
-  const characterIds = characters.documents.map((row) => row.id);
+  const characterIds = characters.rows.map((row) => String(row.id));
   // An author's name finds only what shows it: not 익명 posts or comments.
   const named: Where[] =
     memberIds.length || characterIds.length
@@ -820,15 +821,11 @@ export async function settle(
         "캐릭터로 쓴 정산글에만 경험치를 줄 수 있습니다.",
         { reason: "no_character" },
       );
-    const current = await characterState(ctx, character, owner);
-    const total = (current.data.exp ?? 0) + exp;
-    await ctx.set(
-      CHARACTER_STATE,
-      character,
-      await withExp(ctx, current.data, total),
-    );
+    const current = await characterState(ctx, character);
+    const total = current.data.exp + exp;
+    await saveState(ctx, character, await withExp(ctx, current.data, total));
     await addHistory(ctx, {
-      owner: current.data.owner ?? owner,
+      owner: current.data.owner,
       kind: "exp",
       at: ctx.now,
       character,

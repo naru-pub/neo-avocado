@@ -203,9 +203,10 @@ $("gotoTop").onclick = (event) => {
 async function showMainCharacter(profile) {
   const id = profile?.data.mainCharacter;
   const character = id
-    ? await collection(COLLECTION.characters)
-        .get(id)
-        .catch(() => null)
+    ? await query("characters/sheet:sheet", { id }).then(
+        (found) => found.document,
+        () => null,
+      )
     : null;
   if (character) {
     $("cardThumb").replaceChildren(

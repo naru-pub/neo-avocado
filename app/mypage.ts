@@ -4,8 +4,6 @@
 import {
   $,
   caller,
-  collection,
-  COLLECTION,
   formatTime,
   ownCharacters,
   run,
@@ -18,6 +16,7 @@ import {
   show,
   memberSettings,
   mutate,
+  query,
 } from "./core.js";
 import { expText, moneyText } from "./names.js";
 import { configureBoard, openLogNumber } from "./logs.js";
@@ -74,7 +73,7 @@ async function loadMyPage() {
     event.preventDefault?.();
     run(async () => {
       if (!choice.value) return;
-      const result = await caller().call("characters/profile:mainCharacter", {
+      const result = await mutate("characters/profile:mainCharacter", {
         character: choice.value,
       });
       show(result.document);
@@ -91,11 +90,9 @@ async function loadMyPage() {
           characters.map(async (character): Promise<[string, any]> => [
             character.id,
             // A card without them still shows.
-            await caller()
-              .call("characters/progression:characterStatus", {
-                character: character.id,
-              })
-              .catch(() => null),
+            await query("characters/progression:characterStatus", {
+              character: character.id,
+            }).catch(() => null),
           ]),
         )
       : [],
@@ -322,13 +319,12 @@ $("moneyForm").onsubmit = (event) => {
   run(async () => {
     const name = $<HTMLInputElement>("moneyTo").value.trim();
     const amount = Number($<HTMLInputElement>("moneyAmount").value);
-    const { documents } = await collection(COLLECTION.characters).list({
-      where: { eq: ["name", name] },
-      size: 1,
-    });
-    if (!documents[0]) return say("상대를 확인할 수 없습니다.");
+    const { document: target } = name
+      ? await query("characters/sheet:named", { name })
+      : { document: null };
+    if (!target) return say("상대를 확인할 수 없습니다.");
     const result = await caller().call("economy/money:send", {
-      character: documents[0].id,
+      character: target.id,
       amount,
     });
     $<HTMLFormElement>("moneyForm").reset?.();

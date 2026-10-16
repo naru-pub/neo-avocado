@@ -1,0 +1,86 @@
+// A member's character sheets: name, side, profile, pictures and the custom
+// fields the admin defines. The site owner edits, deletes, moves and creates
+// any member's, as the original's admin (adm/character_form.php,
+// character_delete.php).
+import {
+  characterRow,
+  checkRevision,
+  memberByNick,
+  moveCharacter,
+  presentCharacter,
+  removeCharacter,
+  saveSheet,
+} from "../../modules/characters.js";
+import type { SheetInput } from "../../modules/characters.js";
+import type { MutationCtx } from "../../modules/naru-types.js";
+
+/**
+ * Registers a character (no `id`) or edits one of the member's own (`id`,
+ * with the `revision` it was read at). The site owner saves any, and
+ * registers one for the member named by `nick`.
+ */
+export async function save(
+  ctx: MutationCtx,
+  args: {
+    id?: string | null;
+    data?: SheetInput;
+    revision?: string | null;
+    nick?: string | null;
+  } = {},
+) {
+  const { row, catalogue } = await saveSheet(ctx, args ?? {});
+  return { document: await presentCharacter(ctx, row, { catalogue }) };
+}
+
+/**
+ * Deletes one of the member's characters with what hangs off it. The site
+ * owner deletes any (adm/character_delete.php).
+ */
+export async function remove(ctx: MutationCtx, { id }: { id?: string } = {}) {
+  if (!ctx.member && !ctx.owner)
+    ctx.fail("ACCESS_DENIED", "권한이 없습니다.", { reason: "access_denied" });
+  const row = await characterRow(ctx, id);
+  if (!row)
+    ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {
+      reason: "document_not_found",
+    });
+  if (!ctx.owner && row.owner !== ctx.member.id)
+    ctx.fail("ACCESS_DENIED", "직접 쓴 것만 고치거나 지울 수 있습니다.", {
+      reason: "not_owned",
+    });
+  // The original offers 캐릭터 정보 삭제 only before approval (viewer.php:203).
+  if (!ctx.owner && row.state === "approved")
+    ctx.fail(
+      "ACCESS_DENIED",
+      "승인된 캐릭터는 삭제할 수 없습니다. 운영자에게 문의해 주세요.",
+      { reason: "approved" },
+    );
+  await removeCharacter(ctx, row);
+  return { done: true };
+}
+
+/**
+ * The site owner gives a character to the member named by `nick`, as the
+ * admin form changes its mb_id (adm/character_form.php:135), whatever that
+ * member's limit, with its outfits and relations.
+ */
+export async function move(
+  ctx: MutationCtx,
+  {
+    id,
+    nick,
+    revision = null,
+  }: { id?: string; nick?: string; revision?: string | null } = {},
+) {
+  if (!ctx.owner)
+    ctx.fail("ACCESS_DENIED", "권한이 없습니다.", { reason: "access_denied" });
+  const row = await characterRow(ctx, id);
+  if (!row)
+    ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {
+      reason: "document_not_found",
+    });
+  checkRevision(ctx, row, revision);
+  const member = await memberByNick(ctx, nick);
+  const moved = await moveCharacter(ctx, row, member);
+  return { document: await presentCharacter(ctx, moved), done: true };
+}

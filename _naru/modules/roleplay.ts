@@ -3,11 +3,9 @@
 // in a post, and [[nick]] calls with comment notices.
 import {
   CALLS,
-  CHARACTER_STATE,
   EXPLORE,
   INVENTORY,
   ITEMS,
-  TITLES,
   RECIPES,
   amount,
   pay,
@@ -26,7 +24,8 @@ import {
   requireUsable,
   lacking,
 } from "./shared.js";
-import { communitySettings } from "./access.js";
+import { communitySettings, one } from "./access.js";
+import { saveState } from "./characters.js";
 import { profileByNick, profileOf } from "./members.js";
 import type { Ctx, NaruDocument } from "./naru-types.js";
 
@@ -77,21 +76,23 @@ export async function speakerOf(
     ctx.fail("ACCESS_DENIED", "내 캐릭터로만 쓸 수 있습니다.", {
       reason: "not_owned",
     });
-  const state = await ctx.get(CHARACTER_STATE, character.id);
-  const titleId = state?.data.activeTitle;
-  const title =
-    typeof titleId === "string" && state.data.titles?.includes(titleId)
-      ? await ctx.get(TITLES, titleId)
-      : null;
-  // A title out of use (ti_use) is shown nowhere (extend/title.lib.php:7).
-  const shownTitle =
-    title && !title.data.deleted && title.data.enabled !== false;
+  // The title it shows, if it still holds it and it is in use (ti_use is
+  // shown nowhere otherwise, extend/title.lib.php:7).
+  const title = await one<{ name: string; image: string | null }>(
+    ctx,
+    `SELECT titles.name, titles.image FROM characters
+     JOIN character_titles ON character_titles.character_id = characters.id
+       AND character_titles.title_id = characters.active_title
+     JOIN titles ON titles.id = character_titles.title_id
+     WHERE characters.id = ? AND titles.enabled != 0`,
+    [Number(character.id)],
+  );
   return {
     character: character.id,
     name: character.data.name,
     type: character.data.type ?? "main",
-    title: shownTitle ? title.data.name : null,
-    titleImage: shownTitle ? https(title.data.image) : null,
+    title: title?.name ?? null,
+    titleImage: https(title?.image),
     // The 두상: an outfit dresses the 전신 only (member/viewer.php:76).
     portrait: https(character.data.image),
   };
@@ -254,7 +255,7 @@ export async function explore(ctx: Ctx, speaker: Speaker | null) {
       reason: "explore_closed",
     });
   const state = await characterState(ctx, speaker.character);
-  if (state.data.approved !== true)
+  if (!state.data.approved)
     ctx.fail("CONFLICT", "승인된 캐릭터만 할 수 있습니다.", {
       reason: "not_approved",
     });
@@ -270,7 +271,7 @@ export async function explore(ctx: Ctx, speaker: Speaker | null) {
   const outcome = await draw(ctx, null, EXPLORE);
   const prize = outcome.prize;
   if (prize) await give(ctx, prize, "explore", speaker.character);
-  await ctx.set(CHARACTER_STATE, speaker.character, {
+  await saveState(ctx, speaker.character, {
     ...state.data,
     explore: { day: today, count: used + 1 },
   });
@@ -293,7 +294,7 @@ export async function explore(ctx: Ctx, speaker: Speaker | null) {
  * (write.skin.php:196,290).
  */
 async function requireApproved(ctx: Ctx, speaker: Speaker) {
-  if ((await characterState(ctx, speaker.character)).data.approved !== true)
+  if (!(await characterState(ctx, speaker.character)).data.approved)
     ctx.fail("CONFLICT", "승인된 캐릭터만 할 수 있습니다.", {
       reason: "not_approved",
     });

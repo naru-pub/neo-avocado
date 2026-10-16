@@ -1,7 +1,7 @@
 // What every community write shares: who is writing (a member, or a guest
 // with a name and password), the document they are changing, and whether
-// they may. The site functions in functions/community/posts.js,
-// comments.js and functions/characters/sheet.js start from here.
+// they may. The site functions in functions/community/posts.js and
+// comments.js start from here.
 import { author, communityAccess } from "./shared.js";
 import type {
   Ctx,

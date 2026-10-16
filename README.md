@@ -20,12 +20,9 @@
 2. **컬렉션은 파일과 함께 준비됩니다.** `_naru/collections.json`이 이 사이트에
    필요한 컬렉션과 권한을 선언하고, 나루는 파일이 올라오는 순간 없는 컬렉션을
    만듭니다: 로그·댓글은 `community-board` 규칙과 함께 회원(공개 게시판은
-   손님도)이 읽고, 캐릭터는 `characters` 규칙이 볼 수 있는 항목만 회원과
-   (사이트공개 중에는) 손님에게 보여 주며, 프로필은 닉네임 중복 금지, 나머지는
-   관리자만 읽고 씁니다. 이미 있는 컬렉션의 설정을 바꿔야 하면(예: 손님이
-   멤버목록을 보도록 캐릭터·추가 항목·소속·종족·타이틀·관계·옷장·커플을 ‘누구나
-   읽기’로 바꾼 것) 나루의 데이터베이스 화면에 표시되고, 확인한 뒤 적용하기를
-   누르면 바뀝니다. 그다음 `admin/`(운영 화면)에서 운영자 로그인을
+   손님도)이 읽고, 나머지는 관리자만 읽고 씁니다. 캐릭터처럼 테이블로 옮긴
+   것은 `_naru/migrations/`가 만듭니다. 이미 있는 컬렉션의 설정을 바꿔야 하면
+   나루의 데이터베이스 화면에 표시되고, 확인한 뒤 적용하기를 누르면 바뀝니다. 그다음 `admin/`(운영 화면)에서 운영자 로그인을
    누릅니다.
 3. **가입 방식을 정합니다.** 나루의 데이터베이스 → 사이트 회원에서 누구나 가입,
    운영자 승인 후 이용, 신규 가입 중단 중 하나를 고르고, 필요하면 이메일을
@@ -331,22 +328,21 @@ HTML은 [DOMPurify](https://github.com/cure53/DOMPurify)로 정리하여 표시�
 | ---------------------- | -------------------------------------- | ---------------------------------------------------------------- |
 | 로그인·가입·닉네임     | `app.js`                               | `_naru/queries/community/`, `_naru/mutations/community/`         |
 | 게시판·로그·댓글       | `app/logs.js`, `app/posts.js`          | `_naru/functions/community/posts.js`, `comments.js`, `boards.js` |
-| 캐릭터                 | `app/characters.js`                    | `_naru/functions/characters/` (`sheet.js`가 등록·수정·삭제)      |
+| 캐릭터                 | `app/characters.js`, `app/couples.js`  | `_naru/queries/characters/`, `_naru/mutations/characters/`       |
 | 상점·인벤토리·제작     | `app/shop.js`                          | `_naru/functions/economy/`                                       |
 | 쪽지                   | `app/messages.js`                      | `_naru/functions/community/messages.js`                          |
 | 알림(호출)             | `app/calls.js`                         | `_naru/functions/community/calls.js`                             |
 | 퀘스트·안내 페이지     | `app/content.js`                       | `_naru/queries/content/`                                         |
 | 디자인·메뉴·배너       | `app/site.js`                          | `_naru/queries/content/site.js`                                  |
 | 새 글·알림 실시간 수신 | `app/live.js`                          |                                                                  |
-| 운영 화면              | `admin/`, `admin.js`, `admin-model.js` | `_naru/functions/characters/review.js`                           |
+| 운영 화면              | `admin/`, `admin.js`, `admin-model.js` | `_naru/mutations/characters/review.js`, `admin/documents.js`     |
 
 `app/core.js`는 모든 화면이 함께 쓰는 것(컬렉션 이름, 상태, 오류 표시, 편집 창)입니다.
 
 화면은 컬렉션을 SDK로 직접 읽습니다(`member.collection(...)`, 손님은
 `naru.collection(...)`). 누가 무엇을 읽는지는 `_naru/rules/`의 규칙이 정합니다.
-쓰기는 서버 함수(`community/posts:write`, `community/comments:write`,
-`characters/sheet:save` 등)로 합니다. 새 SDK로 옮긴 부분(가입·프로필·접속·사이트
-틀·안내 페이지·퀘스트)은 `_naru/migrations/`의 테이블을 쓰고, 화면은
+쓰기는 서버 함수(`community/posts:write`, `community/comments:write` 등)로
+합니다. 새 SDK로 옮긴 부분(가입·프로필·접속·사이트 틀·안내 페이지·퀘스트·캐릭터)은 `_naru/migrations/`의 테이블을 쓰고, 화면은
 `query`·`mutate`(`app/core.js`)로 `_naru/queries/`·`_naru/mutations/`를 부릅니다
 (`docs/port.md`).
 

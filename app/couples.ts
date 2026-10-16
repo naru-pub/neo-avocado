@@ -1,13 +1,6 @@
 // 커플목록 (couple/): every couple the owner registered, with both
 // characters' pictures and names and the day it began.
-import {
-  $,
-  allDocuments,
-  collection,
-  COLLECTION,
-  run,
-  showTab,
-} from "./core.js";
+import { $, query, run, showTab } from "./core.js";
 
 /** One side of a couple: the character's picture (or initial) and name, linked. */
 function partner(character) {
@@ -35,30 +28,15 @@ function partner(character) {
 }
 
 async function loadCouples() {
-  const couples = (await allDocuments(COLLECTION.couples)).sort(
-    (a, b) =>
-      (a.data.order ?? 0) - (b.data.order ?? 0) || (a.id < b.id ? -1 : 1),
-  );
-  const ids = [
-    ...new Set(couples.flatMap((row) => [row.data.first, row.data.second])),
-  ].filter((id) => typeof id === "string");
-  const characters = new Map();
-  for (let i = 0; i < ids.length; i += 100)
-    for (const row of await collection(COLLECTION.characters).getMany(
-      ids.slice(i, i + 100),
-    ))
-      if (row) characters.set(row.id, row);
+  // Both sides come with each couple, null where a character is gone.
+  const { couples } = await query("characters/couples:list");
   $("coupleList").replaceChildren(
     ...couples.map((couple) => {
       const item = document.createElement("li");
       const heart = document.createElement("span");
       heart.className = "heart";
       heart.textContent = "♥";
-      item.append(
-        partner(characters.get(couple.data.first)),
-        heart,
-        partner(characters.get(couple.data.second)),
-      );
+      item.append(partner(couple.first), heart, partner(couple.second));
       if (couple.data.since) {
         const since = document.createElement("p");
         since.className = "since";

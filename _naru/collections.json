@@ -15,26 +15,6 @@
       "write": "admin",
       "indexes": ["to"]
     },
-    "neo_avocado_character_fields": {
-      "read": "world",
-      "write": "admin",
-      "rules": "character-fields"
-    },
-    "neo_avocado_character_state": {
-      "read": "admin",
-      "write": "admin"
-    },
-    "neo_avocado_characters": {
-      "read": "world",
-      "write": "admin",
-      "rules": "characters",
-      "indexes": ["owner", "state"]
-    },
-    "neo_avocado_classes": {
-      "read": "world",
-      "write": "admin",
-      "rules": "shown"
-    },
     "neo_avocado_comments": {
       "read": "world",
       "write": "admin",
@@ -44,12 +24,6 @@
     "neo_avocado_counters": {
       "read": "admin",
       "write": "admin"
-    },
-    "neo_avocado_couples": {
-      "read": "world",
-      "write": "admin",
-      "rules": "shown",
-      "indexes": ["first", "second"]
     },
     "neo_avocado_emoticons": {
       "read": "world",
@@ -75,10 +49,6 @@
       "write": "admin",
       "rules": "shown"
     },
-    "neo_avocado_levels": {
-      "read": "admin",
-      "write": "admin"
-    },
     "neo_avocado_logs": {
       "read": "world",
       "write": "admin",
@@ -92,30 +62,6 @@
     },
     "neo_avocado_recipes": {
       "read": "member",
-      "write": "admin",
-      "rules": "shown"
-    },
-    "neo_avocado_relations": {
-      "read": "world",
-      "write": "admin",
-      "rules": "shown"
-    },
-    "neo_avocado_sides": {
-      "read": "world",
-      "write": "admin",
-      "rules": "shown"
-    },
-    "neo_avocado_stat_config": {
-      "read": "admin",
-      "write": "admin"
-    },
-    "neo_avocado_titles": {
-      "read": "world",
-      "write": "admin",
-      "rules": "shown"
-    },
-    "neo_avocado_wardrobe": {
-      "read": "world",
       "write": "admin",
       "rules": "shown"
     }

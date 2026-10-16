@@ -27,19 +27,20 @@ read natively through them; `_naru/collections.json` names the rule of each
 collection.
 
 - `community-board.js`: posts and comments, by board level and secret posts.
-- `characters.js`: characters, with only the custom fields the reader may see.
 - `boards.js`: the boards the reader's level may list.
 - `own.js`: a member's own inventory.
-- `character-fields.js`, `shown.js`: field definitions without admin-only
-  ones, and catalogues without deleted rows.
+- `shown.js`: catalogues without deleted rows.
 
 Profiles, settings, members, wallets and the site's frame are tables now
-(`migrations/0001_foundation.sql`), read through `queries/` and written
+(`migrations/0001_foundation.sql`), and so are characters with their
+fields, lists, titles, relations, outfits, couples, stats and ranks
+(`migrations/0003_characters.sql`), read through `queries/` and written
 through `mutations/`; rules and site functions read them with `ctx.sql`
-through `modules/access.js` and `modules/members.js`.
+through `modules/access.js`, `modules/members.js` and
+`modules/characters.js`.
 
 Rules import `modules/shared.js` for member access, boards and secret
 visibility, so they and the site functions that write the community
-(`functions/community/posts.js` and `comments.js`, `functions/characters/sheet.js`,
-which start from `modules/community.js`) share one implementation. Naru publishes rules with the
+(`functions/community/posts.js` and `comments.js`, which start from
+`modules/community.js`) share one implementation. Naru publishes rules with the
 function revision. Functions and shared modules cannot import a rule.

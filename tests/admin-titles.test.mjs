@@ -13,7 +13,11 @@ function fixture(count = 45) {
     table(P + name).set(id, { id, data, revision: "r1" });
   put("titles", "award", { name: "Award" });
   for (let i = 0; i < count; i++) {
-    put("characters", `c${i}`, { owner: "member", name: `Hero ${i}` });
+    put("characters", `c${i}`, {
+      owner: "member",
+      name: `Hero ${i}`,
+      state: i !== 0 ? "approved" : "editing",
+    });
     put("character_state", `c${i}`, {
       owner: "member",
       character: `c${i}`,
@@ -34,6 +38,16 @@ function fixture(count = 45) {
         if (!row)
           throw Object.assign(new Error("missing"), { code: "NOT_FOUND" });
         return structuredClone(row);
+      },
+      delete: async (id, { condition }) => {
+        assert.equal(table(name).get(id)?.revision, condition.revision);
+        table(name).delete(id);
+        // The site's tables take a title from its holders with it.
+        if (name === P + "titles")
+          for (const row of table(P + "character_state").values()) {
+            row.data.titles = row.data.titles.filter((title) => title !== id);
+            if (row.data.activeTitle === id) row.data.activeTitle = null;
+          }
       },
       set: async (id, data, { condition }) => {
         assert.equal(table(name).get(id)?.revision, condition.revision);
@@ -146,22 +160,18 @@ test("a later conflict reports committed progress and a rerun safely finishes", 
     ]);
 });
 
-test("title deletion resumes after conflict and clears all holders, including orphan progression", async () => {
+test("deleting a title counts its holders and leaves them their other titles and progression", async () => {
   const f = fixture(25);
   for (const row of f.table(P + "character_state").values()) {
     row.data.titles.push("award");
     row.data.activeTitle = "award";
   }
-  f.table(P + "characters").delete("c0");
-  f.fail(1);
-  await assert.rejects(deleteTitle(f.owner, "award"), { code: "CONFLICT" });
-  assert.equal(f.table(P + "titles").get("award").data.deleted, true);
-  await assert.rejects(
-    applyTitles(f.owner, "award", { action: "grant", characterIds: ["c1"] }),
-    /삭제 중인 타이틀/,
+  const heard = [];
+  assert.deepEqual(
+    await deleteTitle(f.owner, "award", (status) => heard.push(status)),
+    { completed: 25 },
   );
-  f.fail(null);
-  await deleteTitle(f.owner, "award");
+  assert.deepEqual(heard, [{ completed: 25, done: true }]);
   assert.equal(f.table(P + "titles").has("award"), false);
   for (const row of f.table(P + "character_state").values()) {
     assert.deepEqual(row.data.titles, ["old"]);

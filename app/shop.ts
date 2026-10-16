@@ -106,7 +106,7 @@ export function showShopCategory(name) {
 async function loadShopCharacter() {
   const id = state.inventoryCharacter;
   const status = id
-    ? await caller().call("characters/progression:characterStatus", {
+    ? await query("characters/progression:characterStatus", {
         character: id,
       })
     : null;
@@ -500,16 +500,10 @@ function giveItem(owned) {
       { name: "memo", label: "전달 메시지", multiline: true, max: 500 },
     ],
     async (data) => {
-      const { documents } = await collection(COLLECTION.characters).list({
-        where: {
-          all: [
-            { eq: ["name", data.name.trim()] },
-            { eq: ["state", "approved"] },
-          ],
-        },
-        size: 1,
+      const { document: character } = await query("characters/sheet:named", {
+        name: data.name.trim(),
+        approved: true,
       });
-      const character = documents[0];
       if (!character) return say("그 이름의 캐릭터를 찾을 수 없습니다.");
       await state.member.call("economy/inventory:gift", {
         inventory: owned.id,

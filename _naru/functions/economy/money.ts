@@ -1,5 +1,4 @@
 import {
-  CHARACTERS,
   MESSAGES,
   amount,
   lacking,
@@ -14,6 +13,7 @@ import {
   saveWallet,
   walletOf,
 } from "../../modules/members.js";
+import { characterRow } from "../../modules/characters.js";
 import type { Ctx } from "../../modules/naru-types.js";
 
 export const readOnly = ["ledger"];
@@ -32,12 +32,7 @@ export async function send(
     ctx.fail("INVALID_REQUEST", "보낼 금액을 1 이상으로 입력해 주세요.", {
       reason: "invalid_input",
     });
-  const target =
-    typeof character === "string" ? await ctx.get(CHARACTERS, character) : null;
-  const recipient =
-    target && !target.data.deleted
-      ? (target.createdBy ?? target.data.owner)
-      : null;
+  const recipient = (await characterRow(ctx, character))?.owner ?? null;
   const [from, to] = await Promise.all([
     profileOf(ctx, ctx.member.id),
     recipient ? profileOf(ctx, recipient) : null,

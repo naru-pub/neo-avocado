@@ -303,3 +303,19 @@ export function text(value: unknown, max: number, required = false): string {
     throw new Error("Invalid text input.");
   return value.trim();
 }
+
+/** An HTTPS address for a picture or link, at most 2,000 characters; refused otherwise. */
+export function imageUrl(value: unknown): string {
+  const url = text(value, 2000, true);
+  // QuickJS has no URL constructor. Browser images must use HTTPS, with no
+  // credentials, whitespace, data payloads or script schemes.
+  if (!/^https:\/\/[^\s/@?#:]+(?::\d{1,5})?(?:[/?#][^\s]*)?$/.test(url))
+    throw new Error("An image must have an HTTPS address.");
+  return url;
+}
+
+export function amount(value: unknown, label: string): number {
+  if (!Number.isSafeInteger(value) || (value as number) < 0)
+    throw new Error(`${label} must be a non-negative safe integer.`);
+  return value as number;
+}

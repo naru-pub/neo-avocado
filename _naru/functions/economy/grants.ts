@@ -1,19 +1,45 @@
 import {
-  CHARACTERS,
-  CHARACTER_STATE,
   INVENTORY,
   ITEMS,
   characterState,
   text,
-  withExp,
 } from "../../modules/shared.js";
+import { saveState, sheetOf, withExp } from "../../modules/characters.js";
+import type { Character, CharacterRow } from "../../modules/characters.js";
 import {
   addHistory,
   profileByNick,
   saveWallet,
   walletOf,
 } from "../../modules/members.js";
-import type { Ctx, NaruDocument } from "../../modules/naru-types.js";
+import type { Ctx } from "../../modules/naru-types.js";
+
+/** The character named so, or null (adm/exp_update.php finds it by ch_name). */
+async function characterNamed(
+  ctx: Ctx,
+  name: string,
+): Promise<Character | null> {
+  const { rows } = await ctx.sql<CharacterRow>(
+    "SELECT * FROM characters WHERE name = ? ORDER BY id LIMIT 1",
+    [text(name, 40, true)],
+  );
+  return rows[0] ? sheetOf(rows[0]) : null;
+}
+
+/**
+ * Up to `size` approved characters (exp_update.php's ch_state = 승인) after
+ * the one numbered `after`, and whether more follow.
+ */
+async function approvedAfter(ctx: Ctx, after: string | null, size: number) {
+  const { rows } = await ctx.sql<CharacterRow>(
+    "SELECT * FROM characters WHERE state = 'approved' AND id > ? ORDER BY id LIMIT ?",
+    [Number(after) || 0, size + 1],
+  );
+  return {
+    characters: rows.slice(0, size).map((row) => sheetOf(row)),
+    more: rows.length > size,
+  };
+}
 
 /** Members given money a call, when it goes to everyone. */
 const MONEY_PAGE = 10;
@@ -122,21 +148,13 @@ export async function grant(
       skipped: page.length - granted - excluded,
     };
   }
-  const give = async (character: NaruDocument) => {
-    const current = await characterState(
-      ctx,
-      character.id,
-      character.createdBy ?? character.data.owner,
-    );
-    const exp = (current.data.exp ?? 0) + value;
+  const give = async (character: Character) => {
+    const current = await characterState(ctx, character.id);
+    const exp = current.data.exp + value;
     if (exp < 0) return false;
-    await ctx.set(
-      CHARACTER_STATE,
-      character.id,
-      await withExp(ctx, current.data, exp),
-    );
+    await saveState(ctx, character.id, await withExp(ctx, current.data, exp));
     await addHistory(ctx, {
-      owner: current.data.owner ?? character.data.owner,
+      owner: current.data.owner,
       kind: "exp",
       at: ctx.now,
       character: character.id,
@@ -148,41 +166,27 @@ export async function grant(
     return true;
   };
   if (target === "one") {
-    const { documents } = await ctx.list(CHARACTERS, {
-      where: {
-        all: [
-          { eq: ["name", text(name, 40, true)] },
-          { ne: ["deleted", true] },
-        ],
-      },
-      size: 1,
-    });
-    if (!documents[0])
+    const character = await characterNamed(ctx, name);
+    if (!character)
       ctx.fail("INVALID_REQUEST", "존재하는 캐릭터가 아닙니다.", {
         reason: "no_character",
       });
-    if (!(await give(documents[0])))
+    if (!(await give(character)))
       ctx.fail("CONFLICT", "가진 것보다 많이 깎을 수 없습니다.", {
         reason: "not_enough",
       });
     return { done: true, granted: 1, skipped: 0 };
   }
   // 전체지급: every approved character (exp_update.php's ch_state = 승인).
-  const page = await ctx.list(CHARACTERS, {
-    where: {
-      all: [{ eq: ["state", "approved"] }, { ne: ["deleted", true] }],
-    },
-    size: 8,
-    after,
-  });
+  const page = await approvedAfter(ctx, after, 8);
   let granted = 0;
-  for (const character of page.documents)
+  for (const character of page.characters)
     if (await give(character)) granted += 1;
   return {
-    done: !page.nextCursor,
-    after: page.nextCursor,
+    done: !page.more,
+    after: page.more ? page.characters.at(-1).id : null,
     granted,
-    skipped: page.documents.length - granted,
+    skipped: page.characters.length - granted,
   };
 }
 
@@ -224,8 +228,8 @@ async function grantItem(
   let writes = ITEM_WRITES;
   let granted = 0;
   /** Gives what the budget allows; true once the character has them all. */
-  const give = async (character: NaruDocument) => {
-    const owner = character.createdBy ?? character.data.owner;
+  const give = async (character: Character) => {
+    const owner = character.data.owner;
     while (given < count && writes > 1) {
       await ctx.add(INVENTORY, {
         owner,
@@ -255,41 +259,29 @@ async function grantItem(
     return true;
   };
   if (target === "one") {
-    const { documents } = await ctx.list(CHARACTERS, {
-      where: {
-        all: [
-          { eq: ["name", text(name, 40, true)] },
-          { ne: ["deleted", true] },
-        ],
-      },
-      size: 1,
-    });
-    if (!documents[0])
+    const character = await characterNamed(ctx, name);
+    if (!character)
       ctx.fail("INVALID_REQUEST", "존재하는 캐릭터가 아닙니다.", {
         reason: "no_character",
       });
-    return (await give(documents[0]))
+    return (await give(character))
       ? { done: true, granted, skipped: 0 }
       : { done: false, after: `${given}:`, granted, skipped: 0 };
   }
+  // `at` is the last character given everything, by number.
   for (;;) {
-    const page = await ctx.list(CHARACTERS, {
-      where: {
-        all: [{ eq: ["state", "approved"] }, { ne: ["deleted", true] }],
-      },
-      size: 1,
-      after: at,
-    });
-    if (!page.documents[0]) return { done: true, granted, skipped: 0 };
-    if (!(await give(page.documents[0])))
+    const page = await approvedAfter(ctx, at, 1);
+    const character = page.characters[0];
+    if (!character) return { done: true, granted, skipped: 0 };
+    if (!(await give(character)))
       return {
         done: false,
         after: `${given}:${at ?? ""}`,
         granted,
         skipped: 0,
       };
-    at = page.nextCursor;
-    if (!at) return { done: true, granted, skipped: 0 };
+    at = character.id;
+    if (!page.more) return { done: true, granted, skipped: 0 };
     if (writes < 2)
       return { done: false, after: `0:${at}`, granted, skipped: 0 };
   }

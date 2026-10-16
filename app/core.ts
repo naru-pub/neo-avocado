@@ -7,22 +7,13 @@ import { imageSlotsOf, viewerOf } from "../_naru/modules/images.js";
 
 const PREFIX = "neo_avocado_";
 export const COLLECTION = {
-  characters: `${PREFIX}characters`,
   logs: `${PREFIX}logs`,
   comments: `${PREFIX}comments`,
   inventory: `${PREFIX}inventory`,
   items: `${PREFIX}items`,
   recipes: `${PREFIX}recipes`,
-  relations: `${PREFIX}relations`,
-  wardrobe: `${PREFIX}wardrobe`,
-  characterState: `${PREFIX}character_state`,
-  titles: `${PREFIX}titles`,
-  couples: `${PREFIX}couples`,
   boards: `${PREFIX}boards`,
   emoticons: `${PREFIX}emoticons`,
-  characterFields: `${PREFIX}character_fields`,
-  sides: `${PREFIX}sides`,
-  classes: `${PREFIX}classes`,
   boardGroups: `${PREFIX}board_groups`,
 };
 export const SHOP_PAGE = 10;
@@ -195,16 +186,9 @@ export const formatTime = (value) =>
 export const mine = (document) =>
   state.member !== null &&
   (document.createdBy ?? document.data.owner) === state.member.id;
-/** Narrows a read to the member's own characters; `mine` still decides. */
+/** The member's own characters, oldest first (characters/sheet:mine). */
 export const ownCharacters = async () =>
-  (
-    await allDocuments(COLLECTION.characters, undefined, {
-      any: [
-        { eq: ["owner", state.member.id] },
-        { eq: [{ metadata: "createdBy" }, state.member.id] },
-      ],
-    })
-  ).filter(mine);
+  (await query("characters/sheet:mine")).documents;
 /** Resolve the distinct authors for a page in bounded batches before rendering. */
 export async function preloadNicks(rows) {
   const member = state.member;
@@ -288,16 +272,16 @@ export function withGuestPassword(title, action) {
 /**
  * The SDK's collection for whoever is reading: the member, or a visitor. The
  * collection rules in _naru/rules/ decide what each of them sees. Pages write
- * through site functions (community/posts, community/comments,
- * characters/sheet) and mutations.
+ * through site functions (community/posts, community/comments) and
+ * mutations.
  */
 export function collection(name) {
   return (state.member ?? state.naru).collection(name);
 }
 
 /**
- * Calls a site function that deletes in bounded steps (a post with its
- * comments, a character with what hangs off it) until it answers `done`.
+ * Calls a site function that works in bounded steps (deleting a post with
+ * its comments, moving a deleted character's items) until it answers `done`.
  */
 export async function removeAll(reference, args) {
   while (!(await caller().call(reference, args)).done);

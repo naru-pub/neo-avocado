@@ -2,7 +2,7 @@
 // type checking only: this module exports types and compiles to nothing.
 // Queries and mutations take Naru's own declarations (naru-functions.d.ts,
 // a copy of naru.pub/sdk/1.1.0/functions.d.ts).
-import type { QueryCtx } from "./naru-functions";
+import type { Json, QueryCtx } from "./naru-functions";
 export type {
   QueryCtx,
   MutationCtx,
@@ -134,7 +134,7 @@ export interface Ctx extends ReadCtx {
   ): Promise<NaruDocument<T>>;
   delete(collection: string, id: string): Promise<unknown>;
   /** Refuses the call: its writes roll back and the page shows `message`. */
-  fail(code: string, message: string, details?: Record<string, unknown>): never;
+  fail(code: string, message: string, details?: Json): never;
   /** Sends `data` to a member's open pages after the call commits. */
   notify(member: string, data: unknown): void;
   /** Sends `data` to every page listening on `topic` after the call commits. */

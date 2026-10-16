@@ -1,21 +1,24 @@
-import { CHARACTERS } from "../../modules/shared.js";
 import {
   CHARACTER_STATES,
   CHARACTER_TYPES,
   MAX_FIELD_TEXT,
+  characterRow,
+  checkRevision,
   fieldCatalogue,
-  syncApproval,
+  fieldsOf,
+  presentCharacter,
 } from "../../modules/characters.js";
-import type { Ctx } from "../../modules/naru-types.js";
+import type { CharacterRow } from "../../modules/characters.js";
+import type { MutationCtx } from "../../modules/naru-types.js";
 
 /**
  * The site owner's review of a character application (adm/character_form):
  * state editing/submitted/approved, main/sub/NPC type and admin-only fields.
- * Approval and the official record's `approved` flag change together, so shop
- * and item conditions agree with the applicant list.
+ * Approval is the sheet's state, so shop and item conditions agree with the
+ * applicant list.
  */
 export async function reviewCharacter(
-  ctx: Ctx,
+  ctx: MutationCtx,
   {
     character,
     state,
@@ -31,19 +34,16 @@ export async function reviewCharacter(
     revision?: string;
   } = {},
 ) {
-  if (!ctx.owner) ctx.fail("ACCESS_DENIED", "Only the site owner reviews.");
-  const row =
-    typeof character === "string" ? await ctx.get(CHARACTERS, character) : null;
-  if (!row || row.data.deleted)
+  if (!ctx.owner)
+    ctx.fail("ACCESS_DENIED", "사이트 운영자만 할 수 있습니다.", {
+      reason: "owner_only",
+    });
+  const row = await characterRow(ctx, character);
+  if (!row)
     ctx.fail("INVALID_REQUEST", "캐릭터를 확인해 주세요.", {
       reason: "no_character",
     });
-  if (revision !== undefined && revision !== row.revision)
-    ctx.fail(
-      "CONFLICT",
-      "다른 곳에서 수정되었습니다. 새로고침 후 다시 수정해 주세요.",
-      { reason: "conflict" },
-    );
+  checkRevision(ctx, row, revision);
   if (state !== undefined && !CHARACTER_STATES.includes(state))
     ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
       reason: "invalid_input",
@@ -52,7 +52,7 @@ export async function reviewCharacter(
     ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
       reason: "invalid_input",
     });
-  const values: Record<string, string> = { ...(row.data.fields ?? {}) };
+  const values: Record<string, string> = fieldsOf(row);
   if (fields !== undefined) {
     if (!fields || typeof fields !== "object" || Array.isArray(fields))
       ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
@@ -84,12 +84,12 @@ export async function reviewCharacter(
         { reason: "fields_too_long" },
       );
   }
-  const document = await ctx.set(CHARACTERS, row.id, {
-    ...row.data,
-    fields: values,
-    ...(state !== undefined ? { state } : {}),
-    ...(type !== undefined ? { type } : {}),
-  });
-  if (state !== undefined) await syncApproval(ctx, row, state);
-  return { document };
+  const saved = (
+    await ctx.sql<CharacterRow>`
+      UPDATE characters SET fields = ${JSON.stringify(values)},
+        state = ${state ?? row.state}, type = ${type ?? row.type},
+        version = version + 1
+      WHERE id = ${row.id} RETURNING *`
+  ).rows[0];
+  return { document: await presentCharacter(ctx, saved) };
 }

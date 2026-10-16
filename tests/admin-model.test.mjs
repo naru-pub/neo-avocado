@@ -246,7 +246,6 @@ test("official progression editing preserves purchase counts and validates title
   };
   const values = {
     id: "hero",
-    approved: true,
     exp: "100",
     points: "5",
     titles: ["winner"],
@@ -282,7 +281,8 @@ test("official progression editing preserves purchase counts and validates title
       references,
     ),
   );
-  assert.ok(scopes.includes("neo_avocado_character_state"));
+  // A table: the admin bridge reaches it, not the owner's sign-in.
+  assert.ok(!scopes.includes("neo_avocado_character_state"));
 });
 
 test("quest forms validate Korean scheduling and multiline images", () => {
@@ -524,7 +524,7 @@ test("profile field definitions validate codes and options; explore misses store
     ).data.item,
     null,
   );
-  assert.ok(scopes.includes("neo_avocado_character_fields"));
+  assert.ok(!scopes.includes("neo_avocado_character_fields"));
   assert.ok(scopes.includes("neo_avocado_explore"));
   assert.equal(models.character_review.collection, "neo_avocado_characters");
 });
@@ -539,7 +539,6 @@ test("the site declares every collection it uses, and sign-in asks for them", as
     "_naru/modules",
     "_naru/functions/community",
     "_naru/functions/economy",
-    "_naru/functions/characters",
     "_naru/rules",
   ])
     for (const name of await readdir(
@@ -557,7 +556,7 @@ test("the site declares every collection it uses, and sign-in asks for them", as
     ))
       used.add(`neo_avocado_${name}`);
   }
-  // The foundation's tables are reached by queries, not collections.
+  // The site's tables are reached by queries, not collections.
   const { mappingOf } = await import("../dist/_naru/modules/documents.js");
   assert.deepEqual(
     [...used].filter((name) => !scopes.includes(name) && !mappingOf(name)),

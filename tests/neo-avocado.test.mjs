@@ -86,6 +86,7 @@ function fakeDatabase(rows = {}) {
       "neo_avocado_couples",
       "neo_avocado_sides",
       "neo_avocado_classes",
+      "neo_avocado_titles",
       "neo_avocado_board_groups",
     ].map((name) => [
       name,
@@ -270,6 +271,163 @@ function fakeDatabase(rows = {}) {
       }
       const profileOf = (id) =>
         store.get(PROFILES).find((row) => row.id === id) ?? null;
+      /**
+       * The characters' queries, answered from the same store: sheets as
+       * lists show them (no custom values) or whole, with the fields the
+       * reader may see; what a character's page shows beside them.
+       */
+      const characterQueries = () => {
+        const rows = (name) => store.get(`neo_avocado_${name}`);
+        const ownerOf = (row) => row.createdBy ?? row.data.owner;
+        const ordered = (list) =>
+          [...list].sort(
+            (a, b) =>
+              (a.data.order ?? 0) - (b.data.order ?? 0) ||
+              (a.id < b.id ? -1 : 1),
+          );
+        const listed = (row) => {
+          const { fields, ...data } = row.data;
+          return { ...row, data };
+        };
+        const definitions = () =>
+          ordered(rows("character_fields")).filter(
+            (row) => database.owner === true || row.data.visibility !== "admin",
+          );
+        const visible = (row) =>
+          Object.fromEntries(
+            definitions()
+              .filter(
+                (field) =>
+                  (field.data.visibility ?? "public") === "public" ||
+                  (field.data.visibility === "owner" &&
+                    database.signedIn &&
+                    ownerOf(row) === ME),
+              )
+              .filter((field) => row.data.fields?.[field.id] !== undefined)
+              .map((field) => [field.id, row.data.fields[field.id]]),
+          );
+        const find = (id) => rows("characters").find((row) => row.id === id);
+        const nicks = (list) =>
+          Object.fromEntries(
+            list
+              .map((row) => [ownerOf(row), profileOf(ownerOf(row))?.data.nick])
+              .filter(([, nick]) => nick !== undefined),
+          );
+        const name = (id) =>
+          find(id) ? { id, name: find(id).data.name } : null;
+        return {
+          "characters/sheet:choices": () => ({
+            fields: definitions(),
+            sides: ordered(rows("sides")),
+            classes: ordered(rows("classes")),
+          }),
+          "characters/sheet:list": () => {
+            const { filter = null, page = 1, size = 20 } = args ?? {};
+            const all = rows("characters")
+              .filter(
+                (row) =>
+                  !filter ||
+                  (filter === "approved"
+                    ? row.data.state === "approved"
+                    : ["editing", "submitted"].includes(row.data.state)),
+              )
+              .sort(
+                (a, b) =>
+                  (a.createdAt < b.createdAt ? -1 : 1) *
+                  (filter === "approved" ? 1 : -1),
+              );
+            const documents = size
+              ? all.slice((page - 1) * size, page * size)
+              : all;
+            return {
+              documents: documents.map(listed),
+              total: all.length,
+              nicks: nicks(documents),
+            };
+          },
+          "characters/sheet:mine": () => ({
+            documents: rows("characters")
+              .filter((row) => ownerOf(row) === ME)
+              .map(listed),
+          }),
+          "characters/sheet:sheet": () => {
+            const row = find(args.id);
+            if (!row) return { document: null };
+            const outfit = rows("wardrobe").find(
+              (entry) =>
+                entry.id === row.data.outfit && entry.data.character === row.id,
+            );
+            return {
+              document: {
+                ...listed(row),
+                data: { ...listed(row).data, fields: visible(row) },
+              },
+              nicks: nicks([row]),
+              outfitImage: outfit?.data.image ?? null,
+            };
+          },
+          "characters/sheet:named": () => ({
+            document:
+              rows("characters")
+                .filter(
+                  (row) =>
+                    row.data.name === args.name &&
+                    (!args.approved || row.data.state === "approved"),
+                )
+                .map(listed)[0] ?? null,
+          }),
+          "characters/sheet:details": async () => {
+            const row = find(args.character);
+            const status = await database.answer(
+              "characters/progression:characterStatus",
+              { character: args.character },
+            );
+            const held = status?.state?.titles ?? [];
+            return {
+              fields: row ? visible(row) : {},
+              status,
+              titles: rows("titles").filter((title) => held.includes(title.id)),
+              couples: ordered(
+                rows("couples").filter((couple) =>
+                  [couple.data.first, couple.data.second].includes(
+                    args.character,
+                  ),
+                ),
+              ).map((couple) => ({
+                ...couple,
+                partner: name(
+                  couple.data.first === args.character
+                    ? couple.data.second
+                    : couple.data.first,
+                ),
+              })),
+              relations: rows("relations")
+                .filter(
+                  (relation) => relation.data.character === args.character,
+                )
+                .sort(
+                  (a, b) =>
+                    (a.data.order ?? 0) - (b.data.order ?? 0) ||
+                    (a.createdAt < b.createdAt ? 1 : -1),
+                )
+                .map((relation) => ({
+                  ...relation,
+                  target: name(relation.data.target),
+                })),
+              wardrobe: rows("wardrobe").filter(
+                (outfit) => outfit.data.character === args.character,
+              ),
+            };
+          },
+          "characters/couples:list": () => ({
+            couples: ordered(rows("couples")).map((couple) => ({
+              ...couple,
+              first: find(couple.data.first) ?? null,
+              second: find(couple.data.second) ?? null,
+            })),
+          }),
+        };
+      };
       if (name === "community/membership:membership") {
         const profile = profileOf(ME);
         return {
@@ -325,6 +483,7 @@ function fakeDatabase(rows = {}) {
             store.get("neo_avocado_wallets").find((row) => row.id === ME)?.data
               .balance ?? 0,
         }),
+        ...characterQueries(),
       };
       if (Object.hasOwn(foundation, name)) {
         calls.push({ method: kind, name, args });
@@ -389,7 +548,9 @@ function fakeDatabase(rows = {}) {
     answer: (name) =>
       name === "community/messages:messageStatus"
         ? { unread: false }
-        : refuse("empty"),
+        : name === "economy/inventory:followCharacter"
+          ? { done: true }
+          : refuse("empty"),
   };
   return database;
 }
@@ -1105,27 +1266,21 @@ test("characters are read when their tab is first opened, and registered by memb
     ],
   });
   const { $, settle, submit } = await page(database);
-  assert.equal(
-    database.calls.some((call) => call.name === CHARACTERS),
-    false,
-  );
+  const lists = () =>
+    database.calls.filter((call) => call.name === "characters/sheet:list");
+  assert.equal(lists().length, 0);
   $("tabCharacters").onclick();
   await settle();
   await settle();
   assert.equal($("charactersView").hidden, false);
-  assert.deepEqual(
-    database.calls.filter((call) => call.name === CHARACTERS),
-    [
-      {
-        method: "list",
-        name: CHARACTERS,
-        sort: [[{ metadata: "createdAt" }, "desc"]],
-        size: 20,
-        after: null,
-        includeTotal: true,
-      },
-    ],
-  );
+  // A page of them, newest first, with their owners' nicknames.
+  assert.deepEqual(lists(), [
+    {
+      method: "query",
+      name: "characters/sheet:list",
+      args: { filter: null, page: 1, size: 20 },
+    },
+  ]);
   assert.equal(
     $("characters").querySelector(".author").textContent,
     "오너: 나",
@@ -1170,8 +1325,7 @@ test("characters are read when their tab is first opened, and registered by memb
   assert.equal($("newCharacter").hidden, true);
   assert.equal($("characterForm").hidden, true);
   // The list reads the new character when next opened, and then not again.
-  const reads = () =>
-    database.calls.filter((call) => call.name === CHARACTERS).length;
+  const reads = () => lists().length;
   $("tabCharacters").onclick();
   await settle();
   await settle();
@@ -1759,10 +1913,14 @@ test("custom fields render on the form, and the applicant filter queries by stat
   $("characterFilter").onchange();
   await settle();
   await settle();
+  // 신청자목록 reads them all at once (size 0), to count and search.
   assert.deepEqual(
-    database.calls.filter((call) => call.name === CHARACTERS).at(-1).where,
-    { in: ["state", ["editing", "submitted"]] },
+    database.calls
+      .filter((call) => call.name === "characters/sheet:list")
+      .at(-1).args,
+    { filter: "applicants", page: 1, size: 0 },
   );
+  assert.match($("characters").textContent, /카도/);
 });
 
 test("calls arrive as live notices and the history marks them seen", async () => {

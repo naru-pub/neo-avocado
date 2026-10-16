@@ -2,12 +2,10 @@
 
 import {
   $,
-  allDocuments,
   caller,
   CHARACTER_PAGE,
-  COLLECTION,
-  collection,
   memberSettings,
+  mutate,
   query,
   edit,
   type EditField,
@@ -25,33 +23,36 @@ import {
   removeAll,
   route,
   formatTime,
-  cursorPages,
   renderPages,
 } from "./core.js";
 import { writeTo } from "./messages.js";
 import { expText, moneyText } from "./names.js";
 
-const CHARACTER_FILTERS = {
-  // member/ready.php: characters not yet approved, in either state.
-  applicants: { in: ["state", ["editing", "submitted"]] },
-  approved: { eq: ["state", "approved"] },
-};
 /**
- * The owner's 소속 and 종족 lists (adm/side_list, class_list), in order; while
- * a list is empty, members write their own.
+ * The list's filter: "applicants" (member/ready.php: characters not yet
+ * approved, in either state), "approved", or every character.
+ */
+const characterFilter = () =>
+  $<HTMLSelectElement>("characterFilter").value || null;
+/** Keeps the nicknames a query answered beside its characters. */
+function keepNicks(nicks: Record<string, string> = {}) {
+  for (const [id, nick] of Object.entries(nicks))
+    if (!state.nicks.has(id)) state.nicks.set(id, Promise.resolve(nick));
+}
+/**
+ * The owner's 소속 and 종족 lists (adm/side_list, class_list), in order (while
+ * a list is empty, members write their own), and the custom profile fields
+ * (adm/character_article_list.php), in one read.
  */
 async function loadChoices() {
-  const sorted = (rows) =>
-    rows.sort(
-      (a, b) =>
-        (a.data.order ?? 0) - (b.data.order ?? 0) || (a.id < b.id ? -1 : 1),
-    );
-  [state.sides, state.classes] = await Promise.all([
-    allDocuments(COLLECTION.sides).then(sorted),
-    allDocuments(COLLECTION.classes).then(sorted),
-  ]);
+  const member = state.member;
+  const { fields, sides, classes } = await query("characters/sheet:choices");
+  if (state.member !== member) return;
+  state.sides = sides;
+  state.classes = classes;
   choiceField("characterSide", state.sides);
   choiceField("characterClass", state.classes);
+  showFieldCatalogue(fields);
 }
 /**
  * The names a member may pick (si_auth, cl_auth: up to their level); the
@@ -97,43 +98,20 @@ function choiceEdit(name, label, rows, value) {
 }
 /**
  * The characters the filter picks by numbered pages: 멤버목록 oldest first
- * (get_character_list's ch_id asc), the rest newest first.
+ * (get_character_list's ch_id asc), the rest newest first; `size` 0, all.
  */
-const characterPages = cursorPages((after, { includeTotal, size }) => {
-  const where =
-    CHARACTER_FILTERS[$<HTMLSelectElement>("characterFilter").value];
-  return collection(COLLECTION.characters).list({
-    sort: [
-      [
-        { metadata: "createdAt" },
-        $<HTMLSelectElement>("characterFilter").value === "approved"
-          ? "asc"
-          : "desc",
-      ],
-    ],
-    size,
-    after,
-    ...(includeTotal ? { includeTotal: true } : {}),
-    ...(where ? { where } : {}),
-  });
-}, CHARACTER_PAGE);
+async function characterPage(filter, page, size) {
+  const result = await query("characters/sheet:list", { filter, page, size });
+  keepNicks(result.nicks);
+  return result;
+}
 export async function loadCharacters({ page: number = 1 } = {}) {
-  const where =
-    CHARACTER_FILTERS[$<HTMLSelectElement>("characterFilter").value];
-  if (number === 1) characterPages.reset();
-  await Promise.all([
-    loadFieldCatalogue(),
-    number === 1 ? loadChoices() : null,
-  ]);
-  $("applicantTools").hidden =
-    $<HTMLSelectElement>("characterFilter").value !== "applicants";
-  if ($<HTMLSelectElement>("characterFilter").value === "applicants") {
+  const filter = characterFilter();
+  if (number === 1 || !state.fieldCatalogue) await loadChoices();
+  $("applicantTools").hidden = filter !== "applicants";
+  if (filter === "applicants") {
     if (number === 1 || !applicants.rows)
-      applicants.rows = await allDocuments(
-        COLLECTION.characters,
-        undefined,
-        where,
-      );
+      applicants.rows = (await characterPage(filter, 1, 0)).documents;
     await showApplicants(number);
     state.charactersLoaded = true;
     return;
@@ -145,20 +123,19 @@ export async function loadCharacters({ page: number = 1 } = {}) {
     state.names.sideTitle &&
     state.sides.length >= 2
   ) {
-    await showBySide(where);
+    await showBySide();
     state.charactersLoaded = true;
     return;
   }
-  const page = await characterPages.page(number);
-  await preloadNicks(page.documents);
+  const page = await characterPage(filter, number, CHARACTER_PAGE);
   $("characters").replaceChildren();
   for (const character of page.documents)
     $("characters").append(await characterItem(character));
   state.charactersLoaded = true;
   renderPages(
     $("characterPages"),
-    page.number,
-    Math.ceil((characterPages.total ?? 0) / CHARACTER_PAGE),
+    number,
+    Math.ceil(page.total / CHARACTER_PAGE),
     (next) => loadCharacters({ page: next }),
   );
 }
@@ -250,13 +227,8 @@ $("applicantSearch").onsubmit = (event) => {
   });
 };
 /** Every approved character under its 소속's title, the rest under 기타. */
-async function showBySide(where) {
-  const characters = await allDocuments(
-    COLLECTION.characters,
-    undefined,
-    where,
-  );
-  await preloadNicks(characters);
+async function showBySide() {
+  const characters = (await characterPage("approved", 1, 0)).documents;
   const sections = [
     ...state.sides.map((side) => ({
       side,
@@ -287,17 +259,13 @@ async function showBySide(where) {
   $("characters").replaceChildren(...items);
   $("characterPages").hidden = true;
 }
-/** The owner's custom profile fields (adm/character_article_list.php), read once. */
+/** The owner's custom profile fields, read with the lists once a visit. */
 async function loadFieldCatalogue() {
-  if (state.fieldCatalogue) return state.fieldCatalogue;
-  const member = state.member;
-  const rows = (await allDocuments(COLLECTION.characterFields))
-    .filter((row) => /^[a-z][a-z0-9_]{0,31}$/.test(row.id))
-    .sort(
-      (a, b) =>
-        (a.data.order ?? 0) - (b.data.order ?? 0) || (a.id < b.id ? -1 : 1),
-    );
-  if (state.member !== member) return [];
+  if (!state.fieldCatalogue) await loadChoices();
+  return state.fieldCatalogue ?? [];
+}
+/** The registration form's inputs for the custom fields. */
+function showFieldCatalogue(rows) {
   state.fieldCatalogue = rows;
   $("characterFields").replaceChildren(
     ...rows.flatMap((row) => {
@@ -431,7 +399,11 @@ async function characterItem(character) {
   remove.onclick = () =>
     run(async () => {
       if (!confirm(`${character.data.name}을(를) 지울까요?`)) return;
-      await removeAll("characters/sheet:remove", { id: character.id });
+      await mutate("characters/sheet:remove", { id: character.id });
+      // Its items go back to the member's own inventory (economy's).
+      await removeAll("economy/inventory:followCharacter", {
+        character: character.id,
+      });
       state.speakers = null;
       item.remove();
     });
@@ -439,7 +411,7 @@ async function characterItem(character) {
   main.hidden = !mine(character);
   main.onclick = () =>
     run(async () => {
-      const result = await caller().call("characters/profile:mainCharacter", {
+      const result = await mutate("characters/profile:mainCharacter", {
         character: character.id,
       });
       show(result.document);
@@ -460,7 +432,10 @@ export async function editCharacter(
 ) {
   // Lists carry no custom values, so an edit starts from the full sheet.
   const catalogue = await loadFieldCatalogue();
-  const current = await collection(COLLECTION.characters).get(character.id);
+  const { document: current } = await query("characters/sheet:sheet", {
+    id: character.id,
+  });
+  if (!current) throw new Error("캐릭터를 찾을 수 없습니다.");
   const fields: EditField[] = [
     {
       name: "name",
@@ -559,19 +534,24 @@ export async function editCharacter(
           const uploaded = await uploadMedia(file);
           data.fields[name.slice(7)] = uploaded.url;
         }
-      const { document: saved } = await caller().call("characters/sheet:save", {
-        id: character.id,
-        data,
-        revision: current.revision,
-        ...(ticket ? { ticket } : {}),
-      });
+      // A 프로필수정 ticket is economy's, which saves the sheet as it spends it.
+      const { document: saved } = ticket
+        ? await caller().call("economy/inventory:useProfileTicket", {
+            ticket,
+            id: character.id,
+            data,
+            revision: current.revision,
+          })
+        : await mutate("characters/sheet:save", {
+            id: character.id,
+            data,
+            revision: current.revision,
+          });
       state.speakers = null;
       await onSaved(saved);
     },
   );
 }
-// Which functions only read is declared in their modules (readOnly), so Naru
-// gives them the read budget; the page calls them all the same way.
 function wireCharacterDetails(item, character) {
   const details = item.querySelector(".character-details");
   const addRelation = item.querySelector(".add-relation");
@@ -596,17 +576,15 @@ function wireCharacterDetails(item, character) {
   let loaded = false;
   const refresh = async () => {
     await loadFieldCatalogue();
+    // What the page shows beside the sheet, in one read.
+    const shown = await query("characters/sheet:details", {
+      character: character.id,
+    });
     if (state.fieldCatalogue.length)
-      renderFields(
-        item.querySelector(".character-fields"),
-        await collection(COLLECTION.characters).get(character.id),
-      );
-    const status = await caller().call(
-      "characters/progression:characterStatus",
-      {
-        character: character.id,
-      },
-    );
+      renderFields(item.querySelector(".character-fields"), {
+        data: { fields: shown.fields },
+      });
+    const status = shown.status;
     // The points not yet given to a stat (status.inc.php's space point).
     const spent = status.definitions.reduce(
       (total, definition) =>
@@ -651,7 +629,7 @@ function wireCharacterDetails(item, character) {
           min: approved ? status.state.stats[definition.id].allocated : 0,
         })),
         async (allocation) => {
-          await caller().call("characters/progression:allocateStats", {
+          await mutate("characters/progression:allocateStats", {
             character: character.id,
             revision: status.revision,
             allocation: Object.fromEntries(
@@ -664,15 +642,7 @@ function wireCharacterDetails(item, character) {
           await refresh();
         },
       );
-    // Only the character's titles are read (at most 100 per query).
-    const owned = [...new Set(status.state.titles ?? [])];
-    const titles = [];
-    for (let i = 0; i < owned.length; i += 100)
-      titles.push(
-        ...(await allDocuments(COLLECTION.titles, undefined, {
-          in: [{ metadata: "id" }, owned.slice(i, i + 100)],
-        })),
-      );
+    const titles = shown.titles;
     const titleChoice = item.querySelector(".title-choice");
     item.querySelector(".titles").replaceChildren();
     titleChoice.replaceChildren();
@@ -700,61 +670,32 @@ function wireCharacterDetails(item, character) {
     titleChoice.hidden = !mine(character) || !titles.length;
     titleChoice.onchange = () =>
       run(async () => {
-        await caller().call("characters/progression:equipTitle", {
+        await mutate("characters/progression:equipTitle", {
           character: character.id,
           title: titleChoice.value || null,
         });
         await refresh();
       });
-    const couples = await allDocuments(COLLECTION.couples, undefined, {
-      any: [{ eq: ["first", character.id] }, { eq: ["second", character.id] }],
-    });
     item.querySelector(".couples").replaceChildren();
-    for (const couple of couples.sort(
-      (a, b) => (a.data.order ?? 0) - (b.data.order ?? 0),
-    )) {
-      const partnerId =
-        couple.data.first === character.id
-          ? couple.data.second
-          : couple.data.first;
-      const partner = await collection(COLLECTION.characters)
-        .get(partnerId)
-        .catch((error) => {
-          if (error.code === "NOT_FOUND") return null;
-          throw error;
-        });
+    for (const couple of shown.couples) {
       const li = document.createElement("li");
-      li.textContent = `${partner?.data.name ?? "삭제된 캐릭터"}${couple.data.since ? ` · ${couple.data.since}부터` : ""}`;
+      li.textContent = `${couple.partner?.name ?? "삭제된 캐릭터"}${couple.data.since ? ` · ${couple.data.since}부터` : ""}`;
       item.querySelector(".couples").append(li);
     }
-    const relations = await allDocuments(COLLECTION.relations, {
-      character: character.id,
-    });
-    const clothes = await allDocuments(COLLECTION.wardrobe, {
-      character: character.id,
-    });
+    const clothes = shown.wardrobe;
     item.querySelector(".relations").replaceChildren();
-    // rm_order, then the newest first; one with no summary is not shown
-    // (relation_list.php:4, 31-34).
-    for (const row of relations
-      .filter((row) => String(row.data.memo ?? "").trim())
-      .sort(
-        (a, b) =>
-          (a.data.order ?? 0) - (b.data.order ?? 0) ||
-          (a.createdAt < b.createdAt ? 1 : -1),
-      )) {
+    // rm_order, then the newest first, as the query answers them; one with
+    // no summary is not shown (relation_list.php:4, 31-34).
+    for (const row of shown.relations.filter((row) =>
+      String(row.data.memo ?? "").trim(),
+    )) {
       const li = document.createElement("li");
-      const target = await collection(COLLECTION.characters)
-        .get(row.data.target)
-        .catch((error) => {
-          if (error.code === "NOT_FOUND") return null;
-          throw error;
-        });
+      const target = row.target;
       // The other character's page (viewer.php?ch_id=), when it still exists.
       const name = target
         ? Object.assign(document.createElement("a"), {
             href: `#/character/${encodeURIComponent(target.id)}`,
-            textContent: target.data.name,
+            textContent: target.name,
           })
         : "삭제된 캐릭터";
       li.append(
@@ -792,7 +733,7 @@ function wireCharacterDetails(item, character) {
         remove.onclick = () =>
           run(async () => {
             if (!confirm("이 관계를 지울까요?")) return;
-            await caller().call("characters/relations:removeRelation", {
+            await mutate("characters/relations:removeRelation", {
               id: row.id,
             });
             await refresh();
@@ -823,7 +764,7 @@ function wireCharacterDetails(item, character) {
         wear.disabled = character.data.outfit === clothing.id;
         wear.onclick = () =>
           run(async () => {
-            const result = await caller().call("characters/wardrobe:wear", {
+            const result = await mutate("characters/wardrobe:wear", {
               character: character.id,
               outfit: clothing.id,
             });
@@ -836,7 +777,7 @@ function wireCharacterDetails(item, character) {
         remove.onclick = () =>
           run(async () => {
             if (!confirm("이 의상을 지울까요?")) return;
-            await caller().call("characters/wardrobe:removeOutfit", {
+            await mutate("characters/wardrobe:removeOutfit", {
               id: clothing.id,
             });
             await refresh();
@@ -871,7 +812,7 @@ function wireCharacterDetails(item, character) {
             ],
             async ({ name, image, file }) => {
               const uploaded = file ? await uploadMedia(file) : null;
-              await caller().call("characters/wardrobe:editOutfit", {
+              await mutate("characters/wardrobe:editOutfit", {
                 id: clothing.id,
                 name,
                 image: uploaded?.url ?? image,
@@ -900,18 +841,14 @@ function wireCharacterDetails(item, character) {
   // found by its name (relation_update.php), with one read.
   const relationEditor = (row?) =>
     run(async () => {
-      const current = row
-        ? await collection(COLLECTION.characters)
-            .get(row.data.target)
-            .catch(() => null)
-        : null;
+      const current = row?.target ?? null;
       edit(
         "캐릭터 관계",
         [
           {
             name: "target",
             label: "상대 캐릭터 이름",
-            value: current?.data.name ?? "",
+            value: current?.name ?? "",
             required: true,
             max: 40,
           },
@@ -946,19 +883,15 @@ function wireCharacterDetails(item, character) {
           },
         ],
         async (data) => {
-          const { documents } = await collection(COLLECTION.characters).list({
-            where: {
-              all: [
-                { eq: ["name", data.target.trim()] },
-                { eq: ["state", "approved"] },
-              ],
-            },
-            size: 1,
-          });
-          const target = documents[0];
+          const { document: target } = data.target.trim()
+            ? await query("characters/sheet:named", {
+                name: data.target.trim(),
+                approved: true,
+              })
+            : { document: null };
           if (!target || target.id === character.id)
             return say("그 이름의 다른 캐릭터를 찾을 수 없습니다.");
-          await caller().call("characters/relations:relation", {
+          await mutate("characters/relations:relation", {
             ...data,
             target: target.id,
             ...(row ? { id: row.id, revision: row.revision } : {}),
@@ -987,7 +920,7 @@ function wireCharacterDetails(item, character) {
       async ({ name, image, file }) => {
         const uploaded = file ? await uploadMedia(file) : null;
         if (uploaded) image = uploaded.url;
-        await caller().call("characters/wardrobe:outfit", {
+        await mutate("characters/wardrobe:outfit", {
           character: character.id,
           name,
           image,
@@ -997,7 +930,7 @@ function wireCharacterDetails(item, character) {
     );
   defaultOutfit.onclick = () =>
     run(async () => {
-      const result = await caller().call("characters/wardrobe:wear", {
+      const result = await mutate("characters/wardrobe:wear", {
         character: character.id,
         outfit: null,
       });
@@ -1103,7 +1036,7 @@ const communitySettings = () => (settingsRead ??= memberSettings());
  * owner's custom fields and 소속·종족 lists, opened from 마이페이지.
  */
 export async function openCharacterForm() {
-  await Promise.all([loadFieldCatalogue(), loadChoices()]);
+  await loadChoices();
   renderImageInputs();
   $("characterForm").hidden = false;
   $("characterName").focus();
@@ -1142,24 +1075,21 @@ $("characterForm").onsubmit = (event) => {
       const uploaded = await uploadMedia(chosen);
       fields[input.dataset.fieldUpload] = uploaded.url;
     }
-    const { document: character } = await caller().call(
-      "characters/sheet:save",
-      {
-        data: {
-          name,
-          side: $<HTMLInputElement | HTMLSelectElement>(
-            "characterSide",
-          ).value.trim(),
-          class: $<HTMLInputElement | HTMLSelectElement>(
-            "characterClass",
-          ).value.trim(),
-          profile: $<HTMLTextAreaElement>("characterProfile").value.trim(),
-          ...images,
-          state: $<HTMLSelectElement>("characterState").value,
-          ...(Object.keys(fields).length ? { fields } : {}),
-        },
+    const { document: character } = await mutate("characters/sheet:save", {
+      data: {
+        name,
+        side: $<HTMLInputElement | HTMLSelectElement>(
+          "characterSide",
+        ).value.trim(),
+        class: $<HTMLInputElement | HTMLSelectElement>(
+          "characterClass",
+        ).value.trim(),
+        profile: $<HTMLTextAreaElement>("characterProfile").value.trim(),
+        ...images,
+        state: $<HTMLSelectElement>("characterState").value,
+        ...(Object.keys(fields).length ? { fields } : {}),
       },
-    );
+    });
     state.speakers = null;
     // A first character became the member's 대표 on the server.
     if (state.profile && !state.profile.data.mainCharacter)
@@ -1183,16 +1113,29 @@ export async function openCharacter(id) {
   route(`character/${id}`, { replace: true });
   $("characterSheet").replaceChildren();
   if (!state.sides) await loadChoices();
-  const character = await collection(COLLECTION.characters).get(id);
-  await preloadNicks([character]);
+  const {
+    document: character,
+    nicks,
+    outfitImage,
+  } = await query("characters/sheet:sheet", { id });
+  if (!character) throw new Error("캐릭터를 찾을 수 없습니다.");
+  keepNicks(nicks);
   const item = await characterItem(character);
   item.classList.add("viewer");
   const details = item.querySelector<HTMLDetailsElement>(".character-details");
   details.open = true;
   details.ontoggle?.(undefined);
-  const sheet = await caller().call("characters/progression:characterSheet", {
+  const sheet = await query("characters/progression:characterSheet", {
     character: id,
   });
+  // The inventory, where the owner shows it, is economy's to read.
+  const inventory = sheet.showsInventory
+    ? (
+        await caller().call("economy/inventory:characterInventory", {
+          character: id,
+        })
+      ).inventory
+    : null;
   const extras = document.createElement("div");
   extras.className = "viewer-extras";
   const heading = (text) => {
@@ -1219,10 +1162,10 @@ export async function openCharacter(id) {
   moreExp.hidden = !expCursor;
   moreExp.onclick = () =>
     run(async () => {
-      const next = await caller().call(
-        "characters/progression:characterSheet",
-        { character: id, after: expCursor },
-      );
+      const next = await query("characters/progression:characterSheet", {
+        character: id,
+        after: expCursor,
+      });
       showExp(next.exp);
       expCursor = next.expCursor ?? null;
       moreExp.hidden = !expCursor;
@@ -1236,7 +1179,7 @@ export async function openCharacter(id) {
   // The experience history (member/exp.php) follows ad_use_exp too.
   if (state.viewer.exp)
     extras.append(heading(`${state.names.expName} 내역`), exp, moreExp);
-  if (sheet.inventory) {
+  if (inventory) {
     const title = heading("인벤토리");
     if (sheet.balance !== null) {
       const money = document.createElement("span");
@@ -1246,7 +1189,7 @@ export async function openCharacter(id) {
     }
     const list = document.createElement("ul");
     list.className = "viewer-inventory";
-    for (const entry of sheet.inventory) {
+    for (const entry of inventory) {
       const li = document.createElement("li");
       if (entry.image?.startsWith("https://"))
         li.append(
@@ -1259,7 +1202,7 @@ export async function openCharacter(id) {
       li.append(entry.name);
       list.append(li);
     }
-    if (!sheet.inventory.length)
+    if (!inventory.length)
       list.append(
         Object.assign(document.createElement("li"), {
           textContent: "아이템이 없습니다.",
@@ -1271,15 +1214,7 @@ export async function openCharacter(id) {
     money.append(` ${moneyText(state.names, sheet.balance)}`);
     extras.append(money);
   }
-  const outfit =
-    character.data.outfit && bodyUsed()
-      ? await collection(COLLECTION.wardrobe)
-          .get(character.data.outfit)
-          .then((row) =>
-            row.data.character === character.id ? row.data.image : null,
-          )
-          .catch(() => null)
-      : null;
+  const outfit = bodyUsed() ? outfitImage : null;
   $("characterSheet").replaceChildren(
     viewerFigures(character, outfit),
     item,

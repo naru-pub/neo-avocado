@@ -726,11 +726,10 @@ export const models: Record<string, Model> = {
     ],
   },
   character_state: {
-    label: "캐릭터 승인·경험치·능력치·타이틀",
-    help: "소속·종족은 캐릭터 시트의 것 하나뿐이며 상점과 아이템 조건도 그것을 봅니다(‘캐릭터 신청 심사’의 수정에서 고칩니다). 포인트는 기본 능력치 외에 배분할 총 포인트입니다. 승인은 ‘캐릭터 신청 심사’에서 바꾸면 신청 상태와 함께 바뀝니다.",
+    label: "캐릭터 경험치·능력치·타이틀",
+    help: "소속·종족은 캐릭터 시트의 것 하나뿐이며 상점과 아이템 조건도 그것을 봅니다(‘캐릭터 신청 심사’의 수정에서 고칩니다). 포인트는 기본 능력치 외에 배분할 총 포인트입니다. 승인은 ‘캐릭터 신청 심사’의 신청 상태입니다.",
     characterKey: true,
     fields: [
-      { key: "approved", label: "승인", type: "checkbox" },
       { key: "exp", label: "경험치", type: "number", default: 0 },
       {
         key: "expNote",
@@ -1250,14 +1249,6 @@ models.log_cleanup = {
   fields: [],
   help: "중단된 댓글 정리를 이어갑니다. 완료될 때까지 정리 계속을 누르세요.",
 };
-models.character_cleanup = {
-  label: "삭제 중인 캐릭터 정리",
-  collection: `${P}characters`,
-  cleanup: "characters",
-  readOnly: true,
-  fields: [],
-  help: "관계·옷장·커플을 정리하고 구매 아이템은 회원 인벤토리로 돌려놓습니다. 잔액과 활동 기록은 보존합니다.",
-};
 models.title_holdings = {
   label: "타이틀 보유·착용 현황",
   help: "캐릭터·타이틀 이름으로 검색하고 개별 지급을 회수합니다. 삭제된 정의나 캐릭터의 기록도 확인할 수 있습니다.",
@@ -1311,7 +1302,7 @@ export const menu = [
       "grants",
     ],
   },
-  { label: "기타관리", sections: ["log_cleanup", "character_cleanup"] },
+  { label: "기타관리", sections: ["log_cleanup"] },
 ];
 
 /**
@@ -1336,8 +1327,6 @@ export const scopes = [
     `${P}characters`,
     `${P}profiles`,
     `${P}comments`,
-    `${P}relations`,
-    `${P}wardrobe`,
     // Written only by site functions.
     `${P}presence`,
     `${P}visits`,

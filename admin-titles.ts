@@ -23,10 +23,11 @@ export async function applyTitles(
   if (!["grant", "revoke"].includes(action))
     throw new Error("지급 또는 회수를 선택하세요.");
   const ids = new Set(characterIds);
+  // Approval is the sheet's state (characters.state).
   if (allApproved) {
     for await (const page of owner
-      .collection(`${P}character_state`)
-      .pages({ filter: { approved: true }, size: 100 }))
+      .collection(`${P}characters`)
+      .pages({ filter: { state: "approved" }, size: 100 }))
       for (const row of page.documents) ids.add(row.id);
   }
   if (!ids.size) throw new Error("대상 캐릭터가 없습니다.");
@@ -88,14 +89,7 @@ export async function applyTitles(
             ? { activeTitle: null }
             : {}),
         };
-        operations.push({
-          collection: `${P}characters`,
-          set: {
-            id,
-            data: character.data,
-            condition: { revision: character.revision },
-          },
-        });
+        // The record is its character's row: its revision guards both.
         operations.push({
           collection: `${P}character_state`,
           set: {
@@ -118,72 +112,30 @@ export async function applyTitles(
   return { completed, total: targets.length };
 }
 
-/** A durable marker blocks new grants; interrupted cleanup resumes on next delete. */
+/**
+ * Deletes a title: the characters holding or showing it lose it with it, in
+ * one write (the site's tables do it together). `progress` hears how many
+ * held it.
+ */
 export async function deleteTitle(
   owner,
   titleId,
   progress: (status: { completed: number; done: boolean }) => void = () => {},
-  finalize: (
-    title,
-    operations: BatchOperation[],
-  ) => Promise<void> = async () => {},
 ) {
-  const collection = owner.collection(`${P}titles`);
-  let title = await collection.get(titleId);
-  if (!title.data.deleted) {
-    await collection.set(
-      titleId,
-      { ...title.data, deleted: true },
-      { condition: { revision: title.revision } },
-    );
-    title = await collection.get(titleId);
-  }
+  const title = await owner.collection(`${P}titles`).get(titleId);
   let completed = 0;
-  for (;;) {
-    const targets = [];
-    for await (const page of owner
-      .collection(`${P}character_state`)
-      .pages({ size: 100 })) {
-      for (const row of page.documents) {
-        if (
-          row.data.titles?.includes(titleId) ||
-          row.data.activeTitle === titleId
-        )
-          targets.push(row);
-        if (targets.length === 20) break;
-      }
-      if (targets.length === 20) break;
-    }
-    const operations: BatchOperation[] = targets.map((row) => ({
-      collection: `${P}character_state`,
-      set: {
-        id: row.id,
-        data: {
-          ...row.data,
-          titles: (row.data.titles ?? []).filter((id) => id !== titleId),
-          ...(row.data.activeTitle === titleId ? { activeTitle: null } : {}),
-        },
-        condition: { revision: row.revision },
-      },
-    }));
-    const done = targets.length < 20;
-    operations.push({
-      collection: `${P}titles`,
-      ...(done
-        ? { delete: { id: titleId, condition: { revision: title.revision } } }
-        : {
-            set: {
-              id: titleId,
-              data: title.data,
-              condition: { revision: title.revision },
-            },
-          }),
-    });
-    if (done) await finalize(title, operations);
-    await owner.batch(operations);
-    completed += targets.length;
-    progress({ completed, done });
-    if (done) return { completed };
-    title = await collection.get(titleId);
-  }
+  for await (const page of owner
+    .collection(`${P}character_state`)
+    .pages({ size: 100 }))
+    for (const row of page.documents)
+      if (
+        row.data.titles?.includes(titleId) ||
+        row.data.activeTitle === titleId
+      )
+        completed += 1;
+  await owner
+    .collection(`${P}titles`)
+    .delete(titleId, { condition: { revision: title.revision } });
+  progress({ completed, done: true });
+  return { completed };
 }

@@ -1,16 +1,15 @@
-// For the time being: the owner's admin page writes the foundation's tables
+// For the time being: the owner's admin page writes the site's tables
 // as the documents it knows (modules/documents.ts), until the admin area is
 // ported to mutations of its own.
 import {
-  documentsOf,
   getDocument,
+  keyOf,
   ownerMapping,
   rolesOfData,
-  rowOf,
-  settingsKey,
+  writeStatements,
 } from "../../modules/documents.js";
 import type { Mapping } from "../../modules/documents.js";
-import type { MutationCtx, SqlValue } from "../../modules/naru-types.js";
+import type { MutationCtx } from "../../modules/naru-types.js";
 
 type Condition = { revision?: string; absent?: boolean } | null | undefined;
 type Write =
@@ -46,40 +45,36 @@ async function write(
   id: string,
   data: Record<string, any>,
 ) {
+  const key = map.generated ? 0 : keyOf(map, id);
   if (
     typeof id !== "string" ||
     !id ||
+    key === null ||
     data === null ||
     typeof data !== "object"
   )
     ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
       reason: "invalid_input",
     });
-  const row = rowOf(map, data, ctx.now);
-  const columns = Object.keys(row);
-  const values: SqlValue[] = Object.values(row);
-  if (map.generated) {
-    // History is only added to: a new row, whatever ID the page made up.
-    const { rows } = await ctx.sql(
-      `INSERT INTO ${map.table} (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")}) RETURNING *`,
-      values,
-    );
-    return (await documentsOf(ctx, map, rows))[0];
-  }
-  const key = map.settings ? settingsKey(map, id) : id;
-  const { rows } = await ctx.sql(
-    `INSERT INTO ${map.table} (${map.key}, ${columns.join(", ")}) VALUES (?, ${columns.map(() => "?").join(", ")})
-     ON CONFLICT (${map.key}) DO UPDATE SET ${columns.map((column) => `${column} = excluded.${column}`).join(", ")}
-     RETURNING *`,
-    [key, ...values],
-  );
+  // History is only added to: a new row, whatever ID the page made up.
+  const { write: statement, after } = writeStatements(map, key, data, ctx.now);
+  const { rows } = await ctx.sql(statement.text, statement.values);
+  // A partial row (a character's official record) is its character's.
+  if (!rows.length)
+    ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {
+      reason: "document_not_found",
+    });
+  for (const next of after) await ctx.sql(next.text, next.values);
   if (map.roles) {
     const before = (await ctx.rolesOf([id]))[id] ?? [];
-    const after = rolesOfData(data, before);
-    if (after.join() !== [...before].sort().join())
-      await ctx.setRoles(id, after);
+    const roles = rolesOfData(data, before);
+    if (roles.join() !== [...before].sort().join())
+      await ctx.setRoles(id, roles);
   }
-  return (await documentsOf(ctx, map, rows))[0];
+  return await getDocument(ctx, {
+    collection: map.collection,
+    id: map.generated ? String(rows[0][map.key]) : id,
+  });
 }
 
 /** Creates or replaces a document, if `condition` still holds. */
@@ -108,15 +103,13 @@ export async function remove(
   { collection, id }: { collection?: string; id?: string } = {},
 ) {
   const map = ownerMapping(ctx, collection);
-  if (typeof id !== "string" || (map.generated && !/^\d{1,15}$/.test(id)))
+  const key = keyOf(map, id);
+  if (key === null || map.partial)
     ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
       reason: "invalid_input",
     });
-  const key = map.settings
-    ? settingsKey(map, id)
-    : map.generated
-      ? Number(id)
-      : id;
+  for (const statement of map.cascade?.(key) ?? [])
+    await ctx.sql(statement.text, statement.values);
   await ctx.sql(`DELETE FROM ${map.table} WHERE ${map.key} = ?`, [key]);
   if (map.roles) {
     const before = (await ctx.rolesOf([id]))[id] ?? [];

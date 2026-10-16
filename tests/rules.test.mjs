@@ -2,9 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import * as boards from "../dist/_naru/rules/boards.js";
 import * as own from "../dist/_naru/rules/own.js";
-import * as characterFields from "../dist/_naru/rules/character-fields.js";
 import * as shown from "../dist/_naru/rules/shown.js";
-import * as characters from "../dist/_naru/rules/characters.js";
 import { matches } from "./where.mjs";
 import { database, migrations, sqlOf } from "./sql-ctx.mjs";
 import {
@@ -85,28 +83,11 @@ test("own: a member reads their own inventory, a visitor nothing", () => {
   );
 });
 
-test("character fields and catalogues hide what members may not see", async () => {
-  assert.deepEqual(await characterFields.readable(rulesCtx("m-1")), {
-    all: [{ ne: ["deleted", true] }, { ne: ["visibility", "admin"] }],
-  });
-  assert.deepEqual(
-    await shown.readable(rulesCtx("m-1"), { collection: `${P}titles` }),
-    { all: [{ ne: ["deleted", true] }, { ne: ["enabled", false] }] },
-  );
-});
-
-test("사이트공개 off: visitors read no characters, fields or catalogues; members read on", async () => {
+test("사이트공개 off: visitors read no catalogues or boards; members read on", async () => {
   const closed = { [`${P}settings`]: { community: { siteOpen: false } } };
   for (const [rule, collection] of [
-    [characters, "characters"],
-    [characterFields, "character_fields"],
-    [shown, "sides"],
-    [shown, "classes"],
-    [shown, "titles"],
-    [shown, "relations"],
-    [shown, "wardrobe"],
-    [shown, "couples"],
     [shown, "emoticons"],
+    [shown, "board_groups"],
   ]) {
     const scope = (member, tables) =>
       rule.readable(rulesCtx(member, tables), {

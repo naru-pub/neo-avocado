@@ -1,10 +1,11 @@
-// For the time being: the owner's admin page reads the foundation's tables
+// For the time being: the owner's admin page reads the site's tables
 // as the documents it knows (modules/documents.ts), until the admin area is
 // ported to queries of its own.
 import {
   documentsOf,
   getDocument,
   ownerMapping,
+  selectOf,
 } from "../../modules/documents.js";
 import type { QueryCtx, SqlValue } from "../../modules/naru-types.js";
 
@@ -57,11 +58,19 @@ export async function list(
         reason: "invalid_input",
       });
     clauses.push(`${column[1]} = ?`);
-    values.push(typeof value === "boolean" ? (value ? 1 : 0) : value);
+    values.push(
+      typeof value === "boolean"
+        ? value
+          ? 1
+          : 0
+        : column[2] === "ref"
+          ? Number(value)
+          : value,
+    );
   }
   values.push(size + 1, offset);
   const { rows } = await ctx.sql(
-    `SELECT * FROM ${map.table}${clauses.length ? ` WHERE ${clauses.join(" AND ")}` : ""} ORDER BY ${map.order} LIMIT ? OFFSET ?`,
+    `${selectOf(map)}${clauses.length ? ` WHERE ${clauses.join(" AND ")}` : ""} ORDER BY ${map.order} LIMIT ? OFFSET ?`,
     values,
   );
   return {

@@ -2,7 +2,6 @@ import {
   INVENTORY,
   ITEMS,
   RECIPES,
-  CHARACTERS,
   record,
   ownCharacter,
   text,
@@ -18,8 +17,21 @@ import {
   lacking,
   MESSAGES,
 } from "../../modules/shared.js";
+import { communitySettings } from "../../modules/access.js";
+import {
+  characterRow,
+  presentCharacter,
+  saveSheet,
+  viewable,
+} from "../../modules/characters.js";
+import type { SheetInput } from "../../modules/characters.js";
 import { profileOf } from "../../modules/members.js";
 import type { Ctx, Data, NaruDocument } from "../../modules/naru-types.js";
+
+// The character viewer's inventory is read by visitors too, while the site
+// is open (사이트공개).
+export const readOnly = ["characterInventory"];
+export const visitors = ["characterInventory"];
 
 /** Selling consumes exactly one owned item; prices always come from the catalog. */
 export async function sell(
@@ -98,14 +110,8 @@ export async function gift(
     ctx.fail("CONFLICT", "선물할 수 없는 아이템입니다.", {
       reason: "not_giftable",
     });
-  const target =
-    typeof character === "string" ? await ctx.get(CHARACTERS, character) : null;
-  if (
-    character &&
-    (!target ||
-      target.data.deleted ||
-      (target.createdBy ?? target.data.owner) !== recipient)
-  )
+  const target = character ? await characterRow(ctx, character) : null;
+  if (character && (!target || target.owner !== recipient))
     ctx.fail("INVALID_REQUEST", "캐릭터를 확인해 주세요.", {
       reason: "no_character",
     });
@@ -119,10 +125,10 @@ export async function gift(
     });
   // By. the sending character, or the member's nickname (se_ch_name).
   const from = owned.data.character
-    ? await ctx.get(CHARACTERS, owned.data.character)
+    ? await characterRow(ctx, owned.data.character)
     : null;
   const senderName =
-    from?.data.name ?? (await profileOf(ctx, ctx.member.id))?.data.nick ?? "";
+    from?.name ?? (await profileOf(ctx, ctx.member.id))?.data.nick ?? "";
   const transferred = await ctx.set(INVENTORY, owned.id, {
     ...owned.data,
     owner: recipient,
@@ -293,7 +299,7 @@ export interface ItemUseInput {
 
 /**
  * Three built-in item actions mirror inventory/use_item.php; the fourth,
- * 프로필수정, is spent by characters/sheet:save.
+ * 프로필수정, is spent by useProfileTicket, below.
  */
 export async function useItem(
   ctx: Ctx,
@@ -323,7 +329,7 @@ export async function useItem(
     });
   const effect = item.data.effect;
   // 프로필수정 is used by saving the character's form with it
-  // (characters/sheet:save's ticket), as the original opens that form.
+  // (useProfileTicket), as the original opens that form.
   if (effect.type === "profile")
     ctx.fail(
       "CONFLICT",
@@ -390,4 +396,141 @@ export async function useItem(
     effect: effect.type,
   });
   return result;
+}
+
+/**
+ * The inventory a character's page shows (member/viewer.php) where the owner
+ * turns it on (ad_use_inven): what the character holds, by name and picture.
+ * The characters/progression:characterSheet query says whether it is shown.
+ */
+export async function characterInventory(
+  ctx: Ctx,
+  { character }: { character?: string } = {},
+) {
+  await viewable(ctx);
+  const row = await characterRow(ctx, character);
+  if (!row)
+    ctx.fail("NOT_FOUND", "캐릭터를 확인해 주세요.", {
+      reason: "no_character",
+    });
+  if ((await communitySettings(ctx)).viewerInventory !== true)
+    return { inventory: null };
+  const rows = (
+    await ctx.list(INVENTORY, {
+      filter: { character: String(row.id) },
+      size: 100,
+    })
+  ).documents;
+  const items = await ctx.getMany(ITEMS, [
+    ...new Set(rows.map((entry) => entry.data.item).filter(Boolean)),
+  ] as string[]);
+  return {
+    inventory: rows.map((entry) => {
+      const item = items.find((found) => found?.id === entry.data.item);
+      return {
+        name: entry.data.name ?? item?.data.name ?? "",
+        image: item?.data.image ?? null,
+      };
+    }),
+  };
+}
+
+/** Inventory rows one call moves after a character's (40 writes). */
+const FOLLOW_PAGE = 40;
+
+/**
+ * After a character is deleted or given to another member (the
+ * characters/sheet mutations, which reach only the site's tables), its items
+ * follow it, as character_delete.php and the admin's move do: a deleted
+ * character's go back to its owner's own inventory; a moved one's go to its
+ * new owner (the site owner's call). In parts: call again until `done`.
+ */
+export async function followCharacter(
+  ctx: Ctx,
+  { character }: { character?: string } = {},
+) {
+  if (!ctx.member && !ctx.owner)
+    ctx.fail("ACCESS_DENIED", "권한이 없습니다.", { reason: "access_denied" });
+  if (typeof character !== "string")
+    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+      reason: "invalid_input",
+    });
+  const row = await characterRow(ctx, character);
+  // A member's call moves only their own items, and only off a character
+  // that is gone; moving belongs to the site owner.
+  if (row && !ctx.owner) return { done: true };
+  const page = await ctx.list(INVENTORY, {
+    filter: {
+      character,
+      ...(ctx.owner ? {} : { owner: ctx.member.id }),
+    },
+    ...(row ? { where: { ne: ["owner", row.owner] } } : {}),
+    size: FOLLOW_PAGE,
+  });
+  for (const owned of page.documents)
+    await ctx.set(
+      INVENTORY,
+      owned.id,
+      row
+        ? { ...owned.data, owner: row.owner }
+        : { ...owned.data, character: null },
+    );
+  return { done: !page.nextCursor };
+}
+
+/**
+ * Saves a character's sheet with a 프로필수정 ticket (inventory/use_item.php
+ * 27-28, character_form.php:80-84): one of the member's own, or the
+ * character's, whose item's effect is "profile". It opens an approved
+ * character while editing is closed, and is spent unless it lasts
+ * (it_use_ever; character_form_update.php:268). The sheet is saved as
+ * characters/sheet:save saves it.
+ */
+export async function useProfileTicket(
+  ctx: Ctx,
+  {
+    ticket,
+    id,
+    data = {},
+    revision = null,
+  }: {
+    /** The ticket's inventory ID. */
+    ticket?: string;
+    id?: string;
+    data?: SheetInput;
+    revision?: string | null;
+  } = {},
+) {
+  if (!ctx.member)
+    ctx.fail("ACCESS_DENIED", "권한이 없습니다.", { reason: "access_denied" });
+  const owned = await ownedItem(ctx, ticket);
+  const item = owned ? await ctx.get(ITEMS, owned.data.item) : null;
+  const character = await characterRow(ctx, id);
+  if (
+    !owned ||
+    !character ||
+    !item ||
+    item.data.effect?.type !== "profile" ||
+    item.data.usable === false ||
+    (owned.data.character && owned.data.character !== String(character.id))
+  )
+    ctx.fail(
+      "CONFLICT",
+      "이 캐릭터에 쓸 수 있는 프로필 수정 아이템이 아닙니다.",
+      { reason: "invalid_ticket" },
+    );
+  await requireUsable(ctx, item, String(character.id));
+  const { row, catalogue } = await saveSheet(
+    ctx,
+    { id: String(character.id), data, revision },
+    { opened: true },
+  );
+  if (item.data.reusable !== true) await ctx.delete(INVENTORY, owned.id);
+  await record(ctx, "use", {
+    item: item.id,
+    inventory: owned.id,
+    character: String(row.id),
+    effect: "profile",
+  });
+  return { document: await presentCharacter(ctx, row, { catalogue }) };
 }

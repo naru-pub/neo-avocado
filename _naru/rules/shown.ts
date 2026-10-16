@@ -1,14 +1,8 @@
-import {
-  INVENTORY,
-  ITEMS,
-  RECIPES,
-  TITLES,
-  siteOpen,
-} from "../modules/shared.js";
+import { INVENTORY, ITEMS, RECIPES, siteOpen } from "../modules/shared.js";
 import type { ReadArgs, ReadCtx, Where } from "../modules/naru-types.js";
 
-// Catalogue rows (items, titles, recipes, emoticons, couples, relations,
-// outfits) the admin or a site function has not marked deleted.
+// Catalogue rows (items, recipes, emoticons, board groups) the admin or a
+// site function has not marked deleted.
 //
 // Recipes the owner hid (숨기기) cannot be crafted, and the original keeps
 // recipes off players' screens altogether (adm/recipi_list.php), so members
@@ -16,8 +10,7 @@ import type { ReadArgs, ReadCtx, Where } from "../modules/naru-types.js";
 // prizes and crafted goods, show only as the original shows them: in the
 // reader's own inventory, or as part of a recipe they can see.
 //
-// Visitors read the world-readable ones (emoticons, board groups, and the
-// character viewer's 소속, 종족, titles, relations, outfits and couples) only
+// Visitors read the world-readable ones (emoticons, board groups) only
 // while the site is open (사이트공개, cf_open).
 export async function readable(
   ctx: ReadCtx,
@@ -27,9 +20,6 @@ export async function readable(
   const listed: Where = { ne: ["deleted", true] };
   if (collection === RECIPES)
     return { all: [listed, { ne: ["hidden", true] }] };
-  // A title out of use (ti_use) is shown nowhere (extend/title.lib.php:7).
-  if (collection === TITLES)
-    return { all: [listed, { ne: ["enabled", false] }] };
   if (collection !== ITEMS) return listed;
   const known = new Set();
   // The reader's inventory, up to 2,000 rows (a rule reads at most 100
