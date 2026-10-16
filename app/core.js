@@ -68,6 +68,8 @@ export const state = {
   owner: false,
   role: "member",
   level: 2,
+  // 경고내역: the owner's warnings, from the member's own record.
+  warnings: { count: 0, note: "" },
   emoticons: null,
   boards: [],
   board: "default",
@@ -414,6 +416,8 @@ const PLACES = {
   mypage: "마이페이지",
   myLogs: "마이페이지",
   myExp: "마이페이지",
+  myFavorites: "마이페이지",
+  myMoney: "마이페이지",
   online: "현재접속자",
 };
 /** The browser, OS and device a page reports with a visit, for statistics. */
@@ -548,6 +552,8 @@ function viewPath(name) {
   }
   if (name === "myLogs") return "mypage/logs";
   if (name === "myExp") return "mypage/exp";
+  if (name === "myFavorites") return "mypage/favorites";
+  if (name === "myMoney") return "mypage/money";
   return name;
 }
 
@@ -556,6 +562,8 @@ const MYPAGE = {
   mypage: "myAccountTab",
   myLogs: "myLogsTab",
   myExp: "myExpTab",
+  myFavorites: "myFavoritesTab",
+  myMoney: "myMoneyTab",
   messages: "myMailTab",
   calls: "myCallsTab",
 };
@@ -573,6 +581,8 @@ export function showTab(name) {
     ["mypageView", "mypage"],
     ["myLogsView", "myLogs"],
     ["myExpView", "myExp"],
+    ["myFavoritesView", "myFavorites"],
+    ["myMoneyView", "myMoney"],
     ["couplesView", "couples"],
   ])
     $(view).hidden = name !== key;

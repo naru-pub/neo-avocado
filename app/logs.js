@@ -430,6 +430,25 @@ export async function logItem(log) {
       : [])
       item.querySelector(".log-dice").before(actionItem(action));
   presentOptions(item, log);
+  // 관심 (mmb's favorite): a member keeps the post in 관심로그.
+  const favorite = item.querySelector(".fav");
+  const marked = () => (state.profile?.data.favorites ?? []).includes(log.id);
+  favorite.hidden = !state.member || Boolean(log.data.locked);
+  favorite.setAttribute("aria-pressed", String(marked()));
+  favorite.onclick = () =>
+    run(async () => {
+      const { favorite: on } = await caller().call("community/posts:favorite", {
+        id: log.id,
+      });
+      if (state.profile) {
+        const others = (state.profile.data.favorites ?? []).filter(
+          (id) => id !== log.id,
+        );
+        state.profile.data.favorites = on ? [log.id, ...others] : others;
+      }
+      favorite.setAttribute("aria-pressed", String(on));
+      say(on ? "관심로그에 담았습니다." : "관심로그에서 뺐습니다.");
+    });
   item.querySelector(".log-title").textContent =
     `${log.data.settlement ? `[${log.data.settlement.state}] ` : ""}${log.data.secret ? "🔒 " : ""}${log.data.title ?? ""}${log.data.category ? ` · ${log.data.category}` : ""}`;
   if (log.data.settlement) item.classList.add("settled");

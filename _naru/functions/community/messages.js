@@ -12,7 +12,7 @@ import {
 } from "../../modules/shared.js";
 import { callsUnread } from "../../modules/roleplay.js";
 
-export const readOnly = ["mailbox", "messageStatus"];
+export const readOnly = ["messageStatus", "conversations"];
 
 /** Messages a member may send a day unless the owner sets another number. */
 const MESSAGE_DAILY_LIMIT = 100;
@@ -100,43 +100,6 @@ export async function sendMessage(ctx, { recipients, body } = {}) {
   return { ids, balance };
 }
 
-export async function mailbox(
-  ctx,
-  { box = "inbox", after = null, size = 20 } = {},
-) {
-  if (
-    !["inbox", "sent"].includes(box) ||
-    !Number.isInteger(size) ||
-    size < 1 ||
-    size > 20 ||
-    (after !== null && typeof after !== "string")
-  )
-    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-      reason: "invalid_input",
-    });
-  const page = await ctx.list(MESSAGES, {
-    filter: { [box === "inbox" ? "to" : "from"]: ctx.member.id },
-    where: { ne: [box === "inbox" ? "hiddenTo" : "hiddenFrom", true] },
-    sort: [[{ metadata: "createdAt" }, "desc"]],
-    size,
-    after,
-  });
-  return {
-    unread: (await messageStatus(ctx)).unread,
-    nextCursor: page.nextCursor,
-    documents: page.documents.map((row) => ({
-      id: row.id,
-      data: {
-        from: row.data.from,
-        to: row.data.to,
-        preview: row.data.body.slice(0, 150),
-        sentAt: row.data.sentAt,
-        readAt: row.data.readAt,
-      },
-    })),
-  };
-}
-
 /**
  * A message the member sent or received and has not removed from their own
  * box, or a refusal.
@@ -202,4 +165,89 @@ export async function messageStatus(ctx) {
     unread: page.documents.length > 0,
     calls: await callsUnread(ctx),
   };
+}
+
+/** The messages between the member and others, as many as a list reads. */
+async function correspondence(ctx, partner = null) {
+  const me = ctx.member.id;
+  const read = (box) =>
+    ctx.list(MESSAGES, {
+      filter: {
+        [box === "inbox" ? "to" : "from"]: me,
+        ...(partner ? { [box === "inbox" ? "from" : "to"]: partner } : {}),
+      },
+      where: { ne: [box === "inbox" ? "hiddenTo" : "hiddenFrom", true] },
+      sort: [[{ metadata: "createdAt" }, "desc"]],
+      size: 100,
+    });
+  const [inbox, sent] = await Promise.all([read("inbox"), read("sent")]);
+  return [...inbox.documents, ...sent.documents].sort(
+    (a, b) => b.data.sentAt - a.data.sentAt || (a.id < b.id ? 1 : -1),
+  );
+}
+
+/**
+ * 쪽지함 as the original's (mypage/memo/index.php): one entry a member the
+ * member has written with, newest first: their last message, how many, and
+ * whether one is unread. Five a page.
+ */
+export async function conversations(ctx, { page = 1 } = {}) {
+  if (!Number.isInteger(page) || page < 1 || page > 100)
+    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+      reason: "invalid_input",
+    });
+  const me = ctx.member.id;
+  const partners = new Map();
+  for (const row of await correspondence(ctx)) {
+    const partner = row.data.from === me ? row.data.to : row.data.from;
+    const entry = partners.get(partner) ?? {
+      partner,
+      last: {
+        id: row.id,
+        preview: row.data.body.slice(0, 150),
+        sentAt: row.data.sentAt,
+        mine: row.data.from === me,
+      },
+      count: 0,
+      unread: false,
+    };
+    entry.count += 1;
+    if (row.data.to === me && row.data.readAt === null) entry.unread = true;
+    partners.set(partner, entry);
+  }
+  const all = [...partners.values()];
+  return {
+    total: all.length,
+    documents: all.slice((page - 1) * 5, page * 5),
+    unread: (await messageStatus(ctx)).unread,
+  };
+}
+
+/**
+ * The messages between the member and one other (memo_view.php), oldest
+ * first; what they sent is read now.
+ */
+export async function conversation(ctx, { partner } = {}) {
+  if (typeof partner !== "string" || partner === ctx.member.id)
+    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+      reason: "invalid_input",
+    });
+  const rows = await correspondence(ctx, partner);
+  // At most 20 receipts a call, inside a call's write budget; the rest
+  // are read the next time the conversation opens.
+  let read = 0;
+  for (const row of rows)
+    if (
+      row.data.to === ctx.member.id &&
+      row.data.readAt === null &&
+      read < 20
+    ) {
+      row.data = (
+        await ctx.set(MESSAGES, row.id, { ...row.data, readAt: ctx.now })
+      ).data;
+      read += 1;
+    }
+  const { unread } = await messageStatus(ctx);
+  if (read) ctx.notify(ctx.member.id, { unread });
+  return { documents: rows.reverse(), unread };
 }

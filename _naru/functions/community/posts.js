@@ -21,6 +21,7 @@ import {
   plainText,
   names,
   presentPost,
+  logReadable,
 } from "../../modules/shared.js";
 import { notDeleted, startValue, startWrite } from "../../modules/community.js";
 import {
@@ -36,7 +37,7 @@ import {
 // guests with a name and password; they search, and on Q&A boards
 // (skin/board/qna) list questions and open their own secret ones.
 export const visitors = ["write", "remove", "search", "questions", "open"];
-export const readOnly = ["search", "questions", "open", "mine"];
+export const readOnly = ["search", "questions", "open", "mine", "favorites"];
 
 const LOGS = `${PREFIX}logs`;
 const COMMENTS = `${PREFIX}comments`;
@@ -350,6 +351,53 @@ const shown = (ctx, access, row) => ({
     staff: access.role === "moderator",
   }),
 });
+
+/** 관심로그 (mmb's 관심, mypage/log/log_favorite.php): at most 200. */
+const FAVORITE_LIMIT = 200;
+
+/** Marks a post 관심, or unmarks it; the newest first. */
+export async function favorite(ctx, { id } = {}) {
+  const access = await communityAccess(ctx);
+  const row = typeof id === "string" ? await ctx.get(LOGS, id) : null;
+  if (!(await logReadable(ctx, row, access)))
+    ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {
+      reason: "document_not_found",
+    });
+  const profile = await ctx.get(PROFILES, ctx.member.id);
+  if (!profile)
+    ctx.fail("CONFLICT", "먼저 닉네임을 등록해 주세요.", {
+      reason: "no_profile",
+    });
+  const current = Array.isArray(profile.data.favorites)
+    ? profile.data.favorites.filter((entry) => typeof entry === "string")
+    : [];
+  const marked = !current.includes(id);
+  const favorites = marked
+    ? [id, ...current].slice(0, FAVORITE_LIMIT)
+    : current.filter((entry) => entry !== id);
+  await ctx.set(PROFILES, profile.id, { ...profile.data, favorites });
+  return { favorite: marked };
+}
+
+/** The member's 관심 posts they may still read, in the order marked, 20 a page. */
+export async function favorites(ctx, { page = 1 } = {}) {
+  if (!Number.isInteger(page) || page < 1 || page > 10)
+    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+      reason: "invalid_input",
+    });
+  const access = await communityAccess(ctx);
+  const profile = ctx.member ? await ctx.get(PROFILES, ctx.member.id) : null;
+  const ids = Array.isArray(profile?.data.favorites)
+    ? profile.data.favorites
+    : [];
+  const slice = ids.slice((page - 1) * 20, page * 20);
+  const rows = slice.length ? await ctx.getMany(LOGS, slice) : [];
+  const documents = [];
+  for (const row of rows)
+    if (await logReadable(ctx, row, access))
+      documents.push(shown(ctx, access, excerpt(row)));
+  return { documents, total: ids.length };
+}
 
 /**
  * 로그내역 (mypage): the member's own posts, newest first, 30 of them, on

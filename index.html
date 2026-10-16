@@ -131,8 +131,12 @@
       <nav id="mypageNav" class="sub-tabs" hidden>
         <button id="myAccountTab" type="button">계정정보</button>
         <button id="myLogsTab" type="button">로그내역</button>
+        <button id="myFavoritesTab" type="button">관심로그</button>
         <button id="myExpTab" type="button">
           <span data-name="expName">경험치</span> 내역
+        </button>
+        <button id="myMoneyTab" type="button">
+          <span data-name="moneyName">아보</span> 관리
         </button>
         <button id="myMailTab" type="button">우편함</button>
         <button id="myCallsTab" type="button">호출내역</button>
@@ -205,11 +209,15 @@
           <dd id="myCommentAlerts"></dd>
           <dt>회원 번호</dt>
           <dd id="myMemberId"></dd>
+          <!-- mypage/index.php's 경고내역, when the owner has warned them. -->
+          <dt id="myWarningsTerm" hidden>경고내역</dt>
+          <dd id="myWarnings" hidden></dd>
         </dl>
         <p class="actions">
           <button id="myEdit" type="button">정보수정</button>
         </p>
         <h2>캐릭터 <small>My Character</small></h2>
+        <div id="myMainCharacter"></div>
         <ul id="myCharacters" class="my-characters"></ul>
         <!-- mypage/character/index.php: 신규 캐릭터 등록, while the owner allows
              it and the member has fewer characters than the limit. -->
@@ -271,6 +279,40 @@
         </h2>
         <ul id="myExp" class="my-exp"></ul>
         <button id="moreExp" type="button" hidden>더 보기</button>
+      </section>
+      <!-- mypage/log/log_favorite.php: the posts marked 관심. -->
+      <section id="myFavoritesView" hidden>
+        <h2>관심로그 <small>Favorite Logs</small></h2>
+        <ul id="myFavorites" class="my-logs"></ul>
+        <nav id="myFavoritePages" class="pages" hidden></nav>
+      </section>
+      <!-- mypage/money: sending money to a character's owner, and the ledger. -->
+      <section id="myMoneyView" hidden>
+        <h2>
+          <span data-name="moneyName">아보</span> 관리 <small>Money</small>
+        </h2>
+        <form id="moneyForm" class="card">
+          <label
+            >받는 캐릭터 이름
+            <input id="moneyTo" maxlength="40" required autocomplete="off" />
+          </label>
+          <label
+            >보낼 금액
+            <input id="moneyAmount" type="number" min="1" step="1" required />
+          </label>
+          <button type="submit">전송</button>
+        </form>
+        <table id="moneyLedger" class="ledger">
+          <thead>
+            <tr>
+              <th scope="col">내용</th>
+              <th scope="col">획득</th>
+              <th scope="col">사용</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <button id="moreMoney" type="button" hidden>더 보기</button>
       </section>
       <!-- member/viewer.php: one character's own page. -->
       <section id="characterView" hidden>
@@ -520,17 +562,11 @@
           <p id="messageCost"></p>
           <button type="submit">쪽지 보내기</button>
         </form>
-        <label
-          >보관함
-          <select id="messageBox">
-            <option value="inbox">받은 쪽지</option>
-            <option value="sent">보낸 쪽지</option>
-          </select></label
-        >
+        <!-- mypage/memo: one entry a correspondent, and the conversation. -->
         <button id="refreshMessages" type="button">새로고침</button>
-        <ul id="messages"></ul>
-        <button id="moreMessages" type="button" hidden>쪽지 더 보기</button>
-        <article id="messageDetail" class="card" hidden></article>
+        <ul id="messages" class="conversations"></ul>
+        <nav id="messagePages" class="pages" hidden></nav>
+        <article id="messageDetail" class="card conversation" hidden></article>
       </section>
       <section id="callsView" hidden>
         <h2>호출·댓글 알림</h2>
@@ -563,6 +599,9 @@
             <button class="edit" type="button" hidden>수정</button>
             <button class="pin" type="button" hidden>공지</button>
             <button class="move" type="button" hidden>이동</button>
+            <button class="fav" type="button" aria-pressed="false" hidden>
+              관심
+            </button>
           </p>
           <details class="comments">
             <summary>댓글</summary>

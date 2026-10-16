@@ -14,7 +14,12 @@ export async function readable(ctx) {
 }
 
 export function present(ctx, { document }) {
-  return ctx.member ? document.data : { nick: document.data.nick };
+  if (!ctx.member) return { nick: document.data.nick };
+  // 관심로그 is the member's own.
+  if (ctx.member.id === document.id) return document.data;
+  const { favorites, ...shown } = document.data;
+  void favorites;
+  return shown;
 }
 
 /** What a member may change on their own profile. */

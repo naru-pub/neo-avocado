@@ -26,7 +26,8 @@ import {
   equipTitle,
   history,
   sendMessage,
-  mailbox,
+  conversations,
+  conversation,
   readMessage,
   removeMessage,
   messageStatus,
@@ -35,6 +36,7 @@ import {
   leave,
   posts,
   comments,
+  money,
   sheet,
   presence,
   quests,
@@ -538,24 +540,19 @@ test("private mail checks parties for listing, reading and deletion and marks on
   assert.equal(sent.balance, 8);
   assert.deepEqual(live, [{ member: "m-2", data: { unread: true } }]);
   const id = sent.ids[0];
-  assert.equal(
-    (await mailbox(ctx, { box: "sent" })).documents[0].data.preview,
-    "private body",
-  );
-  assert.equal(
-    (await mailbox(ctx, { box: "inbox", filter: { to: "m-2" } })).documents
-      .length,
-    0,
+  // The sender's 쪽지함 has m-2's conversation, its last message theirs.
+  const [entry] = (await conversations(ctx)).documents;
+  assert.deepEqual(
+    [entry.partner, entry.last.preview, entry.last.mine, entry.count],
+    ["m-2", "private body", true, 1],
   );
   assert.equal((await readMessage(ctx, { id })).document.data.readAt, null);
   ctx.member.id = "m-3";
   assert.equal(await refusal(readMessage(ctx, { id })), "message_not_found");
   assert.equal(await refusal(removeMessage(ctx, { id })), "message_not_found");
-  assert.equal(
-    (await mailbox(ctx, { box: "sent", owner: "m-1" })).documents.length,
-    0,
-  );
+  assert.equal((await conversations(ctx)).total, 0);
   ctx.member.id = "m-2";
+  assert.equal((await conversations(ctx)).documents[0].unread, true);
   assert.equal((await messageStatus(ctx)).unread, true);
   assert.equal((await readMessage(ctx, { id })).document.data.readAt, ctx.now);
   assert.equal((await messageStatus(ctx)).unread, false);
@@ -567,10 +564,10 @@ test("private mail checks parties for listing, reading and deletion and marks on
   // theirs, so a sender cannot erase what was received, nor the reverse.
   await removeMessage(ctx, { id });
   assert.equal(await refusal(readMessage(ctx, { id })), "message_not_found");
-  assert.equal((await mailbox(ctx, { box: "inbox" })).documents.length, 0);
+  assert.equal((await conversations(ctx)).total, 0);
   ctx.member.id = "m-1";
   assert.equal((await readMessage(ctx, { id })).document.id, id);
-  assert.equal((await mailbox(ctx, { box: "sent" })).documents.length, 1);
+  assert.equal((await conversations(ctx)).total, 1);
   await removeMessage(ctx, { id });
   assert.equal(table(`${P}messages`).has(id), false);
 });
@@ -629,14 +626,41 @@ test("bulk mail validates every recipient before charging and bounds previews an
   );
   for (let i = 0; i < 3; i++)
     await sendMessage(ctx, { recipients: ["m-2"], body: "x".repeat(5000) });
-  const page = await mailbox(ctx, { box: "sent", size: 2 });
-  assert.equal(page.documents.length, 2);
-  assert.equal(page.documents[0].data.preview.length, 150);
-  assert.equal(page.documents[0].data.body, undefined);
+  const [entry] = (await conversations(ctx)).documents;
+  assert.equal(entry.count, 3);
+  assert.equal(entry.last.preview.length, 150);
+});
+
+test("a conversation shows both sides oldest first and reads what the other sent", async () => {
+  const { ctx, table, sent: live } = fakeCtx();
+  for (const id of ["m-1", "m-2", "m-3"])
+    table(`${P}profiles`).set(id, { nick: id });
+  await sendMessage(ctx, { recipients: ["m-2"], body: "안녕" });
+  ctx.now += 1000;
+  await sendMessage(ctx, { recipients: ["m-3"], body: "다른 사람" });
+  ctx.member.id = "m-2";
+  ctx.now += 1000;
+  await sendMessage(ctx, { recipients: ["m-1"], body: "반가워" });
+  ctx.member.id = "m-1";
+  const listed = await conversations(ctx);
+  assert.deepEqual(
+    listed.documents.map((entry) => [entry.partner, entry.unread]),
+    [
+      ["m-2", true],
+      ["m-3", false],
+    ],
+  );
+  const talk = await conversation(ctx, { partner: "m-2" });
+  assert.deepEqual(
+    talk.documents.map((row) => row.data.body),
+    ["안녕", "반가워"],
+  );
+  assert.equal(talk.unread, false);
+  assert.deepEqual(live.at(-1), { member: "m-1", data: { unread: false } });
+  assert.equal((await conversations(ctx)).documents[0].unread, false);
   assert.equal(
-    (await mailbox(ctx, { box: "sent", after: page.nextCursor, size: 2 }))
-      .documents.length,
-    1,
+    await refusal(conversation(ctx, { partner: "m-1" })),
+    "invalid_input",
   );
 });
 test("item use conditions are checked against official state before consuming tickets", async () => {
@@ -3849,5 +3873,77 @@ test("멤버공개 is locked for visitors, and 익명 hides its author from all 
   assert.deepEqual(
     [guest.data.membersOnly, guest.data.anonymous],
     [false, false],
+  );
+});
+
+test("화폐관리 sends money to a character's owner, records both sides and tells them", async () => {
+  const { ctx, table, sent: live } = fakeCtx();
+  table(`${P}profiles`).set("m-1", { nick: "나" });
+  table(`${P}profiles`).set("m-2", { nick: "친구" });
+  table(`${P}characters`).set("theirs", { owner: "m-2", name: "친구캐" });
+  table(`${P}characters`).set("mine", { owner: "m-1", name: "내캐" });
+  table(`${P}wallets`).set("m-1", { balance: 1500 });
+  assert.equal(
+    await refusal(money.send(ctx, { character: "theirs", amount: 2000 })),
+    "not_enough",
+  );
+  assert.equal(
+    await refusal(money.send(ctx, { character: "mine", amount: 10 })),
+    "no_recipient",
+  );
+  assert.equal(
+    await refusal(money.send(ctx, { character: "theirs", amount: 0 })),
+    "invalid_input",
+  );
+  const result = await money.send(ctx, { character: "theirs", amount: 1000 });
+  assert.deepEqual(result, { balance: 500, nick: "친구" });
+  assert.equal(table(`${P}wallets`).get("m-2").balance, 1000);
+  const [notice] = [...table(`${P}messages`).values()];
+  assert.equal(notice.body, "나님이 1,000 아보 보냈습니다.");
+  assert.deepEqual(live.at(-1), { member: "m-2", data: { unread: true } });
+  // The ledger shows money only: 획득 and 사용.
+  table(`${P}history`).set("exp-only", {
+    owner: "m-1",
+    kind: "exp",
+    at: 1,
+    expDelta: 5,
+  });
+  const ledger = await money.ledger(ctx);
+  assert.deepEqual(
+    ledger.documents.map((row) => [row.data.kind, row.data.delta]),
+    [["moneySent", -1000]],
+  );
+  ctx.member.id = "m-2";
+  assert.deepEqual(
+    (await money.ledger(ctx)).documents.map((row) => row.data.memo),
+    ["[받음] 나님"],
+  );
+});
+
+test("관심 keeps a member's favourite posts, theirs alone, and 경고내역 shows their warnings", async () => {
+  const { ctx, table } = roleplayWorld();
+  table(`${P}members`).set("m-1", { warnings: 2, warningNote: "도배" });
+  const status = await membership(ctx);
+  assert.deepEqual([status.warnings, status.warningNote], [2, "도배"]);
+  assert.deepEqual(await posts.favorite(ctx, { id: "thread" }), {
+    favorite: true,
+  });
+  assert.deepEqual(
+    (await posts.favorites(ctx)).documents.map((row) => row.id),
+    ["thread"],
+  );
+  // Another member reads the profile without them.
+  const shown = profileRule.present(
+    { member: { id: "m-2" } },
+    { document: { id: "m-1", data: table(`${P}profiles`).get("m-1") } },
+  );
+  assert.equal(shown.favorites, undefined);
+  assert.deepEqual(await posts.favorite(ctx, { id: "thread" }), {
+    favorite: false,
+  });
+  assert.deepEqual((await posts.favorites(ctx)).documents, []);
+  assert.equal(
+    await refusal(posts.favorite(ctx, { id: "missing" })),
+    "document_not_found",
   );
 });

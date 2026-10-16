@@ -198,7 +198,8 @@ try {
   await alice.locator('#characterForm [type="submit"]').click();
   // Her first character is her 대표 (character_form_update.php:120).
   await alice
-    .locator("#myCharacters li", { hasText: /^초록 · .* · 대표$/ })
+    .locator("#myCharacters li", { hasText: "초록" })
+    .filter({ hasText: "대표" })
     .waitFor();
   assert.equal(await alice.locator("#newCharacter").isVisible(), false);
   await menu(alice, "신청자목록");
@@ -827,6 +828,20 @@ try {
   await alice.locator("#status", { hasText: "쪽지를 보냈습니다." }).waitFor();
   await bob.evaluate(() => document.querySelector("#tabMessages").click());
   await bob.locator("#messages li", { hasText: "안녕 밥" }).waitFor();
+  // 쪽지함 as the original's: the conversation opens, and a reply goes
+  // into it; Alice's entry shows it.
+  await bob
+    .locator("#messages .conversation-entry", { hasText: "앨리스" })
+    .click();
+  await bob.locator("#messageDetail .theirs", { hasText: "안녕 밥" }).waitFor();
+  await bob.locator("#messageDetail .reply textarea").fill("고마워");
+  await bob.locator("#messageDetail .reply button").click();
+  await bob.locator("#messageDetail .mine", { hasText: "고마워" }).waitFor();
+  await alice.evaluate(() => document.querySelector("#tabMessages").click());
+  await alice
+    .locator("#messages .conversation-entry", { hasText: "고마워" })
+    .filter({ hasText: "N" })
+    .waitFor();
 
   // Bob leaves the community: from then on he is a guest here.
   await menu(bob, "마이페이지");

@@ -10,8 +10,17 @@ export const readOnly = ["membership"];
 
 export async function membership(ctx) {
   const access = await communityAccess(ctx);
+  // 경고내역 (mypage/index.php): the member sees the owner's warnings.
+  const record = await ctx.get(MEMBERS, ctx.member.id);
   return {
     ...access,
+    warnings: Number.isSafeInteger(record?.data.warnings)
+      ? record.data.warnings
+      : 0,
+    warningNote:
+      typeof record?.data.warningNote === "string"
+        ? record.data.warningNote
+        : "",
     // The site owner signed in here answers as staff (Q&A answers).
     owner: ctx.owner === true,
     memberId: ctx.member.id,

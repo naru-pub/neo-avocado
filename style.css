@@ -1434,3 +1434,102 @@ body.admin-page {
 .item-detail .actions {
   text-align: left;
 }
+/* 마이페이지 (mypage/): warnings, character cards, the money ledger. */
+.warning-count {
+  color: #d3393d;
+}
+.my-characters {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+  list-style: none;
+  padding: 0;
+}
+.character-card a {
+  display: grid;
+  gap: 2px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  color: inherit;
+  text-decoration: none;
+}
+.character-card img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+}
+.character-card span {
+  color: var(--pit);
+  font-size: 0.9em;
+}
+.ledger {
+  width: 100%;
+  border-collapse: collapse;
+}
+.ledger th,
+.ledger td {
+  border-bottom: 1px solid var(--line);
+  padding: 4px 6px;
+}
+.ledger .amount {
+  text-align: right;
+  white-space: nowrap;
+}
+.meta .fav[aria-pressed="true"] {
+  background: var(--avocado);
+  color: var(--on-avocado);
+}
+/* 쪽지함 (mypage/memo): conversations, and one conversation's thread. */
+.conversations {
+  list-style: none;
+  padding: 0;
+}
+.conversation-entry {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  margin: 0 0 6px;
+}
+.conversation-entry .info {
+  color: var(--pit);
+  font-size: 0.9em;
+}
+.conversation-entry .new {
+  font-style: normal;
+  color: #d3393d;
+  font-weight: bold;
+}
+.conversation-entry .preview {
+  margin: 4px 0 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.messages-thread {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.messages-thread li {
+  max-width: 80%;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+}
+.messages-thread li.mine {
+  justify-self: end;
+  background: var(--surface);
+}
+.messages-thread .message-body {
+  white-space: pre-wrap;
+  margin: 0;
+}
+.messages-thread .meta {
+  margin: 4px 0 0;
+  font-size: 0.85em;
+  color: var(--pit);
+}
+.conversation .reply textarea {
+  width: 100%;
+}

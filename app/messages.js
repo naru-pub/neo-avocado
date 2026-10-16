@@ -12,6 +12,7 @@ import {
   showTab,
   state,
   route,
+  renderPages,
 } from "./core.js";
 import { moneyText } from "./names.js";
 import { showUnread } from "./live.js";
@@ -21,9 +22,7 @@ $("tabMessages").onclick = () =>
     showTab("messages");
     await Promise.all([loadMessageCost(), loadMailbox()]);
   });
-$("messageBox").onchange = () => run(() => loadMailbox());
 $("refreshMessages").onclick = () => run(() => loadMailbox());
-$("moreMessages").onclick = () => run(() => loadMailbox({ more: true }));
 $("messageForm").onsubmit = async (event) => {
   event.preventDefault();
   const button = $("messageForm").querySelector('[type="submit"]');
@@ -36,7 +35,6 @@ $("messageForm").onsubmit = async (event) => {
     });
     $("messageBody").value = "";
     $("messageTo").value = "";
-    $("messageBox").value = "sent";
     await loadMailbox();
     state.shopLoaded = false;
     say("쪽지를 보냈습니다.");
@@ -82,33 +80,128 @@ async function loadMessageCost() {
   $("messageCost").textContent =
     `회원 한 명당 ${moneyText(state.names, settings?.data.messageCost ?? 0)}`;
 }
-async function loadMailbox({ more = false } = {}) {
-  const page = await caller().call("community/messages:mailbox", {
-    box: $("messageBox").value,
-    after: more ? state.messageCursor : null,
-    size: 20,
+/**
+ * 쪽지함 (mypage/memo/index.php): one entry a correspondent, newest first,
+ * with their last message, how many, and N while one is unread.
+ */
+async function loadMailbox(page = 1) {
+  const result = await caller().call("community/messages:conversations", {
+    page,
   });
-  showUnread(page.unread);
-  if (!more) {
-    $("messages").replaceChildren();
-    $("messageDetail").hidden = true;
-  }
-  for (const row of page.documents) {
+  showUnread(result.unread);
+  $("messages").replaceChildren();
+  $("messageDetail").hidden = true;
+  for (const entry of result.documents) {
     const li = document.createElement("li");
     const open = document.createElement("button");
     open.type = "button";
-    open.textContent = `${row.data.readAt === null ? "[안 읽음] " : ""}${await nickOf($("messageBox").value === "inbox" ? row.data.from : row.data.to)} · ${formatTime(row.data.sentAt)} · ${row.data.preview}`;
-    open.onclick = () =>
-      run(async () => {
-        const message = await openMessage(row.id);
-        if (message.data.to === state.member.id)
-          open.textContent = open.textContent.replace(/^\[안 읽음\] /, "");
-      });
+    open.className = "conversation-entry";
+    const name = document.createElement("strong");
+    name.textContent = await nickOf(entry.partner);
+    const info = document.createElement("span");
+    info.className = "info";
+    info.textContent = ` ${formatTime(entry.last.sentAt)} · ${entry.count}통`;
+    open.append(name, info);
+    if (entry.unread)
+      open.append(
+        " ",
+        Object.assign(document.createElement("i"), {
+          className: "new",
+          textContent: "N",
+        }),
+      );
+    open.append(
+      Object.assign(document.createElement("p"), {
+        className: `preview${entry.last.mine ? " mine" : ""}`,
+        textContent: entry.last.preview,
+      }),
+    );
+    open.onclick = () => run(() => openConversation(entry.partner));
     li.append(open);
     $("messages").append(li);
   }
-  state.messageCursor = page.nextCursor;
-  $("moreMessages").hidden = !page.nextCursor;
+  if (!result.documents.length)
+    $("messages").append(
+      Object.assign(document.createElement("li"), {
+        textContent: "주고받은 쪽지가 없습니다.",
+      }),
+    );
+  renderPages($("messagePages"), page, Math.ceil(result.total / 5), (next) =>
+    run(() => loadMailbox(next)),
+  );
+}
+
+/**
+ * The messages with one member (memo_view.php), oldest first, theirs on one
+ * side and the member's on the other, with a reply box below.
+ */
+async function openConversation(partner, focus = null) {
+  const result = await caller().call("community/messages:conversation", {
+    partner,
+  });
+  showUnread(result.unread);
+  const nick = await nickOf(partner);
+  const heading = document.createElement("h3");
+  heading.textContent = `${nick}님과의 쪽지`;
+  const list = document.createElement("ol");
+  list.className = "messages-thread";
+  for (const message of result.documents) {
+    const mine = message.data.from === state.member.id;
+    const item = document.createElement("li");
+    item.className = mine ? "mine" : "theirs";
+    item.id = `message-${message.id}`;
+    const body = document.createElement("p");
+    body.className = "message-body";
+    body.textContent = message.data.body;
+    const meta = document.createElement("p");
+    meta.className = "meta";
+    meta.textContent = `${formatTime(message.data.sentAt)}${mine ? (message.data.readAt === null ? " · 안 읽음" : " · 읽음") : ""}`;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "삭제";
+    remove.onclick = () =>
+      run(async () => {
+        if (
+          !confirm(
+            "이 쪽지를 내 보관함에서 삭제할까요? 상대의 보관함에는 그대로 남습니다.",
+          )
+        )
+          return;
+        await caller().call("community/messages:removeMessage", {
+          id: message.id,
+        });
+        item.remove();
+      });
+    meta.append(" ", remove);
+    item.append(body, meta);
+    list.append(item);
+  }
+  const reply = document.createElement("form");
+  reply.className = "reply";
+  const text = document.createElement("textarea");
+  text.maxLength = 5000;
+  text.rows = 3;
+  text.required = true;
+  text.setAttribute("aria-label", `${nick}님에게 보낼 쪽지`);
+  const send = document.createElement("button");
+  send.type = "submit";
+  send.textContent = "보내기";
+  reply.append(text, send);
+  reply.onsubmit = (event) => {
+    event.preventDefault?.();
+    run(async () => {
+      await caller().call("community/messages:sendMessage", {
+        recipients: [partner],
+        body: text.value,
+      });
+      state.shopLoaded = false;
+      say("쪽지를 보냈습니다.");
+      await openConversation(partner);
+    });
+  };
+  $("messageDetail").replaceChildren(heading, list, reply);
+  $("messageDetail").hidden = false;
+  document.getElementById(`message-${focus}`)?.scrollIntoView?.();
 }
 
 /** 쪽지 to one member (the member list's button, memo_form.php?me_recv_mb_id). */
@@ -119,50 +212,19 @@ export async function writeTo(member) {
   $("messageBody").focus();
 }
 
-/** One message (memo_view.php), at its address #/messages/<id>. */
+/**
+ * A message's address (#/messages/<id>): its conversation, at it.
+ */
 export async function openMessage(id) {
-  const result = await caller().call("community/messages:readMessage", {
-    id,
-  });
-  const message = result.document;
-  showUnread(result.unread);
-  $("messageDetail").replaceChildren();
-  const heading = document.createElement("h3");
-  heading.textContent = `${await nickOf(message.data.from)} → ${await nickOf(message.data.to)}`;
-  const body = document.createElement("p");
-  const receipt = document.createElement("p");
-  receipt.textContent = `보낸 시간 ${formatTime(message.data.sentAt)} · ${message.data.readAt === null ? "아직 읽지 않음" : `읽은 시간 ${formatTime(message.data.readAt)}`}`;
-  body.className = "message-body";
-  body.textContent = message.data.body;
-  const remove = document.createElement("button");
-  remove.type = "button";
-  remove.textContent = "쪽지 삭제";
-  remove.onclick = () =>
-    run(async () => {
-      if (
-        !confirm(
-          "이 쪽지를 내 보관함에서 삭제할까요? 상대의 보관함에는 그대로 남습니다.",
-        )
-      )
-        return;
-      await caller().call("community/messages:removeMessage", {
-        id: message.id,
-      });
-      await loadMailbox();
-    });
-  $("messageDetail").append(heading, receipt, body, remove);
-  if (message.data.to === state.member.id) {
-    const reply = document.createElement("button");
-    reply.type = "button";
-    reply.textContent = "답장";
-    reply.onclick = () =>
-      run(async () => {
-        $("messageTo").value = await nickOf(message.data.from);
-        $("messageBody").focus();
-      });
-    $("messageDetail").append(" ", reply);
-  }
-  $("messageDetail").hidden = false;
+  showTab("messages");
+  await loadMessageCost();
+  const { document: message } = await caller().call(
+    "community/messages:readMessage",
+    { id },
+  );
+  const partner =
+    message.data.from === state.member.id ? message.data.to : message.data.from;
+  await openConversation(partner, message.id);
   route(["messages", id], { replace: true });
   return message;
 }

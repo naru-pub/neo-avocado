@@ -91,7 +91,11 @@ export function openRoute(hash = location.hash) {
           ? "myLogsTab"
           : first === "exp"
             ? "myExpTab"
-            : "tabMypage";
+            : first === "favorites"
+              ? "myFavoritesTab"
+              : first === "money"
+                ? "myMoneyTab"
+                : "tabMypage";
       return $(tab).click();
     }
     return follow(`tab:${kind}`);

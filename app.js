@@ -117,6 +117,10 @@ async function start() {
   state.role = status.role;
   state.owner = status.owner === true;
   state.level = status.level ?? 2;
+  state.warnings = {
+    count: status.warnings ?? 0,
+    note: status.warningNote ?? "",
+  };
   const profile = status.profile;
   show(profile);
   // Decoration: the card keeps its placeholder if this fails.
