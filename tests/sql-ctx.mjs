@@ -45,49 +45,47 @@ const WRITES =
 const bind = (value) =>
   typeof value === "boolean" ? (value ? 1 : 0) : (value ?? null);
 
-/** A fresh site: an empty database with every migration in dist/ applied. */
-export async function testSite({
-  now = Date.parse("2026-10-16T03:00:00Z"),
-} = {}) {
-  const db = new DatabaseSync(":memory:");
+/** The site's migrations in dist/, in the order Naru applies them. */
+export async function migrations() {
   const names = (await readdir(join(dist, "migrations")).catch(() => []))
     .filter((name) => name.endsWith(".sql"))
     .sort();
-  for (const name of names)
-    db.exec(await readFile(join(dist, "migrations", name), "utf8"));
-  const roles = new Map();
-  const site = {
-    db,
-    now,
-    /** Rows of `text` with `values`, straight from the database (for asserts). */
-    rows: (text, ...values) => db.prepare(text).all(...values.map(bind)),
-    /** Runs a statement directly, as a test's setup. */
-    run: (text, ...values) => db.prepare(text).run(...values.map(bind)),
-    setRoles(member, list) {
-      roles.set(member, [...new Set(list)].sort());
-    },
-    query: (name, args = null, who = {}) => call("query", name, args, who),
-    mutate: (name, args = null, who = {}) => call("mutation", name, args, who),
-  };
+  return await Promise.all(
+    names.map((name) => readFile(join(dist, "migrations", name), "utf8")),
+  );
+}
 
-  /** `ctx` for one call; `who` is { member } or { owner: true }, else a visitor. */
-  function context(kind, { member = null, owner = false } = {}) {
-    const sql = (text, ...values) => {
-      let statement, bound;
-      if (Array.isArray(text) && Object.hasOwn(text, "raw")) {
-        statement = text.join("?");
-        bound = values;
-      } else {
-        statement = String(text);
-        bound = values[0] ?? [];
-      }
-      const writes = WRITES.test(statement);
-      if (kind === "query" && writes)
-        throw new Error("Invalid SQL: a read-only query cannot write.");
+/** An empty database with `sql` (the migrations' text) applied. */
+export function database(sql) {
+  const db = new DatabaseSync(":memory:");
+  for (const text of sql) db.exec(text);
+  return db;
+}
+
+/**
+ * ctx.sql over `db`, as Naru's: a tag or (text, values), booleans bound as 1
+ * and 0, { rows, changes }; a query's (`kind` "query") only reads.
+ */
+export function sqlOf(db, kind = "mutation") {
+  return (text, ...values) => {
+    let statement, bound;
+    if (Array.isArray(text) && Object.hasOwn(text, "raw")) {
+      statement = text.join("?");
+      bound = values;
+    } else {
+      statement = String(text);
+      bound = values[0] ?? [];
+    }
+    const writes = WRITES.test(statement);
+    if (kind === "query" && writes)
+      return Promise.reject(
+        new Error("Invalid SQL: a read-only query cannot write."),
+      );
+    try {
       const prepared = db.prepare(statement);
       const params = bound.map(bind);
       if (!writes || /\bRETURNING\b/i.test(statement)) {
-        const rows = prepared.all(...params);
+        const rows = prepared.all(...params).map((row) => ({ ...row }));
         return Promise.resolve({
           rows,
           changes: writes
@@ -97,7 +95,41 @@ export async function testSite({
       }
       const { changes } = prepared.run(...params);
       return Promise.resolve({ rows: [], changes: Number(changes) });
-    };
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  };
+}
+
+/** A fresh site: an empty database with every migration in dist/ applied. */
+export async function testSite({
+  now = Date.parse("2026-10-16T03:00:00Z"),
+} = {}) {
+  const db = database(await migrations());
+  const roles = new Map();
+  const site = {
+    db,
+    now,
+    /** Rows of `text` with `values`, straight from the database (for asserts). */
+    rows: (text, ...values) =>
+      db
+        .prepare(text)
+        .all(...values.map(bind))
+        .map((row) => ({ ...row })),
+    /** Runs a statement directly, as a test's setup. */
+    run: (text, ...values) => db.prepare(text).run(...values.map(bind)),
+    setRoles(member, list) {
+      roles.set(member, [...new Set(list)].sort());
+    },
+    /** A member's roles, as Naru keeps them. */
+    roles: (member) => [...(roles.get(member) ?? [])],
+    query: (name, args = null, who = {}) => call("query", name, args, who),
+    mutate: (name, args = null, who = {}) => call("mutation", name, args, who),
+  };
+
+  /** `ctx` for one call; `who` is { member } or { owner: true }, else a visitor. */
+  function context(kind, { member = null, owner = false } = {}) {
+    const sql = sqlOf(db, kind);
     const passwords = {
       verify: async (password, hash) => hash === `hash:${password}`,
       ...(kind === "mutation"
