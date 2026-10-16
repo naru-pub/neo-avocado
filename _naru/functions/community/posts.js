@@ -19,6 +19,7 @@ import {
   TEXT_LIMIT,
   HTML_LIMIT,
   plainText,
+  names,
 } from "../../modules/shared.js";
 import { notDeleted, startValue, startWrite } from "../../modules/community.js";
 import {
@@ -464,13 +465,14 @@ export async function settle(
     ...row.data,
     settlement: { state: settled, at: ctx.now, exp, money },
   });
+  const named = await names(ctx);
   await ctx.add(COMMENTS, {
     logId: row.id,
     owner: ctx.member?.id ?? null,
     text: [
       `[${settled}]`,
-      exp ? `경험치 +${exp}` : "",
-      money ? `+${money} 아보` : "",
+      exp ? `${named.expName} +${exp}${named.expUnit}` : "",
+      money ? `+${money} ${named.moneyUnit}` : "",
       note,
     ]
       .filter(Boolean)

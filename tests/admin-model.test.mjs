@@ -590,3 +590,15 @@ test("activity counts each member's posts and comments on a board in a Korean da
     ],
   );
 });
+
+test("the admin menu has every section once, in the original's groups and names", async () => {
+  const { menu, sectionLabel } = await import("../admin-model.js");
+  const { NAME_DEFAULTS } = await import("../app/names.js");
+  const listed = menu.flatMap((group) => group.sections);
+  assert.deepEqual([...listed].sort(), Object.keys(models).sort());
+  assert.equal(new Set(listed).size, listed.length);
+  const names = { ...NAME_DEFAULTS, moneyName: "골드", rankName: "레벨" };
+  assert.equal(sectionLabel("wallets", names), "골드 관리");
+  assert.equal(sectionLabel("levels", names), "레벨 설정");
+  assert.equal(sectionLabel("sides", names), "소속 관리");
+});

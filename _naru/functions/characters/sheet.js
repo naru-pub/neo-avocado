@@ -12,6 +12,7 @@ import {
   deleteCommunityDocument,
   text,
   imageUrl,
+  names,
 } from "../../modules/shared.js";
 import { notDeleted, startValue, startWrite } from "../../modules/community.js";
 import {
@@ -122,11 +123,24 @@ export async function save(
   if (member) value.owner = member.id;
   const sheet = await memberSheet(ctx, previous, data);
   const catalogue = sheet.catalogue;
+  const named = await names(ctx);
   value = {
     ...value,
     name: text(data.name, 40, true),
-    side: await listed(ctx, SIDES, data.side, previous?.data.side, "소속"),
-    class: await listed(ctx, CLASSES, data.class, previous?.data.class, "종족"),
+    side: await listed(
+      ctx,
+      SIDES,
+      data.side,
+      previous?.data.side,
+      named.sideTitle || "소속",
+    ),
+    class: await listed(
+      ctx,
+      CLASSES,
+      data.class,
+      previous?.data.class,
+      named.classTitle || "종족",
+    ),
     profile: text(data.profile ?? "", 4000),
     type: sheet.type,
     state: sheet.state,

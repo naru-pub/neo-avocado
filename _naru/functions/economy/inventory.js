@@ -16,6 +16,7 @@ import {
   ownedItem,
   requireUsable,
   restoreStat,
+  lacking,
 } from "../../modules/shared.js";
 import { presentCharacter } from "../../modules/characters.js";
 
@@ -179,7 +180,9 @@ export async function craft(ctx, { recipe, materials, character = null } = {}) {
   const cost = amount(row.data.cost ?? 0, "Crafting cost");
   const current = await wallet(ctx);
   if (current.balance < cost)
-    ctx.fail("CONFLICT", "아보가 모자랍니다.", { reason: "not_enough" });
+    ctx.fail("CONFLICT", await lacking(ctx, "moneyName"), {
+      reason: "not_enough",
+    });
   const balance = await pay(ctx, current, cost);
   for (const item of owned) await ctx.delete(INVENTORY, item.id);
   const output = await give(ctx, prize, "craft", character);
@@ -284,7 +287,10 @@ export async function useItem(ctx, { inventory, character, data = {} } = {}) {
     const profile = {
       ...target.data,
       name: text(data.name, 40, true),
-      side: text(data.side ?? "", 40),
+      // Left out while the owner hides 소속 (an empty cf_side_title).
+      side: Object.hasOwn(data, "side")
+        ? text(data.side ?? "", 40)
+        : (target.data.side ?? ""),
       profile: text(data.profile ?? "", 4000),
     };
     if (Object.hasOwn(data, "image"))

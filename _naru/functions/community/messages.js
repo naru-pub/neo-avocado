@@ -8,6 +8,7 @@ import {
   amount,
   wallet,
   pay,
+  lacking,
 } from "../../modules/shared.js";
 import { callsUnread } from "../../modules/roleplay.js";
 
@@ -70,7 +71,9 @@ export async function sendMessage(ctx, { recipients, body } = {}) {
   if (!Number.isSafeInteger(total)) throw new Error("Message cost overflow.");
   const current = await wallet(ctx);
   if (current.balance < total)
-    ctx.fail("CONFLICT", "아보가 모자랍니다.", { reason: "not_enough" });
+    ctx.fail("CONFLICT", await lacking(ctx, "moneyName"), {
+      reason: "not_enough",
+    });
   const balance = cost ? await pay(ctx, current, total) : current.balance;
   const ids = await Promise.all(
     recipients.map(

@@ -15,7 +15,10 @@ import {
   walletWrites,
   characterStateWrites,
   titleHoldings,
+  menu,
+  sectionLabel,
 } from "./admin-model.js";
+import { NAME_DEFAULTS, moneyText, namesOf, rename } from "./app/names.js";
 const $ = (id) => document.getElementById(id);
 let grantTitleId;
 let naru,
@@ -23,6 +26,8 @@ let naru,
   section = "couples",
   cursor = null,
   selected = null;
+// 기타 항목명 설정, from 커뮤니티 설정: the menu and labels use them.
+let itemNames = NAME_DEFAULTS;
 let references = {
   fields: [],
   characters: [],
@@ -93,8 +98,8 @@ async function openAddress() {
   try {
     if (name && Object.hasOwn(models, name)) {
       section = name;
-      $("adminSection").value = name;
     }
+    renderNav();
     $("adminForm").hidden = true;
     $("characterForm").hidden = true;
     $("titleGrantForm").hidden = true;
@@ -133,7 +138,7 @@ async function all(collection) {
 async function load({ more = false } = {}) {
   const requestedSection = section;
   const model = models[section];
-  $("adminHelp").textContent = model.help;
+  $("adminHelp").textContent = named(model.help);
   // The review registers characters too (adm/character_form.php, w='').
   $("adminNew").hidden = Boolean(model.readOnly) && !model.review;
   $("adminNew").textContent = model.review ? "새 캐릭터" : "새로 등록";
@@ -267,7 +272,7 @@ async function load({ more = false } = {}) {
       continue;
     }
     if (model.readOnly) {
-      li.textContent = `${new Date(row.data.at).toLocaleString("ko-KR")} · ${row.data.owner} · ${row.data.kind}${row.data.delta !== undefined ? ` · ${row.data.delta} 아보` : ""}${row.data.memo ? ` · ${row.data.memo}` : ""}`;
+      li.textContent = `${new Date(row.data.at).toLocaleString("ko-KR")} · ${row.data.owner} · ${row.data.kind}${row.data.delta !== undefined ? ` · ${moneyText(itemNames, row.data.delta)}` : ""}${row.data.memo ? ` · ${row.data.memo}` : ""}`;
       $("adminRows").append(li);
       continue;
     }
@@ -280,7 +285,8 @@ async function load({ more = false } = {}) {
         row.id,
       " ",
     );
-    if (section === "wallets") li.append(`${row.data.balance} 아보 `);
+    if (section === "wallets")
+      li.append(`${moneyText(itemNames, row.data.balance)} `);
     if (section === "inventory")
       li.append(
         `${references.profiles.find((profile) => profile.id === row.data.owner)?.data.nick ?? row.data.owner} · ${references.characters.find((character) => character.id === row.data.character)?.data.name ?? "회원 인벤토리"} `,
@@ -377,8 +383,8 @@ function reviewRow(row) {
   }
   const basics = document.createElement("dl");
   for (const [label, value] of [
-    ["소속", row.data.side],
-    ["종족", row.data.class],
+    [itemNames.sideTitle || "소속", row.data.side],
+    [itemNames.classTitle || "종족", row.data.class],
     ["프로필", row.data.profile],
   ]) {
     const term = document.createElement("dt");
@@ -606,8 +612,8 @@ async function openCharacterForm(row = null) {
       names.length ? choice(name, value, names) : textInput(name, value, 40),
     );
   };
-  listed("side", "소속", sides, row?.data.side);
-  listed("class", "종족", classes, row?.data.class);
+  listed("side", itemNames.sideTitle || "소속", sides, row?.data.side);
+  listed("class", itemNames.classTitle || "종족", classes, row?.data.class);
   const name = add("이름", textInput("name", row?.data.name, 40));
   name.required = true;
   const profile = document.createElement("textarea");
@@ -651,7 +657,7 @@ $("characterForm").onsubmit = async (event) => {
   event.preventDefault();
   const button = $("characterForm").querySelector('[type="submit"]');
   button.disabled = true;
-  $("adminSection").disabled = true;
+  $("adminNav").inert = true;
   try {
     const values = {};
     for (const input of $("characterFields").querySelectorAll(
@@ -693,7 +699,7 @@ $("characterForm").onsubmit = async (event) => {
     $("characterFormStatus").textContent = message(error);
   } finally {
     button.disabled = false;
-    $("adminSection").disabled = false;
+    $("adminNav").inert = false;
   }
 };
 $("characterCancel").onclick = () => {
@@ -733,8 +739,8 @@ async function openForm(row = null) {
   const model = models[section];
   adminRoute([section, row ? row.id : (model.fixedId ?? "new")]);
   $("adminFormTitle").textContent = model.fixedId
-    ? model.label
-    : `${model.label} ${row ? "수정" : "등록"}`;
+    ? sectionLabel(section, itemNames)
+    : `${sectionLabel(section, itemNames).replace(/ 관리$/, "")} ${row ? "수정" : "등록"}`;
   $("adminFormStatus").textContent = "";
   $("adminFields").replaceChildren();
   const fields = [
@@ -781,7 +787,7 @@ async function openForm(row = null) {
   for (const field of fields) {
     if (field.type === "heading") {
       const title = document.createElement("h3");
-      title.textContent = field.label;
+      title.textContent = named(field.label);
       $("adminFields").append(title);
       continue;
     }
@@ -795,7 +801,7 @@ async function openForm(row = null) {
       const group = document.createElement("fieldset");
       group.dataset.ingredients = field.key;
       const legend = document.createElement("legend");
-      legend.textContent = field.label;
+      legend.textContent = named(field.label);
       group.append(legend);
       const addRow = (entry = {}) => {
         const line = document.createElement("div");
@@ -855,7 +861,7 @@ async function openForm(row = null) {
       continue;
     }
     const label = document.createElement("label");
-    label.textContent = field.label;
+    label.textContent = named(field.label);
     // A pick from an owner's list; free text while that list is empty.
     const pickRows =
       field.type === "pick"
@@ -902,7 +908,10 @@ async function openForm(row = null) {
             data: { name: row.data.name },
           }))
         : field.options
-          ? field.options.map(([id, name]) => ({ id, data: { name } }))
+          ? field.options.map(([id, name]) => ({
+              id,
+              data: { name: named(name) },
+            }))
           : references[
               field.type === "character"
                 ? "characters"
@@ -986,7 +995,7 @@ $("adminForm").onsubmit = async (event) => {
   event.preventDefault();
   const button = $("adminForm").querySelector('[type="submit"]');
   button.disabled = true;
-  $("adminSection").disabled = true;
+  $("adminNav").inert = true;
   $("adminNew").disabled = true;
   try {
     const values = {};
@@ -1056,12 +1065,13 @@ $("adminForm").onsubmit = async (event) => {
     $("adminForm").hidden = true;
     adminRoute([section]);
     $("adminStatus").textContent = "저장했습니다.";
+    if (section === "settings") await loadNames();
     await load();
   } catch (error) {
     $("adminFormStatus").textContent = message(error);
   } finally {
     button.disabled = false;
-    $("adminSection").disabled = false;
+    $("adminNav").inert = false;
     $("adminNew").disabled = false;
   }
 };
@@ -1072,15 +1082,54 @@ $("adminCancel").onclick = () => {
 $("adminNew").onclick = () =>
   run(() => (models[section].review ? openCharacterForm() : openForm()));
 $("adminMore").onclick = () => run(() => load({ more: true }));
-$("adminSection").onchange = () =>
-  run(async () => {
-    section = $("adminSection").value;
-    adminRoute([section], { replace: false });
-    $("adminForm").hidden = true;
-    $("characterForm").hidden = true;
-    $("titleGrantForm").hidden = true;
-    await load();
+/** The owner's names, read again after 커뮤니티 설정 is saved. */
+async function loadNames() {
+  const settings = await owner
+    .collection("neo_avocado_settings")
+    .get("community")
+    .catch((error) => {
+      if (error.code === "NOT_FOUND") return null;
+      throw error;
+    });
+  itemNames = namesOf(settings?.data);
+  renderNav();
+}
+/** Template text in the owner's names; 커뮤니티 설정 keeps the original's. */
+function named(text) {
+  return section === "settings" ? text : rename(text, itemNames);
+}
+/**
+ * The menu (adm/admin.head.php's side menu): the original's groups, the
+ * current one open, the current section marked. As in the original, 소속 and
+ * 종족 are left out while untitled, unless one is open.
+ */
+function renderNav() {
+  const groups = menu.map((group) => {
+    const details = document.createElement("details");
+    details.open = group.sections.includes(section);
+    const summary = document.createElement("summary");
+    summary.textContent = group.label;
+    const list = document.createElement("ul");
+    for (const name of group.sections) {
+      if (
+        name !== section &&
+        ((name === "sides" && !itemNames.sideTitle) ||
+          (name === "classes" && !itemNames.classTitle))
+      )
+        continue;
+      const link = document.createElement("a");
+      link.href = `#/${name}`;
+      link.textContent = sectionLabel(name, itemNames);
+      if (name === section) link.setAttribute("aria-current", "page");
+      const item = document.createElement("li");
+      item.append(link);
+      list.append(item);
+    }
+    details.append(summary, list);
+    return details;
   });
+  $("adminNav").replaceChildren(...groups);
+}
 $("adminSignIn").onclick = () =>
   run(() => naru.auth.signIn({ collections: scopes }));
 $("adminSignOut").onclick = () =>
@@ -1093,19 +1142,14 @@ $("adminSignOut").onclick = () =>
 await run(async () => {
   const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
   naru = createNaru(config.site ? { site: config.site } : undefined);
-  for (const [name, model] of Object.entries(models)) {
-    const option = document.createElement("option");
-    option.value = name;
-    option.textContent = model.label;
-    $("adminSection").append(option);
-  }
-  $("adminSection").value = section;
+  renderNav();
   owner = await naru.auth.session();
   if (!owner) return;
   $("adminWelcome").hidden = true;
   $("adminWorkspace").hidden = false;
   references.characters = await all("neo_avocado_characters");
   references.profiles = await all("neo_avocado_profiles");
+  await loadNames();
   await openAddress();
   adminRoute([section]);
 });
@@ -1117,12 +1161,12 @@ $("titleGrantForm").onsubmit = async (event) => {
   event.preventDefault();
   const controls = [
     ...$("titleGrantForm").querySelectorAll("button,input,select"),
-    $("adminSection"),
     $("adminSignOut"),
   ];
   controls.forEach((control) => {
     control.disabled = true;
   });
+  $("adminNav").inert = true;
   try {
     const result = await applyTitles(
       owner,
@@ -1149,6 +1193,7 @@ $("titleGrantForm").onsubmit = async (event) => {
     controls.forEach((control) => {
       control.disabled = false;
     });
+    $("adminNav").inert = false;
   }
 };
 

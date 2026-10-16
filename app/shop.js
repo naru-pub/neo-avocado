@@ -19,6 +19,7 @@ import {
   route,
   renderPages,
 } from "./core.js";
+import { expText, moneyText } from "./names.js";
 import { onDisplay } from "../_naru/modules/display.js";
 
 async function loadBalance() {
@@ -199,7 +200,7 @@ function shopItem(item) {
   const label = document.createElement("span");
   const stock =
     typeof item.data.stock === "number" ? ` · 남은 ${item.data.stock}개` : "";
-  label.textContent = `${item.data.name} · ${item.data.price ?? 0} 아보${stock}`;
+  label.textContent = `${item.data.name} · ${moneyText(state.names, item.data.price ?? 0)}${stock}`;
   const buy = document.createElement("button");
   buy.type = "button";
   buy.textContent = item.data.stock === 0 ? "품절" : "사기";
@@ -233,9 +234,15 @@ function shopItem(item) {
     const r = item.data.requirements;
     note.textContent = [
       r.approved ? "승인 캐릭터" : "",
-      r.sides?.length ? `세력: ${r.sides.join(", ")}` : "",
-      r.classes?.length ? `종족: ${r.classes.join(", ")}` : "",
-      r.exp ? `경험치 ${r.exp}${r.consumeExp ? " 소모" : " 이상"}` : "",
+      r.sides?.length
+        ? `${state.names.sideTitle || "소속"}: ${r.sides.join(", ")}`
+        : "",
+      r.classes?.length
+        ? `${state.names.classTitle || "종족"}: ${r.classes.join(", ")}`
+        : "",
+      r.exp
+        ? `${expText(state.names, r.exp)}${r.consumeExp ? " 소모" : " 이상"}`
+        : "",
       r.title ? `타이틀 ${r.title}${r.consumeTitle ? " 소모" : " 필요"}` : "",
       r.limit !== undefined ? `캐릭터별 ${r.limit}회` : "",
       ...(r.items ?? []).map(
@@ -396,7 +403,7 @@ const HISTORY_NAMES = {
   craft: "제작",
   gacha: "뽑기",
   use: "아이템 사용",
-  exp: "경험치 변경",
+  exp: "변경",
 };
 async function loadHistory({ more = false } = {}) {
   const page = await caller().call("economy/history:history", {
@@ -406,7 +413,7 @@ async function loadHistory({ more = false } = {}) {
   if (!more) $("history").replaceChildren();
   for (const row of page.documents) {
     const li = document.createElement("li");
-    li.textContent = `${formatTime(row.data.at)} · ${HISTORY_NAMES[row.data.kind] ?? row.data.kind}${row.data.delta !== undefined ? ` · ${row.data.delta > 0 ? "+" : ""}${row.data.delta} 아보` : ""}${row.data.balance !== undefined ? ` · 잔액 ${row.data.balance}` : ""}${row.data.expDelta !== undefined ? ` · 경험치 ${row.data.expDelta > 0 ? "+" : ""}${row.data.expDelta} (총 ${row.data.exp})` : ""}${row.data.memo ? ` · ${row.data.memo}` : ""}`;
+    li.textContent = `${formatTime(row.data.at)} · ${row.data.kind === "exp" ? `${state.names.expName} ` : ""}${HISTORY_NAMES[row.data.kind] ?? row.data.kind}${row.data.delta !== undefined ? ` · ${row.data.delta > 0 ? "+" : ""}${moneyText(state.names, row.data.delta)}` : ""}${row.data.balance !== undefined ? ` · 잔액 ${row.data.balance}` : ""}${row.data.expDelta !== undefined ? ` · ${state.names.expName} ${row.data.expDelta > 0 ? "+" : ""}${row.data.expDelta} (총 ${row.data.exp})` : ""}${row.data.memo ? ` · ${row.data.memo}` : ""}`;
     $("history").append(li);
   }
   state.historyCursor = page.nextCursor;
@@ -448,7 +455,9 @@ async function useInventory(owned) {
   if (effect.type === "profile") {
     for (const [name, label, max, multiline] of [
       ["name", "이름", 40, false],
-      ["side", "소속", 40, false],
+      ...(state.names.sideTitle
+        ? [["side", state.names.sideTitle, 40, false]]
+        : []),
       ["profile", "프로필", 4000, true],
     ])
       fields.push({
@@ -506,9 +515,10 @@ async function useInventory(owned) {
       event,
     ) => {
       const selected = characters.find((row) => row.id === event.target.value);
-      for (const name of ["name", "side", "profile"])
-        $("editorFields").querySelector(`[name="${name}"]`).value =
-          selected.data[name] ?? "";
+      for (const name of ["name", "side", "profile"]) {
+        const input = $("editorFields").querySelector(`[name="${name}"]`);
+        if (input) input.value = selected.data[name] ?? "";
+      }
     };
   }
 }
@@ -527,7 +537,7 @@ async function loadRecipes() {
   $("recipe").onchange = () => {
     const recipe = state.recipes.find((row) => row.id === $("recipe").value);
     $("recipeDescription").textContent = recipe
-      ? `${recipe.data.description ?? ""} · ${recipe.data.cost ?? 0} 아보 · 재료: ${(recipe.data.ingredients ?? []).map((ingredient) => `${ingredient.item} × ${ingredient.count}`).join(", ")}`
+      ? `${recipe.data.description ?? ""} · ${moneyText(state.names, recipe.data.cost ?? 0)} · 재료: ${(recipe.data.ingredients ?? []).map((ingredient) => `${ingredient.item} × ${ingredient.count}`).join(", ")}`
       : "";
   };
   $("recipe").onchange();
@@ -569,7 +579,8 @@ $("daily").onclick = () =>
   spend(
     "economy/shop:daily",
     null,
-    (result) => `출석 보상을 받았습니다. 잔액 ${result.balance} 아보.`,
+    (result) =>
+      `출석 보상을 받았습니다. 잔액 ${moneyText(state.names, result.balance)}.`,
   );
 $("gacha").onclick = () =>
   spend(

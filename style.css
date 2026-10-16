@@ -1213,3 +1213,60 @@ body.site:not(.designed) .pages .page {
   object-fit: cover;
   border: 1px solid var(--line);
 }
+/* The admin's side menu (adm/admin.head.php): its groups, the current one
+   open; above the work on a narrow screen. */
+body.admin-page {
+  max-width: 1200px;
+}
+#adminWorkspace:not([hidden]) {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+#adminNav {
+  position: sticky;
+  top: 10px;
+  max-height: calc(100vh - 20px);
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+#adminNav details + details {
+  border-top: 1px solid var(--line);
+}
+#adminNav summary {
+  padding: 8px 12px;
+  font-weight: bold;
+  cursor: pointer;
+}
+#adminNav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 8px;
+}
+#adminNav a {
+  display: block;
+  padding: 4px 12px 4px 20px;
+  color: inherit;
+  text-decoration: none;
+}
+#adminNav a:hover {
+  background: var(--hover);
+}
+#adminNav a[aria-current="page"] {
+  background: var(--avocado);
+  color: var(--on-avocado);
+}
+#adminNav[inert] {
+  opacity: 0.6;
+}
+@media (max-width: 720px) {
+  #adminWorkspace:not([hidden]) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #adminNav {
+    position: static;
+    max-height: none;
+  }
+}

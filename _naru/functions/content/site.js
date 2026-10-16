@@ -8,6 +8,7 @@ import {
   backgroundMusic,
   communityAccess,
   scheduled,
+  namesOf,
   siteOpen,
 } from "../../modules/shared.js";
 
@@ -94,6 +95,8 @@ export async function site(ctx) {
     open: await siteOpen(ctx),
     design,
     bgm: backgroundMusic(settings.bgm),
+    // 기타 항목명 설정: the owner's names for money, experience, rank, 소속, 종족.
+    names: namesOf(settings),
     menus,
     banners,
   };

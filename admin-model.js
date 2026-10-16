@@ -1,3 +1,5 @@
+import { rename } from "./app/names.js";
+
 // Pure forms/validation shared with tests. Only an SDK owner handle writes these.
 const P = "neo_avocado_";
 export const models = {
@@ -418,7 +420,7 @@ export const models = {
   },
   sides: {
     label: "소속",
-    help: "캐릭터가 고를 소속(세력)입니다. 목록이 비어 있으면 회원이 자유롭게 적습니다. 이름을 바꾸면 이미 고른 캐릭터의 소속은 그대로이니 함께 확인하세요.",
+    help: "캐릭터가 고를 소속입니다. 목록이 비어 있으면 회원이 자유롭게 적습니다. 이름을 바꾸면 이미 고른 캐릭터의 소속은 그대로이니 함께 확인하세요.",
     fields: [
       { key: "name", label: "소속 이름", required: true, max: 40 },
       { key: "image", label: "이미지", type: "url", image: true, max: 2000 },
@@ -584,17 +586,18 @@ export const models = {
     ],
   },
   levels: {
-    label: "등급",
-    help: "경험치가 기준 이상인 가장 높은 등급을 표시합니다.",
+    // adm/level_list.php, named by cf_rank_name.
+    label: "랭킹 설정",
+    help: "캐릭터의 경험치가 기준 이상인 가장 높은 단계를 표시합니다.",
     fields: [
-      { key: "name", label: "등급 이름", required: true, max: 40 },
+      { key: "name", label: "이름", required: true, max: 40 },
       { key: "exp", label: "필요 경험치", type: "number", default: 0 },
     ],
   },
   // adm/community_form.php (커뮤니티 설정): one page, in its sections.
   settings: {
     label: "커뮤니티 설정",
-    help: "커뮤니티 전체에 적용되는 설정입니다: 공개 여부, 캐릭터 생성·수정, 탐색, 쪽지, 상점, 캐릭터 보기. 원본의 커뮤니티 설정과 같습니다.",
+    help: "커뮤니티 전체에 적용되는 설정입니다: 공개 여부, 캐릭터 생성·수정, 탐색, 쪽지, 상점, 캐릭터 보기와 화폐·경험치·소속·종족의 이름. 원본의 커뮤니티 설정과 같습니다.",
     fixedId: "community",
     fields: [
       { type: "heading", label: "홈페이지 기본환경 설정" },
@@ -685,6 +688,31 @@ export const models = {
         key: "viewerMoney",
         label: "캐릭터 보기에 오너의 소지금 보이기",
         type: "checkbox",
+      },
+      // 기타 항목명 설정 (cf_money, cf_money_pice, cf_exp_name, cf_exp_pice,
+      // cf_rank_name, cf_side_title, cf_class_title).
+      { type: "heading", label: "기타 항목명 설정" },
+      { key: "moneyName", label: "화폐 명칭", default: "아보", max: 20 },
+      { key: "moneyUnit", label: "화폐 단위", default: "아보", max: 20 },
+      { key: "expName", label: "경험치 명칭", default: "경험치", max: 20 },
+      {
+        key: "expUnit",
+        label: "경험치 단위 (빈칸 가능, 예: exp)",
+        default: "",
+        max: 20,
+      },
+      { key: "rankName", label: "랭킹 명칭", default: "랭킹", max: 20 },
+      {
+        key: "sideTitle",
+        label: "선택A 명칭 (기본 소속, 빈칸: 프로필에 표시하지 않음)",
+        default: "소속",
+        max: 20,
+      },
+      {
+        key: "classTitle",
+        label: "선택B 명칭 (기본 종족, 빈칸: 프로필에 표시하지 않음)",
+        default: "종족",
+        max: 20,
       },
     ],
   },
@@ -859,6 +887,59 @@ for (const [name, model] of Object.entries(models))
 // The collections the owner's sign-in asks for. Their settings (access, rules,
 // unique fields) are declared in _naru/collections.json, which Naru installs
 // when the site's files arrive.
+/**
+ * The admin menu, in the original's groups (adm/admin.menu100–900.php), each
+ * section once. The site's own additions sit with what they belong to.
+ */
+export const menu = [
+  { label: "환경설정", sections: ["settings", "design", "menus", "banners"] },
+  { label: "회원관리", sections: ["members", "activity", "visits"] },
+  {
+    label: "게시판관리",
+    sections: ["boards", "board_groups", "content", "quests", "emoticons"],
+  },
+  {
+    label: "캐릭터관리",
+    sections: [
+      "character_fields",
+      "character_review",
+      "character_state",
+      "titles",
+      "title_holdings",
+      "levels",
+      "stat_config",
+      "couples",
+      "sides",
+      "classes",
+    ],
+  },
+  {
+    label: "아이템 관리",
+    sections: [
+      "items",
+      "inventory",
+      "gacha",
+      "explore",
+      "recipes",
+      "history",
+      "wallets",
+    ],
+  },
+  { label: "기타관리", sections: ["log_cleanup", "character_cleanup"] },
+];
+
+/**
+ * A section's name in the owner's names (기타 항목명 설정), as the original's
+ * menu says "랭킹 설정 관리", "화폐 관리", "소속 관리".
+ */
+export function sectionLabel(name, names) {
+  if (name === "levels") return `${names.rankName} 설정`;
+  if (name === "wallets") return `${names.moneyName} 관리`;
+  if (name === "sides") return `${names.sideTitle || "소속"} 관리`;
+  if (name === "classes") return `${names.classTitle || "종족"} 관리`;
+  return rename(models[name].label, names);
+}
+
 export const scopes = [
   ...new Set([
     ...Object.values(models).map((model) => model.collection),

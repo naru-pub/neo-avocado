@@ -136,7 +136,7 @@ async function loadMyExp({ more = false } = {}) {
   }
   if (!more && !page.documents.length) {
     const empty = document.createElement("li");
-    empty.textContent = "경험치 내역이 없습니다.";
+    empty.textContent = `${state.names.expName} 내역이 없습니다.`;
     $("myExp").append(empty);
   }
   expCursor = page.nextCursor;

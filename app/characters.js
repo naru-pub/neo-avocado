@@ -26,6 +26,7 @@ import {
   renderPages,
 } from "./core.js";
 import { writeTo } from "./messages.js";
+import { expText, moneyText } from "./names.js";
 
 const CHARACTER_FILTERS = {
   // member/ready.php: characters not yet approved, in either state.
@@ -99,7 +100,11 @@ export async function loadCharacters({ page: number = 1 } = {}) {
   ]);
   // 멤버목록 by 소속 (member/index.php's 진영별), once there are two: every
   // approved character on one page, as the original lists them.
-  if ($("characterFilter").value === "approved" && state.sides.length >= 2) {
+  if (
+    $("characterFilter").value === "approved" &&
+    state.names.sideTitle &&
+    state.sides.length >= 2
+  ) {
     await showBySide(where);
     state.charactersLoaded = true;
     return;
@@ -253,9 +258,10 @@ async function characterItem(character) {
     write.onclick = () => run(() => writeTo(owner));
     item.querySelector(".meta").append(write);
   }
+  // An untitled 소속 or 종족 is not shown, as cf_side_title left empty.
   item.querySelector(".character-side").textContent = [
-    character.data.side,
-    character.data.class,
+    state.names.sideTitle && character.data.side,
+    state.names.classTitle && character.data.class,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -290,8 +296,26 @@ async function characterItem(character) {
           required: true,
           max: 40,
         },
-        choiceEdit("side", "소속", state.sides, current.data.side),
-        choiceEdit("class", "종족", state.classes, current.data.class),
+        ...(state.names.sideTitle
+          ? [
+              choiceEdit(
+                "side",
+                state.names.sideTitle,
+                state.sides,
+                current.data.side,
+              ),
+            ]
+          : []),
+        ...(state.names.classTitle
+          ? [
+              choiceEdit(
+                "class",
+                state.names.classTitle,
+                state.classes,
+                current.data.class,
+              ),
+            ]
+          : []),
         {
           name: "profile",
           label: "프로필",
@@ -419,7 +443,7 @@ function wireCharacterDetails(item, character) {
     const left = Math.max(0, status.state.points - spent);
     const approved = status.state.approved === true;
     item.querySelector(".progression").textContent =
-      `경험치 ${status.state.exp}${status.rank ? ` · ${status.rank}` : ""} · 능력치 포인트 ${status.state.points} (남은 ${left})`;
+      `${expText(state.names, status.state.exp)}${status.rank ? ` · ${status.rank}` : ""} · 능력치 포인트 ${status.state.points} (남은 ${left})`;
     item.querySelector(".stats").replaceChildren();
     for (const definition of status.definitions) {
       const li = document.createElement("li");
@@ -856,16 +880,16 @@ export async function openCharacter(id) {
   if (!sheet.exp.length)
     exp.append(
       Object.assign(document.createElement("li"), {
-        textContent: "경험치 내역이 없습니다.",
+        textContent: `${state.names.expName} 내역이 없습니다.`,
       }),
     );
-  extras.append(heading("경험치 내역"), exp);
+  extras.append(heading(`${state.names.expName} 내역`), exp);
   if (sheet.inventory) {
     const title = heading("인벤토리");
     if (sheet.balance !== null) {
       const money = document.createElement("span");
       money.className = "viewer-money";
-      money.textContent = `${sheet.balance} 아보`;
+      money.textContent = moneyText(state.names, sheet.balance);
       title.append(" ", money);
     }
     const list = document.createElement("ul");
@@ -892,7 +916,7 @@ export async function openCharacter(id) {
     extras.append(title, list);
   } else if (sheet.balance !== null) {
     const money = heading("소지금");
-    money.append(` ${sheet.balance} 아보`);
+    money.append(` ${moneyText(state.names, sheet.balance)}`);
     extras.append(money);
   }
   $("characterSheet").replaceChildren(item, extras);

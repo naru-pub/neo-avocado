@@ -28,6 +28,7 @@ import {
   record,
   restoreStat,
   requireUsable,
+  lacking,
 } from "./shared.js";
 
 const https = (value) =>
@@ -344,7 +345,9 @@ export async function combineInPost(ctx, materials, speaker) {
     const cost = amount(recipe.data.cost ?? 0, "Crafting cost");
     const current = await wallet(ctx);
     if (current.balance < cost)
-      ctx.fail("CONFLICT", "아보가 모자랍니다.", { reason: "not_enough" });
+      ctx.fail("CONFLICT", await lacking(ctx, "moneyName"), {
+        reason: "not_enough",
+      });
     if (cost) balance = await pay(ctx, current, cost);
     await give(ctx, prize, "craft", speaker.character);
   }

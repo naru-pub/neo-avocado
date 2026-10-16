@@ -375,11 +375,16 @@ export async function logItem(log) {
           },
           {
             name: "exp",
-            label: "캐릭터 경험치 지급",
+            label: `캐릭터 ${state.names.expName} 지급`,
             type: "number",
             value: 0,
           },
-          { name: "money", label: "오너 아보 지급", type: "number", value: 0 },
+          {
+            name: "money",
+            label: `오너 ${state.names.moneyName} 지급`,
+            type: "number",
+            value: 0,
+          },
           { name: "memo", label: "답변", multiline: true, max: 500 },
         ],
         async ({ state: settled, exp, money, memo }) => {

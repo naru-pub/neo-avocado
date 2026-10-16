@@ -13,6 +13,7 @@ import {
   state,
   route,
 } from "./core.js";
+import { moneyText } from "./names.js";
 import { showUnread } from "./live.js";
 
 $("tabMessages").onclick = () =>
@@ -79,7 +80,7 @@ async function loadMessageCost() {
       throw error;
     });
   $("messageCost").textContent =
-    `회원 한 명당 ${settings?.data.messageCost ?? 0} 아보`;
+    `회원 한 명당 ${moneyText(state.names, settings?.data.messageCost ?? 0)}`;
 }
 async function loadMailbox({ more = false } = {}) {
   const page = await caller().call("community/messages:mailbox", {

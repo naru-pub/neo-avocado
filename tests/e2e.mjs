@@ -61,6 +61,15 @@ async function person() {
 /** Opens a page from the site menu, as a member would. */
 const menu = (page, name) =>
   page.locator("#siteMenu a", { hasText: name }).first().click();
+/** Opens an admin section from the side menu, opening its group first. */
+async function adminMenu(page, group, label) {
+  const details = page.locator("#adminNav details", {
+    has: page.locator("summary", { hasText: group }),
+  });
+  if (!(await details.evaluate((element) => element.open)))
+    await details.locator("summary").click();
+  await details.locator("a", { hasText: label }).first().click();
+}
 async function signInAs(page, name) {
   await page.goto(`${origin}/`);
   await page.locator("#cardSignIn").click();
@@ -134,7 +143,7 @@ try {
 
   // An image field in the admin forms takes a file: it goes to Naru Media
   // as a managed upload and its address is what the row keeps.
-  await owner.locator("#adminSection").selectOption("emoticons");
+  await adminMenu(owner, "게시판관리", "이모티콘");
   await owner.locator("#adminNew").click();
   await owner.locator('#adminFields [name="id"]').fill("smile");
   await owner.locator('#adminFields [name="name"]').fill("웃음");
@@ -573,7 +582,27 @@ try {
     "쪽지",
     "상점",
     "캐릭터 보기",
+    "기타 항목명 설정",
   ]);
+  // 기타 항목명 설정 names the menu: 화폐 관리 by cf_money, and an untitled
+  // 소속 (cf_side_title) has no menu entry, as in the original.
+  await owner.locator('#adminFields [name="moneyName"]').fill("골드");
+  await owner.locator('#adminFields [name="sideTitle"]').fill("");
+  await owner.locator('#adminForm [type="submit"]').click();
+  await owner
+    .locator("#adminNav a", { hasText: "골드 관리" })
+    .waitFor({ state: "attached" });
+  assert.equal(
+    await owner.locator("#adminNav a", { hasText: "소속 관리" }).count(),
+    0,
+  );
+  await owner.reload();
+  await owner.locator('#adminFields [name="moneyName"]').fill("아보");
+  await owner.locator('#adminFields [name="sideTitle"]').fill("소속");
+  await owner.locator('#adminForm [type="submit"]').click();
+  await owner
+    .locator("#adminNav a", { hasText: "소속 관리" })
+    .waitFor({ state: "attached" });
 
   // The admin page has addresses too: an entry's form, and old links to
   // admin.html carry on to /admin/ with their address.
@@ -654,13 +683,13 @@ try {
   await menu(alice, "현재접속자");
   await alice.locator("#onlineList li", { hasText: "앨리스" }).waitFor();
   // The owner's reports: visits counted, and each member's activity.
-  await owner.locator("#adminSection").selectOption("visits");
+  await adminMenu(owner, "회원관리", "접속자 집계");
   await owner.locator("#adminReport table.report td").first().waitFor();
   assert.match(
     await owner.locator("#adminReport p").first().textContent(),
     /접속 [1-9]\d*회/,
   );
-  await owner.locator("#adminSection").selectOption("activity");
+  await adminMenu(owner, "회원관리", "활동량 관리");
   await owner
     .locator("#adminReport tr", { hasText: "앨리스" })
     .first()

@@ -3,6 +3,7 @@
 import { $, caller, run, say, showTab, state } from "./core.js";
 import { configureBoard, loadLogs } from "./logs.js";
 import { loadContentBody, loadContentPages } from "./content.js";
+import { NAME_DEFAULTS } from "./names.js";
 
 const SITE_COLORS = {
   accent: "--avocado",
@@ -17,6 +18,8 @@ export async function loadSite() {
   const site = await caller().call("content/site:site");
   const { design } = site;
   state.siteOpen = site.open !== false;
+  state.names = { ...NAME_DEFAULTS, ...site.names };
+  applyItemNames(state.names);
   const root = document.documentElement.style;
   // Without 디자인 사용 the page is plain (plain.css), as the original
   // without its design CSS: the title, logo, menus and slides still apply.
@@ -44,6 +47,16 @@ export async function loadSite() {
   document.body.classList.remove("font-serif", "font-mono");
   if (design.font !== "sans")
     document.body.classList.add(`font-${design.font}`);
+}
+/**
+ * The owner's names in the page's own text (기타 항목명 설정); a 소속 or 종족
+ * left untitled is hidden, as in the original's profile.
+ */
+function applyItemNames(names) {
+  for (const element of document.querySelectorAll("[data-name]"))
+    element.textContent = names[element.dataset.name];
+  for (const element of document.querySelectorAll("[data-name-shown]"))
+    element.hidden = !names[element.dataset.nameShown];
 }
 /** The site's name and logo, in the header and the copyright. */
 function applyNames(design) {

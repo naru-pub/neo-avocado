@@ -131,7 +131,9 @@
       <nav id="mypageNav" class="sub-tabs" hidden>
         <button id="myAccountTab" type="button">계정정보</button>
         <button id="myLogsTab" type="button">로그내역</button>
-        <button id="myExpTab" type="button">경험치 내역</button>
+        <button id="myExpTab" type="button">
+          <span data-name="expName">경험치</span> 내역
+        </button>
         <button id="myMailTab" type="button">우편함</button>
         <button id="myCallsTab" type="button">호출내역</button>
       </nav>
@@ -222,12 +224,12 @@
             이름
             <input id="characterName" maxlength="40" required />
           </label>
-          <label>
-            소속
+          <label data-name-shown="sideTitle">
+            <span data-name="sideTitle">소속</span>
             <input id="characterSide" maxlength="40" />
           </label>
-          <label>
-            종족
+          <label data-name-shown="classTitle">
+            <span data-name="classTitle">종족</span>
             <input id="characterClass" maxlength="40" />
           </label>
           <label>
@@ -266,7 +268,9 @@
         <ul id="myLogs" class="my-logs"></ul>
       </section>
       <section id="myExpView" hidden>
-        <h2>경험치 내역 <small>Experience</small></h2>
+        <h2>
+          <span data-name="expName">경험치</span> 내역 <small>Experience</small>
+        </h2>
         <ul id="myExp" class="my-exp"></ul>
         <button id="moreExp" type="button" hidden>더 보기</button>
       </section>
@@ -406,9 +410,14 @@
           구매는 승인된 캐릭터로만 할 수 있습니다.
         </p>
         <div class="card wallet">
-          <p>잔액 <strong id="balance">0</strong> 아보</p>
+          <p>
+            잔액 <strong id="balance">0</strong>
+            <span data-name="moneyUnit">아보</span>
+          </p>
           <button id="daily" type="button">출석 보상 받기</button>
-          <button id="gacha" type="button">뽑기 (50 아보)</button>
+          <button id="gacha" type="button">
+            뽑기 (50 <span data-name="moneyUnit">아보</span>)
+          </button>
         </div>
         <h2>상점</h2>
         <div class="shop-npc">

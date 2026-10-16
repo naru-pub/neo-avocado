@@ -1,6 +1,8 @@
 // What every part of the page shares: collection names, the page's state,
 // status messages and run(), the community collections and the edit dialog.
-// It imports no other part, so it is always ready before them.
+// It imports no other part but names.js, so it is always ready before them.
+
+import { NAME_DEFAULTS } from "./names.js";
 
 const PREFIX = "neo_avocado_";
 export const COLLECTION = {
@@ -55,6 +57,8 @@ export const state = {
   admission: null,
   // 사이트공개 (cf_open), from the site's frame: off, visitors see nothing.
   siteOpen: true,
+  // 기타 항목명 설정: the owner's names for money, experience, 소속, 종족.
+  names: NAME_DEFAULTS,
   // The site owner, signed in here, is staff as moderators are.
   owner: false,
   role: "member",

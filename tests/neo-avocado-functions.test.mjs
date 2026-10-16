@@ -3620,3 +3620,37 @@ test("the owner moves a character to another member, with what it keeps", async 
   await wear(ctx, { character: "hero", outfit: "w0" });
   assert.equal(table(`${P}characters`).get("hero").outfit, "w0");
 });
+
+test("기타 항목명 설정 names money, experience, 소속 and 종족 for pages and refusals", async () => {
+  const { NAME_DEFAULTS, subject } = await import("../_naru/modules/shared.js");
+  const pages = await import("../app/names.js");
+  // The pages show the same defaults before the site's frame arrives.
+  assert.deepEqual(pages.NAME_DEFAULTS, NAME_DEFAULTS);
+  const { ctx, table } = fakeCtx();
+  assert.deepEqual((await site(ctx)).names, NAME_DEFAULTS);
+  table(`${P}settings`).set("community", {
+    moneyName: "골드",
+    moneyUnit: "G",
+    expName: "포인트",
+    sideTitle: "",
+    classTitle: "  ",
+    rankName: " ",
+  });
+  const { names } = await site(ctx);
+  assert.equal(names.moneyUnit, "G");
+  // An empty 소속 or 종족 hides it; an empty name for the rest is the default.
+  assert.equal(names.sideTitle, "");
+  assert.equal(names.classTitle, "");
+  assert.equal(names.rankName, "랭킹");
+  assert.equal(
+    await gacha(ctx).catch((error) => error.message),
+    "골드가 모자랍니다.",
+  );
+  assert.equal(subject("포인트"), "포인트가");
+  assert.equal(subject("경험"), "경험이");
+  assert.equal(subject("XP"), "XP이(가)");
+  assert.equal(
+    pages.rename("경험치·아보 지급 (네오 아보카도)", names),
+    "포인트·골드 지급 (네오 아보카도)",
+  );
+});

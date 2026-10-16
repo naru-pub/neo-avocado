@@ -99,6 +99,52 @@ export async function siteOpen(ctx) {
   return (await ctx.get(SETTINGS, "community"))?.data.siteOpen !== false;
 }
 
+/**
+ * The owner's names (기타 항목명 설정: cf_money, cf_money_pice, cf_exp_name,
+ * cf_exp_pice, cf_rank_name, cf_side_title, cf_class_title), the template's
+ * own until changed. An empty 소속 or 종족 title hides it, as in the original.
+ * names.js keeps the same defaults for the pages.
+ */
+export const NAME_DEFAULTS = Object.freeze({
+  moneyName: "아보",
+  moneyUnit: "아보",
+  expName: "경험치",
+  expUnit: "",
+  rankName: "랭킹",
+  sideTitle: "소속",
+  classTitle: "종족",
+});
+export function namesOf(settings = {}) {
+  const names = {};
+  for (const [key, fallback] of Object.entries(NAME_DEFAULTS)) {
+    const value = settings[key];
+    names[key] =
+      typeof value === "string" &&
+      (value.trim() || ["expUnit", "sideTitle", "classTitle"].includes(key))
+        ? value.trim().slice(0, 20)
+        : fallback;
+  }
+  return names;
+}
+export async function names(ctx) {
+  return namesOf((await ctx.get(SETTINGS, "community"))?.data);
+}
+/** A word with its subject particle: 아보가, 경험치가, 포인트가, 골드가. */
+export function subject(word) {
+  const last = word.charCodeAt(word.length - 1);
+  if (last < 0xac00 || last > 0xd7a3) return `${word}이(가)`;
+  return `${word}${(last - 0xac00) % 28 ? "이" : "가"}`;
+}
+/** "아보가 모자랍니다." in the owner's name for money or experience. */
+export async function lacking(ctx, key) {
+  return `${subject((await names(ctx))[key])} 모자랍니다.`;
+}
+/** What a restricted character is refused for, in the owner's names. */
+export function restrictedFor(named, verb) {
+  const kinds = [named.sideTitle, named.classTitle].filter(Boolean);
+  return `이 캐릭터의 ${kinds.join("·") || "조건"}으로는 ${verb} 수 없습니다.`;
+}
+
 /** A visitor of a closed site: below every board's and page's level 1. */
 export const CLOSED_ACCESS = Object.freeze({
   level: 0,
@@ -471,12 +517,14 @@ export async function requireUsable(ctx, item, character) {
       requirements[key]?.length &&
       !requirements[key].includes(official[field])
     )
-      ctx.fail("CONFLICT", "이 캐릭터의 세력·종족은 구매할 수 없습니다.", {
+      ctx.fail("CONFLICT", restrictedFor(await names(ctx), "사용할"), {
         reason: "restricted_character",
       });
   }
   if (official.exp < amount(requirements.exp ?? 0, "Use experience"))
-    ctx.fail("CONFLICT", "경험치가 모자랍니다.", { reason: "not_enough_exp" });
+    ctx.fail("CONFLICT", await lacking(ctx, "expName"), {
+      reason: "not_enough_exp",
+    });
   if (
     requirements.title &&
     (!official.titles?.includes(requirements.title) ||

@@ -16,6 +16,9 @@ import {
   draw,
   ownedItem,
   characterState,
+  lacking,
+  names,
+  restrictedFor,
 } from "../../modules/shared.js";
 
 /** 하루 한 번, 한국 시간으로 날이 바뀌면 받는 출석 보상. */
@@ -61,7 +64,9 @@ export async function buy(
     });
   const current = await wallet(ctx);
   if (current.balance < price)
-    ctx.fail("CONFLICT", "아보가 모자랍니다.", { reason: "not_enough" });
+    ctx.fail("CONFLICT", await lacking(ctx, "moneyName"), {
+      reason: "not_enough",
+    });
   const requirements = listing.data.requirements ?? {};
   for (const [key, field] of [
     ["sides", "side"],
@@ -79,13 +84,15 @@ export async function buy(
       requirements[key]?.length &&
       !requirements[key].includes(progression.data[field])
     )
-      ctx.fail("CONFLICT", "이 캐릭터의 세력·종족은 구매할 수 없습니다.", {
+      ctx.fail("CONFLICT", restrictedFor(await names(ctx), "구매할"), {
         reason: "restricted_character",
       });
   }
   const expPrice = amount(requirements.exp ?? 0, "Required experience");
   if (expPrice && progression.data.exp < expPrice)
-    ctx.fail("CONFLICT", "경험치가 모자랍니다.", { reason: "not_enough_exp" });
+    ctx.fail("CONFLICT", await lacking(ctx, "expName"), {
+      reason: "not_enough_exp",
+    });
   if (
     requirements.title &&
     (!progression.data.titles?.includes(requirements.title) ||
@@ -184,7 +191,9 @@ export async function gacha(ctx, args = {}) {
     });
   const current = await wallet(ctx);
   if (current.balance < GACHA_COST)
-    ctx.fail("CONFLICT", "아보가 모자랍니다.", { reason: "not_enough" });
+    ctx.fail("CONFLICT", await lacking(ctx, "moneyName"), {
+      reason: "not_enough",
+    });
   const result = await draw(ctx);
   if (!result.configured)
     ctx.fail("CONFLICT", "아직 뽑을 것이 없습니다.", { reason: "empty" });
