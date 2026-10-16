@@ -2705,6 +2705,8 @@ test("visits record where members are and count each Korean day, bounded", async
   );
   ctx.now += 11 * 60 * 1000;
   assert.deepEqual((await presence.online(ctx)).members, []);
+  // Who is here is for members: Naru refuses visitors an export not listed.
+  assert.deepEqual(presence.visitors, ["seen"]);
   assert.equal(
     await refusal(presence.seen(ctx, { where: 5 })),
     "invalid_input",

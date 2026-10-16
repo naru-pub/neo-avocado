@@ -87,7 +87,7 @@ const DEFAULT_MENUS = [
   ["커플목록", "tab:couples", true],
   ["상점", "tab:shop", true],
   ["마이페이지", "tab:mypage", true],
-  ["현재접속자", "tab:online"],
+  ["현재접속자", "tab:online", true],
   ["퀘스트", "tab:quests", true],
   ["안내", "tab:content"],
 ].map(([name, link, memberOnly]) => ({

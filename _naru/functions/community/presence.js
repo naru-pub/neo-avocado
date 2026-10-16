@@ -3,8 +3,9 @@ import { PRESENCE, PROFILES, VISITS, kstDay } from "../../modules/shared.js";
 // Who is here (bbs/current_connect.php) and each day's visits
 // (adm/visit_list.php and its breakdowns). A browser counts once a Korean
 // day, as the original's visit cookie does; a member also reports where they
-// are as they move between pages. Nothing polls.
-export const visitors = ["seen", "online"];
+// are as they move between pages. Nothing polls. Who is here, and where, is
+// for members only: a place can name a members-only board.
+export const visitors = ["seen"];
 export const readOnly = ["online"];
 
 /** How long a member counts as here after their last page. */

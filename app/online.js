@@ -1,6 +1,6 @@
 // 현재접속자 (bbs/current_connect.php): members seen in the last ten
 // minutes, and where they were.
-import { $, caller, formatTime, run, showTab } from "./core.js";
+import { $, caller, formatTime, run, say, showTab, state } from "./core.js";
 
 async function loadOnline() {
   const { members } = await caller().call("community/presence:online");
@@ -25,6 +25,8 @@ async function loadOnline() {
 
 $("tabOnline").onclick = () =>
   run(async () => {
+    // Members only: where members are can name members-only boards.
+    if (!state.member) return say("회원 로그인 후 이용할 수 있습니다.");
     showTab("online");
     await loadOnline();
   });
