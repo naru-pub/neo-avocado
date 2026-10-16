@@ -96,7 +96,7 @@ const picture = (name) => ({ name, mimeType: "image/png", buffer: PNG });
 try {
   // _naru/collections.json made every collection as the site started, so
   // the owner's sign-in only signs in.
-  assert.match(log, /_naru\/collections\.json: 13 created, 0 changed/);
+  assert.match(log, /_naru\/collections\.json: 8 created, 0 changed/);
   const owner = await person();
   await owner.goto(`${origin}/admin/`);
   await owner.locator("#adminSignIn").click();
@@ -329,9 +329,12 @@ try {
       id: "community",
       data: { shopCategories: "일반, 이벤트", shopGreeting: "어서 오세요" },
     });
-    await admin
-      .collection(`${P}items`)
-      .set("cake", { name: "케이크", price: 1, shopCategory: "이벤트" });
+    // Items are a table: the owner writes them through a mutation.
+    await admin.mutate("admin/documents:set", {
+      collection: `${P}items`,
+      id: "cake",
+      data: { name: "케이크", price: 1, shopCategory: "이벤트" },
+    });
   }, P);
   await menu(alice, "커플목록");
   await alice.locator("#coupleList li", { hasText: "초록" }).waitFor();
