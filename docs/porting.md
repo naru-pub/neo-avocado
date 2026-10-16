@@ -50,6 +50,9 @@ workflows to the port, and says what was left out and why.
   presentation details of PHP themes.
 - Pruning old call rows and deleting single calls: calls of deleted posts are
   hidden, not removed.
+- 췩 (`bo_use_chick`, posting by uploading pictures first): a post already
+  takes its picture as a managed upload in the same form.
+- 글읽기 포인트 (`bo_read_point`): it would write a ledger row on every read.
 
 ## How it is built
 

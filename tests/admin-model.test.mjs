@@ -720,3 +720,38 @@ test("the character review searches by name or owner, filters 소속·종족 and
     ["a"],
   );
 });
+
+test("a board's form starts from the original's defaults and keeps its limits in order", () => {
+  const defaults = Object.fromEntries(
+    models.boards.fields
+      .filter((field) => field.key)
+      .map((field) => [field.key, field.default ?? ""]),
+  );
+  // bo_gallery_height 600, bo_page_rows 15, bo_count_modify 1.
+  assert.equal(defaults.foldHeight, 600);
+  assert.equal(defaults.pageRows, 15);
+  assert.equal(defaults.editLock, 1);
+  const values = {
+    ...defaults,
+    id: "free",
+    name: "자유",
+    kind: "image",
+    secret: "optional",
+    group: "",
+    categories: "",
+  };
+  const board = buildRecord("boards", values, null, { groups: [] });
+  assert.equal(board.data.writeReward, 0);
+  assert.throws(
+    () =>
+      buildRecord("boards", { ...values, pageRows: 0 }, null, { groups: [] }),
+    /한 페이지 글 수/,
+  );
+  assert.throws(
+    () =>
+      buildRecord("boards", { ...values, writeMin: 10, writeMax: 5 }, null, {
+        groups: [],
+      }),
+    /최소 글자 수/,
+  );
+});

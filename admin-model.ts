@@ -149,7 +149,13 @@ export const models: Record<string, Model> = {
     help: "등급은 회원 관리에서 설정합니다. 목록/본문/작성/댓글 권한을 따로 정합니다. 등급 1은 로그인하지 않은 손님입니다: 목록·본문을 1로 두면 누구나 읽고, 글쓰기·댓글을 1로 두면 손님이 이름과 비밀번호로 씁니다.",
     fields: [
       { key: "name", label: "게시판 이름", required: true, max: 120 },
-      { key: "description", label: "설명", type: "textarea", max: 2000 },
+      // bo_content_head: shown above the list as (sanitized) HTML.
+      {
+        key: "description",
+        label: "설명 (목록 위에 HTML로 표시)",
+        type: "textarea",
+        max: 2000,
+      },
       {
         key: "kind",
         label: "글 형식",
@@ -181,7 +187,7 @@ export const models: Record<string, Model> = {
       },
       {
         key: "actions",
-        label: "행동 허용 (글: 조합·아이템 사용, 댓글: 탐색·아이템 사용)",
+        label: "행동 허용 (글: 탐색·조합·아이템 사용, 댓글: 탐색·아이템 사용)",
         type: "checkbox",
       },
       // bo_use_noname: members may post and comment as 익명.
@@ -190,6 +196,64 @@ export const models: Record<string, Model> = {
       {
         key: "foldHeight",
         label: "로그 자동 접기 높이 (px, 0이면 직접 접은 로그만)",
+        type: "number",
+        default: 600,
+      },
+      // bo_page_rows (cf_page_rows 15, install_db.php:157).
+      {
+        key: "pageRows",
+        label: "한 페이지 글 수",
+        type: "number",
+        default: 15,
+      },
+      // bo_count_modify (board_form.php:89).
+      {
+        key: "editLock",
+        label: "다른 회원 댓글이 이만큼 달리면 수정 금지 (0이면 제한 없음)",
+        type: "number",
+        default: 1,
+      },
+      // bo_write_point, bo_comment_point: paid in the community's money.
+      {
+        key: "writeReward",
+        label: "글쓰기 보상 (화폐, 글을 지우면 회수)",
+        type: "number",
+        default: 0,
+      },
+      {
+        key: "commentReward",
+        label: "댓글쓰기 보상 (화폐, 댓글을 지우면 회수)",
+        type: "number",
+        default: 0,
+      },
+      // bo_insert_content, bo_write_min/max, bo_comment_min/max.
+      {
+        key: "insertContent",
+        label: "새 글 기본 내용",
+        type: "textarea",
+        max: 2000,
+      },
+      {
+        key: "writeMin",
+        label: "글 최소 글자 수 (0이면 제한 없음, HTML 게시판·운영진 제외)",
+        type: "number",
+        default: 0,
+      },
+      {
+        key: "writeMax",
+        label: "글 최대 글자 수 (0이면 제한 없음)",
+        type: "number",
+        default: 0,
+      },
+      {
+        key: "commentMin",
+        label: "댓글 최소 글자 수 (0이면 제한 없음, 운영진 제외)",
+        type: "number",
+        default: 0,
+      },
+      {
+        key: "commentMax",
+        label: "댓글 최대 글자 수 (0이면 제한 없음)",
         type: "number",
         default: 0,
       },
@@ -225,6 +289,12 @@ export const models: Record<string, Model> = {
         type: "pick",
         from: "groups",
         multiple: true,
+      },
+      // mb_adult: sees 19금 posts without the cover (list.log.skin.php:133).
+      {
+        key: "adult",
+        label: "성인 (19금 로그를 가리지 않음)",
+        type: "checkbox",
       },
       { key: "warnings", label: "누적 경고", type: "number", default: 0 },
       { key: "warningNote", label: "경고 내용", type: "textarea", max: 1000 },
@@ -841,6 +911,13 @@ export const models: Record<string, Model> = {
         label: "회원가입 시 획득",
         type: "number",
         default: 0,
+      },
+      // cf_filter (adm/config_form.php:315), checked on posts and comments.
+      {
+        key: "bannedWords",
+        label: "단어 필터링 (쉼표로 구분, 제목·본문·댓글에 쓸 수 없음)",
+        type: "textarea",
+        max: 5000,
       },
       { type: "heading", label: "쪽지" },
       {
@@ -1489,6 +1566,13 @@ export function buildRecord(section, values, previous, references) {
       data.categories.some((name) => name.length > 40)
     )
       throw new Error("분류는 20개 이하, 각 40자 이하입니다.");
+    if (data.pageRows < 1 || data.pageRows > 100)
+      throw new Error("한 페이지 글 수는 1~100입니다.");
+    if (
+      (data.writeMax && data.writeMin > data.writeMax) ||
+      (data.commentMax && data.commentMin > data.commentMax)
+    )
+      throw new Error("최소 글자 수는 최대 글자 수보다 클 수 없습니다.");
   }
   if (section === "items") {
     if (!data.effect.type) delete data.effect;

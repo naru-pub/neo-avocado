@@ -2391,23 +2391,40 @@ test("exploration is limited per character per Korean day and drops configured i
   assert.equal(await reasonOf(explore()), "access_denied");
 });
 
-test("items used in a post are consumed, logged and checked against the speaker", async () => {
+test("items used in a post are the speaker's own, logged and spent; only a draw does anything", async () => {
   const { ctx, table } = roleplayWorld();
   table(`${P}items`).set("letter", {
+    usableInPosts: true,
+    craftMaterial: true,
     name: "Letter",
     description: "A note",
     usableInPosts: true,
   });
   table(`${P}items`).set("box", {
+    usableInPosts: true,
+    craftMaterial: true,
     name: "Box",
     effect: { type: "draw" },
     usableInPosts: true,
   });
-  table(`${P}items`).set("prize", { name: "Prize" });
+  table(`${P}items`).set("prize", {
+    usableInPosts: true,
+    craftMaterial: true,
+    name: "Prize",
+  });
   table(`${P}items`).set("ticket", {
+    usableInPosts: true,
+    craftMaterial: true,
     name: "Ticket",
     effect: { type: "create" },
     usableInPosts: true,
+  });
+  table(`${P}items`).set("charm", {
+    usableInPosts: true,
+    craftMaterial: true,
+    name: "Charm",
+    description: "Kept",
+    reusable: true,
   });
   table(`${P}gacha`).set("in-box", { source: "box", item: "prize", weight: 1 });
   const own = (id, item, extra = {}) =>
@@ -2415,19 +2432,27 @@ test("items used in a post are consumed, logged and checked against the speaker"
       owner: "m-1",
       item,
       name: item,
+      character: "hero",
       ...extra,
     });
   own("i-letter", "letter");
-  own("i-box", "box", { character: "hero" });
+  own("i-box", "box");
   own("i-ticket", "ticket");
-  table(`${P}inventory`).set("i-theirs", { owner: "m-2", item: "letter" });
+  own("i-charm", "charm");
+  // Held by no character: the original's inventory is a character's.
+  own("i-loose", "letter", { character: undefined });
+  table(`${P}inventory`).set("i-theirs", {
+    owner: "m-2",
+    item: "letter",
+    character: "rival",
+  });
   const use = (item, character = "hero") =>
     gate(ctx, "comments", "add", {
       data: { logId: "thread", text: "uses", item, character },
     });
   assert.equal(await reasonOf(use("i-theirs")), "not_owned");
-  assert.equal(await reasonOf(use("i-ticket")), "not_usable_here");
-  assert.equal(await reasonOf(use("i-box", null)), "wrong_character");
+  assert.equal(await reasonOf(use("i-loose")), "wrong_character");
+  assert.equal(await reasonOf(use("i-box", null)), "no_character");
   const letter = (await use("i-letter")).document;
   assert.deepEqual(letter.data.actions, [
     {
@@ -2448,7 +2473,67 @@ test("items used in a post are consumed, logged and checked against the speaker"
     ),
     true,
   );
-  assert.equal(table(`${P}inventory`).has("i-ticket"), true);
+  // A ticket is only shown used and spent: tickets work from the inventory
+  // (write_update.inc.php:126-129 logs any item but 뽑기).
+  const ticket = (await use("i-ticket")).document;
+  assert.equal(ticket.data.actions[0].effect, "create");
+  assert.equal(table(`${P}inventory`).has("i-ticket"), false);
+  // A reusable item (it_use_ever) stays.
+  await use("i-charm");
+  assert.equal(table(`${P}inventory`).has("i-charm"), true);
+  // A post's item needs an approved character; a comment's does not.
+  table(`${P}character_state`).set("hero", {
+    ...table(`${P}character_state`).get("hero"),
+    approved: false,
+  });
+  assert.equal((await use("i-charm")).document.data.actions.length, 1);
+  const post = (data) =>
+    gate(ctx, "logs", "add", {
+      data: {
+        board: "default",
+        image: "https://example.com/p.png",
+        text: "",
+        character: "hero",
+        ...data,
+      },
+    });
+  assert.equal(await reasonOf(post({ item: "i-charm" })), "not_approved");
+});
+
+test("recovery in a post is logged, not applied: it heals from the inventory only", async () => {
+  const { ctx, table } = roleplayWorld();
+  table(`${P}stat_config`).set("hp", { name: "HP", initial: 10, max: 100 });
+  table(`${P}character_state`).set("hero", {
+    ...table(`${P}character_state`).get("hero"),
+    stats: { hp: { allocated: 0, max: 10, current: 3, damage: 7 } },
+  });
+  table(`${P}items`).set("potion", {
+    usableInPosts: true,
+    craftMaterial: true,
+    name: "Potion",
+    effect: { type: "restore", stat: "hp", amount: 3 },
+  });
+  table(`${P}inventory`).set("i-potion", {
+    owner: "m-1",
+    item: "potion",
+    name: "Potion",
+    character: "hero",
+  });
+  const posted = (
+    await gate(ctx, "logs", "add", {
+      data: {
+        board: "default",
+        image: "https://example.com/p.png",
+        text: "",
+        character: "hero",
+        item: "i-potion",
+      },
+    })
+  ).document;
+  assert.equal(posted.data.actions[0].effect, "restore");
+  assert.equal(posted.data.actions[0].amount, undefined);
+  assert.equal(table(`${P}inventory`).has("i-potion"), false);
+  assert.equal(table(`${P}character_state`).get("hero").stats.hp.damage, 7);
 });
 
 test("[[nick]] calls and comment notices reach members who can read the post", async () => {
@@ -2935,9 +3020,12 @@ test("a post's 조합 matches recipes by item, charges cost and consumes even on
       owner: "m-1",
       item,
       name: item,
+      character: "hero",
       ...extra,
     });
   own("i-herb", "herb");
+  // Held by no character: not the speaker's (write.skin.php:238).
+  own("i-loose", "herb", { character: undefined });
   own("i-water", "water", { character: "hero" });
   own("i-pot", "pot");
   own("i-other", "herb", { character: "someone-else" });
@@ -2969,6 +3057,7 @@ test("a post's 조합 matches recipes by item, charges cost and consumes even on
     });
   assert.equal(await reasonOf(combine(["i-herb"], null)), "no_character");
   assert.equal(await reasonOf(combine(["i-other"])), "not_owned");
+  assert.equal(await reasonOf(combine(["i-loose"])), "not_owned");
   assert.equal(
     await reasonOf(combine(["i-herb", "i-herb"])),
     "invalid_materials",
@@ -2988,6 +3077,13 @@ test("a post's 조합 matches recipes by item, charges cost and consumes even on
   const missed = (await combine(["i-herb-2", "i-pot"])).document;
   assert.equal(missed.data.actions[0].success, false);
   assert.equal(table(`${P}inventory`).has("i-herb-2"), false);
+  // Only an approved character combines (write.skin.php:196).
+  table(`${P}character_state`).set("hero", {
+    ...table(`${P}character_state`).get("hero"),
+    approved: false,
+  });
+  own("i-herb-3", "herb");
+  assert.equal(await reasonOf(combine(["i-herb-3"])), "not_approved");
 });
 
 test("the characters rule shows members only the custom fields they may see", async () => {
@@ -4399,16 +4495,19 @@ test("items stay out of posts or 조합 as the owner marks them, and stats keep 
   table(`${P}inventory`).set("i-plain", {
     owner: "m-1",
     item: "plain",
+    character: "hero",
     name: "평범",
   });
   table(`${P}inventory`).set("i-note", {
     owner: "m-1",
     item: "note",
+    character: "hero",
     name: "쪽지",
   });
   table(`${P}inventory`).set("i-stone", {
     owner: "m-1",
     item: "stone",
+    character: "hero",
     name: "돌",
   });
   const post = (data) =>
@@ -4468,4 +4567,322 @@ test("a readable site_main page takes the home's place, and is not an 안내 pag
     (await contentPages(ctx)).documents.map((row) => row.id),
     ["rules"],
   );
+});
+
+test("a post may 탐색, and one that recorded 탐색 or 조합 stays but for the staff", async () => {
+  const { ctx, table } = roleplayWorld({ roll: 0.1 });
+  table(`${P}settings`).set("community", { exploreLimit: 3 });
+  table(`${P}items`).set("herb", {
+    usableInPosts: true,
+    craftMaterial: true,
+    name: "Herb",
+  });
+  table(`${P}explore`).set("found", { item: "herb", weight: 1 });
+  table(`${P}items`).set("letter", {
+    usableInPosts: true,
+    craftMaterial: true,
+    name: "Letter",
+  });
+  table(`${P}inventory`).set("i-letter", {
+    owner: "m-1",
+    item: "letter",
+    name: "Letter",
+    character: "hero",
+  });
+  const post = (data) =>
+    posts.write(ctx, {
+      data: {
+        board: "default",
+        image: "https://example.com/p.png",
+        text: "",
+        character: "hero",
+        ...data,
+      },
+    });
+  const explored = (await post({ action: "explore" })).document;
+  assert.equal(explored.data.actions[0].type, "explore");
+  assert.equal(explored.data.actions[0].item, "herb");
+  assert.equal(await reasonOf(posts.remove(ctx, { id: explored.id })), "acted");
+  // An item's use alone (wr_item_log) does not keep a post.
+  const used = (await post({ item: "i-letter" })).document;
+  assert.deepEqual(await posts.remove(ctx, { id: used.id }), { done: true });
+  table(`${P}members`).set("m-1", { role: "moderator" });
+  assert.deepEqual(await posts.remove(ctx, { id: explored.id }), {
+    done: true,
+  });
+});
+
+test("an edit adds dice and actions a post has none of yet, once", async () => {
+  const { ctx, table } = roleplayWorld({ roll: 0.1 });
+  table(`${P}settings`).set("community", { exploreLimit: 3 });
+  table(`${P}items`).set("herb", {
+    usableInPosts: true,
+    craftMaterial: true,
+    name: "Herb",
+  });
+  table(`${P}explore`).set("found", { item: "herb", weight: 1 });
+  const { document: plain } = await posts.write(ctx, {
+    data: {
+      board: "default",
+      image: "https://example.com/p.png",
+      text: "",
+      character: "hero",
+    },
+  });
+  const edit = async (row, data) =>
+    (
+      await posts.write(ctx, {
+        id: row.id,
+        data: { ...row.data, ...data },
+      })
+    ).document;
+  const diced = await edit(plain, { dice: true });
+  assert.equal(diced.data.dice, true);
+  assert.deepEqual(diced.data.rolls, [1, 1]);
+  Math.random = () => 0.9;
+  assert.deepEqual((await edit(diced, { dice: true })).data.rolls, [1, 1]);
+  Math.random = () => 0.1;
+  const explored = await edit(diced, { action: "explore" });
+  assert.equal(explored.data.actions[0].type, "explore");
+  assert.equal(
+    await reasonOf(edit(explored, { action: "explore" })),
+    "already_acted",
+  );
+  // Another's post: a moderator edits it, but acts for no one.
+  const { document: theirs } = await posts.write(ctx, {
+    data: {
+      board: "default",
+      image: "https://example.com/p.png",
+      text: "",
+      character: "hero",
+    },
+  });
+  table(`${P}members`).set("m-2", { role: "moderator" });
+  ctx.member = { id: "m-2" };
+  assert.equal(
+    await reasonOf(edit(theirs, { action: "explore" })),
+    "access_denied",
+  );
+  assert.equal((await edit(theirs, { dice: true })).data.dice, true);
+});
+
+test("a post with others' comments is no longer edited but by the staff (bo_count_modify)", async () => {
+  const { ctx, table } = roleplayWorld();
+  const { document: log } = await posts.write(ctx, {
+    data: { board: "default", image: "https://example.com/p.png", text: "a" },
+  });
+  const edit = () =>
+    posts.write(ctx, { id: log.id, data: { ...log.data, text: "b" } });
+  await comments.write(ctx, { data: { logId: log.id, text: "mine" } });
+  assert.equal(await reasonOf(edit()), "ok");
+  ctx.member = { id: "m-2" };
+  await comments.write(ctx, { data: { logId: log.id, text: "theirs" } });
+  ctx.member = { id: "m-1" };
+  assert.equal(await reasonOf(edit()), "commented");
+  table(`${P}boards`).set("default", {
+    ...table(`${P}boards`).get("default"),
+    editLock: 2,
+  });
+  assert.equal(await reasonOf(edit()), "ok");
+  table(`${P}boards`).set("default", {
+    ...table(`${P}boards`).get("default"),
+    editLock: 1,
+  });
+  table(`${P}members`).set("m-1", { role: "moderator" });
+  assert.equal(await reasonOf(edit()), "ok");
+});
+
+test("boards pay for posts and comments, and take it back when they are deleted", async () => {
+  const { ctx, table } = roleplayWorld();
+  table(`${P}boards`).set("default", {
+    ...table(`${P}boards`).get("default"),
+    name: "로그",
+    writeReward: 10,
+    commentReward: 3,
+  });
+  const { document: log } = await posts.write(ctx, {
+    data: { board: "default", image: "https://example.com/p.png", text: "a" },
+  });
+  assert.equal(log.data.reward, 10);
+  assert.equal(table(`${P}wallets`).get("m-1").balance, 10);
+  ctx.member = { id: "m-2" };
+  const { document: comment } = await comments.write(ctx, {
+    data: { logId: log.id, text: "hi" },
+  });
+  await comments.write(ctx, { data: { logId: log.id, text: "again" } });
+  assert.equal(table(`${P}wallets`).get("m-2").balance, 6);
+  // An edit pays nothing more.
+  await comments.write(ctx, {
+    id: comment.id,
+    data: { ...comment.data, text: "edited" },
+  });
+  assert.equal(table(`${P}wallets`).get("m-2").balance, 6);
+  await comments.remove(ctx, { id: comment.id });
+  assert.equal(table(`${P}wallets`).get("m-2").balance, 3);
+  ctx.member = { id: "m-1" };
+  await posts.remove(ctx, { id: log.id });
+  assert.equal(table(`${P}wallets`).get("m-1").balance, 0);
+  // The remaining comment's reward went back with the post.
+  assert.equal(table(`${P}wallets`).get("m-2").balance, 0);
+  const memos = [...table(`${P}history`).values()]
+    .filter((row) => row.kind === "board")
+    .map((row) => [row.owner, row.delta, row.memo]);
+  assert.deepEqual(memos, [
+    ["m-1", 10, `로그 ${log.data.number} 글쓰기`],
+    ["m-2", 3, `로그 ${log.data.number} 댓글쓰기`],
+    ["m-2", 3, `로그 ${log.data.number} 댓글쓰기`],
+    ["m-2", -3, `로그 ${log.data.number} 댓글삭제`],
+    ["m-1", -10, `로그 ${log.data.number} 글삭제`],
+    ["m-2", -3, `로그 ${log.data.number} 댓글삭제`],
+  ]);
+  // Guests are paid nothing.
+  ctx.member = null;
+  table(`${P}boards`).set("default", {
+    ...table(`${P}boards`).get("default"),
+    writeLevel: 1,
+    listLevel: 1,
+    readLevel: 1,
+  });
+  const { document: guestLog } = await posts.write(ctx, {
+    data: { board: "default", image: "https://example.com/p.png", text: "g" },
+    guest: { name: "길손", password: "pass1234" },
+  });
+  assert.equal(guestLog.data.reward, undefined);
+});
+
+test("a board search also finds posts by their comments' text and writers", async () => {
+  const { ctx, table } = fakeCtx();
+  table(`${P}boards`).set("free", {
+    name: "자유",
+    kind: "text",
+    listLevel: 1,
+    readLevel: 1,
+  });
+  table(`${P}boards`).set("other", {
+    name: "다른",
+    kind: "text",
+    listLevel: 1,
+    readLevel: 1,
+  });
+  table(`${P}profiles`).set("m-2", { nick: "보라돌이" });
+  table(`${P}logs`).set("a", { board: "free", owner: "m-3", text: "봄" });
+  table(`${P}logs`).set("b", { board: "free", owner: "m-3", text: "여름" });
+  table(`${P}logs`).set("c", {
+    board: "free",
+    owner: "m-3",
+    text: "가을",
+    secret: true,
+  });
+  table(`${P}logs`).set("d", { board: "other", owner: "m-3", text: "겨울" });
+  table(`${P}logs`).set("e", { board: "free", owner: "m-3", text: "바다" });
+  table(`${P}comments`).set("ca", { logId: "a", owner: "m-3", text: "바다" });
+  table(`${P}comments`).set("cb", { logId: "b", owner: "m-2", text: "hi" });
+  table(`${P}comments`).set("cc", { logId: "c", owner: "m-3", text: "바다" });
+  table(`${P}comments`).set("cd", { logId: "d", owner: "m-3", text: "바다" });
+  table(`${P}comments`).set("ce", { logId: "e", owner: "m-3", text: "바다" });
+  table(`${P}comments`).set("cx", {
+    logId: "b",
+    owner: "m-2",
+    text: "익명",
+    anonymous: true,
+  });
+  const found = async (text) =>
+    (await posts.search(ctx, { board: "free", text })).documents.map(
+      (row) => row.id,
+    );
+  // e matched itself; c is secret; d is another board's.
+  assert.deepEqual(await found("바다"), ["e", "a"]);
+  assert.deepEqual(await found("보라"), ["b"]);
+  // Comments are read 20 at a time after the posts, with their own cursor.
+  for (let n = 0; n < 25; n += 1)
+    table(`${P}comments`).set(`many-${n}`, {
+      logId: "b",
+      owner: "m-3",
+      text: "파도",
+    });
+  const first = await posts.search(ctx, { board: "free", text: "파도" });
+  assert.deepEqual(
+    first.documents.map((row) => row.id),
+    ["b"],
+  );
+  assert.match(first.nextCursor, /^comments:/);
+  const second = await posts.search(ctx, {
+    board: "free",
+    text: "파도",
+    after: first.nextCursor,
+  });
+  assert.deepEqual(
+    second.documents.map((row) => row.id),
+    ["b"],
+  );
+  assert.equal(second.nextCursor, null);
+});
+
+test("boards bound post and comment lengths, and the site's banned words are refused", async () => {
+  const { ctx, table } = roleplayWorld();
+  table(`${P}boards`).set("default", {
+    ...table(`${P}boards`).get("default"),
+    writeMin: 3,
+    writeMax: 10,
+    commentMin: 2,
+    commentMax: 5,
+  });
+  const post = (text, title = "") =>
+    posts.write(ctx, {
+      data: {
+        board: "default",
+        image: "https://example.com/p.png",
+        title,
+        text,
+      },
+    });
+  assert.equal(await reasonOf(post("ab")), "length");
+  assert.equal(await reasonOf(post("01234567890")), "length");
+  assert.equal(await reasonOf(post("abc")), "ok");
+  const comment = (text) =>
+    comments.write(ctx, { data: { logId: "thread", text } });
+  assert.equal(await reasonOf(comment("a")), "length");
+  assert.equal(await reasonOf(comment("abcdef")), "length");
+  assert.equal(await reasonOf(comment("abc")), "ok");
+  table(`${P}settings`).set("community", { bannedWords: "바보, Spam" });
+  assert.equal(await reasonOf(post("hello", "바보야")), "banned_word");
+  assert.equal(await reasonOf(post("buy SPAM")), "banned_word");
+  assert.equal(await reasonOf(comment("spam")), "banned_word");
+  // The staff are held to the words, not the lengths.
+  table(`${P}members`).set("m-1", { role: "moderator" });
+  assert.equal(await reasonOf(comment("a")), "ok");
+  assert.equal(await reasonOf(comment("spam")), "banned_word");
+});
+
+test("the owner's comments carry the admin mark, and adult members are told so", async () => {
+  const { ctx, table } = roleplayWorld();
+  ctx.owner = true;
+  const { document: marked } = await comments.write(ctx, {
+    data: { logId: "thread", text: "공지" },
+  });
+  assert.equal(marked.data.admin, true);
+  ctx.owner = false;
+  const { document: plain } = await comments.write(ctx, {
+    data: { logId: "thread", text: "회원" },
+  });
+  assert.equal(plain.data.admin, undefined);
+  assert.equal((await membership(ctx)).adult, false);
+  table(`${P}members`).set("m-1", { adult: true });
+  assert.equal((await membership(ctx)).adult, true);
+});
+
+test("the board rule lets comments as long as the comments function does", async () => {
+  const { ctx } = roleplayWorld();
+  const write = (text) =>
+    canWrite(ctx, {
+      collection: `${P}comments`,
+      operation: "create",
+      before: null,
+      after: {
+        id: "c-new",
+        data: { logId: "thread", owner: "m-1", text, dice: false },
+      },
+    });
+  assert.equal(await write("가".repeat(2000)), true);
+  assert.equal(await write("가".repeat(2001)), false);
 });

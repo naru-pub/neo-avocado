@@ -106,6 +106,10 @@ try {
   await owner.evaluate(async (P) => {
     const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
     const admin = await createNaru().auth.session();
+    // A day's first visit pays this (cf_login_point); the original installs 0.
+    await admin
+      .collection(`${P}settings`)
+      .set("community", { loginReward: 100 });
     // The original installs no boards: the owner makes 로그 too.
     await admin.collection(`${P}boards`).set("default", {
       name: "로그",
@@ -276,20 +280,16 @@ try {
   );
 
   // The shop runs in site functions with the real write budget.
+  // The day's first visit paid the 로그인 reward (common.php:401), once.
   await menu(bob, "상점");
-  await bob.locator("#daily").click();
   await bob.waitForFunction(
     () => document.querySelector("#balance").textContent === "100",
   );
-  // A second claim is refused by the function's ctx.fail, in its own words,
-  // and the balance stays.
-  await bob.locator("#daily").click();
+  await bob.reload();
+  await menu(bob, "상점");
   await bob.waitForFunction(
-    () =>
-      document.querySelector("#status").textContent ===
-      "오늘은 이미 받았습니다.",
+    () => document.querySelector("#balance").textContent === "100",
   );
-  assert.equal(await bob.locator("#balance").textContent(), "100");
   // What an action said stays with its page.
   await menu(bob, "로그");
   assert.equal(await bob.locator("#status").textContent(), "");
@@ -410,7 +410,6 @@ try {
     { id: greenId },
   );
   await alice.reload();
-  await alice.locator("#daily").click();
   await alice.waitForFunction(
     () => document.querySelector("#balance").textContent === "100",
   );
@@ -759,7 +758,7 @@ try {
     .first()
     .waitFor();
   // 아보·경험치 지급 (adm/point_list.php): to one member, with its log.
-  await adminMenu(owner, "아이템 관리", "아보·경험치 지급");
+  await adminMenu(owner, "아이템 관리", "아보·경험치·아이템 지급");
   await owner
     .locator(".grant-form label", { hasText: "회원 닉네임" })
     .locator("input")

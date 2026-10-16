@@ -371,25 +371,46 @@ export async function deleteCommunityDocument(
   // 25 writes, less the marker, the parent's delete and the character's
   // state and profile fix-ups: what the children may spend.
   let remaining = 25 - 1 - 1 - 2;
-  const remove = async (target: string, filter: Filter, detach = false) => {
-    if (remaining === 0) {
+  // A comment's reward is taken back as it goes (bbs/delete.php:100-104):
+  // up to two writes more for each.
+  const remove = async (
+    target: string,
+    filter: Filter,
+    detach = false,
+    each: ((child: NaruDocument) => Promise<number>) | null = null,
+  ) => {
+    const most = each ? 3 : 1;
+    if (remaining < most) {
       unfinished = true;
       return;
     }
     const page = await ctx.list(target, {
       filter,
-      size: Math.min(10, remaining),
+      size: Math.min(10, Math.floor(remaining / most)),
     });
     unfinished ||= Boolean(page.nextCursor);
     for (const child of page.documents) {
+      if (remaining < most) {
+        unfinished = true;
+        break;
+      }
       remaining--;
+      if (each) remaining -= await each(child);
       if (detach)
         await ctx.set(target, child.id, { ...child.data, character: null });
       else await ctx.delete(target, child.id);
     }
   };
-  if (kind === "logs") await remove(`${PREFIX}comments`, { logId: row.id });
-  else {
+  if (kind === "logs") {
+    const board = (await ctx.get(BOARDS, row.data.board ?? "default"))?.data;
+    await remove(`${PREFIX}comments`, { logId: row.id }, false, (child) =>
+      takeBackReward(
+        ctx,
+        child,
+        `${board?.name ?? "게시판"} ${row.data.number ?? ""} 댓글삭제`,
+      ),
+    );
+  } else {
     await remove(RELATIONS, { character: row.id });
     await remove(RELATIONS, { target: row.id });
     await remove(WARDROBE, { character: row.id });
@@ -578,6 +599,53 @@ export async function pay(
     balance,
   });
   return balance;
+}
+
+/**
+ * Pays a member the board's reward for a post or comment (insert_point with
+ * bo_write_point or bo_comment_point, bbs/write_update.php:309,
+ * write_comment_update.php:200) in the community's money, with a history
+ * row; returns what was paid, which the post or comment keeps as `reward`.
+ */
+export async function payReward(
+  ctx: Ctx,
+  reward: unknown,
+  memo: string,
+): Promise<number> {
+  const paid = Number.isSafeInteger(reward) && (reward as number) > 0;
+  if (!paid || !ctx.member) return 0;
+  const current = await wallet(ctx);
+  const balance = current.balance + (reward as number);
+  if (!Number.isSafeInteger(balance))
+    throw new Error("Balance is outside its allowed range.");
+  await ctx.set(WALLETS, ctx.member.id, { ...current, balance });
+  await record(ctx, "board", { delta: reward, balance, memo });
+  return reward as number;
+}
+
+/**
+ * Takes back the reward a post or comment was paid, from its author, when it
+ * is deleted (bbs/delete.php:78, delete_comment.php:63), down to nothing:
+ * a balance never goes below zero here. Returns the writes it spent.
+ */
+export async function takeBackReward(
+  ctx: Ctx,
+  row: NaruDocument,
+  memo: string,
+): Promise<number> {
+  const reward = row.data.reward;
+  const owner = author(row);
+  if (!Number.isSafeInteger(reward) || reward <= 0 || !owner) return 0;
+  const found = await ctx.get(WALLETS, owner);
+  const before = Number.isSafeInteger(found?.data.balance)
+    ? found.data.balance
+    : 0;
+  const taken = Math.min(reward, before);
+  if (!taken) return 0;
+  const balance = before - taken;
+  await ctx.set(WALLETS, owner, { ...found.data, balance });
+  await record(ctx, "board", { delta: -taken, balance, memo }, owner);
+  return 2;
 }
 
 export async function give(

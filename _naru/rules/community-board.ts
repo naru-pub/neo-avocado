@@ -71,7 +71,15 @@ export async function readable(
 }
 // What a reader may filter and sort on. Not `owner`: asking which posts a
 // member wrote would find their 익명 ones; 로그내역 reads through posts:mine.
-export const queryable = ["board", "number", "notice", "tags", "logId"];
+// `category` lists a board by 분류 (bbs/list.mmb.php:4-25's sca).
+export const queryable = [
+  "board",
+  "number",
+  "notice",
+  "tags",
+  "logId",
+  "category",
+];
 
 /** 멤버공개 locked for visitors, 익명 without its author (presentPost). */
 export async function present(
@@ -125,7 +133,8 @@ export async function canWrite(
       return false;
     if (!after) return operation === "delete";
     return (
-      text(after.data.text, 1000) &&
+      // As the comments function's limit (mmb/write_comment.php's textarea).
+      text(after.data.text, 2000) &&
       typeof after.data.dice === "boolean" &&
       (Boolean(after.data.text.trim()) || after.data.dice)
     );

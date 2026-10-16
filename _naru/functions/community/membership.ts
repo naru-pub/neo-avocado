@@ -26,6 +26,8 @@ export async function membership(ctx: Ctx) {
       typeof record?.data.warningNote === "string"
         ? record.data.warningNote
         : "",
+    // mb_adult: 19금 posts show to them uncovered (list.log.skin.php:133).
+    adult: record?.data.adult === true,
     // The site owner signed in here answers as staff (Q&A answers).
     owner: ctx.owner === true,
     memberId: ctx.member.id,

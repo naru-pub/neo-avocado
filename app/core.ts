@@ -35,7 +35,8 @@ export const STATE_NAMES = {
   approved: "승인",
 };
 export const TYPE_NAMES = { main: "메인", sub: "서브", npc: "NPC" };
-export const LOG_PAGE = 10;
+/** A board's posts a page unless the owner sets one (cf_page_rows, install_db.php:157). */
+export const LOG_PAGE = 15;
 export const CHARACTER_PAGE = 20;
 export const COMMENT_PAGE = 50;
 export const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
@@ -71,12 +72,16 @@ const initialState = {
   owner: false,
   role: "member",
   level: 2,
+  // mb_adult: 19금 posts show uncovered.
+  adult: false,
   // 경고내역: the owner's warnings, from the member's own record.
   warnings: { count: 0, note: "" },
   emoticons: null,
   boards: [],
   board: "default",
   tag: null,
+  // The board list's 분류 (sca), while one is chosen.
+  category: null,
   // The board search (skins' 검색), while it is shown.
   search: null,
   // The board list's page, for its address.

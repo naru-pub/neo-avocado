@@ -26,7 +26,6 @@ import {
   ownCharacter,
   ownedItem,
   record,
-  restoreStat,
   requireUsable,
   lacking,
 } from "./shared.js";
@@ -109,7 +108,13 @@ export function rollDice(): number[] {
 }
 
 const CALL = /\[\[([^[\]\r\n]{1,20})\]\]/g;
-export const MAX_CALLS = 5;
+/**
+ * The original calls everyone a text names. Each call here is a notice row
+ * written within the function's 25 writes, beside the post, its number, its
+ * reward and its 조합 or 탐색 and item (up to 13), so a text calls at most
+ * this many members: more than a scene names.
+ */
+export const MAX_CALLS = 10;
 
 /** The distinct nicknames a text calls, in order, at most MAX_CALLS. */
 export function calledNicks(text: unknown): string[] {
@@ -278,15 +283,35 @@ export async function explore(ctx: Ctx, speaker: Speaker | null) {
 }
 
 /**
- * An item used in a post (wr_item_log): recovery heals the speaking character,
- * a draw ticket rolls its own table, an item without an effect is shown as
- * used. Forms (personal items, profile tickets) stay in the inventory.
+ * Fails unless the speaking character is approved: the mmb skin offers its
+ * actions and items only to a character with ch_state 승인
+ * (write.skin.php:196,290).
+ */
+async function requireApproved(ctx: Ctx, speaker: Speaker) {
+  if ((await characterState(ctx, speaker.character)).data.approved !== true)
+    ctx.fail("CONFLICT", "승인된 캐릭터만 할 수 있습니다.", {
+      reason: "not_approved",
+    });
+}
+
+/**
+ * An item used in a post (wr_item_log), from the speaking character's own
+ * inventory (write.skin.php:68). Only a draw ticket does anything here, rolling
+ * its own table; any other item is shown as used and spent, effect or not, as
+ * write_update.inc.php:106-131 logs it (recovery and tickets take effect only
+ * from the inventory). A post needs an approved character; a comment's item
+ * list does not ask (write_comment.php:23), so `approved` is false there.
  */
 export async function useInPost(
   ctx: Ctx,
   inventory: unknown,
   speaker: Speaker | null,
+  { approved = true }: { approved?: boolean } = {},
 ): Promise<UsedItem> {
+  if (!speaker)
+    ctx.fail("INVALID_REQUEST", "캐릭터를 확인해 주세요.", {
+      reason: "no_character",
+    });
   const owned = await ownedItem(ctx, inventory);
   if (!owned)
     ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
@@ -298,11 +323,12 @@ export async function useInPost(
     ctx.fail("CONFLICT", "사용할 수 없는 아이템입니다.", {
       reason: "not_usable",
     });
-  const character = speaker?.character ?? null;
-  if (owned.data.character && owned.data.character !== character)
+  const character = speaker.character;
+  if (owned.data.character !== character)
     ctx.fail("CONFLICT", "이 아이템을 가진 캐릭터를 선택해 주세요.", {
       reason: "wrong_character",
     });
+  if (approved) await requireApproved(ctx, speaker);
   await requireUsable(ctx, item, character);
   const effect = item.data.effect?.type ?? null;
   const used: UsedItem = {
@@ -312,37 +338,21 @@ export async function useInPost(
     image: https(item.data.image),
     effect,
   };
-  if (effect === "restore") {
-    if (!character)
-      ctx.fail("INVALID_REQUEST", "캐릭터를 확인해 주세요.", {
-        reason: "no_character",
-      });
-    if (!(await restoreStat(ctx, item.data.effect, character)))
-      ctx.fail("CONFLICT", "이미 전부 회복되었습니다.", {
-        reason: "already_full",
-      });
-    used.stat = item.data.effect.stat;
-    used.amount = item.data.effect.amount;
-  } else if (effect === "draw") {
+  if (effect === "draw") {
     const outcome = await draw(ctx, item.id);
     if (!outcome.configured)
       ctx.fail("CONFLICT", "아직 뽑을 것이 없습니다.", { reason: "empty" });
-    if (outcome.prize)
-      await give(ctx, outcome.prize, "item", owned.data.character ?? character);
+    if (outcome.prize) await give(ctx, outcome.prize, "item", character);
     used.prize = outcome.prize
       ? { item: outcome.prize.id, name: outcome.prize.data.name }
       : null;
-  } else if (effect)
-    ctx.fail("CONFLICT", "이 아이템은 인벤토리에서 사용해 주세요.", {
-      reason: "not_usable_here",
-    });
-  else used.description = String(item.data.description ?? "").slice(0, 200);
+  } else used.description = String(item.data.description ?? "").slice(0, 200);
   if (item.data.reusable !== true) await ctx.delete(INVENTORY, owned.id);
   await record(ctx, "use", {
     item: item.id,
     inventory: owned.id,
     character,
-    effect: effect ?? "post",
+    effect: effect === "draw" ? "draw" : "post",
   });
   return used;
 }
@@ -352,7 +362,8 @@ export const MAX_MATERIALS = 3;
 
 /**
  * Combination (조합, action H): one to three of the speaking character's items
- * matched against the recipes by item, ignoring order. A match makes the
+ * (write.skin.php:238 lists that character's inventory), for an approved
+ * character, matched against the recipes by item, ignoring order. A match makes the
  * recipe's item for the character and charges its cost; a miss still uses up
  * the materials, as the original did. Reusable items are never consumed.
  */
@@ -376,17 +387,11 @@ export async function combineInPost(
       reason: "invalid_materials",
     });
   const owned = await Promise.all(materials.map((id) => ownedItem(ctx, id)));
-  if (
-    owned.some(
-      (row) =>
-        !row ||
-        ((row.data.character ?? null) !== null &&
-          row.data.character !== speaker.character),
-    )
-  )
+  if (owned.some((row) => !row || row.data.character !== speaker.character))
     ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
       reason: "not_owned",
     });
+  await requireApproved(ctx, speaker);
   // it_use_recepi: only craft materials go into 조합.
   for (const row of owned)
     if ((await ctx.get(ITEMS, row.data.item))?.data.craftMaterial !== true)

@@ -155,7 +155,8 @@ export function actionItem(action) {
   else
     line.append(
       `${action.name}을(를) 사용했습니다!`,
-      action.effect === "restore"
+      // Posts made before items only showed their use healed here.
+      action.effect === "restore" && action.stat
         ? ` (${action.stat} +${action.amount})`
         : action.description
           ? ` (${action.description})`
@@ -181,10 +182,13 @@ export function wireSpeakerChoice(select) {
   select.onpointerdown = fill;
 }
 /**
- * The member's inventory with each copy's item, read once until it changes:
- * posts offer what the owner lets them (it_use_mmb_able, it_use_recepi).
+ * The member's inventory with each copy's item and the name of the character
+ * holding it (`owner`, null for a copy no character holds), read once until
+ * it changes: posts offer a character's own items (write.skin.php:68, 238)
+ * that the owner lets them (it_use_mmb_able, it_use_recepi).
  */
 export async function postInventory() {
+  state.speakers ??= await ownCharacters();
   state.postItems ??= await allDocuments(COLLECTION.inventory, {
     owner: state.member.id,
   });
@@ -199,6 +203,9 @@ export async function postInventory() {
   return state.postItems.map((row) => ({
     row,
     item: state.itemCatalog.get(row.data.item)?.data ?? null,
+    owner:
+      state.speakers.find((character) => character.id === row.data.character)
+        ?.data.name ?? null,
   }));
 }
 /** Fills an in-post item select with what the member may use in posts. */
@@ -207,18 +214,14 @@ export function wireItemChoice(select) {
     run(async () => {
       if (select.dataset.loaded) return;
       select.dataset.loaded = "1";
-      const usable = (await postInventory())
-        .filter(
-          ({ item }) =>
-            item?.effect?.type &&
-            item.usable !== false &&
-            item.usableInPosts === true,
-        )
-        .map(({ row }) => row);
-      for (const row of usable) {
+      // Any item the owner allows in posts: only a draw ticket does more
+      // than show it was used (write_update.inc.php:106-131).
+      for (const { row, item, owner } of await postInventory()) {
+        if (!owner || !item || item.usable === false) continue;
+        if (item.usableInPosts !== true) continue;
         const option = document.createElement("option");
         option.value = row.id;
-        option.textContent = row.data.name ?? row.data.item;
+        option.textContent = `${row.data.name ?? row.data.item} (${owner})`;
         select.append(option);
       }
     });
