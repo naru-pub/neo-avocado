@@ -1,5 +1,14 @@
 // The shapes Naru hands site functions and collection rules (SDK 1.1.0), for
 // type checking only: this module exports types and compiles to nothing.
+// Queries and mutations take Naru's own declarations (naru-functions.d.ts,
+// a copy of naru.pub/sdk/1.1.0/functions.d.ts).
+export type {
+  QueryCtx,
+  MutationCtx,
+  CallingMember,
+  SqlValue,
+  SqlResult,
+} from "./naru-functions";
 
 /** A document's data: its shape varies by collection. */
 export type Data = Record<string, any>;

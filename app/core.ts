@@ -243,6 +243,22 @@ export async function nickOf(memberId) {
 }
 /** Who calls site functions: the signed-in member, else the visitor's client. */
 export const caller = () => state.member ?? state.naru;
+/**
+ * Runs one of the site's queries (_naru/queries/<module>.ts) as whoever is
+ * reading: the member, or a visitor. The query's code decides what each sees.
+ */
+export const query = <R = any>(name: string, args: any = null): Promise<R> =>
+  caller().query(name, args);
+/** Runs one of the site's mutations (_naru/mutations/<module>.ts), in one transaction. */
+export const mutate = <R = any>(name: string, args: any = null): Promise<R> =>
+  caller().mutate(name, args);
+/** A query's answer, kept current while the page holds it (`close()` ends it). */
+export const subscribe = <R = any>(
+  name: string,
+  args: any,
+  onResult: (result: R) => void,
+  onError?: (error: any) => void,
+) => caller().subscribe(name, args, onResult, { onError });
 /** The name and password a visitor posts with (bbs/write.php's wr_name, wr_password). */
 export function guestCredentials() {
   const name = $<HTMLInputElement>("guestName").value.trim();
