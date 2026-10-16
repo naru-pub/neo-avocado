@@ -106,13 +106,13 @@ export async function setMainCharacter(
 /** 관심로그 (mmb's 관심): at most 200. */
 export const FAVORITE_LIMIT = 200;
 
-/** A member's 관심 posts, newest first. */
+/** A member's 관심 posts' IDs, newest first. */
 export async function favoritesOf(ctx: SqlCtx, member: string) {
   return (
     await ctx.sql<{
-      post: string;
+      post: number;
     }>`SELECT post FROM favorites WHERE member = ${member} ORDER BY id DESC LIMIT ${FAVORITE_LIMIT}`
-  ).rows.map((row) => row.post);
+  ).rows.map((row) => String(row.post));
 }
 
 /** A wallet: its balance and the day the login reward was last paid. */

@@ -7,19 +7,6 @@ import { JSDOM } from "jsdom";
 import { matches } from "./where.mjs";
 import { memberSettings } from "../dist/_naru/modules/access.js";
 const root = new URL("../dist/", import.meta.url);
-/** What _naru/collections.json lets visitors read (the rules narrow it on Naru). */
-const WORLD = new Set(
-  Object.entries(
-    JSON.parse(await readFile(new URL("_naru/collections.json", root), "utf8"))
-      .collections,
-  )
-    .filter(([, entry]) => entry.read === "world")
-    .map(([name]) => name)
-    // Posts and comments only where a test opens them (visitorWorld).
-    .filter(
-      (name) => !["neo_avocado_logs", "neo_avocado_comments"].includes(name),
-    ),
-);
 
 /** How a fake Naru answers a call its test did not expect: ctx.fail. */
 function refuse(reason, message = reason) {
@@ -231,10 +218,22 @@ function fakeDatabase(rows = {}) {
     // (profiles, settings, wallets), the rest as a function call.
     query: (name, args = null) => member.call(name, args, "query"),
     mutate: (name, args = null) => member.call(name, args, "mutate"),
+    // Each subscription is kept for the test to send newer answers.
     subscribe(name, args, onResult) {
       calls.push({ method: "subscribe", name, args });
-      member.call(name, args, "query").then(onResult);
-      return { close() {} };
+      const subscription = {
+        name,
+        args: JSON.parse(JSON.stringify(args)),
+        onResult,
+        closed: false,
+      };
+      database.subscriptions.push(subscription);
+      member.call(name, args, "query").then(onResult, () => {});
+      return {
+        close() {
+          subscription.closed = true;
+        },
+      };
     },
     // 서버 함수는 나루에서 돈다. 여기서는 무엇을 불렀는지만 남기고, 테스트가
     // 정한 결과를 돌려준다.
@@ -260,14 +259,6 @@ function fakeDatabase(rows = {}) {
           banners: [],
           ...database.site,
         };
-      }
-      if (name === "community/boards:commentCounts") {
-        const counts = {};
-        for (const id of args.ids)
-          counts[id] = store
-            .get(COMMENTS)
-            .filter((row) => row.data.logId === id).length;
-        return { counts };
       }
       const profileOf = (id) =>
         store.get(PROFILES).find((row) => row.id === id) ?? null;
@@ -483,6 +474,92 @@ function fakeDatabase(rows = {}) {
           },
         };
       };
+      /**
+       * The boards' queries, answered from the same store: the boards with
+       * their groups and emoticons, a board's page (notices first, newest
+       * first, the board's rows a page, with comment counts), one post, a
+       * post's comments, a board's newest post and unread calls.
+       */
+      const boardQueries = () => {
+        const boards = () => store.get("neo_avocado_boards");
+        const boardOf = (id) => boards().find((row) => row.id === id);
+        const logs = () => store.get(LOGS);
+        const comments = (id) =>
+          store
+            .get(COMMENTS)
+            .filter((row) => row.data.logId === id)
+            .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
+        const notFound = () => {
+          throw Object.assign(new Error("자료를 찾을 수 없습니다."), {
+            code: "NOT_FOUND",
+            details: { reason: "document_not_found" },
+          });
+        };
+        return {
+          "community/boards:boards": () => ({
+            boards: boards(),
+            groups: [...store.get("neo_avocado_board_groups")].sort(
+              (a, b) =>
+                (a.data.order ?? 0) - (b.data.order ?? 0) ||
+                (a.id < b.id ? -1 : 1),
+            ),
+            emoticons: store.get("neo_avocado_emoticons"),
+          }),
+          "community/posts:page": () => {
+            const board = boardOf(args.board);
+            const size = Math.min(
+              board.data.pageRows ?? 15,
+              board.data.kind === "qna" && !args.tag ? 10 : 100,
+            );
+            const all = logs()
+              .filter(
+                (row) =>
+                  row.data.board === args.board &&
+                  (!args.category || row.data.category === args.category) &&
+                  (!args.tag || (row.data.tags ?? []).includes(args.tag)),
+              )
+              .sort(
+                (a, b) =>
+                  (b.data.notice === true) - (a.data.notice === true) ||
+                  (a.createdAt < b.createdAt ? 1 : -1),
+              );
+            const page = args.page ?? 1;
+            const documents = all.slice((page - 1) * size, page * size);
+            return {
+              board,
+              documents,
+              total: all.length,
+              size,
+              counts: Object.fromEntries(
+                documents.map((row) => [row.id, comments(row.id).length]),
+              ),
+            };
+          },
+          "community/posts:post": () => ({
+            document:
+              (args.id !== undefined
+                ? logs().find((row) => row.id === args.id)
+                : logs().find(
+                    (row) =>
+                      row.data.board === args.board &&
+                      row.data.number === args.number,
+                  )) ?? notFound(),
+          }),
+          "community/comments:list": () => {
+            const all = comments(args.post);
+            const start = args.after
+              ? all.findIndex((row) => row.id === args.after) + 1
+              : 0;
+            const documents = all.slice(start, start + 50);
+            return {
+              documents,
+              nextCursor: start + 50 < all.length ? documents.at(-1).id : null,
+            };
+          },
+          "community/posts:latest": () => ({ id: null }),
+          "community/calls:unread": () => ({ unread: false }),
+        };
+      };
       if (name === "community/membership:membership") {
         const profile = profileOf(ME);
         return {
@@ -540,9 +617,16 @@ function fakeDatabase(rows = {}) {
         }),
         ...economyQueries(),
         ...characterQueries(),
+        ...boardQueries(),
       };
       if (Object.hasOwn(foundation, name)) {
         calls.push({ method: kind, name, args });
+        // Before the site is ready, as Naru answers reads of what it has
+        // not made yet.
+        if (database.unprepared)
+          throw Object.assign(new Error(`Collection ${name} does not exist.`), {
+            code: "NOT_FOUND",
+          });
         return JSON.parse(JSON.stringify(await foundation[name]()));
       }
       // Writes: posts, comments and characters through their functions,
@@ -600,6 +684,7 @@ function fakeDatabase(rows = {}) {
     store,
     member,
     visitor,
+    subscriptions: [],
     signedIn: true,
     answer: (name) =>
       name === "community/messages:messageStatus"
@@ -637,18 +722,6 @@ async function page(database) {
     ["createNaru"],
     function () {
       this.setExport("createNaru", () => ({
-        // Visitors read what the declaration makes world-readable; posts
-        // only where the test opens them (the board rule decides on Naru).
-        collection: (name) => {
-          if (database.visitorWorld || WORLD.has(name))
-            return database.member.collection(name);
-          const denied = async () => {
-            throw Object.assign(new Error("Members only"), {
-              code: "ACCESS_DENIED",
-            });
-          };
-          return { get: denied, list: denied };
-        },
         call: database.visitor.call,
         query: database.visitor.query,
         mutate: database.visitor.mutate,
@@ -884,27 +957,27 @@ test("the shop exposes later pages and crafts from the inventory's own copies th
   );
 });
 
-test("signed out, a visitor reads only the boards the board rule lists, and may sign in", async () => {
-  // The board rule gives this visitor no boards.
+test("signed out, a visitor reads only the boards the board query lists, and may sign in", async () => {
+  // The boards query gives this visitor no boards.
   const database = fakeDatabase({ neo_avocado_boards: [] });
   database.signedIn = false;
   const { $, settle, window } = await page(database);
   assert.equal($("welcome").hidden, false);
   assert.equal($("community").hidden, false);
   assert.ok(window.document.body.classList.contains("visitor"));
-  // No board is open to guests: nothing but the board list is read, natively.
+  // No board is open to guests: nothing but the board list is read.
   assert.equal($("noPublicBoards").hidden, false);
   assert.equal($("logForm").hidden, true);
-  // Their one call reports the visit (현재접속자, 접속자집계).
+  // Besides it, their one call reports the visit (현재접속자, 접속자집계).
   assert.deepEqual(
     database.visitor.calls.map((call) => call.name),
-    ["community/presence:seen"],
+    ["community/presence:seen", "community/boards:boards"],
   );
   assert.deepEqual(
     database.calls
       .filter((call) => call.method !== "call")
       .map((call) => [call.method, call.name]),
-    [["list", "neo_avocado_boards"]],
+    [["query", "community/boards:boards"]],
   );
   $("signIn").onclick();
   await settle();
@@ -945,12 +1018,11 @@ test("a guest posts with a name and password, and must give the password to edit
     ],
   });
   database.signedIn = false;
-  database.visitorWorld = true;
   const { $, submit, settle } = await page(database);
   const post = $("logs").querySelector(".log");
-  // World-readable posts are read natively, through the board rule.
+  // A visitor reads the board's page as members do.
   assert.ok(
-    database.calls.some((call) => call.method === "list" && call.name === LOGS),
+    database.visitor.calls.some((call) => call.name === "community/posts:page"),
   );
   assert.equal(post.querySelector(".author").textContent, "길손 (손님)");
   assert.equal(post.querySelector(".edit").hidden, false);
@@ -1011,7 +1083,7 @@ test("a first visit sets a nickname under the member's own id, then reads the lo
   assert.equal($("community").hidden, false);
   assert.equal($("whoami").textContent, "아보 님");
   assert.equal(
-    database.calls.some((call) => call.method === "list" && call.name === LOGS),
+    database.calls.some((call) => call.name === "community/posts:page"),
     true,
   );
 });
@@ -1170,27 +1242,17 @@ test("logs are read a page at a time, newest first, and comments only when opene
     ],
   });
   const { $, settle } = await page(database);
-  const listed = database.calls.filter((call) => call.method === "list");
+  // The boards (with their groups, for the board picker), then the board's
+  // first page in one read.
+  const listed = database.calls.filter((call) =>
+    ["community/boards:boards", "community/posts:page"].includes(call.name),
+  );
   assert.deepEqual(listed, [
-    { method: "list", name: "neo_avocado_boards", size: 100, after: null },
-    // The board groups, for the board picker.
+    { method: "query", name: "community/boards:boards", args: null },
     {
-      method: "list",
-      name: "neo_avocado_board_groups",
-      size: 100,
-      after: null,
-    },
-    {
-      method: "list",
-      name: LOGS,
-      filter: { board: "default" },
-      sort: [
-        ["notice", "desc"],
-        [{ metadata: "createdAt" }, "desc"],
-      ],
-      size: 15,
-      after: null,
-      includeTotal: true,
+      method: "query",
+      name: "community/posts:page",
+      args: { board: "default", page: 1 },
     },
   ]);
   const items = $("logs").querySelectorAll(".log");
@@ -1206,8 +1268,13 @@ test("logs are read a page at a time, newest first, and comments only when opene
   // The member's own came with their membership.
   assert.deepEqual(askedFor, ["member-other"]);
   assert.equal(
-    database.calls.some((call) => call.name === COMMENTS),
+    database.calls.some((call) => call.name === "community/comments:list"),
     false,
+  );
+  // The page brought each post's comment count.
+  assert.equal(
+    items[0].querySelector(".comments summary").textContent,
+    "댓글 (1)",
   );
   const comments = items[0].querySelector(".comments");
   comments.open = true;
@@ -1216,15 +1283,12 @@ test("logs are read a page at a time, newest first, and comments only when opene
   await settle();
   assert.deepEqual(
     database.calls
-      .filter((call) => call.method === "list" && call.name === COMMENTS)
+      .filter((call) => call.name === "community/comments:list")
       .at(-1),
     {
-      method: "list",
-      name: COMMENTS,
-      filter: { logId: "log-16" },
-      sort: [[{ metadata: "createdAt" }, "asc"]],
-      size: 50,
-      after: null,
+      method: "query",
+      name: "community/comments:list",
+      args: { post: "log-16", after: null },
     },
   );
   assert.match(items[0].querySelector(".comment-list").textContent, /멋져요/);
@@ -1394,11 +1458,9 @@ test("characters are read when their tab is first opened, and registered by memb
 test("an ended sign-in returns the page to the welcome screen", async () => {
   const database = fakeDatabase({ [PROFILES]: [me] });
   const { $, settle } = await page(database);
-  database.member.collection = () => ({
-    list: async () => {
-      throw Object.assign(new Error("expired"), { code: "AUTH_REQUIRED" });
-    },
-  });
+  database.member.query = async () => {
+    throw Object.assign(new Error("expired"), { code: "AUTH_REQUIRED" });
+  };
   $("messageDetail").textContent = "private message";
   $("messageBody").value = "private draft";
   $("board").onchange();
@@ -1690,7 +1752,7 @@ test("post details and comment lists use native reads while deletion stays trans
   assert.equal(deletion.id, "long");
 });
 
-test("unread notices and new posts arrive over the live connection instead of a poll", async () => {
+test("unread notices arrive over the live connection, and new posts by subscription, instead of a poll", async () => {
   const database = fakeDatabase({ [PROFILES]: [me] });
   const unread = { value: false };
   database.answer = (name) =>
@@ -1700,7 +1762,12 @@ test("unread notices and new posts arrive over the live connection instead of a 
   const { $, settle } = await page(database);
   await settle();
   const live = database.live;
-  assert.deepEqual([...live.options.topics], [LOGS]);
+  // Mail's notices only: the board's newest post is a subscription.
+  assert.equal(live.options.topics, undefined);
+  const latest = database.subscriptions.find(
+    (subscription) => subscription.name === "community/posts:latest",
+  );
+  assert.deepEqual(latest.args, { board: "default" });
   const statusReads = () =>
     database.calls.filter(
       (call) => call.name === "community/messages:messageStatus",
@@ -1717,23 +1784,14 @@ test("unread notices and new posts arrive over the live connection instead of a 
   live.options.onMessage({ type: "notice", data: { unread: true } });
   assert.equal($("tabMessages").textContent, "쪽지 · 새 쪽지");
   assert.equal(statusReads(), 1);
-  // Another board's post is ignored; this board's marks the tab until reloaded.
-  live.options.onMessage({
-    type: "topic",
-    topic: LOGS,
-    data: { board: "other", id: "x" },
-  });
+  // A newer post than the page has seen marks the tab until reloaded.
+  latest.onResult({ id: null });
   assert.equal($("tabLogs").textContent, "로그");
-  live.options.onMessage({
-    type: "topic",
-    topic: LOGS,
-    data: { board: "default", id: "new" },
-  });
+  latest.onResult({ id: "new" });
   assert.equal($("tabLogs").textContent, "로그 · 새 글");
   const logReads = () =>
-    database.calls.filter(
-      (call) => call.method === "list" && call.name === LOGS,
-    ).length;
+    database.calls.filter((call) => call.name === "community/posts:page")
+      .length;
   const before = logReads();
   $("tabLogs").onclick();
   await settle();
@@ -1742,6 +1800,7 @@ test("unread notices and new posts arrive over the live connection instead of a 
   $("signOut").onclick();
   await settle();
   assert.equal(live.closed, true);
+  assert.equal(latest.closed, true);
 });
 
 test("a function's ctx.fail reason and a duplicate nickname are shown as the page's own text", async () => {
@@ -1978,7 +2037,7 @@ test("custom fields render on the form, and the applicant filter queries by stat
   assert.match($("characters").textContent, /카도/);
 });
 
-test("calls arrive as live notices and the history marks them seen", async () => {
+test("calls arrive by subscription and the history marks them seen", async () => {
   const database = fakeDatabase({
     [PROFILES]: [me],
     [LOGS]: [
@@ -2014,12 +2073,14 @@ test("calls arrive as live notices and the history marks them seen", async () =>
         : null;
   const { $, settle } = await page(database);
   await settle();
-  database.live.options.onStatus("open");
-  await settle();
+  const unread = database.subscriptions.find(
+    (subscription) => subscription.name === "community/calls:unread",
+  );
+  unread.onResult({ unread: true });
   assert.equal($("tabCalls").textContent, "알림 · 새 알림");
-  database.live.options.onMessage({ type: "notice", data: { calls: false } });
+  unread.onResult({ unread: false });
   assert.equal($("tabCalls").textContent, "알림");
-  database.live.options.onMessage({ type: "notice", data: { calls: true } });
+  unread.onResult({ unread: true });
   $("tabCalls").onclick();
   await settle();
   await settle();
@@ -2070,7 +2131,8 @@ test("log numbers, @N links, #tags, notices first and comment counts", async () 
   assert.equal($("logFocusPanel").hidden, false);
   assert.match($("logFocus").textContent, /첫 글/);
   assert.deepEqual(
-    database.calls.filter((call) => call.method === "list").at(-1).filter,
+    database.calls.filter((call) => call.name === "community/posts:post").at(-1)
+      .args,
     { board: "default", number: 1 },
   );
   items[2].querySelector(".hash-tag").onclick({ preventDefault() {} });
@@ -2110,7 +2172,7 @@ test("before the owner's first sign-in, the page says the site is being prepared
   const database = fakeDatabase();
   database.signedIn = false;
   database.unprepared = true;
-  // Collections are missing: every read the visitor makes fails NOT_FOUND.
+  // Nothing is made yet: every read the visitor makes fails NOT_FOUND.
   const { $, settle } = await page(database);
   await settle();
   assert.equal($("welcome").hidden, false);
@@ -2481,10 +2543,9 @@ test("a board lists by 분류, shows its HTML notice and new-post text, and mark
   links()[1].onclick({ preventDefault() {} });
   for (let n = 0; n < 4; n += 1) await settle();
   assert.deepEqual(
-    database.calls
-      .filter((call) => call.method === "list" && call.name === LOGS)
-      .at(-1).filter,
-    { board: "default", category: "잡담" },
+    database.calls.filter((call) => call.name === "community/posts:page").at(-1)
+      .args,
+    { board: "default", page: 1, category: "잡담" },
   );
   assert.deepEqual(
     [...$("logs").querySelectorAll(".log")].map((item) => item.dataset.id),

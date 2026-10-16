@@ -35,7 +35,7 @@ CREATE TABLE profiles (
 CREATE TABLE favorites (
   id INTEGER PRIMARY KEY,
   member TEXT NOT NULL,
-  post TEXT NOT NULL,
+  post INTEGER NOT NULL,
   UNIQUE (member, post)
 );
 CREATE INDEX favorites_post ON favorites (post);

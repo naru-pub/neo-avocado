@@ -4,26 +4,20 @@ import { emoticonContent } from "../emoticons.js";
 import { sanitizedFragment } from "../content-renderer.js";
 import {
   $,
-  allDocuments,
-  caller,
-  COLLECTION,
-  COMMENT_PAGE,
-  collection,
   edit,
   formatTime,
   guestCredentials,
-  LOG_PAGE,
   mine,
+  mutate,
   preloadNicks,
+  query,
   run,
   say,
   showTab,
   state,
   uploadMedia,
   withGuestPassword,
-  removeAll,
   route,
-  cursorPages,
   renderPages,
 } from "./core.js";
 import {
@@ -35,14 +29,8 @@ import {
   wireItemChoice,
   wireSpeakerChoice,
 } from "./posts.js";
-import { showNewPost } from "./live.js";
+import { showNewPost, watchBoard } from "./live.js";
 
-const LOG_SORT = [
-  ["notice", "desc"],
-  [{ metadata: "createdAt" }, "desc"],
-];
-/** A tag search: logs whose tags hold `tag`. */
-const tagOptions = (tag) => ({ where: { has: ["tags", tag] } });
 /**
  * What a board is (bo_skin): image logs (mmb), plain posts, questions and
  * answers (qna), or settlement requests (caculate).
@@ -50,50 +38,6 @@ const tagOptions = (tag) => ({ where: { has: ["tags", tag] } });
 export const kindOf = (id = state.board) =>
   state.boards.find((row) => row.id === (id ?? "default"))?.data.kind ??
   "image";
-/**
- * How many posts a page of the current board shows (bo_page_rows, 15 unless
- * the owner sets it); a Q&A board's whole questions at most ten, as many as
- * a function's result holds.
- */
-function pageRows() {
-  const board = state.boards.find((row) => row.id === state.board);
-  const rows =
-    Number.isSafeInteger(board?.data.pageRows) && board.data.pageRows > 0
-      ? board.data.pageRows
-      : LOG_PAGE;
-  return kindOf() === "qna" && !state.tag ? Math.min(rows, 10) : rows;
-}
-/** The current board's posts, a page at a time (or those with the tag). */
-const pagesOf = (rows: number) =>
-  cursorPages(
-    (after, { includeTotal, size, cursorOnly }) =>
-      // A Q&A board shows others' secret questions locked, so a function reads it.
-      kindOf() === "qna" && !state.tag
-        ? caller().call("community/posts:questions", {
-            board: state.board,
-            after,
-            size,
-            ...(state.category ? { category: state.category } : {}),
-            ...(cursorOnly ? { cursorOnly: true } : {}),
-          })
-        : collection(COLLECTION.logs).list({
-            // 분류 (sca) narrows the board to one category.
-            filter: {
-              board: state.board,
-              ...(state.category ? { category: state.category } : {}),
-            },
-            // Notices (bo_notice) sort first: true above false and unset.
-            sort: LOG_SORT,
-            size,
-            after,
-            ...(includeTotal ? { includeTotal: true } : {}),
-            ...(state.tag ? tagOptions(state.tag) : {}),
-          }),
-    rows,
-  );
-let logRows = LOG_PAGE;
-let logPages = pagesOf(logRows);
-/** Shows a page of the board: the first unless `page` is given. */
 /**
  * The list's address: the board, and its page, tag, search or category
  * (#/logs/free/page/3, #/logs/free/tag/봄, #/logs/free/search/바다,
@@ -112,38 +56,49 @@ function routeList() {
   if (!$("logsView").hidden && $("logFocusPanel").hidden)
     route(logsPath(), { replace: true });
 }
+/**
+ * Shows a page of the board (the first unless `page` is given): its posts,
+ * how many pages there are and each post's comment count, read at once
+ * (community/posts:page).
+ */
 export async function loadLogs({ page: number = 1 } = {}) {
   if (!state.member && !state.boards.length) return $("logs").replaceChildren();
+  watchBoard();
   if (state.search) return showSearch();
   showCategories();
-  if (logRows !== pageRows()) {
-    logRows = pageRows();
-    logPages = pagesOf(logRows);
-  } else if (number === 1) logPages.reset();
-  const page = await logPages.page(number);
-  state.logPage = page.number;
+  const page = await query("community/posts:page", {
+    board: state.board,
+    page: number,
+    ...(state.category ? { category: state.category } : {}),
+    ...(state.tag ? { tag: state.tag } : {}),
+  });
+  // The board as it is now, should the owner have changed it.
+  state.boards = state.boards.map((row) =>
+    row.id === page.board.id ? page.board : row,
+  );
+  state.logPage = number;
   routeList();
   await preloadNicks(page.documents);
   $("logs").replaceChildren();
-  if (page.number === 1) showNewPost(null);
+  if (number === 1) showNewPost(null);
   $("tagFilter").hidden = !state.tag;
   $("searchMore").hidden = true;
   $("tagName").textContent = state.tag ? `#${state.tag} 태그가 달린 로그` : "";
-  const shown = [];
   for (const log of page.documents) {
     // Questions show whole, as the qna skin lists them.
     const item = await logItem(kindOf() === "qna" ? log : previewOf(log));
     if (log.data.notice) item.classList.add("notice");
+    if (typeof page.counts[log.id] === "number")
+      item.querySelector(".comments summary").textContent =
+        `댓글 (${page.counts[log.id]})`;
     $("logs").append(item);
-    shown.push([log.id, item]);
   }
   renderPages(
     $("logPages"),
-    page.number,
-    Math.ceil((logPages.total ?? 0) / logRows),
+    number,
+    Math.ceil(page.total / page.size),
     (next) => loadLogs({ page: next }),
   );
-  await showCommentCounts(shown);
 }
 /**
  * The board's 분류 links (bbs/list.mmb.php:4-25): 전체 and each category,
@@ -177,24 +132,6 @@ function showCategories() {
     }),
   );
 }
-/** Fills each log's "댓글 (n)" from one read-only count call. */
-async function showCommentCounts(entries) {
-  const ids = entries.map(([id]) => id).filter(Boolean);
-  if (!ids.length) return;
-  // Counts are a decoration: a page without them is still a page.
-  const counts = await caller()
-    .call("community/boards:commentCounts", {
-      ids: ids.slice(0, 20),
-    })
-    .then(
-      (result) => result.counts ?? {},
-      () => ({}),
-    );
-  for (const [id, item] of entries)
-    if (typeof counts[id] === "number")
-      item.querySelector(".comments summary").textContent =
-        `댓글 (${counts[id]})`;
-}
 /**
  * A listed post shows the start of its text (150 characters, an HTML body as
  * plain text); "본문 보기" reads the whole post.
@@ -216,11 +153,16 @@ function htmlText(html) {
 }
 /** Shows log No. `number` of the current board, as the skin's log link (?log=N&single=Y). */
 export async function openLogNumber(number) {
-  const page = await collection(COLLECTION.logs).list({
-    filter: { board: state.board, number },
-    size: 1,
-  });
-  const log = page.documents[0];
+  const log = await query("community/posts:post", {
+    board: state.board,
+    number,
+  }).then(
+    (found) => found.document,
+    (error) => {
+      if (error?.code !== "NOT_FOUND") throw error;
+      return null;
+    },
+  );
   if (!log) return say("자료를 찾을 수 없습니다.");
   await openPost(log.id, { log });
 }
@@ -230,7 +172,7 @@ export async function openLogNumber(number) {
  * comments open at that comment (#/post/<id>/comment/<id>).
  */
 export async function openPost(id, { comment = null, log = null } = {}) {
-  const post = log ?? (await collection(COLLECTION.logs).get(id));
+  const post = log ?? (await query("community/posts:post", { id })).document;
   const board = post.data.board ?? "default";
   showTab("logs");
   if (board !== state.board && state.boards.some((row) => row.id === board)) {
@@ -285,7 +227,7 @@ async function showSearch({ more = false } = {}) {
     searchFound = 0;
     $("logs").replaceChildren();
   }
-  const page = await caller().call("community/posts:search", {
+  const page = await query("community/posts:search", {
     board: state.board,
     text: state.search,
     after: searchFrom,
@@ -496,7 +438,7 @@ export async function logItem(log) {
   pin.textContent = log.data.notice ? "공지 해제" : "공지로";
   pin.onclick = () =>
     run(async () => {
-      const { document: saved } = await caller().call(
+      const { document: saved } = await mutate(
         "community/boards:moderatePost",
         {
           id: log.id,
@@ -518,7 +460,7 @@ export async function logItem(log) {
         },
       ],
       async ({ board }) => {
-        await caller().call("community/boards:moderatePost", {
+        await mutate("community/boards:moderatePost", {
           id: log.id,
           board,
         });
@@ -544,10 +486,10 @@ export async function logItem(log) {
     form.onsubmit = (event) => {
       event.preventDefault?.();
       run(async () => {
-        const { document: opened } = await caller().call(
-          "community/posts:open",
-          { id: log.id, password: password.value },
-        );
+        const { document: opened } = await query("community/posts:open", {
+          id: log.id,
+          password: password.value,
+        });
         item.replaceWith(await logItem(opened));
       });
     };
@@ -579,7 +521,7 @@ export async function logItem(log) {
   favorite.setAttribute("aria-pressed", String(marked()));
   favorite.onclick = () =>
     run(async () => {
-      const { favorite: on } = await caller().call("community/posts:favorite", {
+      const { favorite: on } = await mutate("community/posts:favorite", {
         id: log.id,
       });
       if (state.profile) {
@@ -643,16 +585,13 @@ export async function logItem(log) {
           { name: "memo", label: "답변", multiline: true, max: 500 },
         ],
         async ({ state: settled, exp, money, memo }) => {
-          const { document: saved } = await caller().call(
-            "community/posts:settle",
-            {
-              id: log.id,
-              state: settled,
-              exp: Number(exp) || 0,
-              money: Number(money) || 0,
-              memo,
-            },
-          );
+          const { document: saved } = await mutate("community/posts:settle", {
+            id: log.id,
+            state: settled,
+            exp: Number(exp) || 0,
+            money: Number(money) || 0,
+            memo,
+          });
           item.replaceWith(await logItem(previewOf(saved)));
         },
       );
@@ -724,26 +663,23 @@ export async function logItem(log) {
         const materials = [material1, material2, material3].filter(Boolean);
         if (action === "combine" && !materials.length)
           throw new Error("조합 재료를 골라 주세요.");
-        const { document: saved } = await caller().call(
-          "community/posts:write",
-          {
-            id: log.id,
-            data: {
-              ...current.data,
-              text,
-              title,
-              category,
-              secret,
-              ...options,
-              ...(dice ? { dice: true } : {}),
-              ...(action === "combine" ? { action, materials } : {}),
-              ...(action === "explore" ? { action } : {}),
-              ...(used ? { item: used } : {}),
-            },
-            revision: current.revision,
-            ...(guestPost ? { guest: { password } } : {}),
+        const { document: saved } = await mutate("community/posts:write", {
+          id: log.id,
+          data: {
+            ...current.data,
+            text,
+            title,
+            category,
+            secret,
+            ...options,
+            ...(dice ? { dice: true } : {}),
+            ...(action === "combine" ? { action, materials } : {}),
+            ...(action === "explore" ? { action } : {}),
+            ...(used ? { item: used } : {}),
           },
-        );
+          revision: current.revision,
+          ...(guestPost ? { guest: { password } } : {}),
+        });
         if (action || used) forgetInventory();
         item.replaceWith(await logItem(saved));
       },
@@ -752,9 +688,11 @@ export async function logItem(log) {
     beginEdit(current);
     run(() => fillActionEdits(current.data.character));
   };
+  const whole = async () =>
+    (await query("community/posts:post", { id: log.id })).document;
   change.onclick = () =>
     log.data.truncated
-      ? run(async () => openEdit(await collection(COLLECTION.logs).get(log.id)))
+      ? run(async () => openEdit(await whole()))
       : openEdit(log);
   if (log.data.truncated && !log.data.locked) {
     const expand = document.createElement("button");
@@ -762,7 +700,7 @@ export async function logItem(log) {
     expand.textContent = "본문 보기";
     expand.onclick = () =>
       run(async () => {
-        const full = await collection(COLLECTION.logs).get(log.id);
+        const full = await whole();
         item.replaceWith(
           await logItem({ ...full, data: { ...full.data, truncated: false } }),
         );
@@ -772,12 +710,12 @@ export async function logItem(log) {
   remove.onclick = () =>
     guestPost
       ? withGuestPassword("로그 삭제", async (guest) => {
-          await removeAll("community/posts:remove", { id: log.id, guest });
+          await mutate("community/posts:remove", { id: log.id, guest });
           item.remove();
         })
       : run(async () => {
           if (!confirm("이 로그를 지울까요?")) return;
-          await removeAll("community/posts:remove", { id: log.id });
+          await mutate("community/posts:remove", { id: log.id });
           item.remove();
         });
   // 댓글은 펼쳤을 때 처음 읽는다.
@@ -786,10 +724,8 @@ export async function logItem(log) {
   let cursor;
   const load = (more) =>
     run(async () => {
-      const page = await collection(COLLECTION.comments).list({
-        filter: { logId: log.id },
-        sort: [[{ metadata: "createdAt" }, "asc"]],
-        size: COMMENT_PAGE,
+      const page = await query("community/comments:list", {
+        post: log.id,
         after: more ? cursor : null,
       });
       await preloadNicks(page.documents);
@@ -894,21 +830,18 @@ export async function logItem(log) {
       ).checked;
       if (!text && !dice && !action && !used) return;
       const guest = state.member ? null : guestCredentials();
-      const { document: saved } = await caller().call(
-        "community/comments:write",
-        {
-          data: {
-            logId: log.id,
-            text,
-            dice,
-            ...(character && !guest ? { character } : {}),
-            ...(action && !guest ? { action } : {}),
-            ...(used && !guest ? { item: used } : {}),
-            ...(anonymous && !guest ? { anonymous: true } : {}),
-          },
-          ...(guest ? { guest } : {}),
+      const { document: saved } = await mutate("community/comments:write", {
+        data: {
+          logId: log.id,
+          text,
+          dice,
+          ...(character && !guest ? { character } : {}),
+          ...(action && !guest ? { action } : {}),
+          ...(used && !guest ? { item: used } : {}),
+          ...(anonymous && !guest ? { anonymous: true } : {}),
         },
-      );
+        ...(guest ? { guest } : {}),
+      });
       item.querySelector(".comment-list").append(await commentItem(saved, log));
       form.querySelector<HTMLTextAreaElement>(".comment-text").value = "";
       form.querySelector<HTMLInputElement>(".comment-dice").checked = false;
@@ -1012,15 +945,12 @@ async function commentItem(comment, log) {
         async ({ text, password }) => {
           if (!text && !comment.data.dice)
             throw new Error("댓글을 입력해 주세요.");
-          const { document: saved } = await caller().call(
-            "community/comments:write",
-            {
-              id: comment.id,
-              data: { ...comment.data, text },
-              revision: comment.revision,
-              ...(guestComment ? { guest: { password } } : {}),
-            },
-          );
+          const { document: saved } = await mutate("community/comments:write", {
+            id: comment.id,
+            data: { ...comment.data, text },
+            revision: comment.revision,
+            ...(guestComment ? { guest: { password } } : {}),
+          });
           item.replaceWith(await commentItem(saved, log));
         },
       );
@@ -1032,14 +962,14 @@ async function commentItem(comment, log) {
     remove.onclick = () =>
       guestComment
         ? withGuestPassword("댓글 삭제", async (guest) => {
-            await caller().call("community/comments:remove", {
+            await mutate("community/comments:remove", {
               id: comment.id,
               guest,
             });
             item.remove();
           })
         : run(async () => {
-            await caller().call("community/comments:remove", {
+            await mutate("community/comments:remove", {
               id: comment.id,
             });
             item.remove();
@@ -1093,7 +1023,7 @@ $("logForm").onsubmit = (event) => {
                 }),
           }
         : {};
-    const { document: log } = await caller().call("community/posts:write", {
+    const { document: log } = await mutate("community/posts:write", {
       data: {
         image: image?.url ?? (address || null),
         text: $<HTMLTextAreaElement>("logText").value.trim(),
@@ -1124,7 +1054,13 @@ $("logForm").onsubmit = (event) => {
   });
 };
 export async function loadBoards() {
-  state.boards = await allDocuments(COLLECTION.boards);
+  const {
+    boards,
+    groups: listed,
+    emoticons,
+  } = await query("community/boards:boards");
+  state.boards = boards;
+  state.emoticons = emoticons;
   // As in the original, there is nothing to read or post on until the owner
   // makes a board (adm/board_form.php).
   $("noPublicBoards").hidden = state.boards.length > 0;
@@ -1141,10 +1077,7 @@ export async function loadBoards() {
   if (!state.boards.some((row) => row.id === state.board))
     state.board = state.boards[0].id;
   // Boards under their group's name (adm/boardgroup_list), ungrouped first.
-  const groups = (await allDocuments(COLLECTION.boardGroups)).sort(
-    (a, b) =>
-      (a.data.order ?? 0) - (b.data.order ?? 0) || (a.id < b.id ? -1 : 1),
-  );
+  const groups = listed;
   const option = (row) => new Option(row.data.name, row.id);
   const grouped = (row) => groups.some((group) => group.id === row.data.group);
   $("board").replaceChildren(
@@ -1265,11 +1198,12 @@ $("board").onchange = () =>
     configureBoard();
     await loadLogs();
   });
+/** The emoticons, read with the boards (community/boards:boards). */
 async function loadEmoticons() {
   if (state.emoticons !== null) return state.emoticons;
   const member = state.member;
-  const rows = await allDocuments(COLLECTION.emoticons);
+  const { emoticons } = await query("community/boards:boards");
   if (state.member !== member) return [];
-  state.emoticons = rows.filter((row) => !row.data.deleted);
+  state.emoticons = emoticons;
   return state.emoticons;
 }

@@ -3,8 +3,6 @@
 import {
   $,
   caller,
-  COLLECTION,
-  collection,
   formatTime,
   nickOf,
   run,

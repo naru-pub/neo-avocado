@@ -9,7 +9,8 @@ Naru SDK 1.1.0 loads their static relative imports directly. No generated runtim
 files or bundling step is needed.
 
 Pages call a function by `"<module/path>:<export>"`, as the SDK takes it:
-`member.call("community/posts:write", { data })`. A function that refuses calls
+`member.call("community/messages:sendMessage", { recipients, body })`, and
+queries and mutations likewise: `member.mutate("community/posts:write", { data })`. A function that refuses calls
 `ctx.fail(code, "한국어 메시지", { reason })`; its writes roll back and the page
 shows the message. `tests/function-modules.test.mjs` checks that every reference
 names an export and every export is called. Shared modules cannot be called
@@ -21,28 +22,14 @@ individual files, save shared dependencies first. Naru validates and activates a
 revision after file changes; an invalid import leaves the prior revision running.
 This requires the Naru Worker and control plane with native import support.
 
-`rules/` holds collection rules, not callable functions: what members and
-visitors may read of each collection, and how much of each document. Pages
-read natively through them; `_naru/collections.json` names the rule of each
-collection.
-
-- `community-board.js`: posts and comments, by board level and secret posts.
-- `boards.js`: the boards the reader's level may list.
-- `shown.js`: catalogues (emoticons, board groups) without deleted rows.
-
 Profiles, settings, members, wallets and the site's frame are tables now
-(`migrations/0001_foundation.sql`), and so are characters with their
-fields, lists, titles, relations, outfits, couples, stats and ranks
-(`migrations/0003_characters.sql`), and the economy's items, inventory,
-recipes and draw tables (`migrations/0004_economy.sql`), read through
-`queries/` and written through `mutations/`; rules and site functions read
-them with `ctx.sql` through `modules/access.js`, `modules/members.js`,
-`modules/characters.js` and `modules/economy.js`.
+(`migrations/0001_foundation.sql`), and so are the boards with their posts,
+comments, tags, calls and emoticons (`migrations/0002_boards.sql`),
+characters with their fields, lists, titles, relations, outfits, couples,
+stats and ranks (`migrations/0003_characters.sql`), and the economy's items,
+inventory, recipes and draw tables (`migrations/0004_economy.sql`), read
+through `queries/` and written through `mutations/`, which decide who may do
+what (`modules/access.js`, `modules/boards.js`). The old site functions left
+(mail) read them with `ctx.sql` through the same modules.
 `functions/economy/notices.js` only sends the 쪽지 a gift or money sent
 tells its recipient of, while mail is still a collection.
-
-Rules import `modules/shared.js` for member access, boards and secret
-visibility, so they and the site functions that write the community
-(`functions/community/posts.js` and `comments.js`, which start from
-`modules/community.js`) share one implementation. Naru publishes rules with the
-function revision. Functions and shared modules cannot import a rule.

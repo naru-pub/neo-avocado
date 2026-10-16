@@ -19,6 +19,15 @@ type Write =
     }
   | { collection: string; delete: { id: string } };
 
+/** A mapping the owner writes here; posts and comments have mutations of their own. */
+function writable(ctx: MutationCtx, map: Mapping): Mapping {
+  if (map.readOnly)
+    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+      reason: "invalid_input",
+    });
+  return map;
+}
+
 async function check(
   ctx: MutationCtx,
   collection: string,
@@ -93,7 +102,7 @@ export async function set(
     condition?: Condition;
   } = {},
 ) {
-  const map = ownerMapping(ctx, collection);
+  const map = writable(ctx, ownerMapping(ctx, collection));
   await check(ctx, collection, id, condition);
   return await write(ctx, map, id, data);
 }
@@ -103,7 +112,7 @@ export async function remove(
   ctx: MutationCtx,
   { collection, id }: { collection?: string; id?: string } = {},
 ) {
-  const map = ownerMapping(ctx, collection);
+  const map = writable(ctx, ownerMapping(ctx, collection));
   const key = keyOf(map, id);
   if (key === null || map.partial)
     ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {

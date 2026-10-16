@@ -40,7 +40,6 @@ export interface Model {
   characterKey?: boolean;
   holdings?: boolean;
   report?: string;
-  cleanup?: string;
   review?: boolean;
 }
 export const models: Record<string, Model> = {
@@ -1241,14 +1240,6 @@ models.activity = {
   readOnly: true,
   collection: `${P}members`,
 };
-models.log_cleanup = {
-  label: "삭제 중인 로그 정리",
-  collection: `${P}logs`,
-  cleanup: "logs",
-  readOnly: true,
-  fields: [],
-  help: "중단된 댓글 정리를 이어갑니다. 완료될 때까지 정리 계속을 누르세요.",
-};
 models.title_holdings = {
   label: "타이틀 보유·착용 현황",
   help: "캐릭터·타이틀 이름으로 검색하고 개별 지급을 회수합니다. 삭제된 정의나 캐릭터의 기록도 확인할 수 있습니다.",
@@ -1302,7 +1293,6 @@ export const menu = [
       "grants",
     ],
   },
-  { label: "기타관리", sections: ["log_cleanup"] },
 ];
 
 /**
@@ -1331,8 +1321,6 @@ export const scopes = [
     `${P}presence`,
     `${P}visits`,
     `${P}messages`,
-    `${P}counters`,
-    `${P}calls`,
   ]),
 ].filter((name) => !mappingOf(name));
 

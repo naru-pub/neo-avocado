@@ -539,7 +539,6 @@ test("the site declares every collection it uses, and sign-in asks for them", as
     "_naru/modules",
     "_naru/functions/community",
     "_naru/functions/economy",
-    "_naru/rules",
   ])
     for (const name of await readdir(
       new URL(`../dist/${dir}`, import.meta.url),
@@ -575,7 +574,8 @@ test("the site declares every collection it uses, and sign-in asks for them", as
   assert.deepEqual(Object.keys(collections).sort(), [...scopes].sort());
   for (const [name, entry] of Object.entries(collections))
     assert.ok(entry.read && entry.write, `${name} states read and write`);
-  assert.equal(collections.neo_avocado_logs.rules, "community-board");
+  // Mail is the one collection left; it has no rules.
+  assert.deepEqual(Object.keys(collections), ["neo_avocado_messages"]);
   // Profiles are a table, nicknames unique there.
   assert.equal(collections.neo_avocado_profiles, undefined);
 });

@@ -11,8 +11,6 @@ import { config } from "./config.js";
 import {
   $,
   clearPrivateViews,
-  collection,
-  COLLECTION,
   edit,
   memberSettings,
   mutate,

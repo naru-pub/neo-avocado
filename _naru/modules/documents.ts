@@ -1,7 +1,7 @@
-// For the time being: the site's tables (the foundation's, the characters'
-// and the economy's) read and written as the documents of the collections they
-// replaced, for code not ported yet (the admin page, through the owner-only
-// admin/documents query and mutation). It goes when the admin area is
+// For the time being: the site's tables (the foundation's, the boards',
+// the characters' and the economy's) read and written as the documents of
+// the collections they replaced, for code not ported yet (the admin page,
+// through the owner-only admin/documents query and mutation). It goes when the admin area is
 // ported to its own mutations.
 import { GROUP_ROLE, STAFF, parsed } from "./access.js";
 import type { QueryCtx, SqlValue } from "./naru-types.js";
@@ -62,6 +62,8 @@ export interface Mapping {
   versioned?: boolean;
   /** What a list or get selects besides the row's columns. */
   select?: string;
+  /** The owner only reads it here: its rows are written by mutations of their own. */
+  readOnly?: boolean;
   /** Fields made from the row beyond its columns. */
   read?: (row: Record<string, SqlValue>, data: Record<string, any>) => void;
   /** Columns made from the document beyond its fields. */
@@ -442,6 +444,75 @@ export const MAPPINGS: Record<string, Mapping> = Object.fromEntries(
       ["item", "item_id", "text", null],
       ["weight", "weight", "num", 1],
     ]),
+    // The boards' tables (0002_boards.sql): the owner edits boards, groups
+    // and emoticons; posts and comments are read here (활동량 관리), and
+    // written and moderated through community/posts and boards.
+    mapping(
+      "boards",
+      "boards",
+      "id",
+      [
+        ["name", "name", "text", ""],
+        ["group", "group_id", "text", null],
+        ["kind", "kind", "text", "image"],
+        ["enabled", "enabled", "bool", 1],
+        ["listLevel", "list_level", "int", 2],
+        ["readLevel", "read_level", "int", 2],
+        ["writeLevel", "write_level", "int", 2],
+        ["commentLevel", "comment_level", "int", 2],
+        ["anonymous", "anonymous", "bool", 0],
+        ["secret", "secret", "text", "optional"],
+        ["writeReward", "write_reward", "int", 0],
+        ["commentReward", "comment_reward", "int", 0],
+        ["writeMin", "write_min", "int", 0],
+        ["writeMax", "write_max", "int", 0],
+        ["commentMin", "comment_min", "int", 0],
+        ["commentMax", "comment_max", "int", 0],
+        ["editLock", "edit_lock", "int", 1],
+        ["pageRows", "page_rows", "int", 15],
+        ["foldHeight", "fold_height", "int", 600],
+      ],
+      { extra: "options" },
+    ),
+    mapping("board_groups", "board_groups", "id", [
+      ["name", "name", "text", ""],
+      ["membersOnly", "members_only", "bool", 0],
+      ["order", "sort_order", "int", 0],
+    ]),
+    mapping("emoticons", "emoticons", "id", [
+      ["name", "name", "text", ""],
+      ["image", "image", "text", ""],
+    ]),
+    mapping(
+      "logs",
+      "posts",
+      "id",
+      [
+        ["board", "board", "text", ""],
+        ["number", "number", "int", 0],
+        ["owner", "owner", "text", null],
+        ["title", "title", "text", ""],
+        ["category", "category", "text", ""],
+        ["text", "body", "text", ""],
+        ["image", "image", "text", null],
+        ["secret", "secret", "bool", 0],
+        ["notice", "notice", "bool", 0],
+        ["createdAt", "created_at", "created", 0],
+      ],
+      { numeric: true, readOnly: true },
+    ),
+    mapping(
+      "comments",
+      "comments",
+      "id",
+      [
+        ["logId", "post_id", "ref", 0],
+        ["owner", "owner", "text", null],
+        ["text", "body", "text", ""],
+        ["createdAt", "created_at", "created", 0],
+      ],
+      { numeric: true, readOnly: true },
+    ),
   ].map((entry) => [entry.collection, entry]),
 );
 

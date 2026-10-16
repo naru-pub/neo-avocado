@@ -1,18 +1,10 @@
-// What every part of the page shares: collection names, the page's state,
-// status messages and run(), the community collections and the edit dialog.
+// What every part of the page shares: the page's state, status messages and
+// run(), the site's queries and mutations, and the edit dialog.
 // It imports no other part but names.js, so it is always ready before them.
 
 import { NAME_DEFAULTS } from "./names.js";
 import { imageSlotsOf, viewerOf } from "../_naru/modules/images.js";
 
-const PREFIX = "neo_avocado_";
-export const COLLECTION = {
-  logs: `${PREFIX}logs`,
-  comments: `${PREFIX}comments`,
-  boards: `${PREFIX}boards`,
-  emoticons: `${PREFIX}emoticons`,
-  boardGroups: `${PREFIX}board_groups`,
-};
 export const SHOP_PAGE = 10;
 export const STATE_NAMES = {
   editing: "수정 중",
@@ -20,10 +12,7 @@ export const STATE_NAMES = {
   approved: "승인",
 };
 export const TYPE_NAMES = { main: "메인", sub: "서브", npc: "NPC" };
-/** A board's posts a page unless the owner sets one (cf_page_rows, install_db.php:157). */
-export const LOG_PAGE = 15;
 export const CHARACTER_PAGE = 20;
-export const COMMENT_PAGE = 50;
 export const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
   document.getElementById(id) as T;
 const initialState = {
@@ -72,6 +61,8 @@ const initialState = {
   // The board list's page, for its address.
   logPage: 1,
   live: null,
+  // The board whose newest post the page keeps in view (live.js).
+  boardWatch: null as { board: string; handle: { close(): void } } | null,
   newPost: null,
   ownPosts: new Set(),
   // The member's characters for posting, and items for in-post use: read on
@@ -266,23 +257,6 @@ export function withGuestPassword(title, action) {
     ({ password }) => action({ password }),
   );
 }
-/**
- * The SDK's collection for whoever is reading: the member, or a visitor. The
- * collection rules in _naru/rules/ decide what each of them sees. Pages write
- * through site functions (community/posts, community/comments) and
- * mutations.
- */
-export function collection(name) {
-  return (state.member ?? state.naru).collection(name);
-}
-
-/**
- * Calls a site function that works in bounded steps (deleting a post with
- * its comments, moving a deleted character's items) until it answers `done`.
- */
-export async function removeAll(reference, args) {
-  while (!(await caller().call(reference, args)).done);
-}
 export function showAdmission(status) {
   state.admission = status;
   state.charactersLoaded = false;
@@ -420,21 +394,8 @@ $("cancelEditor").onclick = () => $<HTMLDialogElement>("editor").close();
 export function stopLive() {
   state.live?.close();
   state.live = null;
-}
-export async function allDocuments(name, filter?, where?) {
-  const documents = [];
-  let after = null;
-  do {
-    const page = await collection(name).list({
-      size: 100,
-      after,
-      ...(filter ? { filter } : {}),
-      ...(where ? { where } : {}),
-    });
-    documents.push(...page.documents);
-    after = page.nextCursor;
-  } while (after);
-  return documents;
+  state.boardWatch?.handle.close();
+  state.boardWatch = null;
 }
 /** Where a member is, as 현재접속자 shows it, for each view. */
 const PLACES = {
@@ -636,52 +597,6 @@ export function showTab(name) {
     $(tab).setAttribute("aria-pressed", String(name === key));
     $(view).hidden = name !== key;
   }
-}
-
-/**
- * Numbered pages over a list the SDK reads by cursor (lib's get_paging,
- * pg_wrap). `read(after, { includeTotal, size, cursorOnly })` reads `size`
- * documents from `after`. The total comes with the first page, and a page
- * past it is empty, as the original's LIMIT past the end shows nothing. A
- * page not reached yet is skipped to from the nearest known one, up to 100
- * documents a read, keeping only the cursor.
- */
-export function cursorPages(read, size) {
-  const starts = new Map([[1, null]]);
-  // As many pages as one read of at most 100 documents covers.
-  const skip = Math.max(1, Math.floor(100 / size));
-  return {
-    total: null,
-    reset() {
-      starts.clear();
-      starts.set(1, null);
-      this.total = null;
-    },
-    async page(number) {
-      if (this.total === null) {
-        const first = await read(null, { includeTotal: true, size });
-        this.total = first.totalCount ?? null;
-        if (first.nextCursor) starts.set(2, first.nextCursor);
-        if (number <= 1) return { ...first, number: 1 };
-      }
-      const pages = Math.max(1, Math.ceil((this.total ?? 0) / size));
-      if (number > pages) return { documents: [], nextCursor: null, number };
-      let known = Math.max(...[...starts.keys()].filter((at) => at <= number));
-      while (known < number) {
-        const jump = Math.min(skip, number - known);
-        const step = await read(starts.get(known), {
-          size: size * jump,
-          cursorOnly: true,
-        });
-        if (!step.nextCursor) break;
-        known += jump;
-        starts.set(known, step.nextCursor);
-      }
-      const page = await read(starts.get(known), { size });
-      if (page.nextCursor) starts.set(known + 1, page.nextCursor);
-      return { ...page, number: known };
-    },
-  };
 }
 
 /**

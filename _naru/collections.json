@@ -1,41 +1,5 @@
 {
   "collections": {
-    "neo_avocado_board_groups": {
-      "read": "world",
-      "write": "admin",
-      "rules": "shown"
-    },
-    "neo_avocado_boards": {
-      "read": "world",
-      "write": "admin",
-      "rules": "boards"
-    },
-    "neo_avocado_calls": {
-      "read": "admin",
-      "write": "admin",
-      "indexes": ["to"]
-    },
-    "neo_avocado_comments": {
-      "read": "world",
-      "write": "admin",
-      "rules": "community-board",
-      "indexes": ["logId"]
-    },
-    "neo_avocado_counters": {
-      "read": "admin",
-      "write": "admin"
-    },
-    "neo_avocado_emoticons": {
-      "read": "world",
-      "write": "admin",
-      "rules": "shown"
-    },
-    "neo_avocado_logs": {
-      "read": "world",
-      "write": "admin",
-      "rules": "community-board",
-      "indexes": ["board", "owner", "category"]
-    },
     "neo_avocado_messages": {
       "read": "admin",
       "write": "admin",

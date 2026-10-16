@@ -3,7 +3,6 @@
 // messages and calls views, under the same menu.
 import {
   $,
-  caller,
   formatTime,
   ownCharacters,
   run,
@@ -155,13 +154,10 @@ $("newCharacter").onclick = () => run(() => openCharacterForm());
 
 /**
  * 로그내역 (mypage/log): the member's own posts on every board they can read,
- * newest first. Each board is asked for its own, as the board rule reads one
- * board at a time.
+ * newest first.
  */
 async function loadMyLogs() {
-  // Read by a function: readers may not ask for posts by author, which
-  // would find others' 익명 ones.
-  const { documents } = await caller().call("community/posts:mine");
+  const { documents } = await query("community/posts:mine");
   const posts = documents
     .map((log) => ({
       board: state.boards.find(
@@ -237,7 +233,7 @@ async function loadMyExp({ more = false } = {}) {
 
 /** 관심로그 (mypage/log/log_favorite.php), 20 a page, in the order marked. */
 async function loadMyFavorites(page = 1) {
-  const result = await caller().call("community/posts:favorites", { page });
+  const result = await query("community/posts:favorites", { page });
   $("myFavorites").replaceChildren(
     ...result.documents.map((log) => {
       const board = state.boards.find(

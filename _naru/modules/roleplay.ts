@@ -2,17 +2,14 @@
 // posting as a character, server-rolled dice, exploration (탐색), items used
 // in a post, and [[nick]] calls with comment notices.
 import {
-  CALLS,
   amount,
-  author,
-  characterState,
   communityAccess,
+  communitySettings,
   kstDay,
-  logReadable,
-  ownCharacter,
   lacking,
-} from "./shared.js";
-import { communitySettings, one } from "./access.js";
+  one,
+  parsed,
+} from "./access.js";
 import {
   draw,
   give,
@@ -27,9 +24,14 @@ import {
   spend,
   wallet,
 } from "./economy.js";
-import { saveState } from "./characters.js";
+import { characterState, ownCharacter, saveState } from "./characters.js";
 import { profileByNick, profileOf } from "./members.js";
-import type { Ctx, NaruDocument } from "./naru-types.js";
+import { postReadable } from "./boards.js";
+import type { PostRow } from "./boards.js";
+import type { MutationCtx, QueryCtx } from "./naru-types.js";
+import type { SqlCtx } from "./access.js";
+
+type Ctx = MutationCtx;
 
 /** Who a post or comment speaks as (speakerOf). */
 export interface Speaker {
@@ -87,16 +89,16 @@ export async function speakerOf(
        AND character_titles.title_id = characters.active_title
      JOIN titles ON titles.id = character_titles.title_id
      WHERE characters.id = ? AND titles.enabled != 0`,
-    [Number(character.id)],
+    [character.id],
   );
   return {
-    character: character.id,
-    name: character.data.name,
-    type: character.data.type ?? "main",
+    character: String(character.id),
+    name: character.name,
+    type: character.type ?? "main",
     title: title?.name ?? null,
     titleImage: https(title?.image),
     // The 두상: an outfit dresses the 전신 only (member/viewer.php:76).
-    portrait: https(character.data.image),
+    portrait: https(character.image),
   };
 }
 
@@ -107,10 +109,10 @@ export function rollDice(): number[] {
 
 const CALL = /\[\[([^[\]\r\n]{1,20})\]\]/g;
 /**
- * The original calls everyone a text names. Each call here is a notice row
- * written within the 25 writes the function keeps to, beside the post, its number, its
- * reward and its 조합 or 탐색 and item (up to 13), so a text calls at most
- * this many members: more than a scene names.
+ * The original calls everyone a text names. Each call here takes four
+ * statements (the nickname, the member's access, the board, the notice) of
+ * a call's 100, beside the post, its reward and its 조합 or 탐색 and item,
+ * so a text calls at most this many members: more than a scene names.
  */
 export const MAX_CALLS = 10;
 
@@ -147,7 +149,7 @@ export async function resolveCalls(
     const found = await profileByNick(ctx, nick);
     if (!found) saved = saved.split(`[[${nick}]]`).join("[[???]]");
     else if (
-      found.id !== ctx.member.id &&
+      found.id !== ctx.member?.id &&
       !earlier.includes(found.id) &&
       !recipients.some((row) => row.id === found.id)
     )
@@ -161,14 +163,15 @@ export async function resolveCalls(
 }
 
 /**
- * Records and sends calls and the comment notice after a post is saved. A
- * member who could not read the post is not told about it; the post's author
- * may turn comment notices off (profile.commentAlerts).
+ * Records calls and the comment notice after a post or comment is saved. A
+ * member who could not read the post is not told about it; the post's
+ * author may turn comment notices off (profile.commentAlerts). Members see
+ * them by subscribing to community/calls:unread.
  */
 export async function deliverCalls(
   ctx: Ctx,
   {
-    log,
+    post,
     comment = null,
     text,
     speaker,
@@ -177,8 +180,9 @@ export async function deliverCalls(
     guest = null,
     anonymous = false,
   }: {
-    log: NaruDocument;
-    comment?: NaruDocument | null;
+    post: PostRow;
+    /** The comment's ID, for a comment. */
+    comment?: number | null;
     text: string;
     speaker: Speaker | null;
     recipients: Recipient[];
@@ -194,28 +198,19 @@ export async function deliverCalls(
   const sent = new Set<string>();
   const send = async (to: string, kind: "call" | "comment") => {
     if (sent.has(to) || to === from) return;
-    if (!(await logReadable(ctx, log, await communityAccess(ctx, to), to)))
+    if (!(await postReadable(ctx, post, await communityAccess(ctx, to), to)))
       return;
     sent.add(to);
     // A 익명 writer's notice names no one (view_comment.skin.php: 익명의 누군가).
-    await ctx.add(CALLS, {
-      to,
-      from: anonymous ? null : from,
-      nick: anonymous
-        ? "익명의 누군가"
-        : (me?.data.nick ?? (guest ? `${guest} (손님)` : "")),
-      speaker: anonymous ? null : (speaker?.name ?? null),
-      kind,
-      board: log.data.board ?? "default",
-      logId: log.id,
-      commentId: comment?.id ?? null,
-      preview,
-      at: ctx.now,
-    });
-    ctx.notify(to, { calls: true });
+    await ctx.sql`INSERT INTO calls (recipient, sender, nick, speaker, kind, board, post_id, comment_id, preview, at)
+      VALUES (${to}, ${anonymous ? null : from}, ${
+        anonymous
+          ? "익명의 누군가"
+          : (me?.data.nick ?? (guest ? `${guest} (손님)` : ""))
+      }, ${anonymous ? null : (speaker?.name ?? null)}, ${kind}, ${post.board}, ${post.id}, ${comment}, ${preview}, ${ctx.now})`;
   };
   for (const recipient of recipients) await send(recipient.id, "call");
-  const owner = author(log);
+  const owner = post.owner;
   if (notifyAuthor && owner && !sent.has(owner)) {
     const profile = await profileOf(ctx, owner);
     if (profile && profile.data.commentAlerts !== false)
@@ -225,17 +220,15 @@ export async function deliverCalls(
 }
 
 /** Whether the member has calls newer than they last looked (profile.callsSeenAt). */
-export async function callsUnread(ctx: Ctx): Promise<boolean> {
-  const profile = await profileOf(ctx, ctx.member.id);
-  const seen = Number.isFinite(profile?.data.callsSeenAt)
-    ? profile.data.callsSeenAt
-    : 0;
-  const page = await ctx.list(CALLS, {
-    filter: { to: ctx.member.id },
-    where: { gt: ["at", seen] },
-    size: 1,
-  });
-  return page.documents.length > 0;
+export async function callsUnread(ctx: SqlCtx): Promise<boolean> {
+  return Boolean(
+    await one(
+      ctx,
+      `SELECT 1 FROM calls WHERE recipient = ?
+       AND at > coalesce((SELECT calls_seen_at FROM profiles WHERE member = ?), 0) LIMIT 1`,
+      [ctx.member.id, ctx.member.id],
+    ),
+  );
 }
 
 /**

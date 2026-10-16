@@ -748,7 +748,10 @@ test("the owner reads and writes the foundation's tables as the admin's document
     await refusal(get("neo_avocado_settings", "community", M1)),
     "owner_only",
   );
-  assert.equal(await refusal(get("neo_avocado_logs", "x")), "invalid_input");
+  assert.equal(
+    await refusal(get("neo_avocado_messages", "x")),
+    "invalid_input",
+  );
   assert.equal(await get("neo_avocado_settings", "community"), null);
   const saved = await set({
     collection: "neo_avocado_settings",

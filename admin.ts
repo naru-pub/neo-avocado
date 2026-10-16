@@ -1,5 +1,4 @@
 import { applyTitles, deleteTitle } from "./admin-titles.js";
-import { resumeCleanup } from "./admin-cleanup.js";
 import { withTables } from "./admin-tables.js";
 import { config } from "./config.js";
 import {
@@ -250,7 +249,6 @@ async function load({ more = false } = {}) {
     page = await owner.collection(model.collection).list({
       size: 50,
       after: more ? cursor : null,
-      ...(model.cleanup ? { filter: { deleted: true } } : {}),
     });
   if (requestedSection !== section || !owner) return;
   if (!more) $("adminRows").replaceChildren();
@@ -301,28 +299,6 @@ async function load({ more = false } = {}) {
     }
     if (model.review) {
       li.append(reviewRow(row));
-      $("adminRows").append(li);
-      continue;
-    }
-    if (model.cleanup) {
-      li.append(`${row.data.name ?? row.data.title ?? row.id} · 삭제 정리 중 `);
-      const resume = document.createElement("button");
-      resume.type = "button";
-      resume.textContent = "정리 계속";
-      resume.onclick = () =>
-        run(async () => {
-          resume.disabled = true;
-          try {
-            const result = await resumeCleanup(owner, model.cleanup, row.id);
-            $("adminStatus").textContent = result.done
-              ? "정리를 완료했습니다."
-              : "일부 자료를 정리했습니다. 정리 계속을 눌러 이어가세요.";
-            await load();
-          } finally {
-            resume.disabled = false;
-          }
-        });
-      li.append(resume);
       $("adminRows").append(li);
       continue;
     }
