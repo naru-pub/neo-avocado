@@ -110,6 +110,15 @@ TOP 버튼. 원본과 달리 휴대폰에서는 메뉴가 버튼 뒤로 접히�
 고를 수 있습니다. 배경음악은 메뉴 옆 재생 버튼으로 듣고, 페이지를 옮겨 다녀도
 이어집니다.
 
+같은 설정의 **화폐**에서 원본처럼 **로그인 시 획득**(한국 시간으로 하루의 첫
+방문에 자동 지급, 출석 버튼은 없음)과 **회원가입 시 획득**(처음 가입할 때 한 번)을
+정합니다. 원본처럼 둘 다 0으로 시작하므로, 운영자가 정하기 전에는 매일 받는 보상이
+없습니다. 원본의 화폐기능 사용(끄기) 스위치는 옮기지 않았습니다.
+
+상점은 원본의 아이템 관리와 상점 관리를 합친 것입니다. 아이템은 **상점에서
+숨기기**를 끄면 상점에 진열되므로, 새 아이템은 가격 0으로 팔리지 않게 숨긴 채
+시작합니다. 상점은 아이템의 **진열 순서**(작은 수가 먼저), 그다음 이름 순입니다.
+
 모든 화면에 주소가 있어 링크로 나누고 새로고침해도 그 화면이 열리며, 뒤로 가기도
 됩니다: `#/logs/게시판ID/글번호`, `#/character/캐릭터ID`, `#/shop/분류`,
 `#/members`, `#/mypage/logs` 등. 캐릭터 이름을 누르면 캐릭터 보기 화면이 열려 큰
@@ -201,7 +210,10 @@ NPC 대사와 함께 가격(돈 + 소모 경험치 + 교환 아이템), 설명, 
 배분하고 이미 배분한 능력치는 줄일 수 없습니다.
 
 **커뮤니티 설정**의 하루 탐색 횟수(0이면 탐색 끔), **탐색 표**, 게시판의 **댓글
-행동 허용**을 설정합니다.
+행동 허용**을 설정합니다. 원본은 하루 횟수를 넘긴 탐색 댓글을 탐색 없이 올리지만,
+여기서는 댓글을 올리지 않고 횟수를 다 썼다고 알립니다. 탐색 표와 뽑기 표는 원본의
+0~100 구간 대신 **무게**를 씁니다: 원본에서 0~30, 31~100이던 두 줄은 무게 30과
+70처럼 구간의 너비를 무게로 옮기면 같은 확률이 됩니다.
 
 ## 안내 페이지
 
@@ -213,11 +225,17 @@ NPC 대사와 함께 가격(돈 + 소모 경험치 + 교환 아이템), 설명, 
 나오지 않습니다.
 
 운영 화면의 **디자인**에서 사이트 설명(검색·공유에 보임)과 파비콘을, **아이템
-관리 → 아보·경험치 지급**에서 회원 한 명이나 전체 회원에게 아보를, 캐릭터 하나나
-승인된 전체 캐릭터에게 경험치를 내용과 함께 주거나 깎습니다(최근 지급 기록이
-함께 보임). **랭킹 설정**의 단계마다 달성 시 추가 능력치 포인트를 정하면, 경험치로
+관리 → 아보·경험치·아이템 지급**에서 회원 한 명이나 전체 회원(원본처럼 등급 1
+회원 제외)에게 아보를, 캐릭터 하나나 승인된 전체 캐릭터에게 경험치를 내용과 함께
+주거나 깎고, 아이템을 1~100개 줍니다(최근 지급 기록이 함께 보임). **랭킹 설정**의 단계마다 달성 시 추가 능력치 포인트를 정하면, 경험치로
 단계가 오를 때 그만큼 받고 내려가면 돌려놓습니다. 아이템마다 **로그·댓글에서 사용
 가능**과 **조합 재료로 사용 가능**을, 능력치마다 **최소값**과 **도움말**을 정합니다.
+둘 다 원본처럼 꺼진 채 시작하고, 켠 아이템만 글에서 쓰거나 조합·제작 재료로
+넣을 수 있습니다. 이 설정이 생기기 전에 만든 아이템은 꺼진 것으로 보니, 쓰던
+아이템이면 켜 주세요. 레시피에는 조합 재료로 쓸 수 있는 아이템만 넣을 수 있고,
+다른 레시피와 같은 재료 조합은 저장되지 않습니다. 제작에 쓴 재료 중 **사용 후
+남기기**인 것은 남습니다. 회복 아이템은 이미 가득 찼어도 원본처럼 사용되어
+소모됩니다.
 
 HTML은 [DOMPurify](https://github.com/cure53/DOMPurify)로 정리하여 표시합니다.
 스크립트·폼·전체 페이지에 영향을 주는 스타일/ID/이름은 표시하지 않습니다.
@@ -257,13 +275,15 @@ HTML은 [DOMPurify](https://github.com/cure53/DOMPurify)로 정리하여 표시�
 화면은 서버 함수를 `"파일 경로:함수 이름"`으로 부릅니다.
 
 ```js
-// app/shop.js: 출석 보상 버튼
-$("daily").onclick = () =>
+// app/shop.js: 뽑기 버튼
+$("gacha").onclick = () =>
   spend(
-    "economy/shop:daily",
-    null,
+    "economy/shop:gacha",
+    state.inventoryCharacter ? { character: state.inventoryCharacter } : null,
     (result) =>
-      `출석 보상을 받았습니다. 잔액 ${moneyText(state.names, result.balance)}.`,
+      result.owned
+        ? `뽑기에서 ${result.owned.data.name}이(가) 나왔습니다!`
+        : "아무것도 나오지 않았습니다.",
   );
 
 function spend(reference, args, success) {
@@ -276,15 +296,21 @@ function spend(reference, args, success) {
 ```
 
 ```js
-// _naru/functions/economy/shop.js
-export async function daily(ctx) {
+// _naru/functions/economy/shop.js (줄임)
+export async function gacha(ctx, { character = null } = {}) {
   const current = await wallet(ctx);
-  const today = kstDay(ctx.now);
-  if (current.lastDaily === today)
-    ctx.fail("CONFLICT", "오늘은 이미 받았습니다.", { reason: "already" });
-  const balance = await pay(ctx, current, -DAILY_REWARD, { lastDaily: today });
-  await record(ctx, "daily", { delta: DAILY_REWARD, balance });
-  return { balance };
+  if (current.balance < GACHA_COST)
+    ctx.fail("CONFLICT", await lacking(ctx, "moneyName"), {
+      reason: "not_enough",
+    });
+  const result = await draw(ctx);
+  if (!result.configured)
+    ctx.fail("CONFLICT", "아직 뽑을 것이 없습니다.", { reason: "empty" });
+  const balance = await pay(ctx, current, GACHA_COST);
+  const owned = result.prize
+    ? await give(ctx, result.prize, "gacha", character)
+    : null;
+  return { balance, owned };
 }
 ```
 

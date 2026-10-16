@@ -9,6 +9,8 @@ export interface ModelField {
   label: string;
   type?: string;
   default?: unknown;
+  /** A new record's value, where a saved one without the key means `default`. */
+  newDefault?: unknown;
   max?: number;
   optional?: boolean;
   required?: boolean;
@@ -241,7 +243,11 @@ export const models: Record<string, Model> = {
     help: "잔액을 변경하면 같은 트랜잭션에서 회원의 기록에 조정 사유를 남깁니다. 잔액 기록은 삭제하지 않습니다.",
     fields: [
       { key: "balance", label: "잔액", type: "number", default: 0 },
-      { key: "lastDaily", label: "최근 출석일 (빈칸: 초기화)", type: "date" },
+      {
+        key: "lastDaily",
+        label: "최근 로그인 보상일 (빈칸: 초기화)",
+        type: "date",
+      },
       {
         key: "note",
         label: "잔액 조정 사유",
@@ -325,22 +331,33 @@ export const models: Record<string, Model> = {
         label: "판매 보상 (빈칸: 판매 불가)",
         type: "optional-number",
       },
-      { key: "hidden", label: "상점에서 숨기기", type: "checkbox" },
+      // sh_order (adm/shop_form.php): lower first in the shop.
+      {
+        key: "order",
+        label: "진열 순서 (작은 수가 먼저)",
+        type: "number",
+        default: 0,
+      },
+      // A new item starts hidden, so it is not on sale at 0 until priced.
+      {
+        key: "hidden",
+        label: "상점에서 숨기기",
+        type: "checkbox",
+        newDefault: true,
+      },
       { key: "sellable", label: "판매 허용", type: "checkbox", default: true },
       { key: "giftable", label: "선물 허용", type: "checkbox", default: true },
       { key: "usable", label: "사용 허용", type: "checkbox", default: true },
-      // it_use_mmb_able, it_use_recepi.
+      // it_use_mmb_able, it_use_recepi: both start off (adm/item_form.php:217).
       {
         key: "usableInPosts",
         label: "로그·댓글에서 사용 가능",
         type: "checkbox",
-        default: true,
       },
       {
         key: "craftMaterial",
         label: "조합 재료로 사용 가능",
         type: "checkbox",
-        default: true,
       },
       { key: "reusable", label: "사용 후 남기기", type: "checkbox" },
       {
@@ -774,7 +791,7 @@ export const models: Record<string, Model> = {
   // adm/community_form.php (커뮤니티 설정): one page, in its sections.
   settings: {
     label: "커뮤니티 설정",
-    help: "커뮤니티 전체에 적용되는 설정입니다: 공개 여부, 캐릭터 생성·수정, 탐색, 쪽지, 상점, 캐릭터 보기와 화폐·경험치·소속·종족의 이름. 원본의 커뮤니티 설정과 같습니다.",
+    help: "커뮤니티 전체에 적용되는 설정입니다: 공개 여부, 캐릭터 생성·수정, 탐색, 로그인·가입 보상, 쪽지, 상점, 캐릭터 보기와 화폐·경험치·소속·종족의 이름. 원본의 커뮤니티 설정과 같습니다.",
     fixedId: "community",
     fields: [
       { type: "heading", label: "홈페이지 기본환경 설정" },
@@ -819,6 +836,21 @@ export const models: Record<string, Model> = {
       {
         key: "initialStatPoints",
         label: "새 캐릭터 배분 포인트",
+        type: "number",
+        default: 0,
+      },
+      // 화폐 (adm/config_form.php:137, 353): cf_login_point and
+      // cf_register_point, both installed at 0 (install/install_db.php).
+      { type: "heading", label: "화폐" },
+      {
+        key: "loginReward",
+        label: "로그인 시 획득 (1일 1회, 한국 시간 기준)",
+        type: "number",
+        default: 0,
+      },
+      {
+        key: "signupReward",
+        label: "회원가입 시 획득",
         type: "number",
         default: 0,
       },
@@ -1037,11 +1069,12 @@ models.visits = {
   report: "visits",
   readOnly: true,
 };
-// adm/point_list.php (화폐 관리) and exp_list.php (경험치 관리): grants with
-// a memo, to one or to everyone, and the log of them.
+// adm/point_list.php (화폐 관리), exp_list.php (경험치 관리) and
+// inventory_list.php (아이템 지급): grants with a memo, to one or to
+// everyone, and the log of them.
 models.grants = {
-  label: "아보·경험치 지급",
-  help: "회원 한 명(닉네임) 또는 전체 회원에게 아보를, 캐릭터 하나(이름) 또는 승인된 전체 캐릭터에게 경험치를 주거나 깎습니다. 내용은 받는 사람의 기록에 남고, 가진 것보다 많이 깎지는 않습니다. 경험치로 랭킹이 바뀌면 그 랭킹의 추가 능력치 포인트도 함께 바뀝니다.",
+  label: "아보·경험치·아이템 지급",
+  help: "회원 한 명(닉네임) 또는 전체 회원(등급 1 회원 제외)에게 아보를, 캐릭터 하나(이름) 또는 승인된 전체 캐릭터에게 경험치를 주거나 깎고, 아이템을 1~100개 줍니다. 내용은 받는 사람의 기록에 남고, 가진 것보다 많이 깎지는 않습니다. 경험치로 랭킹이 바뀌면 그 랭킹의 추가 능력치 포인트도 함께 바뀝니다.",
   report: "grants",
   readOnly: true,
   collection: `${P}history`,
@@ -1361,6 +1394,32 @@ export function buildRecord(section, values, previous, references) {
     data.name = item.data.name;
     data.character = data.character || null;
     if (!previous) data.from = "admin";
+  }
+  if (section === "recipes") {
+    // Only craft materials (adm/recipi_update.php:14-30), and no combination
+    // twice (:48-51): which recipe a set of materials makes must be one.
+    const unflagged = data.ingredients.find(
+      (entry) =>
+        references.items.find((item) => item.id === entry.item)?.data
+          .craftMaterial !== true,
+    );
+    if (unflagged)
+      throw new Error(
+        `${references.items.find((item) => item.id === unflagged.item)?.data.name ?? unflagged.item}은(는) 조합 재료로 사용 가능하게 설정되지 않은 아이템입니다.`,
+      );
+    const combination = (ingredients) =>
+      (Array.isArray(ingredients) ? ingredients : [])
+        .flatMap((entry) => Array(Number(entry.count) || 0).fill(entry.item))
+        .sort()
+        .join("||");
+    const key = combination(data.ingredients);
+    const same = (references.recipes ?? []).find(
+      (row) => row.id !== id && combination(row.data.ingredients) === key,
+    );
+    if (same)
+      throw new Error(
+        `이미 등록된 레시피 조합입니다: ${same.data.name ?? same.id}.`,
+      );
   }
   if (section === "content" && (data.readLevel < 1 || data.readLevel > 10))
     throw new Error("읽기 등급은 1~10입니다.");

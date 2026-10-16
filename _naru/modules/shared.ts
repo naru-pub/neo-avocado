@@ -473,7 +473,37 @@ export async function weightedRows(
   return rows;
 }
 
-export const DAILY_REWARD = 100;
+/** A whole, non-negative amount the owner set in 커뮤니티 설정, else 0. */
+export async function communityAmount(
+  ctx: ReadCtx,
+  key: string,
+): Promise<number> {
+  const value = (await ctx.get(SETTINGS, "community"))?.data[key];
+  return Number.isSafeInteger(value) && value > 0 ? value : 0;
+}
+
+/**
+ * The day's first visit pays the 로그인 보상 (common.php:401, cf_login_point),
+ * once a Korean day; the original installs it at 0. The wallet keeps the
+ * day, so later visits that day pay nothing. A member who left gets none.
+ * Answers the new balance, or null when nothing was paid.
+ */
+export async function loginReward(ctx: Ctx): Promise<number | null> {
+  const current = await wallet(ctx);
+  const today = kstDay(ctx.now);
+  if (current.lastDaily === today) return null;
+  if ((await ctx.get(MEMBERS, ctx.member.id))?.data.left) return null;
+  const reward = await communityAmount(ctx, "loginReward");
+  const balance = await pay(ctx, current, -reward, { lastDaily: today });
+  if (!reward) return null;
+  // insert_point's memo, "YYYY-MM-DD 첫로그인".
+  await record(ctx, "daily", {
+    delta: reward,
+    balance,
+    memo: `${today} 첫로그인`,
+  });
+  return balance;
+}
 
 export const GACHA_COST = 50;
 
@@ -692,7 +722,11 @@ export async function requireUsable(
     });
 }
 
-/** Applies a recovery effect to an owned character; null when already full. */
+/**
+ * Applies a recovery effect to an owned character, up to the stat's maximum:
+ * at full it changes nothing and the item is still used, as set_status
+ * clamps (extend/status.lib.php:80) and use_item.php:35 consumes regardless.
+ */
 export async function restoreStat(ctx: Ctx, effect: Data, character: string) {
   const state = await characterState(ctx, character);
   if (
@@ -703,7 +737,6 @@ export async function restoreStat(ctx: Ctx, effect: Data, character: string) {
   const recovery = amount(effect.amount, "Recovery amount");
   if (!recovery) throw new Error("Recovery amount must be positive.");
   const stat = state.data.stats[effect.stat];
-  if (stat.current === stat.max) return null;
   stat.damage = Math.max(0, stat.damage - recovery);
   stat.current = Math.max(0, stat.max - stat.damage);
   return await ctx.set(CHARACTER_STATE, character, state.data);

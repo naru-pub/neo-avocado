@@ -281,7 +281,8 @@ async function loadMyMoney({ more = false } = {}) {
 /** What each kind of record was, where it has no memo of its own. */
 const HISTORY_KINDS = {
   adjust: "운영자 조정",
-  daily: "출석 보상",
+  daily: "첫 로그인",
+  signup: "회원가입 축하",
   buy: "구매",
   sell: "판매",
   craft: "제작",

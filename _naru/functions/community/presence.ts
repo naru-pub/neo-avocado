@@ -1,4 +1,10 @@
-import { PRESENCE, PROFILES, VISITS, kstDay } from "../../modules/shared.js";
+import {
+  PRESENCE,
+  PROFILES,
+  VISITS,
+  kstDay,
+  loginReward,
+} from "../../modules/shared.js";
 import type { Ctx } from "../../modules/naru-types.js";
 
 // Who is here (bbs/current_connect.php) and each day's visits
@@ -59,15 +65,17 @@ export async function seen(
       reason: "invalid_input",
     });
   // 현재접속자 leaves out the site's owner (bbs/current_connect.php:11).
-  if (ctx.member && !ctx.owner) {
-    const profile = await ctx.get(PROFILES, ctx.member.id);
-    if (profile)
-      await ctx.set(PRESENCE, ctx.member.id, {
-        nick: profile.data.nick,
-        where,
-        at: ctx.now,
-      });
-  }
+  const profile = ctx.member ? await ctx.get(PROFILES, ctx.member.id) : null;
+  if (profile && !ctx.owner)
+    await ctx.set(PRESENCE, ctx.member.id, {
+      nick: profile.data.nick,
+      where,
+      at: ctx.now,
+    });
+  // The day's first page pays the login reward, as the original's first
+  // login of the day does (common.php:401); any later page that day finds
+  // the day in the wallet and pays nothing.
+  if (profile) await loginReward(ctx);
   // Only a visit is counted; a member's other calls only say where they are.
   if (visit !== true) return null;
   const day = kstDay(ctx.now);

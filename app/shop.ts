@@ -154,6 +154,13 @@ function showCategory(number = 1) {
       (item.data.shopCategory || first) === state.shopCategory &&
       forCharacter(item),
   );
+  // The owner's 진열 순서 (sh_order, shop/index.php:15), then by name.
+  shown.sort(
+    (a, b) =>
+      (a.data.order ?? 0) - (b.data.order ?? 0) ||
+      String(a.data.name ?? "").localeCompare(String(b.data.name ?? "")) ||
+      (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+  );
   // Ten to a page (shop/index.php's page_rows).
   const pages = Math.ceil(shown.length / SHOP_PAGE);
   const current = Math.min(Math.max(1, number), Math.max(1, pages));
@@ -525,7 +532,8 @@ $("inventoryCharacter").onchange = () =>
   });
 const HISTORY_NAMES = {
   adjust: "운영자 잔액 조정",
-  daily: "출석",
+  daily: "첫 로그인",
+  signup: "회원가입 축하",
   buy: "구매",
   sell: "판매",
   gift: "선물 보냄",
@@ -602,7 +610,14 @@ async function useInventory(owned) {
   if (effect.type === "create")
     fields.push(
       { name: "name", label: "새 아이템 이름", required: true, max: 80 },
-      { name: "description", label: "설명", multiline: true, max: 2000 },
+      // The original asks for all of these (inventory/inc/add_item_form.php).
+      {
+        name: "description",
+        label: "설명",
+        multiline: true,
+        max: 2000,
+        required: true,
+      },
       { name: "image", label: "이미지 주소 (HTTPS)", max: 2000 },
       {
         name: "file",
@@ -616,6 +631,8 @@ async function useInventory(owned) {
     fields,
     async (values) => {
       const { character, file, ...data } = values;
+      if (effect.type === "create" && !file && !data.image)
+        throw new Error("이미지 주소를 넣거나 이미지 파일을 골라 주세요.");
       if (file) {
         const uploaded = await uploadManaged(file);
         data.image = uploaded.url;
@@ -714,13 +731,6 @@ $("tabShop").onclick = () =>
     showTab("shop");
     if (!state.shopLoaded) await loadShop();
   });
-$("daily").onclick = () =>
-  spend(
-    "economy/shop:daily",
-    null,
-    (result) =>
-      `출석 보상을 받았습니다. 잔액 ${moneyText(state.names, result.balance)}.`,
-  );
 $("gacha").onclick = () =>
   spend(
     "economy/shop:gacha",

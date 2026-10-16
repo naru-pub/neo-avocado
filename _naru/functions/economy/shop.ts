@@ -7,9 +7,7 @@ import {
   record,
   ownCharacter,
   amount,
-  DAILY_REWARD,
   GACHA_COST,
-  kstDay,
   wallet,
   pay,
   give,
@@ -22,17 +20,6 @@ import {
   withExp,
 } from "../../modules/shared.js";
 import type { Ctx, Data } from "../../modules/naru-types.js";
-
-/** 하루 한 번, 한국 시간으로 날이 바뀌면 받는 출석 보상. */
-export async function daily(ctx: Ctx) {
-  const current = await wallet(ctx);
-  const today = kstDay(ctx.now);
-  if (current.lastDaily === today)
-    ctx.fail("CONFLICT", "오늘은 이미 받았습니다.", { reason: "already" });
-  const balance = await pay(ctx, current, -DAILY_REWARD, { lastDaily: today });
-  await record(ctx, "daily", { delta: DAILY_REWARD, balance });
-  return { balance };
-}
 
 /**
  * 상점에서 승인된 내 캐릭터로 하나 산다. 재고(stock)가 없으면 무제한이다.

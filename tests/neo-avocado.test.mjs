@@ -1013,6 +1013,8 @@ test("the shop reads the wallet, items and own inventory when opened, and spends
       id: "potion",
       data: {
         name: "물약",
+        // 진열 순서 (sh_order) before names: 요정 활 (0), 물약, 기념품.
+        order: 1,
         price: 10,
         stock: 3,
         sellPrice: 5,
@@ -1032,7 +1034,13 @@ test("the shop reads the wallet, items and own inventory when opened, and spends
     },
     {
       id: "token",
-      data: { name: "기념품", price: 1, sellable: false, giftable: false },
+      data: {
+        name: "기념품",
+        order: 2,
+        price: 1,
+        sellable: false,
+        giftable: false,
+      },
       createdAt: "6",
     },
   ]);
@@ -1157,7 +1165,7 @@ test("the shop reads the wallet, items and own inventory when opened, and spends
     { method: "call", name: "economy/shop:gacha", args: { character: "hero" } },
   );
   assert.match($("status").textContent, /황금 아보카도/);
-  $("daily").onclick();
+  $("shopDetail").querySelector("button").onclick();
   for (let n = 0; n < 4; n += 1) await settle();
   assert.equal($("status").textContent, "오늘은 이미 받았습니다.");
   $("shopDetail").querySelector("button").onclick();
@@ -1325,14 +1333,14 @@ test("a function's ctx.fail reason and a duplicate nickname are shown as the pag
   const failure = (code, message, details) =>
     Object.assign(new Error(message), { code, details });
   database.answer = (name) => {
-    if (name === "economy/shop:daily")
+    if (name === "economy/shop:gacha")
       throw failure("CONFLICT", "아보가 모자랍니다.", { reason: "not_enough" });
     if (name === "community/messages:messageStatus") return { unread: false };
     refuse("empty");
   };
   const { $, settle, submit } = await page(database);
   await settle();
-  $("daily").onclick();
+  $("gacha").onclick();
   await settle();
   assert.equal($("status").textContent, "아보가 모자랍니다.");
   // A member's profile is written directly; Naru refuses a taken nickname.
@@ -1408,7 +1416,10 @@ test("posts speak as a chosen character, show server dice, calls and actions", a
     ],
     // Posts offer an item with an effect, usable in posts (it_use_mmb_able).
     neo_avocado_items: [
-      { id: "letter", data: { name: "편지", effect: { type: "draw" } } },
+      {
+        id: "letter",
+        data: { name: "편지", effect: { type: "draw" }, usableInPosts: true },
+      },
     ],
   });
   const { $, settle, submit } = await page(database);

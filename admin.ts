@@ -769,6 +769,8 @@ async function openForm(row = null) {
     sides: await all("neo_avocado_sides"),
     classes: await all("neo_avocado_classes"),
     groups: await all("neo_avocado_board_groups"),
+    // To refuse a combination another recipe already has.
+    recipes: section === "recipes" ? await all("neo_avocado_recipes") : [],
   };
   if (requestedSection !== section || !owner) return;
   selected = row;
@@ -832,7 +834,8 @@ async function openForm(row = null) {
         ? (row?.id ?? model.fixedId ?? field.default)
         : section === "quests" && field.key === "images"
           ? (row?.data.images?.join("\n") ?? "")
-          : (fieldValue(row?.data, field.key) ?? field.default);
+          : (fieldValue(row?.data, field.key) ??
+            (row ? field.default : (field.newDefault ?? field.default)));
     if (field.type === "ingredients") {
       const group = document.createElement("fieldset");
       group.dataset.ingredients = field.key;
@@ -1501,8 +1504,9 @@ async function activityView() {
 /* ----------------------------------------------------------- grants --- */
 
 /**
- * 아보·경험치 지급 (adm/point_list.php, exp_list.php): the form, run to the
- * end a page of recipients a call, and the last grants.
+ * 아보·경험치·아이템 지급 (adm/point_list.php, exp_list.php,
+ * inventory_list.php): the form, run to the end a part of the recipients a
+ * call, and the last grants.
  */
 async function grantsView() {
   const report = $("adminReport");
@@ -1512,6 +1516,14 @@ async function grantsView() {
   kind.append(
     new Option(itemNames.moneyName, "money"),
     new Option(itemNames.expName, "exp"),
+    new Option("아이템", "item"),
+  );
+  const items = (await all("neo_avocado_items")).filter(
+    (row) => !row.data.deleted,
+  );
+  const item = document.createElement("select");
+  item.append(
+    ...items.map((row) => new Option(row.data.name ?? row.id, row.id)),
   );
   const target = document.createElement("select");
   target.append(new Option("개별 지급", "one"), new Option("전체 지급", "all"));
@@ -1524,11 +1536,17 @@ async function grantsView() {
   const memo = document.createElement("input");
   memo.maxLength = 200;
   const nameLabel = control("", name);
+  const itemLabel = control("아이템", item);
+  const valueLabel = control("", value);
   const describe = () => {
     nameLabel.firstChild.textContent =
       kind.value === "money" ? "회원 닉네임" : "캐릭터 이름";
     nameLabel.hidden = target.value === "all";
     name.required = target.value === "one";
+    itemLabel.hidden = kind.value !== "item";
+    item.required = kind.value === "item";
+    valueLabel.firstChild.textContent =
+      kind.value === "item" ? "개수 (1~100)" : "양 (깎으려면 음수)";
   };
   kind.onchange = target.onchange = describe;
   const status = document.createElement("p");
@@ -1540,7 +1558,8 @@ async function grantsView() {
     control("종류", kind),
     control("지급 유형", target),
     nameLabel,
-    control("양 (깎으려면 음수)", value),
+    itemLabel,
+    valueLabel,
     control("내용", memo),
     submit,
     status,
@@ -1568,7 +1587,9 @@ async function grantsView() {
         item.textContent = `${new Date(row.data.at).toLocaleString("ko-KR")} · ${character ? `${character} (${who})` : who} · ${
           row.data.kind === "exp"
             ? `${itemNames.expName} ${row.data.expDelta > 0 ? "+" : ""}${row.data.expDelta}`
-            : `${row.data.delta > 0 ? "+" : ""}${moneyText(itemNames, row.data.delta)}`
+            : row.data.kind === "grant"
+              ? `${row.data.name} ${row.data.count}개`
+              : `${row.data.delta > 0 ? "+" : ""}${moneyText(itemNames, row.data.delta)}`
         }${row.data.memo ? ` · ${row.data.memo}` : ""}`;
         return item;
       }),
@@ -1580,10 +1601,16 @@ async function grantsView() {
       const amount = Number(value.value);
       if (!Number.isSafeInteger(amount) || amount === 0)
         return (status.textContent = "0이 아닌 정수를 입력하세요.");
+      if (kind.value === "item" && (amount < 1 || amount > 100))
+        return (status.textContent = "아이템은 1~100개 지급할 수 있습니다.");
       if (
         target.value === "all" &&
         !confirm(
-          `전체 ${kind.value === "money" ? "회원" : "승인된 캐릭터"}에게 ${amount}만큼 지급할까요?`,
+          `전체 ${kind.value === "money" ? "회원" : "승인된 캐릭터"}에게 ${
+            kind.value === "item"
+              ? `${item.selectedOptions[0]?.textContent} ${amount}개를`
+              : `${amount}만큼`
+          } 지급할까요?`,
         )
       )
         return;
@@ -1600,6 +1627,7 @@ async function grantsView() {
             value: amount,
             memo: memo.value.trim(),
             after,
+            ...(kind.value === "item" ? { item: item.value } : {}),
           });
           granted += result.granted;
           skipped += result.skipped;

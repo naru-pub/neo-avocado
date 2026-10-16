@@ -31,6 +31,6 @@ export * from "../functions/characters/review.js";
 export { quests } from "../functions/content/quests.js";
 export { contentPages, contentPage } from "../functions/content/pages.js";
 export { site } from "../functions/content/site.js";
-export { DAILY_REWARD, GACHA_COST } from "./shared.js";
+export { GACHA_COST, loginReward } from "./shared.js";
 export * as money from "../functions/economy/money.js";
 export * as grants from "../functions/economy/grants.js";

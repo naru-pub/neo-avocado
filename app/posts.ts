@@ -212,7 +212,7 @@ export function wireItemChoice(select) {
           ({ item }) =>
             item?.effect?.type &&
             item.usable !== false &&
-            item.usableInPosts !== false,
+            item.usableInPosts === true,
         )
         .map(({ row }) => row);
       for (const row of usable) {

@@ -2,8 +2,12 @@ import {
   PROFILES,
   MEMBERS,
   communityAccess,
+  communityAmount,
   kstDay,
+  pay,
+  record,
   text,
+  wallet,
 } from "../../modules/shared.js";
 import type { Ctx } from "../../modules/naru-types.js";
 
@@ -55,6 +59,19 @@ export async function join(
       role: "member",
       requestedAt: ctx.now,
     });
+  // 회원가입 포인트 (bbs/register_form_update.php:245, cf_register_point):
+  // paid once, on joining; changing the nickname later pays nothing.
+  if (!old) {
+    const reward = await communityAmount(ctx, "signupReward");
+    if (reward) {
+      const balance = await pay(ctx, await wallet(ctx), -reward);
+      await record(ctx, "signup", {
+        delta: reward,
+        balance,
+        memo: "회원가입 축하",
+      });
+    }
+  }
   return { profile, ...access };
 }
 

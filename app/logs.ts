@@ -1044,7 +1044,7 @@ $("logMaterials").onfocus = $("logMaterials").onpointerdown = () =>
     if ($("logMaterials").dataset.loaded) return;
     $("logMaterials").dataset.loaded = "1";
     for (const { row, item } of await postInventory())
-      if (item?.craftMaterial !== false)
+      if (item?.craftMaterial === true)
         $("logMaterials").append(
           new Option(row.data.name ?? row.data.item, row.id),
         );

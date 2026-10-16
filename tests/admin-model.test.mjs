@@ -20,7 +20,7 @@ const references = {
   titles: [{ id: "winner", data: { name: "Winner" } }],
   stats: [{ id: "hp", data: { name: "Health", initial: 10, max: 20 } }],
   items: [
-    { id: "seed", data: { name: "Seed" } },
+    { id: "seed", data: { name: "Seed", craftMaterial: true } },
     { id: "tree", data: { name: "Tree" } },
   ],
 };
@@ -165,6 +165,41 @@ test("recipes validate material counts and gacha retains explicit misses and fra
     assert.throws(() =>
       buildRecord("recipes", { ...values, ingredients }, null, references),
     );
+  // Only craft materials, and no combination another recipe has
+  // (adm/recipi_update.php:14-30, 48-51); saving a recipe again is no clash.
+  assert.throws(
+    () =>
+      buildRecord(
+        "recipes",
+        { ...values, ingredients: [{ item: "tree", count: "1" }] },
+        null,
+        references,
+      ),
+    /Tree은\(는\) 조합 재료로/,
+  );
+  const withRecipes = {
+    ...references,
+    recipes: [
+      {
+        id: "recipe",
+        data: {
+          name: "Tree recipe",
+          ingredients: [{ item: "seed", count: 2 }],
+        },
+      },
+    ],
+  };
+  buildRecord("recipes", values, null, withRecipes);
+  assert.throws(
+    () => buildRecord("recipes", { ...values, id: "again" }, null, withRecipes),
+    /이미 등록된 레시피 조합입니다: Tree recipe/,
+  );
+  buildRecord(
+    "recipes",
+    { ...values, id: "again", ingredients: [{ item: "seed", count: "3" }] },
+    null,
+    withRecipes,
+  );
   const draw = buildRecord(
     "gacha",
     { id: "miss", source: "", item: "", weight: "0.5" },

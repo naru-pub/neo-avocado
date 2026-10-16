@@ -226,6 +226,18 @@ export async function craft(
     ctx.fail("INVALID_REQUEST", "레시피에 맞는 재료를 선택해 주세요.", {
       reason: "invalid_materials",
     });
+  // Only craft materials go in (it_use_recepi), and a reusable one stays
+  // (it_use_ever), as in the original's 조합.
+  const catalogue = await ctx.getMany(ITEMS, [...required.keys()]);
+  if (catalogue.some((item) => item?.data.craftMaterial !== true))
+    ctx.fail("INVALID_REQUEST", "조합 재료로 쓸 수 없는 아이템입니다.", {
+      reason: "not_material",
+    });
+  const reusable = new Set(
+    catalogue
+      .filter((item) => item.data.reusable === true)
+      .map((item) => item.id),
+  );
   const prize =
     typeof row.data.item === "string"
       ? await ctx.get(ITEMS, row.data.item)
@@ -238,7 +250,8 @@ export async function craft(
       reason: "not_enough",
     });
   const balance = await pay(ctx, current, cost);
-  for (const item of owned) await ctx.delete(INVENTORY, item.id);
+  for (const item of owned)
+    if (!reusable.has(item.data.item)) await ctx.delete(INVENTORY, item.id);
   const output = await give(ctx, prize, "craft", character);
   await record(ctx, "craft", {
     character,
@@ -320,12 +333,7 @@ export async function useItem(
       ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
         reason: "not_owned",
       });
-    const restored = await restoreStat(ctx, effect, character);
-    if (!restored)
-      ctx.fail("CONFLICT", "이미 전부 회복되었습니다.", {
-        reason: "already_full",
-      });
-    result.document = restored;
+    result.document = await restoreStat(ctx, effect, character);
   } else if (effect.type === "draw") {
     const outcome = await draw(ctx, item.id);
     if (!outcome.configured)
@@ -334,9 +342,18 @@ export async function useItem(
       ? await give(ctx, outcome.prize, "item", owned.data.character ?? null)
       : null;
   } else if (effect.type === "create") {
+    // The form asks for all three (inventory/inc/add_item_form.php:26-32).
+    if (
+      [data.name, data.description, data.image].some(
+        (value) => typeof value !== "string" || !value.trim(),
+      )
+    )
+      ctx.fail("INVALID_REQUEST", "이름, 설명, 이미지를 모두 입력해 주세요.", {
+        reason: "invalid_input",
+      });
     const name = text(data.name, 80, true);
-    const description = text(data.description ?? "", 2000);
-    const image = data.image ? imageUrl(data.image) : null;
+    const description = text(data.description ?? "", 2000, true);
+    const image = imageUrl(data.image);
     const personal = await ctx.add(ITEMS, {
       name,
       description,
