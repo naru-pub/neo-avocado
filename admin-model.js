@@ -629,8 +629,8 @@ export const models = {
   // adm/character_article_list.php's 기본 항목: the 두상, 흉상 and 전신 a
   // character sheet asks for, each an upload or an address.
   character_images: {
-    label: "캐릭터 이미지 항목",
-    help: "캐릭터 신청서의 두상·흉상·전신 이미지를 정합니다. 두상은 목록과 프로필, 흉상과 전신은 캐릭터 보기에 보입니다. 원본의 프로필 양식 관리 기본 항목과 같습니다.",
+    label: "프로필 기본 항목",
+    help: "캐릭터 신청서의 두상·흉상·전신 이미지와, 캐릭터 보기에 보일 항목을 정합니다. 두상은 목록과 프로필, 흉상과 전신은 캐릭터 보기에 보입니다. 원본의 프로필 양식 관리 기본 항목과 같습니다.",
     collection: `${P}settings`,
     fixedId: "profile",
     fields: [
@@ -676,6 +676,38 @@ export const models = {
       },
       { key: "bodyLabel", label: "항목 이름", default: "전신", max: 20 },
       { key: "bodyHelp", label: "도움말", max: 200 },
+      // ad_use_exp, ad_use_rank, ad_use_status, ad_use_title, ad_use_closet.
+      { type: "heading", label: "캐릭터 보기" },
+      {
+        key: "showExp",
+        label: "경험치 보이기",
+        type: "checkbox",
+        default: true,
+      },
+      {
+        key: "showRank",
+        label: "랭킹 보이기",
+        type: "checkbox",
+        default: true,
+      },
+      {
+        key: "showStats",
+        label: "능력치 보이기",
+        type: "checkbox",
+        default: true,
+      },
+      {
+        key: "showTitles",
+        label: "타이틀 보이기",
+        type: "checkbox",
+        default: true,
+      },
+      {
+        key: "showCloset",
+        label: "옷장 보이기",
+        type: "checkbox",
+        default: true,
+      },
     ],
   },
   // adm/community_form.php (커뮤니티 설정): one page, in its sections.

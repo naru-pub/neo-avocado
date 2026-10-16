@@ -3947,3 +3947,29 @@ test("관심 keeps a member's favourite posts, theirs alone, and 경고내역 sh
     "document_not_found",
   );
 });
+
+test("the site's frame says what a character's page shows, and the owner is not 현재접속자", async () => {
+  const { ctx, table } = fakeCtx();
+  assert.deepEqual((await site(ctx)).viewer, {
+    exp: true,
+    rank: true,
+    stats: true,
+    titles: true,
+    closet: true,
+  });
+  table(`${P}settings`).set("profile", { showStats: false, showCloset: false });
+  assert.deepEqual((await site(ctx)).viewer, {
+    exp: true,
+    rank: true,
+    stats: false,
+    titles: true,
+    closet: false,
+  });
+  table(`${P}profiles`).set("m-1", { nick: "운영자" });
+  ctx.owner = true;
+  await presence.seen(ctx, { where: "home" });
+  assert.deepEqual((await presence.online(ctx)).members, []);
+  ctx.owner = false;
+  await presence.seen(ctx, { where: "home" });
+  assert.equal((await presence.online(ctx)).members.length, 1);
+});

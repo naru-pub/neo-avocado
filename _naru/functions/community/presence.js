@@ -39,7 +39,8 @@ export async function seen(
     ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
       reason: "invalid_input",
     });
-  if (ctx.member) {
+  // 현재접속자 leaves out the site's owner (bbs/current_connect.php:11).
+  if (ctx.member && !ctx.owner) {
     const profile = await ctx.get(PROFILES, ctx.member.id);
     if (profile)
       await ctx.set(PRESENCE, ctx.member.id, {

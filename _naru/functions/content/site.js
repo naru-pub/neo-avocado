@@ -10,6 +10,7 @@ import {
   scheduled,
   imageSlotsOf,
   namesOf,
+  viewerOf,
   siteOpen,
 } from "../../modules/shared.js";
 
@@ -89,6 +90,7 @@ export async function site(ctx) {
       newWindow: row.data.newWindow === true,
     }));
   const settings = (await ctx.get(SETTINGS, "community"))?.data ?? {};
+  const profile = (await ctx.get(SETTINGS, "profile"))?.data;
   return {
     level: access.level,
     member: Boolean(ctx.member),
@@ -99,7 +101,9 @@ export async function site(ctx) {
     // 기타 항목명 설정: the owner's names for money, experience, rank, 소속, 종족.
     names: namesOf(settings),
     // 프로필 양식 관리's 두상·흉상·전신: which the sheet asks for and shows.
-    images: imageSlotsOf((await ctx.get(SETTINGS, "profile"))?.data),
+    images: imageSlotsOf(profile),
+    // ...and what a character's page shows (ad_use_exp, _rank, _status…).
+    viewer: viewerOf(profile),
     menus,
     banners,
   };

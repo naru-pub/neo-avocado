@@ -91,11 +91,19 @@ function choiceEdit(name, label, rows, value) {
     ],
   };
 }
-/** The characters the filter picks, newest first, by numbered pages. */
+/**
+ * The characters the filter picks by numbered pages: 멤버목록 oldest first
+ * (get_character_list's ch_id asc), the rest newest first.
+ */
 const characterPages = cursorPages((after, { includeTotal, size }) => {
   const where = CHARACTER_FILTERS[$("characterFilter").value];
   return collection(COLLECTION.characters).list({
-    sort: [[{ metadata: "createdAt" }, "desc"]],
+    sort: [
+      [
+        { metadata: "createdAt" },
+        $("characterFilter").value === "approved" ? "asc" : "desc",
+      ],
+    ],
     size,
     after,
     ...(includeTotal ? { includeTotal: true } : {}),
@@ -109,6 +117,18 @@ export async function loadCharacters({ page: number = 1 } = {}) {
     loadFieldCatalogue(),
     number === 1 ? loadChoices() : null,
   ]);
+  $("applicantTools").hidden = $("characterFilter").value !== "applicants";
+  if ($("characterFilter").value === "applicants") {
+    if (number === 1 || !applicants.rows)
+      applicants.rows = await allDocuments(
+        COLLECTION.characters,
+        undefined,
+        where,
+      );
+    await showApplicants(number);
+    state.charactersLoaded = true;
+    return;
+  }
   // 멤버목록 by 소속 (member/index.php's 진영별), once there are two: every
   // approved character on one page, as the original lists them.
   if (
@@ -133,6 +153,93 @@ export async function loadCharacters({ page: number = 1 } = {}) {
     (next) => loadCharacters({ page: next }),
   );
 }
+/** 신청자목록's applicants, read once a visit, and what narrows them. */
+const applicants = { rows: null, side: "", class: "", field: "nick", text: "" };
+const APPLICANT_PAGE = 10;
+/**
+ * 신청자목록 (member/ready.php): ALL and each 소속 (with its 종족) and
+ * their counts, the search, then 10 a page, newest first.
+ */
+async function showApplicants(number = 1) {
+  const rows = applicants.rows;
+  await preloadNicks(rows);
+  const nicks = new Map();
+  for (const row of rows)
+    nicks.set(row.id, await nickOf(row.createdBy ?? row.data.owner));
+  const searched = rows.filter((row) => {
+    if (!applicants.text) return true;
+    const value =
+      applicants.field === "nick" ? nicks.get(row.id) : row.data.name;
+    return String(value ?? "").includes(applicants.text);
+  });
+  const count = (side, kind) =>
+    searched.filter(
+      (row) =>
+        (!side || row.data.side === side) && (!kind || row.data.class === kind),
+    ).length;
+  const filter = (label, side, kind) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = `${label}(${count(side, kind)})`;
+    button.setAttribute(
+      "aria-pressed",
+      String(applicants.side === side && applicants.class === kind),
+    );
+    button.onclick = () =>
+      run(async () => {
+        applicants.side = side;
+        applicants.class = kind;
+        await showApplicants();
+      });
+    return button;
+  };
+  const sides = state.names.sideTitle
+    ? state.sides.map((row) => row.data.name)
+    : [];
+  const classes = state.names.classTitle
+    ? state.classes.map((row) => row.data.name)
+    : [];
+  $("applicantFilters").replaceChildren(
+    filter("ALL", "", ""),
+    ...sides.flatMap((side) => [
+      filter(side, side, ""),
+      ...classes.map((kind) => filter(`${side} ${kind}`, side, kind)),
+    ]),
+    ...(sides.length ? [] : classes.map((kind) => filter(kind, "", kind))),
+  );
+  const shown = searched
+    .filter(
+      (row) =>
+        (!applicants.side || row.data.side === applicants.side) &&
+        (!applicants.class || row.data.class === applicants.class),
+    )
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  const pages = Math.ceil(shown.length / APPLICANT_PAGE);
+  const current = Math.min(Math.max(1, number), Math.max(1, pages));
+  $("characters").replaceChildren();
+  for (const character of shown.slice(
+    (current - 1) * APPLICANT_PAGE,
+    current * APPLICANT_PAGE,
+  ))
+    $("characters").append(await characterItem(character));
+  if (!shown.length)
+    $("characters").append(
+      Object.assign(document.createElement("li"), {
+        textContent: "신청자가 없습니다.",
+      }),
+    );
+  renderPages($("characterPages"), current, pages, (next) =>
+    run(() => showApplicants(next)),
+  );
+}
+$("applicantSearch").onsubmit = (event) => {
+  event.preventDefault?.();
+  run(async () => {
+    applicants.field = $("applicantField").value;
+    applicants.text = $("applicantText").value.trim();
+    await showApplicants();
+  });
+};
 /** Every approved character under its 소속's title, the rest under 기타. */
 async function showBySide(where) {
   const characters = await allDocuments(
@@ -443,6 +550,13 @@ function wireCharacterDetails(item, character) {
   const allocate = item.querySelector(".allocate-stats");
   for (const button of [addRelation, addOutfit, defaultOutfit])
     button.hidden = !mine(character);
+  // What the owner shows on a character (ad_use_status, _title, _closet).
+  const show = state.viewer;
+  item.querySelector(".stats-section").hidden =
+    !show.stats && !show.exp && !show.rank;
+  item.querySelector(".stats").hidden = !show.stats;
+  item.querySelector(".titles-section").hidden = !show.titles;
+  item.querySelector(".closet-section").hidden = !show.closet;
   let loaded = false;
   const refresh = async () => {
     await loadFieldCatalogue();
@@ -465,8 +579,15 @@ function wireCharacterDetails(item, character) {
     );
     const left = Math.max(0, status.state.points - spent);
     const approved = status.state.approved === true;
-    item.querySelector(".progression").textContent =
-      `${expText(state.names, status.state.exp)}${status.rank ? ` · ${status.rank}` : ""} · 능력치 포인트 ${status.state.points} (남은 ${left})`;
+    item.querySelector(".progression").textContent = [
+      state.viewer.exp ? expText(state.names, status.state.exp) : "",
+      state.viewer.rank && status.rank ? status.rank : "",
+      state.viewer.stats
+        ? `능력치 포인트 ${status.state.points} (남은 ${left})`
+        : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
     item.querySelector(".stats").replaceChildren();
     for (const definition of status.definitions) {
       const li = document.createElement("li");
@@ -477,7 +598,10 @@ function wireCharacterDetails(item, character) {
     // Once approved, only the points left are spent, and no stat goes below
     // what it has (mypage/character/status.inc.php:17-25, 60).
     allocate.hidden =
-      !mine(character) || !status.definitions.length || (approved && !left);
+      !state.viewer.stats ||
+      !mine(character) ||
+      !status.definitions.length ||
+      (approved && !left);
     allocate.onclick = () =>
       edit(
         approved
@@ -995,7 +1119,9 @@ export async function openCharacter(id) {
         textContent: `${state.names.expName} 내역이 없습니다.`,
       }),
     );
-  extras.append(heading(`${state.names.expName} 내역`), exp);
+  // The experience history (member/exp.php) follows ad_use_exp too.
+  if (state.viewer.exp)
+    extras.append(heading(`${state.names.expName} 내역`), exp);
   if (sheet.inventory) {
     const title = heading("인벤토리");
     if (sheet.balance !== null) {

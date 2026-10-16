@@ -56,7 +56,12 @@ async function loadCouples() {
       if (couple.data.since) {
         const since = document.createElement("p");
         since.className = "since";
-        since.textContent = `${couple.data.since} ~`;
+        // How many days, the first counted (couple/index.php's ceil).
+        const days = Math.ceil(
+          (Date.now() - Date.parse(`${couple.data.since}T00:00:00+09:00`)) /
+            86400000,
+        );
+        since.textContent = `${couple.data.since} ~${Number.isFinite(days) && days > 0 ? ` · D+${days}` : ""}`;
         item.append(since);
       }
       return item;

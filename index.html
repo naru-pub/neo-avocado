@@ -463,6 +463,28 @@
             <option value="approved">승인된 캐릭터</option>
           </select></label
         >
+        <!-- member/ready.php: ALL and each 소속 (and 종족) with counts, and
+             a search by 오너명 or 캐릭명; 10 a page, newest first. -->
+        <div id="applicantTools" hidden>
+          <nav
+            id="applicantFilters"
+            class="sub-tabs"
+            aria-label="신청자 분류"
+          ></nav>
+          <form id="applicantSearch" class="board-search" role="search">
+            <select id="applicantField" aria-label="검색 항목">
+              <option value="nick">오너명</option>
+              <option value="name">캐릭명</option>
+            </select>
+            <input
+              id="applicantText"
+              type="search"
+              maxlength="40"
+              aria-label="검색어"
+            />
+            <button type="submit">검색</button>
+          </form>
+        </div>
         <ul id="characters" class="characters"></ul>
         <nav
           id="characterPages"
@@ -665,7 +687,7 @@
             <p class="character-profile"></p>
             <dl class="character-fields"></dl>
             <div class="profile-sections">
-              <section class="profile-section">
+              <section class="profile-section stats-section">
                 <h4>능력치</h4>
                 <p class="progression"></p>
                 <ul class="stats"></ul>
@@ -673,7 +695,7 @@
                   능력치 배분
                 </button>
               </section>
-              <section class="profile-section">
+              <section class="profile-section titles-section">
                 <h4>타이틀</h4>
                 <div class="titles"></div>
                 <select
@@ -693,7 +715,7 @@
                   관계 등록
                 </button>
               </section>
-              <section class="profile-section">
+              <section class="profile-section closet-section">
                 <h4>옷장</h4>
                 <ul class="wardrobe"></ul>
                 <button class="add-outfit" type="button" hidden>

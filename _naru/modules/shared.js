@@ -1,5 +1,5 @@
 // Shared collection identifiers and transactional domain helpers.
-export { IMAGE_SLOTS, imageSlotsOf } from "./images.js";
+export { IMAGE_SLOTS, imageSlotsOf, viewerOf } from "./images.js";
 export const PREFIX = "neo_avocado_";
 
 export const WALLETS = `${PREFIX}wallets`;

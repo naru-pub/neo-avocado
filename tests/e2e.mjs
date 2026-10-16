@@ -169,7 +169,7 @@ try {
   );
 
   // 캐릭터 이미지 항목: the owner turns the 전신 on, asked as an address.
-  await adminMenu(owner, "캐릭터관리", "캐릭터 이미지 항목");
+  await adminMenu(owner, "캐릭터관리", "프로필 기본 항목");
   await owner.locator('#adminFields [name="bodyUse"]').check();
   await owner.locator('#adminFields [name="bodyUrl"]').check();
   await owner.locator('#adminForm [type="submit"]').click();
@@ -203,6 +203,22 @@ try {
     .waitFor();
   assert.equal(await alice.locator("#newCharacter").isVisible(), false);
   await menu(alice, "신청자목록");
+  await alice
+    .locator("#characters .character")
+    .filter({ hasText: "초록" })
+    .waitFor();
+  // member/ready.php: ALL with its count, and a search by 캐릭명.
+  await alice
+    .locator("#applicantFilters button", { hasText: "ALL(1)" })
+    .waitFor();
+  await alice.locator("#applicantField").selectOption("name");
+  await alice.locator("#applicantText").fill("없는이름");
+  await alice.locator("#applicantSearch button").click();
+  await alice
+    .locator("#characters li", { hasText: "신청자가 없습니다." })
+    .waitFor();
+  await alice.locator("#applicantText").fill("초록");
+  await alice.locator("#applicantSearch button").click();
   await alice
     .locator("#characters .character")
     .filter({ hasText: "초록" })

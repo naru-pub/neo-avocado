@@ -32,3 +32,24 @@ export function imageSlotsOf(profile = {}) {
         : "",
   }));
 }
+
+/**
+ * What a character's page shows (adm/character_article_list.php's ad_use_exp,
+ * ad_use_rank, ad_use_status, ad_use_title, ad_use_closet), from the same
+ * settings row. On from the start, as this template has always shown them.
+ */
+export const VIEWER_SWITCHES = Object.freeze([
+  "exp",
+  "rank",
+  "stats",
+  "titles",
+  "closet",
+]);
+export function viewerOf(profile = {}) {
+  return Object.fromEntries(
+    VIEWER_SWITCHES.map((key) => [
+      key,
+      profile?.[`show${key[0].toUpperCase()}${key.slice(1)}`] !== false,
+    ]),
+  );
+}

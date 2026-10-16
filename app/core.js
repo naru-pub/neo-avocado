@@ -3,7 +3,7 @@
 // It imports no other part but names.js, so it is always ready before them.
 
 import { NAME_DEFAULTS } from "./names.js";
-import { imageSlotsOf } from "../_naru/modules/images.js";
+import { imageSlotsOf, viewerOf } from "../_naru/modules/images.js";
 
 const PREFIX = "neo_avocado_";
 export const COLLECTION = {
@@ -64,6 +64,8 @@ export const state = {
   names: NAME_DEFAULTS,
   // 캐릭터 이미지 항목: the 두상, 흉상 and 전신 the owner uses.
   images: imageSlotsOf(),
+  // What a character's page shows (ad_use_exp, _rank, _status, _title…).
+  viewer: viewerOf(),
   // The site owner, signed in here, is staff as moderators are.
   owner: false,
   role: "member",
