@@ -13,6 +13,7 @@ import {
   text,
   imageUrl,
   names,
+  communityAccess,
 } from "../../modules/shared.js";
 import { notDeleted, startValue, startWrite } from "../../modules/community.js";
 import {
@@ -44,10 +45,14 @@ async function listed(ctx, collection, value, kept, label) {
   const chosen = text(value ?? "", 40);
   if (!chosen || chosen === kept) return chosen;
   const { documents } = await ctx.list(collection, { size: 100 });
-  const names = documents
-    .filter((row) => !row.data.deleted)
+  const rows = documents.filter((row) => !row.data.deleted);
+  // si_auth, cl_auth: a member picks only what their level reaches; the
+  // site owner, any.
+  const level = ctx.owner ? Infinity : (await communityAccess(ctx)).level;
+  const names = rows
+    .filter((row) => (Number(row.data.level) || 1) <= level)
     .map((row) => row.data.name);
-  if (names.length && !names.includes(chosen))
+  if (rows.length && !names.includes(chosen))
     ctx.fail("INVALID_REQUEST", `${label}을(를) 목록에서 골라 주세요.`, {
       reason: "invalid_input",
     });
@@ -147,8 +152,10 @@ export async function save(
     fields: sheet.fields,
   };
   delete value.fieldMedia;
-  if (data.image !== previous?.data.image)
-    value.image = data.image ? imageUrl(data.image) : null;
+  // 두상, 흉상, 전신 (ch_thumb, ch_head, ch_body): an address or an upload's.
+  for (const key of ["image", "head", "body"])
+    if (Object.hasOwn(data, key) && data[key] !== previous?.data[key])
+      value[key] = data[key] ? imageUrl(data[key]) : null;
   delete value.imageId;
   const document = previous
     ? await ctx.set(CHARACTERS, previous.id, value)
@@ -156,6 +163,10 @@ export async function save(
   if (ctx.owner) {
     await syncApproval(ctx, document, value.state);
     if (member) await claimMain(ctx, member, document.id);
+  } else if (!previous) {
+    // A member's first character is their 대표 (character_form_update.php:120).
+    const profile = await ctx.get(PROFILES, ctx.member.id);
+    if (profile) await claimMain(ctx, profile, document.id);
   }
   return { document: await presentCharacter(ctx, document, { catalogue }) };
 }
@@ -167,6 +178,19 @@ export async function save(
  */
 export async function remove(ctx, { id } = {}) {
   const { previous } = await startWrite(ctx, CHARACTERS, { id, owners: true });
+  // The original offers 캐릭터 정보 삭제 only before approval (viewer.php:203).
+  if (
+    !ctx.owner &&
+    previous?.data.state === "approved" &&
+    !previous.data.deleted
+  )
+    ctx.fail(
+      "ACCESS_DENIED",
+      "승인된 캐릭터는 삭제할 수 없습니다. 운영자에게 문의해 주세요.",
+      {
+        reason: "approved",
+      },
+    );
   return await deleteCommunityDocument(ctx, CHARACTERS, "characters", previous);
 }
 

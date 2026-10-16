@@ -8,6 +8,7 @@ import {
   backgroundMusic,
   communityAccess,
   scheduled,
+  imageSlotsOf,
   namesOf,
   siteOpen,
 } from "../../modules/shared.js";
@@ -97,6 +98,8 @@ export async function site(ctx) {
     bgm: backgroundMusic(settings.bgm),
     // 기타 항목명 설정: the owner's names for money, experience, rank, 소속, 종족.
     names: namesOf(settings),
+    // 프로필 양식 관리's 두상·흉상·전신: which the sheet asks for and shows.
+    images: imageSlotsOf((await ctx.get(SETTINGS, "profile"))?.data),
     menus,
     banners,
   };

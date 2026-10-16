@@ -2997,6 +2997,65 @@ test("characters choose 소속 and 종족 from the owner's lists once there are 
   assert.equal(kept.document.data.side, "빛");
 });
 
+test("a 소속 or 종족 with a level is picked only by members of that level (si_auth)", async () => {
+  const { ctx, table } = fakeCtx();
+  const data = { name: "하나", type: "main", state: "editing" };
+  table(`${P}sides`).set("a", { name: "빛" });
+  table(`${P}sides`).set("b", { name: "왕실", level: 5 });
+  // A member is level 2 until the owner sets another.
+  assert.equal(
+    await refusal(sheet.save(ctx, { data: { ...data, side: "왕실" } })),
+    "invalid_input",
+  );
+  table(`${P}members`).set("m-1", { level: 5 });
+  const royal = await sheet.save(ctx, { data: { ...data, side: "왕실" } });
+  assert.equal(royal.document.data.side, "왕실");
+});
+
+test("a member's first character is their 대표, with its 두상·흉상·전신, deleted only before approval", async () => {
+  const { ctx, table } = fakeCtx();
+  table(`${P}profiles`).set("m-1", { nick: "앨리스" });
+  const data = {
+    name: "하나",
+    type: "main",
+    state: "editing",
+    image: "https://example.com/thumb.png",
+    head: "https://example.com/head.png",
+    body: "https://example.com/body.png",
+  };
+  const first = await sheet.save(ctx, { data });
+  assert.equal(
+    table(`${P}profiles`).get("m-1").mainCharacter,
+    first.document.id,
+  );
+  assert.deepEqual(
+    ["image", "head", "body"].map((key) => first.document.data[key]),
+    [data.image, data.head, data.body],
+  );
+  // The second does not take the 대표 over.
+  await sheet.save(ctx, { data: { ...data, name: "둘" } });
+  assert.equal(
+    table(`${P}profiles`).get("m-1").mainCharacter,
+    first.document.id,
+  );
+  // A sheet that leaves a picture out keeps it.
+  const { image, head, body, ...rest } = data;
+  const kept = await sheet.save(ctx, {
+    id: first.document.id,
+    revision: first.document.revision,
+    data: rest,
+  });
+  assert.equal(kept.document.data.body, body);
+  table(`${P}characters`).set(first.document.id, {
+    ...table(`${P}characters`).get(first.document.id),
+    state: "approved",
+  });
+  assert.equal(
+    await refusal(sheet.remove(ctx, { id: first.document.id })),
+    "approved",
+  );
+});
+
 test("a members-only board group keeps its boards to its members and moderators", async () => {
   const { ctx, table } = fakeCtx();
   // Only the group's board, not the site's 로그.

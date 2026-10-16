@@ -19,6 +19,7 @@ export async function loadSite() {
   const { design } = site;
   state.siteOpen = site.open !== false;
   state.names = { ...NAME_DEFAULTS, ...site.names };
+  if (Array.isArray(site.images)) state.images = site.images;
   applyItemNames(state.names);
   const root = document.documentElement.style;
   // Without 디자인 사용 the page is plain (plain.css), as the original

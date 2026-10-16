@@ -947,7 +947,6 @@ test("characters are read when their tab is first opened, and registered by memb
         side: "갈색단",
         class: "인간",
         profile: "",
-        image: null,
         type: "main",
         state: "editing",
       },

@@ -3,6 +3,7 @@
 // It imports no other part but names.js, so it is always ready before them.
 
 import { NAME_DEFAULTS } from "./names.js";
+import { imageSlotsOf } from "../_naru/modules/images.js";
 
 const PREFIX = "neo_avocado_";
 export const COLLECTION = {
@@ -59,6 +60,8 @@ export const state = {
   siteOpen: true,
   // 기타 항목명 설정: the owner's names for money, experience, 소속, 종족.
   names: NAME_DEFAULTS,
+  // 캐릭터 이미지 항목: the 두상, 흉상 and 전신 the owner uses.
+  images: imageSlotsOf(),
   // The site owner, signed in here, is staff as moderators are.
   owner: false,
   role: "member",

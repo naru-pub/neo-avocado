@@ -1270,3 +1270,27 @@ body.admin-page {
     max-height: none;
   }
 }
+/* The 흉상 and 전신 on a character's page (member/viewer.skin.php). */
+.viewer-figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+  justify-content: center;
+}
+.viewer-figures:empty {
+  display: none;
+}
+.viewer-figures img {
+  max-width: 100%;
+  height: auto;
+}
+.viewer-figures .viewer-body {
+  max-height: 80vh;
+}
+.viewer-figures .viewer-head {
+  max-height: 320px;
+}
+#characterImages small.help {
+  color: var(--pit);
+}

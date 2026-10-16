@@ -424,6 +424,13 @@ export const models = {
     fields: [
       { key: "name", label: "소속 이름", required: true, max: 40 },
       { key: "image", label: "이미지", type: "url", image: true, max: 2000 },
+      // si_auth, cl_auth: members below this level do not see it to pick.
+      {
+        key: "level",
+        label: "선택 가능 회원 등급 (1~10, 기본 1)",
+        type: "number",
+        default: 1,
+      },
       { key: "order", label: "정렬 순서", type: "number", default: 0 },
     ],
   },
@@ -433,6 +440,13 @@ export const models = {
     fields: [
       { key: "name", label: "종족 이름", required: true, max: 40 },
       { key: "image", label: "이미지", type: "url", image: true, max: 2000 },
+      // si_auth, cl_auth: members below this level do not see it to pick.
+      {
+        key: "level",
+        label: "선택 가능 회원 등급 (1~10, 기본 1)",
+        type: "number",
+        default: 1,
+      },
       { key: "order", label: "정렬 순서", type: "number", default: 0 },
     ],
   },
@@ -592,6 +606,58 @@ export const models = {
     fields: [
       { key: "name", label: "이름", required: true, max: 40 },
       { key: "exp", label: "필요 경험치", type: "number", default: 0 },
+    ],
+  },
+  // adm/character_article_list.php's 기본 항목: the 두상, 흉상 and 전신 a
+  // character sheet asks for, each an upload or an address.
+  character_images: {
+    label: "캐릭터 이미지 항목",
+    help: "캐릭터 신청서의 두상·흉상·전신 이미지를 정합니다. 두상은 목록과 프로필, 흉상과 전신은 캐릭터 보기에 보입니다. 원본의 프로필 양식 관리 기본 항목과 같습니다.",
+    collection: `${P}settings`,
+    fixedId: "profile",
+    fields: [
+      { type: "heading", label: "두상" },
+      {
+        key: "thumbUse",
+        label: "사용",
+        type: "checkbox",
+        default: true,
+      },
+      {
+        key: "thumbUrl",
+        label: "외부 이미지 경로로 등록 (끄면 파일을 올립니다)",
+        type: "checkbox",
+      },
+      { key: "thumbLabel", label: "항목 이름", default: "두상", max: 20 },
+      { key: "thumbHelp", label: "도움말", max: 200 },
+      { type: "heading", label: "흉상" },
+      {
+        key: "headUse",
+        label: "사용",
+        type: "checkbox",
+        default: false,
+      },
+      {
+        key: "headUrl",
+        label: "외부 이미지 경로로 등록 (끄면 파일을 올립니다)",
+        type: "checkbox",
+      },
+      { key: "headLabel", label: "항목 이름", default: "흉상", max: 20 },
+      { key: "headHelp", label: "도움말", max: 200 },
+      { type: "heading", label: "전신" },
+      {
+        key: "bodyUse",
+        label: "사용",
+        type: "checkbox",
+        default: false,
+      },
+      {
+        key: "bodyUrl",
+        label: "외부 이미지 경로로 등록 (끄면 파일을 올립니다)",
+        type: "checkbox",
+      },
+      { key: "bodyLabel", label: "항목 이름", default: "전신", max: 20 },
+      { key: "bodyHelp", label: "도움말", max: 200 },
     ],
   },
   // adm/community_form.php (커뮤니티 설정): one page, in its sections.
@@ -902,6 +968,7 @@ export const menu = [
     label: "캐릭터관리",
     sections: [
       "character_fields",
+      "character_images",
       "character_review",
       "character_state",
       "titles",

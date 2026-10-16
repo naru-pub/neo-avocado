@@ -168,6 +168,13 @@ try {
     200,
   );
 
+  // 캐릭터 이미지 항목: the owner turns the 전신 on, asked as an address.
+  await adminMenu(owner, "캐릭터관리", "캐릭터 이미지 항목");
+  await owner.locator('#adminFields [name="bodyUse"]').check();
+  await owner.locator('#adminFields [name="bodyUrl"]').check();
+  await owner.locator('#adminForm [type="submit"]').click();
+  await owner.locator("#adminStatus", { hasText: "저장했습니다." }).waitFor();
+
   // Alice joins, makes a character with an owner-only field and an image
   // field, and posts a log with a picture and a tag.
   const alice = await person();
@@ -187,8 +194,12 @@ try {
   await alice
     .locator('#characterFields [data-field-upload="art"]')
     .setInputFiles(picture("art.png"));
+  await alice.locator('#characterImages [data-image="body"]').fill(smile);
   await alice.locator('#characterForm [type="submit"]').click();
-  await alice.locator("#myCharacters li", { hasText: "초록" }).waitFor();
+  // Her first character is her 대표 (character_form_update.php:120).
+  await alice
+    .locator("#myCharacters li", { hasText: /^초록 · .* · 대표$/ })
+    .waitFor();
   assert.equal(await alice.locator("#newCharacter").isVisible(), false);
   await menu(alice, "신청자목록");
   await alice
@@ -317,6 +328,13 @@ try {
   await alice
     .locator("#characterSheet h3", { hasText: "경험치 내역" })
     .waitFor();
+  // The 전신 the owner turned on shows on the character's page.
+  assert.equal(
+    await alice
+      .locator("#characterSheet .viewer-figures .viewer-body")
+      .getAttribute("src"),
+    smile,
+  );
   await alice.reload();
   await alice
     .locator("#characterSheet .character-name", { hasText: "초록" })

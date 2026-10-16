@@ -19,6 +19,7 @@ import {
   sectionLabel,
 } from "./admin-model.js";
 import { NAME_DEFAULTS, moneyText, namesOf, rename } from "./app/names.js";
+import { imageSlotsOf } from "./_naru/modules/images.js";
 const $ = (id) => document.getElementById(id);
 let grantTitleId;
 let naru,
@@ -28,6 +29,8 @@ let naru,
   selected = null;
 // 기타 항목명 설정, from 커뮤니티 설정: the menu and labels use them.
 let itemNames = NAME_DEFAULTS;
+// 캐릭터 이미지 항목: the 두상, 흉상 and 전신, named as the owner set them.
+let imageSlots = imageSlotsOf();
 let references = {
   fields: [],
   characters: [],
@@ -621,9 +624,15 @@ async function openCharacterForm(row = null) {
   profile.maxLength = 4000;
   profile.value = row?.data.profile ?? "";
   add("프로필", profile);
-  const image = textInput("image", row?.data.image, 2000);
-  image.placeholder = "https://";
-  add("이미지", image, { key: "image", image: true });
+  // 두상, 흉상, 전신: the owner sets all three, used or not.
+  for (const slot of imageSlots) {
+    const image = textInput(slot.key, row?.data[slot.key], 2000);
+    image.placeholder = "https://";
+    add(`${slot.label}${slot.use ? "" : " (사용 안 함)"}`, image, {
+      key: slot.key,
+      image: true,
+    });
+  }
   const definitions = fields
     .filter((field) => !field.data.deleted)
     .sort((a, b) => (a.data.order ?? 0) - (b.data.order ?? 0));
@@ -686,6 +695,8 @@ $("characterForm").onsubmit = async (event) => {
         class: values.class,
         profile: values.profile,
         image: values.image.trim(),
+        head: values.head.trim(),
+        body: values.body.trim(),
         type: values.type,
         state: values.state,
         fields,
@@ -1065,7 +1076,7 @@ $("adminForm").onsubmit = async (event) => {
     $("adminForm").hidden = true;
     adminRoute([section]);
     $("adminStatus").textContent = "저장했습니다.";
-    if (section === "settings") await loadNames();
+    if (models[section].fixedId) await loadNames();
     await load();
   } catch (error) {
     $("adminFormStatus").textContent = message(error);
@@ -1092,6 +1103,14 @@ async function loadNames() {
       throw error;
     });
   itemNames = namesOf(settings?.data);
+  const profile = await owner
+    .collection("neo_avocado_settings")
+    .get("profile")
+    .catch((error) => {
+      if (error.code === "NOT_FOUND") return null;
+      throw error;
+    });
+  imageSlots = imageSlotsOf(profile?.data);
   renderNav();
 }
 /** Template text in the owner's names; 커뮤니티 설정 keeps the original's. */

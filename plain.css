@@ -15,7 +15,10 @@
   --surface: transparent;
   --rule: #ddd;
   --corner: #222326;
-  font-family: initial;
+  /* The original sets no font: its authors saw the browser's own Korean
+     default on Windows, Gulim then and Malgun Gothic now, not a Mac's
+     AppleMyungjo. */
+  font-family: "Malgun Gothic", "맑은 고딕", "Apple SD Gothic Neo", sans-serif;
 }
 /* The same page in dark (see style.css): light text and lines on near-black,
    links in a light blue, as browsers' own dark pages show them. */

@@ -50,6 +50,17 @@ async function loadChoices() {
   choiceField("characterSide", state.sides);
   choiceField("characterClass", state.classes);
 }
+/**
+ * The names a member may pick (si_auth, cl_auth: up to their level); the
+ * site owner, all.
+ */
+function pickable(rows) {
+  return rows
+    .filter(
+      (row) => state.owner || (Number(row.data.level) || 1) <= state.level,
+    )
+    .map((row) => row.data.name);
+}
 /** The form's field as a select of the list's names, or free text. */
 function choiceField(id, rows) {
   const current = $(id);
@@ -61,14 +72,14 @@ function choiceField(id, rows) {
   else
     field.append(
       new Option("선택 안 함", ""),
-      ...rows.map((row) => new Option(row.data.name, row.data.name)),
+      ...pickable(rows).map((name) => new Option(name, name)),
     );
   current.replaceWith(field);
 }
 /** The edit dialog's field for a list, keeping a value no longer on it. */
 function choiceEdit(name, label, rows, value) {
   if (!rows?.length) return { name, label, value, max: 40 };
-  const names = rows.map((row) => row.data.name);
+  const names = pickable(rows);
   return {
     name,
     label,
@@ -276,7 +287,9 @@ async function characterItem(character) {
   item.querySelector(".author").textContent =
     `오너: ${await nickOf(character.createdBy ?? character.data.owner)}`;
   const remove = item.querySelector(".delete");
-  remove.hidden = !mine(character);
+  // 캐릭터 정보 삭제 only before approval (viewer.php:203); the owner, always.
+  remove.hidden =
+    !mine(character) || (character.data.state === "approved" && !state.owner);
   const change = item.querySelector(".edit");
   // An approved character is edited only while the owner allows editing.
   change.hidden =
@@ -344,6 +357,7 @@ async function characterItem(character) {
             ["submitted", "신청 (수정 완료)"],
           ],
         });
+      fields.push(...imageEdits(current));
       for (const row of catalogue) {
         if (row.data.type === "image")
           fields.push({
@@ -375,7 +389,16 @@ async function characterItem(character) {
         for (const [name, value] of Object.entries(values))
           if (name.startsWith("field:")) {
             if (value) data.fields[name.slice(6)] = value;
-          } else if (!name.startsWith("upload:")) data[name] = value;
+          } else if (name.startsWith("image:")) {
+            data[name.slice(6)] = value.trim() || null;
+          } else if (
+            !name.startsWith("upload:") &&
+            !name.startsWith("imageUpload:")
+          )
+            data[name] = value;
+        for (const [name, file] of Object.entries(values))
+          if (name.startsWith("imageUpload:") && file)
+            data[name.slice(12)] = (await uploadManaged(file)).url;
         // An uploaded file replaces the field's address with its own.
         for (const [name, file] of Object.entries(values))
           if (name.startsWith("upload:") && file) {
@@ -640,7 +663,10 @@ function wireCharacterDetails(item, character) {
     }
     const active = clothes.find((row) => row.id === character.data.outfit);
     let portrait = item.querySelector(".character-image");
-    const src = active?.data.image ?? character.data.image;
+    // With a 전신 in use the outfit is the 전신 (member/viewer.php:76);
+    // without one it stands for the character's picture, as before.
+    const src =
+      (bodyUsed() ? null : active?.data.image) ?? character.data.image;
     if (src && !portrait) {
       portrait = document.createElement("img");
       portrait.className = "character-image";
@@ -758,7 +784,7 @@ function wireCharacterDetails(item, character) {
   details.ontoggle = () => {
     if (details.open && !loaded) run(refresh);
   };
-  if (character.data.outfit)
+  if (character.data.outfit && !bodyUsed())
     run(async () => {
       const clothing = await collection(COLLECTION.wardrobe).get(
         character.data.outfit,
@@ -781,6 +807,81 @@ $("tabCharacters").onclick = () =>
     if (!state.charactersLoaded) await loadCharacters();
   });
 $("characterFilter").onchange = () => run(() => loadCharacters());
+/**
+ * The registration form's pictures (character_form.php's 캐릭터 이미지
+ * 정보): each used one as an upload, or an address where the owner asks.
+ */
+function renderImageInputs() {
+  const labels = state.images
+    .filter((slot) => slot.use)
+    .map((slot) => {
+      const label = document.createElement("label");
+      label.append(slot.label);
+      if (slot.help)
+        label.append(
+          Object.assign(document.createElement("small"), {
+            className: "help",
+            textContent: ` ${slot.help}`,
+          }),
+        );
+      const input = document.createElement("input");
+      input.dataset.image = slot.key;
+      if (slot.url) {
+        input.type = "url";
+        input.placeholder = "https://";
+        input.maxLength = 2000;
+      } else {
+        input.type = "file";
+        input.accept = "image/*";
+      }
+      label.append(input);
+      return label;
+    });
+  $("characterImages").replaceChildren(...labels);
+}
+/** The edit dialog's fields for the used pictures. */
+function imageEdits(current) {
+  return state.images
+    .filter((slot) => slot.use)
+    .map((slot) =>
+      slot.url
+        ? {
+            name: `image:${slot.key}`,
+            label: `${slot.label} (HTTPS 주소)`,
+            value: current.data[slot.key] ?? "",
+            max: 2000,
+          }
+        : {
+            name: `imageUpload:${slot.key}`,
+            label: `${slot.label} 바꾸기 (선택)`,
+            type: "file",
+            accept: "image/*",
+          },
+    );
+}
+const bodyUsed = () =>
+  state.images.some((slot) => slot.slot === "body" && slot.use);
+/** The 흉상 and 전신 on a character's page; the worn outfit is the 전신. */
+function viewerFigures(character, outfit) {
+  const figures = document.createElement("div");
+  figures.className = "viewer-figures";
+  for (const slot of state.images) {
+    if (slot.slot === "thumb" || !slot.use) continue;
+    const src =
+      slot.slot === "body"
+        ? (outfit ?? character.data.body)
+        : character.data.head;
+    if (typeof src !== "string" || !src.startsWith("https://")) continue;
+    figures.append(
+      Object.assign(new Image(), {
+        src,
+        alt: `${character.data.name} ${slot.label}`,
+        className: `viewer-${slot.slot}`,
+      }),
+    );
+  }
+  return figures;
+}
 /** The owner's community settings, read once a page load. */
 let settingsRead;
 const communitySettings = () =>
@@ -794,6 +895,7 @@ const communitySettings = () =>
  */
 export async function openCharacterForm() {
   await Promise.all([loadFieldCatalogue(), loadChoices()]);
+  renderImageInputs();
   $("characterForm").hidden = false;
   $("characterName").focus();
 }
@@ -802,9 +904,16 @@ $("characterForm").onsubmit = (event) => {
   run(async () => {
     const name = $("characterName").value.trim();
     if (!name) return;
-    const file = $("characterImage").files?.[0];
-    const uploaded = file ? await uploadManaged(file) : null;
-    const image = uploaded?.url ?? null;
+    const images = {};
+    for (const input of $("characterImages").querySelectorAll("[data-image]")) {
+      const file = input.files?.[0];
+      const value = file
+        ? (await uploadManaged(file)).url
+        : input.type === "file"
+          ? ""
+          : input.value.trim();
+      if (value) images[input.dataset.image] = value;
+    }
     const fields = Object.fromEntries(
       [...$("characterFields").querySelectorAll("[data-field]")]
         .map((input) => [input.dataset.field, input.value.trim()])
@@ -826,7 +935,7 @@ $("characterForm").onsubmit = (event) => {
           side: $("characterSide").value.trim(),
           class: $("characterClass").value.trim(),
           profile: $("characterProfile").value.trim(),
-          image,
+          ...images,
           type: $("characterType").value,
           state: $("characterState").value,
           ...(Object.keys(fields).length ? { fields } : {}),
@@ -834,6 +943,9 @@ $("characterForm").onsubmit = (event) => {
       },
     );
     state.speakers = null;
+    // A first character became the member's 대표 on the server.
+    if (state.profile && !state.profile.data.mainCharacter)
+      show(await collection(COLLECTION.profiles).get(state.member.id));
     // The lists read it again when next shown; 마이페이지 shows it now.
     state.charactersLoaded = false;
     $("characterForm").reset?.();
@@ -919,5 +1031,18 @@ export async function openCharacter(id) {
     money.append(` ${moneyText(state.names, sheet.balance)}`);
     extras.append(money);
   }
-  $("characterSheet").replaceChildren(item, extras);
+  const outfit =
+    character.data.outfit && bodyUsed()
+      ? await collection(COLLECTION.wardrobe)
+          .get(character.data.outfit)
+          .then((row) =>
+            row.data.character === character.id ? row.data.image : null,
+          )
+          .catch(() => null)
+      : null;
+  $("characterSheet").replaceChildren(
+    viewerFigures(character, outfit),
+    item,
+    extras,
+  );
 }
