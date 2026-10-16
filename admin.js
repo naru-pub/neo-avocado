@@ -139,6 +139,23 @@ async function load({ more = false } = {}) {
   $("adminNew").textContent = model.review ? "새 캐릭터" : "새로 등록";
   $("adminReport").hidden = !model.report;
   $("adminRows").hidden = Boolean(model.report);
+  // One document, as the original's settings pages are one form
+  // (adm/community_form.php): shown at once, filled in, nothing to register.
+  if (model.fixedId) {
+    $("adminNew").hidden = true;
+    $("adminRows").hidden = true;
+    $("adminMore").hidden = true;
+    $("holdingsSearchLabel").hidden = true;
+    const row = await owner
+      .collection(model.collection)
+      .get(model.fixedId)
+      .catch((error) => {
+        if (error.code === "NOT_FOUND") return null;
+        throw error;
+      });
+    if (requestedSection === section) await openForm(row);
+    return;
+  }
   if (model.report) {
     $("adminMore").hidden = true;
     $("holdingsSearchLabel").hidden = true;
@@ -715,7 +732,9 @@ async function openForm(row = null) {
   selected = row;
   const model = models[section];
   adminRoute([section, row ? row.id : (model.fixedId ?? "new")]);
-  $("adminFormTitle").textContent = `${model.label} ${row ? "수정" : "등록"}`;
+  $("adminFormTitle").textContent = model.fixedId
+    ? model.label
+    : `${model.label} ${row ? "수정" : "등록"}`;
   $("adminFormStatus").textContent = "";
   $("adminFields").replaceChildren();
   const fields = [
@@ -760,6 +779,12 @@ async function openForm(row = null) {
         },
       );
   for (const field of fields) {
+    if (field.type === "heading") {
+      const title = document.createElement("h3");
+      title.textContent = field.label;
+      $("adminFields").append(title);
+      continue;
+    }
     const value =
       field.key === "id"
         ? (row?.id ?? model.fixedId ?? field.default)
@@ -1268,10 +1293,7 @@ async function activityView() {
   const board = document.createElement("select");
   board.append(
     new Option("모든 게시판", ""),
-    new Option("로그 (기본)", "default"),
-    ...boards
-      .filter((row) => row.id !== "default")
-      .map((row) => new Option(row.data.name, row.id)),
+    ...boards.map((row) => new Option(row.data.name, row.id)),
   );
   const [chosen, fromDay, toDay] = reportFilters.map((value) =>
     value === "all" ? "" : value,

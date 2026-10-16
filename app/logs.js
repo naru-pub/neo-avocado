@@ -780,29 +780,19 @@ $("logForm").onsubmit = (event) => {
 };
 export async function loadBoards() {
   state.boards = await allDocuments(COLLECTION.boards);
-  $("noPublicBoards").hidden = Boolean(state.member) || state.boards.length > 0;
+  // As in the original, there is nothing to read or post on until the owner
+  // makes a board (adm/board_form.php).
+  $("noPublicBoards").hidden = state.boards.length > 0;
+  $("noPublicBoards").textContent = state.member
+    ? "아직 게시판이 없습니다. 운영자가 게시판을 만들면 글을 쓸 수 있습니다."
+    : "손님에게 공개된 게시판이 없습니다.";
   $("logs").hidden = $("board").hidden = !state.boards.length;
-  if (!state.boards.length && !state.member) {
+  if (!state.boards.length) {
     $("board").replaceChildren();
     $("logForm").hidden = true;
     $("logPages").hidden = true;
     return;
   }
-  // Posts without a board are on "default", which exists until the admin
-  // stores their own, for members.
-  if (state.member && !state.boards.some((row) => row.id === "default"))
-    state.boards.unshift({
-      id: "default",
-      data: {
-        name: "로그",
-        kind: "image",
-        enabled: true,
-        secret: "optional",
-        categories: [],
-        writeLevel: 2,
-        actions: true,
-      },
-    });
   if (!state.boards.some((row) => row.id === state.board))
     state.board = state.boards[0].id;
   // Boards under their group's name (adm/boardgroup_list), ungrouped first.

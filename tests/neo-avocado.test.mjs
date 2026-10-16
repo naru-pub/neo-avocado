@@ -36,6 +36,21 @@ const ME = "member-me";
 
 // 회원 컬렉션을 흉내 내는 가짜 데이터베이스. 이 테스트들이 보는 것은 페이지가
 // 어떤 질의를 보내는지, 그리고 누가 쓴 문서인지(createdBy)를 어떻게 다루는지다.
+const DEFAULT_BOARD = {
+  id: "default",
+  data: {
+    name: "로그",
+    kind: "image",
+    enabled: true,
+    listLevel: 2,
+    readLevel: 2,
+    writeLevel: 2,
+    commentLevel: 2,
+    secret: "optional",
+    categories: [],
+    actions: true,
+  },
+};
 function fakeDatabase(rows = {}) {
   // 페이지(jsdom)에서 만든 객체를 이 프로세스의 것으로 옮겨 적는다. 그래야
   // deepEqual이 내용만 비교한다.
@@ -72,7 +87,11 @@ function fakeDatabase(rows = {}) {
       "neo_avocado_board_groups",
     ].map((name) => [
       name,
-      (rows[name] ?? []).map((row) => ({
+      // A site the owner has given a 로그 board ("default"), as the
+      // original's admin makes boards; tests that need others pass them.
+      (
+        rows[name] ?? (name === "neo_avocado_boards" ? [DEFAULT_BOARD] : [])
+      ).map((row) => ({
         revision: "r1.1",
         createdAt: new Date((clock += 1000)).toISOString(),
         createdBy: null,
@@ -582,7 +601,8 @@ test("the shop exposes later pages and crafts selected inventory through the ser
 });
 
 test("signed out, a visitor reads only the boards the board rule lists, and may sign in", async () => {
-  const database = fakeDatabase();
+  // The board rule gives this visitor no boards.
+  const database = fakeDatabase({ neo_avocado_boards: [] });
   database.signedIn = false;
   const { $, settle, window } = await page(database);
   assert.equal($("welcome").hidden, false);

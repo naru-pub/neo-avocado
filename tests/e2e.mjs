@@ -97,6 +97,19 @@ try {
   await owner.evaluate(async (P) => {
     const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
     const admin = await createNaru().auth.session();
+    // The original installs no boards: the owner makes 로그 too.
+    await admin.collection(`${P}boards`).set("default", {
+      name: "로그",
+      kind: "image",
+      enabled: true,
+      listLevel: 1,
+      readLevel: 1,
+      writeLevel: 2,
+      commentLevel: 2,
+      secret: "optional",
+      categories: [],
+      actions: true,
+    });
     await admin.collection(`${P}boards`).set("free", {
       name: "자유",
       kind: "text",
@@ -548,6 +561,19 @@ try {
     forged: "ACCESS_DENIED",
     theirs: "ACCESS_DENIED",
   });
+
+  // 커뮤니티 설정 is one form, opened at once, in the original's sections
+  // (adm/community_form.php): nothing to register first, even on a new site.
+  await owner.goto(`${origin}/admin/#/settings`);
+  await owner.locator('#adminFields [name="siteOpen"]').waitFor();
+  assert.equal(await owner.locator("#adminNew").isVisible(), false);
+  assert.deepEqual(await owner.locator("#adminFields h3").allTextContents(), [
+    "홈페이지 기본환경 설정",
+    "기능 설정",
+    "쪽지",
+    "상점",
+    "캐릭터 보기",
+  ]);
 
   // The admin page has addresses too: an entry's form, and old links to
   // admin.html carry on to /admin/ with their address.

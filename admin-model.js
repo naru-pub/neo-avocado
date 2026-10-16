@@ -591,11 +591,13 @@ export const models = {
       { key: "exp", label: "필요 경험치", type: "number", default: 0 },
     ],
   },
+  // adm/community_form.php (커뮤니티 설정): one page, in its sections.
   settings: {
-    label: "기본 설정",
-    help: "새 캐릭터가 받을 기본 배분 포인트입니다. 기존 캐릭터 값은 따로 변경하세요.",
+    label: "커뮤니티 설정",
+    help: "커뮤니티 전체에 적용되는 설정입니다: 공개 여부, 캐릭터 생성·수정, 탐색, 쪽지, 상점, 캐릭터 보기. 원본의 커뮤니티 설정과 같습니다.",
     fixedId: "community",
     fields: [
+      { type: "heading", label: "홈페이지 기본환경 설정" },
       // cf_open (adm/community_form.php:45): off, visitors see only the
       // sign-in screen. The original installs it off; here it starts on.
       {
@@ -605,17 +607,11 @@ export const models = {
         default: true,
       },
       {
-        key: "messageCost",
-        label: "쪽지 발송 비용 (회원 한 명당)",
-        type: "number",
-        default: 0,
+        key: "bgm",
+        label: "배경음악 (유튜브 재생목록·영상 주소, 빈칸: 끄기)",
+        max: 300,
       },
-      {
-        key: "messageDailyLimit",
-        label: "회원 한 명이 하루에 보낼 수 있는 쪽지 (0이면 제한 없음)",
-        type: "number",
-        default: 100,
-      },
+      { type: "heading", label: "기능 설정" },
       {
         key: "characterCreation",
         label: "캐릭터 생성 가능",
@@ -635,17 +631,31 @@ export const models = {
         default: 1,
       },
       {
-        key: "initialStatPoints",
-        label: "새 캐릭터 배분 포인트",
-        type: "number",
-        default: 0,
-      },
-      {
         key: "exploreLimit",
         label: "캐릭터별 하루 탐색 횟수 (0: 탐색 끄기, 한국 시간 기준)",
         type: "number",
         default: 0,
       },
+      {
+        key: "initialStatPoints",
+        label: "새 캐릭터 배분 포인트",
+        type: "number",
+        default: 0,
+      },
+      { type: "heading", label: "쪽지" },
+      {
+        key: "messageCost",
+        label: "쪽지 발송 비용 (회원 한 명당)",
+        type: "number",
+        default: 0,
+      },
+      {
+        key: "messageDailyLimit",
+        label: "회원 한 명이 하루에 보낼 수 있는 쪽지 (0이면 제한 없음)",
+        type: "number",
+        default: 100,
+      },
+      { type: "heading", label: "상점" },
       {
         key: "shopCategories",
         label: "상점 분류 (쉼표로 구분, 첫 분류가 기본)",
@@ -665,11 +675,7 @@ export const models = {
         type: "textarea",
         max: 500,
       },
-      {
-        key: "bgm",
-        label: "배경음악 (유튜브 재생목록·영상 주소, 빈칸: 끄기)",
-        max: 300,
-      },
+      { type: "heading", label: "캐릭터 보기" },
       {
         key: "viewerInventory",
         label: "캐릭터 보기에 인벤토리 보이기",
@@ -934,6 +940,8 @@ export function buildRecord(section, values, previous, references) {
     throw new Error("ID는 영문·숫자·밑줄·하이픈 1~64자로 입력하세요.");
   const data = structuredClone(previous?.data ?? {});
   for (const field of model.fields) {
+    // A section title on the form, as the original's settings page has.
+    if (field.type === "heading") continue;
     const value = values[field.key];
     if (field.transient) {
       if (value === undefined && !field.required) continue;

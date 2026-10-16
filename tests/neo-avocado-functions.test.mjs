@@ -123,6 +123,20 @@ function fakeCtx({ now = Date.parse("2030-01-01T03:00:00Z"), roll = 0 } = {}) {
     },
     delete: async (name, id) => table(name).delete(id),
   };
+  // A 로그 board ("default"), as the owner would make one: the original
+  // installs no boards. Tests that need others set them.
+  table(`${P}boards`).set("default", {
+    name: "로그",
+    kind: "image",
+    enabled: true,
+    listLevel: 2,
+    readLevel: 2,
+    writeLevel: 2,
+    commentLevel: 2,
+    secret: "optional",
+    categories: [],
+    actions: true,
+  });
   // Tests give one member several characters; the limit has its own test.
   const settingsTable = table(`${P}settings`);
   const set = settingsTable.set.bind(settingsTable);
@@ -2985,6 +2999,8 @@ test("characters choose 소속 and 종족 from the owner's lists once there are 
 
 test("a members-only board group keeps its boards to its members and moderators", async () => {
   const { ctx, table } = fakeCtx();
+  // Only the group's board, not the site's 로그.
+  table(`${P}boards`).delete("default");
   table(`${P}board_groups`).set("staff", { name: "운영", membersOnly: true });
   table(`${P}boards`).set("plans", {
     name: "계획",

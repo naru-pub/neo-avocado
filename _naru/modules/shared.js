@@ -133,27 +133,14 @@ export function author(row) {
   return row?.createdBy ?? row?.data.owner;
 }
 
+/**
+ * A board the owner made, or null: as in the original, a site has no boards
+ * until its admin creates them (adm/board_form.php). A post without a board
+ * names "default", which is a board only once the owner makes one with that ID.
+ */
 export async function boardOf(ctx, id = "default") {
   const found = typeof id === "string" ? await ctx.get(BOARDS, id) : null;
-  if (found) return withGroup(ctx, found);
-  return id === "default"
-    ? {
-        id,
-        data: {
-          name: "로그",
-          description: "",
-          kind: "image",
-          listLevel: 2,
-          readLevel: 2,
-          writeLevel: 2,
-          commentLevel: 2,
-          secret: "optional",
-          categories: [],
-          enabled: true,
-          actions: true,
-        },
-      }
-    : null;
+  return found ? withGroup(ctx, found) : null;
 }
 
 /**
