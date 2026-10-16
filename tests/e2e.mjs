@@ -729,6 +729,16 @@ try {
     .locator("#adminNav a", { hasText: "소속 관리" })
     .waitFor({ state: "attached" });
 
+  // A settings form's own address opens it, as the form gives it.
+  await owner.goto(`${origin}/admin/#/settings/community`);
+  await owner.reload();
+  await owner.locator('#adminFields [name="moneyName"]').waitFor();
+  assert.equal(
+    await owner.locator('#adminFields [name="moneyName"]').inputValue(),
+    "아보",
+  );
+  assert.equal(await owner.locator("#adminStatus").textContent(), "");
+
   // The admin page has addresses too: an entry's form, and old links to
   // admin.html carry on to /admin/ with their address.
   await owner.goto(`${origin}/admin/#/emoticons/smile`);

@@ -203,7 +203,7 @@ function message(error) {
   return error?.code === "CONFLICT"
     ? "다른 창에서 바뀌었습니다. 다시 불러온 뒤 수정하세요."
     : error?.code === "NOT_FOUND"
-      ? "컬렉션을 먼저 만들거나 삭제된 자료를 확인하세요."
+      ? "자료를 찾을 수 없습니다. 삭제되었는지 확인하세요."
       : error?.code === "ACCESS_DENIED"
         ? "사이트 소유자 권한이 필요합니다."
         : error?.code === "AUTH_REQUIRED"
@@ -267,7 +267,8 @@ async function openAddress() {
     const model = models[section];
     reportFilters = model.report && name === section ? [entry, ...filters] : [];
     await load();
-    if (model.report || name !== section || !entry) return;
+    // A settings form is opened by load(), whatever its address names.
+    if (model.report || model.fixedId || name !== section || !entry) return;
     const open = model.review ? openCharacterForm : openForm;
     if (entry === "new") return open();
     if (!CALLS[section]?.get) return;
