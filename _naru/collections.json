@@ -16,7 +16,8 @@
     },
     "neo_avocado_calls": {
       "read": "admin",
-      "write": "admin"
+      "write": "admin",
+      "indexes": ["to"]
     },
     "neo_avocado_character_fields": {
       "read": "member",
@@ -30,7 +31,8 @@
     "neo_avocado_characters": {
       "read": "member",
       "write": "admin",
-      "rules": "characters"
+      "rules": "characters",
+      "indexes": ["owner", "state"]
     },
     "neo_avocado_classes": {
       "read": "member",
@@ -40,7 +42,8 @@
     "neo_avocado_comments": {
       "read": "world",
       "write": "admin",
-      "rules": "community-board"
+      "rules": "community-board",
+      "indexes": ["logId"]
     },
     "neo_avocado_content": {
       "read": "admin",
@@ -53,7 +56,8 @@
     "neo_avocado_couples": {
       "read": "member",
       "write": "admin",
-      "rules": "shown"
+      "rules": "shown",
+      "indexes": ["first", "second"]
     },
     "neo_avocado_design": {
       "read": "admin",
@@ -74,12 +78,14 @@
     },
     "neo_avocado_history": {
       "read": "admin",
-      "write": "admin"
+      "write": "admin",
+      "indexes": ["owner", "character"]
     },
     "neo_avocado_inventory": {
       "read": "member",
       "write": "admin",
-      "rules": "own"
+      "rules": "own",
+      "indexes": ["owner", "character"]
     },
     "neo_avocado_items": {
       "read": "member",
@@ -93,7 +99,8 @@
     "neo_avocado_logs": {
       "read": "world",
       "write": "admin",
-      "rules": "community-board"
+      "rules": "community-board",
+      "indexes": ["board", "owner"]
     },
     "neo_avocado_members": {
       "read": "admin",
@@ -105,7 +112,8 @@
     },
     "neo_avocado_messages": {
       "read": "admin",
-      "write": "admin"
+      "write": "admin",
+      "indexes": ["to"]
     },
     "neo_avocado_presence": {
       "read": "admin",
