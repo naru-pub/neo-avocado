@@ -491,15 +491,12 @@ function giveItem(owned) {
         approved: true,
       });
       if (!character) return say("그 이름의 캐릭터를 찾을 수 없습니다.");
-      const sent = await mutate("economy/inventory:gift", {
+      await mutate("economy/inventory:gift", {
         inventory: owned.id,
         recipient: character.createdBy ?? character.data.owner,
         character: character.id,
         memo: data.memo,
       });
-      // The recipient's 쪽지 (economy/notices:deliver, while mail is a
-      // collection).
-      if (sent.notice) await state.member.call("economy/notices:deliver");
       say(`${character.data.name}님께 선물이 배송되었습니다.`);
       await loadInventory();
     },

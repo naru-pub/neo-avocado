@@ -17,12 +17,9 @@
      않습니다.
    - 또는 이 저장소를 내 GitHub로 가져가 나루의 GitHub 배포를 사이트 맨 위에
      연결합니다. 이후 푸시할 때마다 사이트가 갱신됩니다.
-2. **컬렉션은 파일과 함께 준비됩니다.** `_naru/collections.json`이 이 사이트에
-   필요한 컬렉션과 권한을 선언하고, 나루는 파일이 올라오는 순간 없는 컬렉션을
-   만듭니다: 남은 것은 관리자만 읽고 쓰는 쪽지뿐입니다. 게시판·캐릭터처럼
-   테이블로 옮긴 것은 `_naru/migrations/`가 만듭니다. 이미 있는 컬렉션의 설정을 바꿔야 하면
-   나루의 데이터베이스 화면에 표시되고, 확인한 뒤 적용하기를 누르면 바뀝니다. 그다음 `admin/`(운영 화면)에서 운영자 로그인을
-   누릅니다.
+2. **테이블은 파일과 함께 준비됩니다.** 사이트의 데이터는 모두 테이블이고,
+   `_naru/migrations/`가 파일이 올라오는 순간 만듭니다. 컬렉션은 쓰지 않습니다.
+   그다음 `admin/`(운영 화면)에서 운영자 로그인을 누릅니다.
 3. **가입 방식을 정합니다.** 나루의 데이터베이스 → 사이트 회원에서 누구나 가입,
    운영자 승인 후 이용, 신규 가입 중단 중 하나를 고르고, 필요하면 이메일을
    인증한 계정만 받도록 합니다.
@@ -208,8 +205,8 @@ NPC 대사와 함께 가격(돈 + 소모 경험치 + 교환 아이템), 설명, 
 있습니다. 계정정보에는 가입일(처음 닉네임을 정한 날)도 보입니다. 우편함은 원본처럼
 상대별 대화로 묶여, 마지막 쪽지와 통수, 안 읽은 쪽지 표시(N)를 보여 주고, 열면
 주고받은 쪽지를 최근 50통부터 차례로 보며(**이전 쪽지 더 보기**로 그 전 50통씩) 그
-자리에서 답장합니다. 상대 목록은 받은 쪽지함과 보낸 쪽지함에서 각각 최근 1,000통으로
-만듭니다(서버 함수 한 번에 읽을 수 있는 양). 메인 화면의 회원 카드는 원본처럼 안 읽은
+자리에서 답장합니다. 상대 목록은 주고받은 쪽지 전부를 상대별로 묶어 만듭니다. 안 읽은
+쪽지와 새 알림은 새로고침 없이 바로 표시됩니다. 메인 화면의 회원 카드는 원본처럼 안 읽은
 쪽지 수, 캐릭터가 없으면 **캐릭터 생성** 버튼(생성 기간이 아니면 그렇다는 안내),
 사이트 운영자에게는 **관리자** 링크를 보여 줍니다. 캐릭터는 원본처럼 마이페이지의 **신규 캐릭터
 등록**으로 만들고, 멤버목록과 신청자목록은 목록만 보여 줍니다. 멤버목록은 원본처럼
@@ -329,20 +326,20 @@ HTML은 [DOMPurify](https://github.com/cure53/DOMPurify)로 정리하여 표시�
 | 게시판·로그·댓글       | `app/logs.js`, `app/posts.js`          | `_naru/queries/community/`, `_naru/mutations/community/`           |
 | 캐릭터                 | `app/characters.js`, `app/couples.js`  | `_naru/queries/characters/`, `_naru/mutations/characters/`         |
 | 상점·인벤토리·제작     | `app/shop.js`                          | `_naru/queries/economy/`, `_naru/mutations/economy/`               |
-| 쪽지                   | `app/messages.js`                      | `_naru/functions/community/messages.js`                            |
+| 쪽지                   | `app/messages.js`                      | `_naru/queries/community/messages.js`, `mutations/community/`      |
 | 알림(호출)             | `app/calls.js`                         | `_naru/queries/community/calls.js`, `mutations/community/calls.js` |
 | 퀘스트·안내 페이지     | `app/content.js`                       | `_naru/queries/content/`                                           |
 | 디자인·메뉴·배너       | `app/site.js`                          | `_naru/queries/content/site.js`                                    |
-| 새 글·알림 실시간 수신 | `app/live.js`                          |                                                                    |
+| 새 글·알림 실시간 수신 | `app/live.js`                          | `_naru/queries/community/inbox.js`, `posts.js`                     |
 | 운영 화면              | `admin/`, `admin.js`, `admin-model.js` | `_naru/mutations/characters/review.js`, `admin/documents.js`       |
 
 `app/core.js`는 모든 화면이 함께 쓰는 것(상태, 오류 표시, 편집 창)입니다.
 
-새 SDK로 옮긴 부분(가입·프로필·접속·사이트 틀·안내 페이지·퀘스트·게시판·캐릭터·상점과
-인벤토리)은 `_naru/migrations/`의 테이블을 쓰고, 화면은 `query`·`mutate`·`subscribe`
+모든 기능이 `_naru/migrations/`의 테이블을 쓰고, 화면은 `query`·`mutate`·`subscribe`
 (`app/core.js`)로 `_naru/queries/`·`_naru/mutations/`를 부릅니다(`docs/port.md`).
 누가 무엇을 읽고 쓰는지는 그 코드가 정합니다(게시판은 `_naru/modules/boards.js`).
-쪽지만 아직 서버 함수(`_naru/functions/`)와 컬렉션입니다.
+새 쪽지와 알림은 `community/inbox:status`를 구독해 받습니다: 나루는 쪽지·호출을 쓰는
+mutation이 끝날 때마다 그 답을 다시 보내 줍니다.
 
 화면은 서버 함수를 `"파일 경로:함수 이름"`으로 부릅니다.
 

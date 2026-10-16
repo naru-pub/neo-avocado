@@ -1,24 +1,17 @@
 // Live updates: new posts, unread messages and notifications as they happen.
 
-import { $, caller, run, state, subscribe } from "./core.js";
+import { $, caller, state, subscribe } from "./core.js";
 
-/** How many messages are unread, as last told. */
-let unreadCount = 0;
 /**
  * The mail notice on the tab, and on the main page's card how many are
- * unread (outlogin.skin.2.php's $memo_not_read). A notice without a count
- * says one message came (messages:sendMessage, a gift's or money's notice).
+ * unread (outlogin.skin.2.php's $memo_not_read).
  */
-export function showUnread(unread, count?) {
+export function showUnread(count: number) {
+  const unread = count > 0;
   $("tabMessages").textContent = unread ? "쪽지 · 새 쪽지" : "쪽지";
-  unreadCount = !unread
-    ? 0
-    : typeof count === "number"
-      ? count
-      : unreadCount + 1;
-  $("cardUnread").textContent = unread ? String(unreadCount) : "";
+  $("cardUnread").textContent = unread ? String(count) : "";
   $("cardUnread").hidden = !unread;
-  $("cardMessages").classList.toggle("point", Boolean(unread));
+  $("cardMessages").classList.toggle("point", unread);
 }
 export function showCalls(unread) {
   $("tabCalls").textContent = unread ? "알림 · 새 알림" : "알림";
@@ -27,13 +20,6 @@ export function showNewPost(id) {
   state.newPost = id;
   $("tabLogs").textContent = id ? "로그 · 새 글" : "로그";
 }
-async function refreshUnread() {
-  const member = state.member;
-  const notice = await caller().call("community/messages:messageStatus");
-  if (state.member !== member) return;
-  showUnread(notice.unread, notice.unreadCount);
-}
-
 /**
  * Keeps the current board's newest post in view (community/posts:latest):
  * a newer one than the page has seen, not the reader's own, shows the 새 글
@@ -65,11 +51,11 @@ export function watchBoard() {
 }
 
 /**
- * Instead of polling, the page subscribes to the board's newest post and
- * the member's unread calls, and hears mail's notices over the live
- * connection (mail's site functions still notify the member). Nothing is
- * replayed there, so mail's status is read again whenever the connection
- * opens or reopens.
+ * Instead of polling, the page subscribes to the board's newest post and,
+ * for a member, to what is new for them (community/inbox:status): Naru
+ * answers again whenever a mutation writes mail, calls or the member's
+ * profile, so a 쪽지, a gift's or money's note, a call or a comment notice
+ * shows as it arrives, and reading them clears the notice on every tab.
  */
 export function listen() {
   // The board's subscription stays while the reader does (watchBoard).
@@ -78,40 +64,16 @@ export function listen() {
   watchBoard();
   const member = state.member;
   if (!member) return;
-  // 알림: the member's calls and comment notices. (Mail's own unread status
-  // takes this in when mail moves to the site's tables.)
-  const calls = subscribe(
-    "community/calls:unread",
+  state.live = subscribe(
+    "community/inbox:status",
     null,
-    ({ unread }) => {
-      if (state.member === member) showCalls(unread === true);
+    ({ messages, calls }) => {
+      if (state.member !== member) return;
+      showUnread(messages);
+      showCalls(calls === true);
     },
     () => {
-      /* The tab keeps its last notice. */
+      /* The tabs keep their last notice. */
     },
   );
-  if (!member?.live) {
-    state.live = calls;
-    return run(refreshUnread);
-  }
-  const connection = member.live({
-    onMessage(message) {
-      if (state.member !== member) return;
-      if (
-        message.type === "notice" &&
-        typeof message.data?.unread === "boolean"
-      )
-        showUnread(message.data.unread, message.data.unreadCount);
-    },
-    onStatus(status) {
-      if (status === "open" && state.member === member && state.profile)
-        run(refreshUnread);
-    },
-  });
-  state.live = {
-    close() {
-      calls.close();
-      connection.close();
-    },
-  };
 }

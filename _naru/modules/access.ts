@@ -1,12 +1,10 @@
 // Who may do what in the community, and the owner's settings, read from the
-// site's tables. Every query and mutation calls these, and so, until their
-// areas are ported, do the old site functions and collection rules (Naru
-// hands them ctx.sql too), so old and new code agree.
+// site's tables. Every query and mutation calls these.
 import type { QueryCtx, SqlValue } from "./naru-types.js";
 
 /**
- * What these helpers use of a call's ctx: who calls and `sql`. A query's or
- * mutation's ctx has it; so do the old site functions' and rules'.
+ * What these helpers use of a call's ctx: who calls and `sql`, as a query's
+ * or mutation's ctx has them.
  */
 export interface SqlCtx {
   readonly member: {
@@ -97,8 +95,8 @@ export async function siteOpen(ctx: SqlCtx): Promise<boolean> {
 }
 
 /**
- * A member's roles: the caller's own from ctx, anyone else's (and a rule's
- * caller, whose ctx carries none) by asking Naru.
+ * A member's roles: the caller's own from ctx, anyone else's by asking
+ * Naru.
  */
 export async function rolesOf(ctx: SqlCtx, id: string): Promise<string[]> {
   if (ctx.member?.id === id && ctx.member.roles?.length)

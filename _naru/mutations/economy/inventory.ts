@@ -24,6 +24,7 @@ import {
   ownCharacter,
 } from "../../modules/characters.js";
 import type { Character } from "../../modules/characters.js";
+import { sendNote } from "../../modules/mail.js";
 import { profileOf } from "../../modules/members.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
@@ -66,9 +67,8 @@ export async function sell(ctx: MutationCtx, args: { inventory?: string }) {
  * member's, or one of the sender's own. The recipient must be an existing
  * member profile, never a browser-supplied owner. The item remembers who
  * sent it and the message (se_ch_name, in_memo), and another member taking
- * 쪽지 hears of it by one, as the original's send_memo: the gift's history
- * keeps the note, which economy/notices:deliver sends while mail is still
- * a collection.
+ * 쪽지 hears of it by one, as the original's send_memo, in the same
+ * transaction.
  */
 export async function gift(
   ctx: MutationCtx,
@@ -134,20 +134,20 @@ export async function gift(
     },
   };
   // The item arrives either way; the note only to a member taking 쪽지.
-  const notice =
-    !self && receiver.data.acceptMessages !== false
-      ? {
-          to: recipient,
-          body: `[ ${senderName}님이 보내신 《${owned.data.name || item.data.name}》 아이템이 도착하였습니다. ] 캐릭터 인벤토리를 확인하세요.`,
-        }
-      : undefined;
+  const notice = !self && receiver.data.acceptMessages !== false;
+  if (notice)
+    await sendNote(
+      ctx,
+      recipient,
+      `[ ${senderName}님이 보내신 《${owned.data.name || item.data.name}》 아이템이 도착하였습니다. ] 캐릭터 인벤토리를 확인하세요.`,
+      { kind: "item", inventory: owned.id },
+    );
   await record(ctx, "gift", {
     item: owned.data.item,
     inventory: owned.id,
     recipient,
     character,
     memo,
-    notice,
   });
   await record(
     ctx,
@@ -161,7 +161,7 @@ export async function gift(
     },
     recipient,
   );
-  return { owned: transferred, notice: Boolean(notice) };
+  return { owned: transferred, notice };
 }
 
 /** Selected materials are checked against the owner's recipe, then consumed atomically. */

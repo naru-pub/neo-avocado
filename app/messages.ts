@@ -2,7 +2,6 @@
 
 import {
   $,
-  caller,
   formatTime,
   nickOf,
   run,
@@ -12,9 +11,9 @@ import {
   route,
   renderPages,
   query,
+  mutate,
 } from "./core.js";
 import { moneyText } from "./names.js";
-import { showUnread } from "./live.js";
 
 $("tabMessages").onclick = () =>
   run(async () => {
@@ -31,7 +30,7 @@ $("messageForm").onsubmit = async (event) => {
     const recipients = await recipientsNamed(
       $<HTMLInputElement>("messageTo").value,
     );
-    await caller().call("community/messages:sendMessage", {
+    await mutate("community/messages:sendMessage", {
       recipients,
       body: $<HTMLTextAreaElement>("messageBody").value,
     });
@@ -79,10 +78,7 @@ async function loadMessageCost() {
  * with their last message, how many, and N while one is unread.
  */
 async function loadMailbox(page = 1) {
-  const result = await caller().call("community/messages:conversations", {
-    page,
-  });
-  showUnread(result.unread, result.unreadCount);
+  const result = await query("community/messages:conversations", { page });
   $("messages").replaceChildren();
   $("messageDetail").hidden = true;
   for (const entry of result.documents) {
@@ -148,7 +144,7 @@ function messageItem(message) {
         )
       )
         return;
-      await caller().call("community/messages:removeMessage", {
+      await mutate("community/messages:removeMessage", {
         id: message.id,
       });
       item.remove();
@@ -161,20 +157,20 @@ function messageItem(message) {
 /**
  * The messages with one member (memo_view.php), oldest first, theirs on one
  * side and the member's on the other, with a reply box below. The newest 50
- * show; 이전 쪽지 더 보기 reads the 50 before the oldest shown.
+ * show; 이전 쪽지 더 보기 reads the 50 before the oldest shown. Opening it
+ * reads what they sent.
  */
 async function openConversation(partner, focus = null) {
-  const result = await caller().call("community/messages:conversation", {
-    partner,
-  });
-  showUnread(result.unread, result.unreadCount);
+  const result = await query("community/messages:conversation", { partner });
+  if (result.unread)
+    await mutate("community/messages:readConversation", { partner });
   const nick = await nickOf(partner);
   const heading = document.createElement("h3");
   heading.textContent = `${nick}님과의 쪽지`;
   const list = document.createElement("ol");
   list.className = "messages-thread";
   list.append(...result.documents.map(messageItem));
-  let oldest = result.documents[0]?.data.sentAt ?? null;
+  let oldest = result.documents[0]?.id ?? null;
   const older = document.createElement("button");
   older.type = "button";
   older.className = "older-messages";
@@ -183,13 +179,12 @@ async function openConversation(partner, focus = null) {
   const readOlder = async () => {
     older.disabled = true;
     try {
-      const page = await caller().call("community/messages:conversation", {
+      const page = await query("community/messages:conversation", {
         partner,
         before: oldest,
       });
-      showUnread(page.unread, page.unreadCount);
       list.prepend(...page.documents.map(messageItem));
-      oldest = page.documents[0]?.data.sentAt ?? oldest;
+      oldest = page.documents[0]?.id ?? oldest;
       older.hidden = !page.more || !page.documents.length;
     } finally {
       older.disabled = false;
@@ -210,7 +205,7 @@ async function openConversation(partner, focus = null) {
   reply.onsubmit = (event) => {
     event.preventDefault?.();
     run(async () => {
-      await caller().call("community/messages:sendMessage", {
+      await mutate("community/messages:sendMessage", {
         recipients: [partner],
         body: text.value,
       });
@@ -248,10 +243,9 @@ export async function writeTo(member) {
 export async function openMessage(id) {
   showTab("messages");
   await loadMessageCost();
-  const { document: message } = await caller().call(
-    "community/messages:readMessage",
-    { id },
-  );
+  const { document: message } = await mutate("community/messages:readMessage", {
+    id,
+  });
   const partner =
     message.data.from === state.member.id ? message.data.to : message.data.from;
   await openConversation(partner, message.id);

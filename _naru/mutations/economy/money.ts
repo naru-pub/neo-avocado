@@ -2,14 +2,14 @@
 import { amount, lacking, names, signedIn } from "../../modules/access.js";
 import { pay, record, wallet } from "../../modules/economy.js";
 import { characterRow } from "../../modules/characters.js";
+import { sendNote } from "../../modules/mail.js";
 import { profileOf, saveWallet, walletOf } from "../../modules/members.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
 /**
  * 화폐관리 (mypage/money/money_update.php): sends money to the member who
  * owns the character named, records it on both sides, and tells them by
- * 쪽지 as the original's send_memo (the history keeps the note, which
- * economy/notices:deliver sends while mail is still a collection). Not to
+ * 쪽지 as the original's send_memo, in the same transaction. Not to
  * oneself.
  */
 export async function send(
@@ -44,19 +44,19 @@ export async function send(
     });
   await saveWallet(ctx, recipient, received);
   // The money arrives either way; the note only to a member taking 쪽지.
-  const notice =
-    to.data.acceptMessages !== false
-      ? {
-          to: recipient,
-          body: `${from?.data.nick ?? ""}님이 ${sent.toLocaleString("ko-KR")}${named.moneyUnit ? ` ${named.moneyUnit}` : ""} 보냈습니다.`,
-        }
-      : undefined;
+  const notice = to.data.acceptMessages !== false;
+  if (notice)
+    await sendNote(
+      ctx,
+      recipient,
+      `${from?.data.nick ?? ""}님이 ${sent.toLocaleString("ko-KR")}${named.moneyUnit ? ` ${named.moneyUnit}` : ""} 보냈습니다.`,
+      { kind: "money", amount: sent },
+    );
   await record(ctx, "moneySent", {
     delta: -sent,
     balance,
     recipient,
     memo: `[보냄] ${to.data.nick}님`,
-    notice,
   });
   await record(
     ctx,
@@ -69,5 +69,5 @@ export async function send(
     },
     recipient,
   );
-  return { balance, nick: to.data.nick, notice: Boolean(notice) };
+  return { balance, nick: to.data.nick, notice };
 }

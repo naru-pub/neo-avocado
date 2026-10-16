@@ -1,9 +1,0 @@
-{
-  "collections": {
-    "neo_avocado_messages": {
-      "read": "admin",
-      "write": "admin",
-      "indexes": ["to", "from"]
-    }
-  }
-}

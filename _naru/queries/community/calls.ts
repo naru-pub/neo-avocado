@@ -100,14 +100,3 @@ export async function callHistory(
     unread: await callsUnread(ctx),
   };
 }
-
-/**
- * Whether the member has calls newer than they last looked, which their
- * pages subscribe to for the 알림 tab's notice. (Until mail is ported, mail
- * keeps its own notice on the live connection; this joins mail's unread
- * status then.)
- */
-export async function unread(ctx: QueryCtx) {
-  if (!ctx.member) return { unread: false };
-  return { unread: await callsUnread(ctx) };
-}

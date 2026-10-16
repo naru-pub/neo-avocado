@@ -4,9 +4,9 @@
 // official record (experience, points, stats, titles, purchases). Mirrors
 // adm/character_article_list.php and mypage/character/character_form*.
 //
-// The queries and mutations in characters/ use it, and so do the old site
-// functions of the areas not ported yet (Naru hands them ctx.sql), so a
-// character reads the same everywhere. A character keeps the shape pages
+// The queries and mutations in characters/ use it, and so do the other
+// areas' (a post's speaker, the shop), so a character reads the same
+// everywhere. A character keeps the shape pages
 // know ({ id, data, revision }), its ID a string of its row's number.
 import {
   communityAccess,

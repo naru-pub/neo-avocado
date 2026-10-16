@@ -323,9 +323,6 @@ $("moneyForm").onsubmit = (event) => {
       character: target.id,
       amount,
     });
-    // The recipient's 쪽지 (economy/notices:deliver, while mail is a
-    // collection).
-    if (result.notice) await state.member.call("economy/notices:deliver");
     $<HTMLFormElement>("moneyForm").reset?.();
     state.shopLoaded = false;
     say(`${result.nick}님께 ${moneyText(state.names, amount)} 보냈습니다.`);

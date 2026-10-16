@@ -1,8 +1,7 @@
 // Boards in the site's tables: the owner's boards and groups, posts and
 // comments as readers see them, and who may do what on a board (the old
 // community-board, boards and shown rules). Every board query and mutation
-// starts from here, and so do the old site functions still reading posts
-// (mail's call notices), so a post reads the same everywhere. Posts and
+// starts from here, so a post reads the same everywhere. Posts and
 // comments keep the shape pages know ({ id, data }); an ID is its row's
 // number as a string.
 import { communityAccess, one, parsed, siteOpen } from "./access.js";

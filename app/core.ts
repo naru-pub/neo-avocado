@@ -32,7 +32,6 @@ const initialState = {
   shopCharacter: null,
   ownCharacters: [],
   historyCursor: null,
-  messageCursor: null,
   admission: null,
   // 사이트공개 (cf_open), from the site's frame: off, visitors see nothing.
   siteOpen: true,
@@ -96,8 +95,9 @@ const MESSAGES = {
   CONFLICT: "다른 곳에서 수정되었습니다. 새로고침 후 다시 수정해 주세요.",
 };
 /**
- * The site's own words for an error: a site function's ctx.fail message
- * (it passes a reason in its details), or the unique field a write hit.
+ * The site's own words for an error: a query's or mutation's ctx.fail
+ * message (it passes a reason in its details), or the unique field a write
+ * hit.
  */
 function siteMessage(error) {
   if (error?.details?.unique === "nick") return "이미 쓰는 닉네임입니다.";
@@ -214,7 +214,7 @@ export async function nickOf(memberId) {
  */
 export const memberSettings = (): Promise<Record<string, any>> =>
   query("content/site:settings").catch(() => ({}));
-/** Who calls site functions: the signed-in member, else the visitor's client. */
+/** Who calls queries and mutations: the signed-in member, else the visitor's client. */
 export const caller = () => state.member ?? state.naru;
 /**
  * Runs one of the site's queries (_naru/queries/<module>.ts) as whoever is

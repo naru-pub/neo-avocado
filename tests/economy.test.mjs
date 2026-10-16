@@ -6,10 +6,9 @@
 // sends, and the owner's bridge to the tables.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { sqlOf, testSite } from "./sql-ctx.mjs";
+import { testSite } from "./sql-ctx.mjs";
 import { onDisplay } from "../dist/_naru/modules/display.js";
 import { GACHA_COST } from "../dist/_naru/modules/economy.js";
-import { deliver } from "../dist/_naru/functions/economy/notices.js";
 
 const M1 = { member: "m-1" };
 const M2 = { member: "m-2" };
@@ -544,7 +543,7 @@ test("gifts go to a character, another member's or one's own, keep who sent them
     (await site.query("economy/inventory:inventory", null, M2)).inventory,
     [{ id: mine, data: expected }],
   );
-  // Both sides' history; the recipient's 쪽지 waits in the sender's.
+  // Both sides' history.
   assert.deepEqual(
     site
       .rows("SELECT owner, kind FROM history ORDER BY id")
@@ -554,30 +553,21 @@ test("gifts go to a character, another member's or one's own, keep who sent them
       ["m-2", "giftReceived"],
     ],
   );
-  // The sender's page has it sent (send_memo), as a gift, not a 쪽지 they
-  // wrote; once.
-  const messages = [];
-  const live = [];
-  const ctx = {
-    member: { id: "m-1" },
-    now: site.now + 1,
-    sql: sqlOf(site.db),
-    fail: (code, message, details) => {
-      throw Object.assign(new Error(message), { code, details });
-    },
-    add: async (collection, data) => messages.push({ collection, data }),
-    notify: (member, data) => live.push({ member, data }),
-  };
-  assert.deepEqual(await deliver(ctx), { sent: 1 });
-  assert.equal(messages.length, 1);
-  assert.equal(messages[0].collection, `${P}messages`);
-  assert.equal(messages[0].data.to, "m-2");
-  assert.equal(messages[0].data.gift, true);
-  assert.equal(messages[0].data.sentAt, site.now);
-  assert.match(messages[0].data.body, /나님이 보내신 《씨앗》 아이템이 도착/);
-  assert.deepEqual(live, [{ member: "m-2", data: { unread: true } }]);
-  assert.deepEqual(await deliver(ctx), { sent: 0 });
-  assert.equal(await refusal(deliver({ ...ctx, member: null })), "sign_in");
+  // The recipient's 쪽지 (send_memo) is written with it, as a gift's note,
+  // not a 쪽지 the sender wrote; their inbox status counts it.
+  const notes = () => site.rows("SELECT * FROM messages ORDER BY id");
+  assert.equal(notes().length, 1);
+  const [note] = notes();
+  assert.deepEqual(
+    [note.sender, note.recipient, note.sent_at, note.read_at],
+    ["m-1", "m-2", site.now, null],
+  );
+  assert.deepEqual(JSON.parse(note.gift), { kind: "item", inventory: mine });
+  assert.match(note.body, /나님이 보내신 《씨앗》 아이템이 도착/);
+  assert.deepEqual(await site.query("community/inbox:status", null, M2), {
+    messages: 1,
+    calls: false,
+  });
   assert.equal(
     await refusal(
       mutate(site, "inventory:gift", { inventory: mine, recipient: "m-2" }),
@@ -598,7 +588,7 @@ test("gifts go to a character, another member's or one's own, keep who sent them
   });
   assert.equal(kept.notice, false);
   assert.equal(held(site, again).character_id, Number(five));
-  assert.deepEqual(await deliver(ctx), { sent: 0 });
+  assert.equal(notes().length, 1);
   // Not one the owner keeps from gifts, nor to a member taking no 쪽지.
   item(site, "bound", { giftable: 0 });
   assert.equal(
@@ -616,7 +606,7 @@ test("gifts go to a character, another member's or one's own, keep who sent them
     recipient: "m-2",
   });
   assert.equal(quiet.notice, false);
-  assert.deepEqual(await deliver(ctx), { sent: 0 });
+  assert.equal(notes().length, 1);
 });
 
 test("crafting rejects duplicate, foreign, extra and insufficient materials before spending", async () => {
@@ -874,13 +864,17 @@ test("화폐관리 sends money to a character's owner, records both sides and te
     notice: true,
   });
   assert.equal(balanceOf(site, "m-2"), 1000);
-  const [sent] = site.rows(
-    "SELECT details FROM history WHERE kind = 'moneySent'",
+  // The 쪽지 is written with it.
+  const [note] = site.rows("SELECT * FROM messages");
+  assert.deepEqual(
+    [note.sender, note.recipient, note.body, JSON.parse(note.gift)],
+    [
+      "m-1",
+      "m-2",
+      "나님이 1,000 아보 보냈습니다.",
+      { kind: "money", amount: 1000 },
+    ],
   );
-  assert.deepEqual(JSON.parse(sent.details).notice, {
-    to: "m-2",
-    body: "나님이 1,000 아보 보냈습니다.",
-  });
   // The ledger shows money only: 획득 and 사용.
   insert(site, "history", { owner: "m-1", kind: "exp", at: 1, exp_delta: 5 });
   const ledger = (who) => site.query("economy/money:ledger", null, who);
@@ -896,6 +890,7 @@ test("화폐관리 sends money to a character's owner, records both sides and te
   // A member taking no 쪽지 gets the money without one.
   site.run("UPDATE profiles SET accept_messages = 0 WHERE member = 'm-2'");
   assert.equal((await send(theirs, 1)).notice, false);
+  assert.equal(count(site, "messages"), 1);
 });
 
 test("the owner grants money and experience to one or all, and ranks add their bonus points", async () => {

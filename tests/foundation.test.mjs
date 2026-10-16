@@ -4,7 +4,7 @@
 // frame and pages, profiles and the owner's temporary document bridge.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { testSite } from "./sql-ctx.mjs";
+import { sqlOf, testSite } from "./sql-ctx.mjs";
 
 const M1 = { member: "m-1" };
 const M2 = { member: "m-2" };
@@ -500,6 +500,17 @@ test("the site's frame names money and experience and says what a character's pa
     closet: false,
   });
   assert.equal(images[2].use, true);
+  // Refusals and pages say them in the owner's names.
+  const { lacking, subject } = await import("../dist/_naru/modules/access.js");
+  const ctx = { member: null, sql: sqlOf(site.db, "query") };
+  assert.equal(await lacking(ctx, "moneyName"), "골드가 모자랍니다.");
+  assert.equal(subject("포인트"), "포인트가");
+  assert.equal(subject("경험"), "경험이");
+  assert.equal(subject("XP"), "XP이(가)");
+  assert.equal(
+    pages.rename("경험치·아보 지급 (네오 아보카도)", names),
+    "포인트·골드 지급 (네오 아보카도)",
+  );
 });
 
 test("content read levels and publication protect both metadata and selected bodies", async () => {
@@ -748,10 +759,7 @@ test("the owner reads and writes the foundation's tables as the admin's document
     await refusal(get("neo_avocado_settings", "community", M1)),
     "owner_only",
   );
-  assert.equal(
-    await refusal(get("neo_avocado_messages", "x")),
-    "invalid_input",
-  );
+  assert.equal(await refusal(get("neo_avocado_nothing", "x")), "invalid_input");
   assert.equal(await get("neo_avocado_settings", "community"), null);
   const saved = await set({
     collection: "neo_avocado_settings",

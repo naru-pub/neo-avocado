@@ -676,11 +676,13 @@ test("[[nick]] calls and comment notices reach members who can read the post", a
   assert.equal(rows[0].preview, "세번째 ??? 아보 안녕");
   assert.equal(rows[0].comment_id, Number(said.id));
   // What the called see: a new call on their 알림 tab.
-  assert.deepEqual(await site.query("community/calls:unread", null, M3), {
-    unread: true,
+  assert.deepEqual(await site.query("community/inbox:status", null, M3), {
+    messages: 0,
+    calls: true,
   });
-  assert.deepEqual(await site.query("community/calls:unread", null, M1), {
-    unread: false,
+  assert.deepEqual(await site.query("community/inbox:status", null, M1), {
+    messages: 0,
+    calls: false,
   });
   // Editing calls only the newly named members.
   await reply(site, {
@@ -722,7 +724,7 @@ test("call history shows readable posts newest first and is cleared once seen", 
   await reply(site, { data: { logId: later, text: "[[아보]]" } }, M2);
   site.run("UPDATE posts SET secret = 1 WHERE id = ?", Number(later));
   assert.equal(
-    (await site.query("community/calls:unread", null, M1)).unread,
+    (await site.query("community/inbox:status", null, M1)).calls,
     true,
   );
   const history = await site.query("community/calls:callHistory", {}, M1);
@@ -745,7 +747,7 @@ test("call history shows readable posts newest first and is cleared once seen", 
     null,
   );
   assert.equal(
-    (await site.query("community/calls:unread", null, M1)).unread,
+    (await site.query("community/inbox:status", null, M1)).calls,
     false,
   );
   assert.equal(

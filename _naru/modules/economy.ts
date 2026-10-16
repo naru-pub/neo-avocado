@@ -1,7 +1,7 @@
 // The economy in the site's tables: the shop's items, what members hold, the
 // recipes, the draw tables, and the money a member pays with. The queries
-// and mutations in economy/ use it, and so do the old site functions of the
-// areas not ported yet (a post's 탐색, 조합 and items, its rewards), so an
+// and mutations in economy/ use it, and so do the boards' (a post's 탐색,
+// 조합 and items, its rewards), so an
 // item reads the same everywhere. Items and held copies keep the shape pages
 // know ({ id, data }); a held copy's ID is its row's number as a string.
 import {

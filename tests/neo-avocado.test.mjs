@@ -201,19 +201,6 @@ function fakeDatabase(rows = {}) {
     async signOut() {
       calls.push({ method: "signOut" });
     },
-    // One live connection at a time; tests deliver messages and statuses.
-    live(options) {
-      calls.push({ method: "live", topics: options.topics });
-      const connection = {
-        options,
-        closed: false,
-        close() {
-          connection.closed = true;
-        },
-      };
-      database.live = connection;
-      return connection;
-    },
     // Queries and mutations: the foundation's answer from the same store
     // (profiles, settings, wallets), the rest as a function call.
     query: (name, args = null) => member.call(name, args, "query"),
@@ -557,7 +544,7 @@ function fakeDatabase(rows = {}) {
             };
           },
           "community/posts:latest": () => ({ id: null }),
-          "community/calls:unread": () => ({ unread: false }),
+          "community/inbox:status": () => ({ messages: 0, calls: false }),
         };
       };
       if (name === "community/membership:membership") {
@@ -672,12 +659,6 @@ function fakeDatabase(rows = {}) {
     query: (name, args = null) => visitor.call(name, args, "query"),
     mutate: (name, args = null) => visitor.call(name, args, "mutate"),
     subscribe: (...args) => member.subscribe(...args),
-    live(options) {
-      visitor.calls.push({ name: "live", args: { topics: options.topics } });
-      const connection = { options, close() {} };
-      database.live = connection;
-      return connection;
-    },
   };
   const database = {
     calls,
@@ -686,10 +667,7 @@ function fakeDatabase(rows = {}) {
     visitor,
     subscriptions: [],
     signedIn: true,
-    answer: (name) =>
-      name === "community/messages:messageStatus"
-        ? { unread: false }
-        : refuse("empty"),
+    answer: () => refuse("empty"),
   };
   return database;
 }
@@ -722,11 +700,9 @@ async function page(database) {
     ["createNaru"],
     function () {
       this.setExport("createNaru", () => ({
-        call: database.visitor.call,
         query: database.visitor.query,
         mutate: database.visitor.mutate,
         subscribe: database.visitor.subscribe,
-        live: database.visitor.live,
         members: {
           session: async () => (database.signedIn ? database.member : null),
           signIn: async () => database.calls.push({ method: "signIn" }),
@@ -1132,7 +1108,6 @@ test("site_main's placeholders become the slides, the member card and links, as 
           body: '<p>{{VISUAL_SLIDE}}</p><div id="x">{{OUTLOGIN}} {{MYPAGE}} {{LOGIN}} {{UNKNOWN}}{{TWITTER}}</div><img src="x.png" onerror="alert(1)"><p title="{{LOGIN}}">text</p>',
         },
       };
-    if (name === "community/messages:messageStatus") return { unread: false };
     return refuse("empty");
   };
   const { $, settle } = await page(database);
@@ -1175,23 +1150,19 @@ test("the main page's card counts unread mail, offers 캐릭터 생성 and links
     neo_avocado_settings: [{ id: "community", data: {} }],
   });
   database.owner = true;
-  database.answer = (name) =>
-    name === "community/messages:messageStatus"
-      ? { unread: true, unreadCount: 3 }
-      : refuse("empty");
+  database.answer = () => refuse("empty");
   const { $, settle } = await page(database);
   await settle();
-  database.live.options.onStatus("open");
-  await settle();
+  const inbox = database.subscriptions.find(
+    (subscription) => subscription.name === "community/inbox:status",
+  );
+  inbox.onResult({ messages: 3, calls: false });
   assert.equal($("cardUnread").textContent, "3");
   assert.equal($("cardUnread").hidden, false);
-  // A notice without a count is one more message.
-  database.live.options.onMessage({ type: "notice", data: { unread: true } });
+  // Naru answers again as mail arrives or is read.
+  inbox.onResult({ messages: 4, calls: false });
   assert.equal($("cardUnread").textContent, "4");
-  database.live.options.onMessage({
-    type: "notice",
-    data: { unread: false, unreadCount: 0 },
-  });
+  inbox.onResult({ messages: 0, calls: false });
   assert.equal($("cardUnread").hidden, true);
   assert.equal($("cardAdmin").hidden, false);
   assert.equal($("cardDescript").textContent, "보유중인 캐릭터가 없습니다.");
@@ -1206,10 +1177,7 @@ test("the intro shows one picture at a time on arriving home, then not for a day
   database.site = {
     banners: [slide("a", "intro"), slide("b", "intro"), slide("main")],
   };
-  database.answer = (name) =>
-    name === "community/messages:messageStatus"
-      ? { unread: false }
-      : refuse("empty");
+  database.answer = () => refuse("empty");
   const { $, settle, window } = await page(database);
   await settle();
   assert.equal($("intro").open, true);
@@ -1752,38 +1720,27 @@ test("post details and comment lists use native reads while deletion stays trans
   assert.equal(deletion.id, "long");
 });
 
-test("unread notices arrive over the live connection, and new posts by subscription, instead of a poll", async () => {
+test("unread mail and calls, and new posts, arrive by subscription instead of a poll", async () => {
   const database = fakeDatabase({ [PROFILES]: [me] });
-  const unread = { value: false };
-  database.answer = (name) =>
-    name === "community/messages:messageStatus"
-      ? { unread: unread.value }
-      : refuse("empty");
+  database.answer = () => refuse("empty");
   const { $, settle } = await page(database);
   await settle();
-  const live = database.live;
-  // Mail's notices only: the board's newest post is a subscription.
-  assert.equal(live.options.topics, undefined);
   const latest = database.subscriptions.find(
     (subscription) => subscription.name === "community/posts:latest",
   );
   assert.deepEqual(latest.args, { board: "default" });
-  const statusReads = () =>
-    database.calls.filter(
-      (call) => call.name === "community/messages:messageStatus",
-    ).length;
-  assert.equal(statusReads(), 0);
-  // Nothing is replayed, so every (re)open reads the status once.
-  unread.value = true;
-  live.options.onStatus("open");
-  await settle();
-  assert.equal(statusReads(), 1);
+  // One subscription says what is new for the member: mail and calls.
+  const inboxes = database.subscriptions.filter(
+    (subscription) => subscription.name === "community/inbox:status",
+  );
+  assert.equal(inboxes.length, 1);
+  const [inbox] = inboxes;
+  inbox.onResult({ messages: 1, calls: false });
   assert.equal($("tabMessages").textContent, "쪽지 · 새 쪽지");
-  live.options.onMessage({ type: "notice", data: { unread: false } });
+  assert.equal($("tabCalls").textContent, "알림");
+  inbox.onResult({ messages: 0, calls: true });
   assert.equal($("tabMessages").textContent, "쪽지");
-  live.options.onMessage({ type: "notice", data: { unread: true } });
-  assert.equal($("tabMessages").textContent, "쪽지 · 새 쪽지");
-  assert.equal(statusReads(), 1);
+  assert.equal($("tabCalls").textContent, "알림 · 새 알림");
   // A newer post than the page has seen marks the tab until reloaded.
   latest.onResult({ id: null });
   assert.equal($("tabLogs").textContent, "로그");
@@ -1799,7 +1756,7 @@ test("unread notices arrive over the live connection, and new posts by subscript
   assert.equal($("tabLogs").textContent, "로그");
   $("signOut").onclick();
   await settle();
-  assert.equal(live.closed, true);
+  assert.equal(inbox.closed, true);
   assert.equal(latest.closed, true);
 });
 
@@ -1810,7 +1767,6 @@ test("a function's ctx.fail reason and a duplicate nickname are shown as the pag
   database.answer = (name) => {
     if (name === "economy/shop:gacha")
       throw failure("CONFLICT", "아보가 모자랍니다.", { reason: "not_enough" });
-    if (name === "community/messages:messageStatus") return { unread: false };
     refuse("empty");
   };
   const { $, settle, submit } = await page(database);
@@ -2049,38 +2005,36 @@ test("calls arrive by subscription and the history marks them seen", async () =>
     ],
   });
   database.answer = (name) =>
-    name === "community/messages:messageStatus"
-      ? { unread: false, calls: true }
-      : name === "community/calls:callHistory"
-        ? {
-            unread: true,
-            nextCursor: null,
-            documents: [
-              {
-                id: "call-1",
-                data: {
-                  kind: "call",
-                  nick: "남",
-                  speaker: "남의 것",
-                  logId: "log-9",
-                  preview: "나",
-                  at: Date.parse("2030-01-01T00:00:00Z"),
-                  unread: true,
-                },
+    name === "community/calls:callHistory"
+      ? {
+          unread: true,
+          nextCursor: null,
+          documents: [
+            {
+              id: "call-1",
+              data: {
+                kind: "call",
+                nick: "남",
+                speaker: "남의 것",
+                logId: "log-9",
+                preview: "나",
+                at: Date.parse("2030-01-01T00:00:00Z"),
+                unread: true,
               },
-            ],
-          }
-        : null;
+            },
+          ],
+        }
+      : null;
   const { $, settle } = await page(database);
   await settle();
   const unread = database.subscriptions.find(
-    (subscription) => subscription.name === "community/calls:unread",
+    (subscription) => subscription.name === "community/inbox:status",
   );
-  unread.onResult({ unread: true });
+  unread.onResult({ messages: 0, calls: true });
   assert.equal($("tabCalls").textContent, "알림 · 새 알림");
-  unread.onResult({ unread: false });
+  unread.onResult({ messages: 0, calls: false });
   assert.equal($("tabCalls").textContent, "알림");
-  unread.onResult({ unread: true });
+  unread.onResult({ messages: 0, calls: true });
   $("tabCalls").onclick();
   await settle();
   await settle();
@@ -2350,9 +2304,7 @@ test("on a Q&A board the comment form is the staff's alone", async () => {
     database.answer = (name) =>
       name === "community/posts:questions"
         ? { documents: [question], nextCursor: null, totalCount: 1 }
-        : name === "community/messages:messageStatus"
-          ? { unread: false }
-          : refuse("empty");
+        : refuse("empty");
     const { $, settle } = await page(database);
     for (let n = 0; n < 6; n += 1) await settle();
     const log = $("logs").querySelector(".log");

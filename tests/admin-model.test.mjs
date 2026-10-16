@@ -529,17 +529,13 @@ test("profile field definitions validate codes and options; explore misses store
   assert.equal(models.character_review.collection, "neo_avocado_characters");
 });
 
-test("the site declares every collection it uses, and sign-in asks for them", async () => {
+test("every collection the site names is a table, and the sign-in asks for none", async () => {
   const { scopes } = await import("../dist/admin-model.js");
   const { readdir, readFile } = await import("node:fs/promises");
   const files = ["app.js", "admin.js"];
   for (const name of await readdir(new URL("../dist/app", import.meta.url)))
     files.push(`app/${name}`);
-  for (const dir of [
-    "_naru/modules",
-    "_naru/functions/community",
-    "_naru/functions/economy",
-  ])
+  for (const dir of ["_naru/modules"])
     for (const name of await readdir(
       new URL(`../dist/${dir}`, import.meta.url),
     ))
@@ -565,19 +561,11 @@ test("the site declares every collection it uses, and sign-in asks for them", as
     scopes.filter((name) => mappingOf(name)),
     [],
   );
-  const { collections } = JSON.parse(
-    await readFile(
-      new URL("../dist/_naru/collections.json", import.meta.url),
-      "utf8",
-    ),
+  // No collection is left: the site declares none (no collections.json).
+  assert.deepEqual(scopes, []);
+  await assert.rejects(
+    readFile(new URL("../dist/_naru/collections.json", import.meta.url)),
   );
-  assert.deepEqual(Object.keys(collections).sort(), [...scopes].sort());
-  for (const [name, entry] of Object.entries(collections))
-    assert.ok(entry.read && entry.write, `${name} states read and write`);
-  // Mail is the one collection left; it has no rules.
-  assert.deepEqual(Object.keys(collections), ["neo_avocado_messages"]);
-  // Profiles are a table, nicknames unique there.
-  assert.equal(collections.neo_avocado_profiles, undefined);
 });
 
 test("a character's experience change is recorded for its owner in the same batch", () => {

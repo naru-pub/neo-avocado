@@ -166,7 +166,7 @@ export async function resolveCalls(
  * Records calls and the comment notice after a post or comment is saved. A
  * member who could not read the post is not told about it; the post's
  * author may turn comment notices off (profile.commentAlerts). Members see
- * them by subscribing to community/calls:unread.
+ * them by subscribing to community/inbox:status.
  */
 export async function deliverCalls(
   ctx: Ctx,

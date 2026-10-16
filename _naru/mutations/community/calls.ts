@@ -5,7 +5,7 @@ import type { MutationCtx } from "../../modules/naru-types.js";
 
 /**
  * Marks every call seen (close_call.php); the member's other pages, which
- * subscribe to community/calls:unread, clear their notice too.
+ * subscribe to community/inbox:status, clear their notice too.
  */
 export async function seeCalls(ctx: MutationCtx) {
   const member = signedIn(ctx);
