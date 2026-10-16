@@ -113,7 +113,7 @@
     "neo_avocado_messages": {
       "read": "admin",
       "write": "admin",
-      "indexes": ["to"]
+      "indexes": ["to", "from"]
     },
     "neo_avocado_presence": {
       "read": "admin",

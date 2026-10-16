@@ -437,6 +437,17 @@ let lastPlace = null;
  * Tells Naru where the visitor is (현재접속자, 접속자집계): on the first
  * page, then when they move on, at most every 30 seconds. Never polls.
  */
+/** True the first time this browser asks on a Korean day, then false until the next. */
+function firstVisitToday() {
+  const day = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+  try {
+    if (localStorage.getItem("neo-avocado-visited") === day) return false;
+    localStorage.setItem("neo-avocado-visited", day);
+  } catch {
+    /* Storage blocked: count once a page load instead. */
+  }
+  return true;
+}
 export function noteVisit(place) {
   if (!state.naru) return;
   const now = Date.now();
@@ -444,6 +455,11 @@ export function noteVisit(place) {
   const first = !lastVisit;
   lastVisit = now;
   lastPlace = place;
+  // A browser counts as a visitor once a Korean day, as the original's
+  // ck_visit_ip cookie (bbs/visit_insert.inc.php) lets it; a visitor who is
+  // not signed in reports nothing else, so browsing costs them no calls.
+  const visit = firstVisitToday();
+  if (!visit && !state.member) return;
   let domain = "";
   try {
     const from = first && document.referrer ? new URL(document.referrer) : null;
@@ -454,8 +470,9 @@ export function noteVisit(place) {
   caller()
     .call("community/presence:seen", {
       where: place,
-      ...client(),
-      ...(domain ? { domain } : {}),
+      ...(visit
+        ? { visit: true, ...client(), ...(domain ? { domain } : {}) }
+        : {}),
     })
     .catch(() => {
       /* A visit not counted is no reason to bother anyone. */
@@ -562,28 +579,46 @@ export function showTab(name) {
 
 /**
  * Numbered pages over a list the SDK reads by cursor (lib's get_paging,
- * pg_wrap): each page's cursor is kept as it is reached, and a page not yet
- * reached is walked to from the last one known. `read(after)` reads a page.
+ * pg_wrap). `read(after, { includeTotal, size, cursorOnly })` reads `size`
+ * documents from `after`. The total comes with the first page, and a page
+ * past it is empty, as the original's LIMIT past the end shows nothing. A
+ * page not reached yet is skipped to from the nearest known one, up to 100
+ * documents a read, keeping only the cursor.
  */
-export function cursorPages(read) {
-  const starts = [null];
+export function cursorPages(read, size) {
+  const starts = new Map([[1, null]]);
+  // As many pages as one read of at most 100 documents covers.
+  const skip = Math.max(1, Math.floor(100 / size));
   return {
     total: null,
     reset() {
-      starts.length = 1;
+      starts.clear();
+      starts.set(1, null);
       this.total = null;
     },
     async page(number) {
-      while (starts.length < number) {
-        const step = await read(starts[starts.length - 1], false);
-        if (!step.nextCursor) break;
-        starts.push(step.nextCursor);
+      if (this.total === null) {
+        const first = await read(null, { includeTotal: true, size });
+        this.total = first.totalCount ?? null;
+        if (first.nextCursor) starts.set(2, first.nextCursor);
+        if (number <= 1) return { ...first, number: 1 };
       }
-      const at = Math.min(number, starts.length);
-      const page = await read(starts[at - 1], this.total === null);
-      if (page.totalCount !== undefined) this.total = page.totalCount;
-      if (page.nextCursor && starts.length === at) starts.push(page.nextCursor);
-      return { ...page, number: at };
+      const pages = Math.max(1, Math.ceil((this.total ?? 0) / size));
+      if (number > pages) return { documents: [], nextCursor: null, number };
+      let known = Math.max(...[...starts.keys()].filter((at) => at <= number));
+      while (known < number) {
+        const jump = Math.min(skip, number - known);
+        const step = await read(starts.get(known), {
+          size: size * jump,
+          cursorOnly: true,
+        });
+        if (!step.nextCursor) break;
+        known += jump;
+        starts.set(known, step.nextCursor);
+      }
+      const page = await read(starts.get(known), { size });
+      if (page.nextCursor) starts.set(known + 1, page.nextCursor);
+      return { ...page, number: known };
     },
   };
 }

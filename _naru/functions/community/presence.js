@@ -1,8 +1,9 @@
 import { PRESENCE, PROFILES, VISITS, kstDay } from "../../modules/shared.js";
 
 // Who is here (bbs/current_connect.php) and each day's visits
-// (adm/visit_list.php and its breakdowns). Pages report a visit when they
-// open and as the visitor moves between pages; nothing polls.
+// (adm/visit_list.php and its breakdowns). A browser counts once a Korean
+// day, as the original's visit cookie does; a member also reports where they
+// are as they move between pages. Nothing polls.
 export const visitors = ["seen", "online"];
 export const readOnly = ["online"];
 
@@ -31,7 +32,7 @@ const site = (counts = {}, value) =>
  */
 export async function seen(
   ctx,
-  { where = "", browser, os, device, domain } = {},
+  { where = "", visit = false, browser, os, device, domain } = {},
 ) {
   if (typeof where !== "string" || where.length > 40)
     ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
@@ -46,6 +47,8 @@ export async function seen(
         at: ctx.now,
       });
   }
+  // Only a visit is counted; a member's other calls only say where they are.
+  if (visit !== true) return null;
   const day = kstDay(ctx.now);
   const hour = String(new Date(ctx.now + 9 * 3600 * 1000).getUTCHours());
   const visits = (await ctx.get(VISITS, day))?.data ?? {};

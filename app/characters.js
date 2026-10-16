@@ -80,16 +80,16 @@ function choiceEdit(name, label, rows, value) {
   };
 }
 /** The characters the filter picks, newest first, by numbered pages. */
-const characterPages = cursorPages((after, includeTotal) => {
+const characterPages = cursorPages((after, { includeTotal, size }) => {
   const where = CHARACTER_FILTERS[$("characterFilter").value];
   return collection(COLLECTION.characters).list({
     sort: [[{ metadata: "createdAt" }, "desc"]],
-    size: CHARACTER_PAGE,
+    size,
     after,
     ...(includeTotal ? { includeTotal: true } : {}),
     ...(where ? { where } : {}),
   });
-});
+}, CHARACTER_PAGE);
 export async function loadCharacters({ page: number = 1 } = {}) {
   const where = CHARACTER_FILTERS[$("characterFilter").value];
   if (number === 1) characterPages.reset();

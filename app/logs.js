@@ -50,19 +50,26 @@ export const kindOf = (id = state.board) =>
   state.boards.find((row) => row.id === (id ?? "default"))?.data.kind ??
   "image";
 /** The current board's posts, ten to a page (or those with the tag). */
-const logPages = cursorPages((after, includeTotal) =>
-  // A Q&A board shows others' secret questions locked, so a function reads it.
-  kindOf() === "qna" && !state.tag
-    ? caller().call("community/posts:questions", { board: state.board, after })
-    : collection(COLLECTION.logs).list({
-        filter: { board: state.board },
-        // Notices (bo_notice) sort first: true above false and unset.
-        sort: LOG_SORT,
-        size: LOG_PAGE,
-        after,
-        ...(includeTotal ? { includeTotal: true } : {}),
-        ...(state.tag ? tagOptions(state.tag) : {}),
-      }),
+const logPages = cursorPages(
+  (after, { includeTotal, size, cursorOnly }) =>
+    // A Q&A board shows others' secret questions locked, so a function reads it.
+    kindOf() === "qna" && !state.tag
+      ? caller().call("community/posts:questions", {
+          board: state.board,
+          after,
+          size,
+          ...(cursorOnly ? { cursorOnly: true } : {}),
+        })
+      : collection(COLLECTION.logs).list({
+          filter: { board: state.board },
+          // Notices (bo_notice) sort first: true above false and unset.
+          sort: LOG_SORT,
+          size,
+          after,
+          ...(includeTotal ? { includeTotal: true } : {}),
+          ...(state.tag ? tagOptions(state.tag) : {}),
+        }),
+  LOG_PAGE,
 );
 /** Shows a page of the board: the first unless `page` is given. */
 /**

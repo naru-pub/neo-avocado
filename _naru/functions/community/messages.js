@@ -2,6 +2,7 @@ import {
   PROFILES,
   SETTINGS,
   MESSAGES,
+  kstDay,
   record,
   text,
   amount,
@@ -11,6 +12,9 @@ import {
 import { callsUnread } from "../../modules/roleplay.js";
 
 export const readOnly = ["mailbox", "messageStatus"];
+
+/** Messages a member may send a day unless the owner sets another number. */
+const MESSAGE_DAILY_LIMIT = 100;
 
 /** Message storage is admin-only; every public operation checks the parties. */
 export async function sendMessage(ctx, { recipients, body } = {}) {
@@ -40,10 +44,28 @@ export async function sendMessage(ctx, { recipients, body } = {}) {
         reason: "no_recipient",
       });
   }
-  const cost = amount(
-    (await ctx.get(SETTINGS, "community"))?.data.messageCost ?? 0,
-    "Message cost",
-  );
+  const settings = (await ctx.get(SETTINGS, "community"))?.data ?? {};
+  // The original makes each send pass a captcha (bbs/memo_form_update.php);
+  // here a member may send so many a day (0: no limit), so one account
+  // cannot fill the site's storage with mail.
+  const daily = Number.isSafeInteger(settings.messageDailyLimit)
+    ? settings.messageDailyLimit
+    : MESSAGE_DAILY_LIMIT;
+  if (daily > 0) {
+    const sent = await ctx.count(MESSAGES, {
+      filter: { from: ctx.member.id },
+      where: {
+        gte: ["sentAt", Date.parse(`${kstDay(ctx.now)}T00:00:00+09:00`)],
+      },
+    });
+    if (sent + recipients.length > daily)
+      ctx.fail(
+        "RATE_LIMITED",
+        `쪽지는 하루에 ${daily}통까지 보낼 수 있습니다. 오늘 ${Math.max(0, daily - sent)}통 남았습니다.`,
+        { reason: "daily_limit", remaining: Math.max(0, daily - sent) },
+      );
+  }
+  const cost = amount(settings.messageCost ?? 0, "Message cost");
   const total = cost * recipients.length;
   if (!Number.isSafeInteger(total)) throw new Error("Message cost overflow.");
   const current = await wallet(ctx);

@@ -548,6 +548,30 @@ test("private mail checks parties for listing, reading and deletion and marks on
   assert.equal(await refusal(readMessage(ctx, { id })), "message_not_found");
 });
 
+test("a member sends so many messages a day, as the original's captcha slowed them", async () => {
+  const { ctx, table } = fakeCtx();
+  for (const id of ["m-1", "m-2", "m-3", "m-4"])
+    table(`${P}profiles`).set(id, { nick: id });
+  table(`${P}settings`).set("community", { messageDailyLimit: 3 });
+  await sendMessage(ctx, { recipients: ["m-2", "m-3"], body: "hi" });
+  const refused = await sendMessage(ctx, {
+    recipients: ["m-2", "m-4"],
+    body: "again",
+  }).catch((error) => error);
+  assert.equal(refused.code, "RATE_LIMITED");
+  assert.deepEqual(refused.details, { reason: "daily_limit", remaining: 1 });
+  await sendMessage(ctx, { recipients: ["m-4"], body: "last" });
+  // The next Korean day starts again.
+  ctx.now += 24 * 3600 * 1000;
+  await sendMessage(ctx, {
+    recipients: ["m-2", "m-3", "m-4"],
+    body: "new day",
+  });
+  // 0 lifts the limit.
+  table(`${P}settings`).set("community", { messageDailyLimit: 0 });
+  await sendMessage(ctx, { recipients: ["m-2"], body: "no limit" });
+});
+
 test("bulk mail validates every recipient before charging and bounds previews and pagination", async () => {
   const { ctx, table } = fakeCtx();
   table(`${P}profiles`).set("m-1", { nick: "Sender" });
@@ -2634,6 +2658,7 @@ test("visits record where members are and count each Korean day, bounded", async
   await join(ctx, { nick: "앨리스" });
   await presence.seen(ctx, {
     where: "상점",
+    visit: true,
     browser: "Chrome",
     os: "macOS",
     device: "PC",
@@ -2641,6 +2666,7 @@ test("visits record where members are and count each Korean day, bounded", async
   });
   await presence.seen(ctx, {
     where: "로그",
+    visit: true,
     browser: "<script>",
     os: "x".repeat(500),
   });
@@ -2657,8 +2683,13 @@ test("visits record where members are and count each Korean day, bounded", async
   assert.deepEqual(day.browsers, { Chrome: 1, 기타: 1 });
   assert.deepEqual(day.os, { macOS: 1, 기타: 1 });
   assert.deepEqual(day.domains, { "twitter.com": 1 });
+  // Moving between pages says where a member is, and counts nothing.
+  await presence.seen(ctx, { where: "마이페이지" });
+  assert.equal(table(`${P}presence`).get("m-1").where, "마이페이지");
+  assert.equal(table(`${P}visits`).get("2030-01-02").total, 2);
   // A visitor counts as a guest and is not listed as here.
   ctx.member = null;
+  await presence.seen(ctx, { visit: true });
   await presence.seen(ctx, {});
   assert.equal(table(`${P}visits`).get("2030-01-02").guests, 1);
   assert.deepEqual(
@@ -2850,6 +2881,65 @@ test("a board search finds titles, text and nicknames among posts the reader may
     await refusal(posts.search(ctx, { board: "free", text: " " })),
     "invalid_input",
   );
+});
+
+test("long questions and search results stay within a function's 64 KiB result", async () => {
+  const { ctx, table } = fakeCtx();
+  for (const [id, kind] of [
+    ["qna", "qna"],
+    ["free", "text"],
+  ])
+    table(`${P}boards`).set(id, {
+      name: id,
+      kind,
+      listLevel: 1,
+      readLevel: 1,
+    });
+  const long = `<p>${"가".repeat(11_000)}</p>`;
+  for (let n = 0; n < 12; n++) {
+    table(`${P}logs`).set(`q${n}`, {
+      board: "qna",
+      owner: "m-1",
+      title: `질문 ${n}`,
+      format: "html",
+      text: long,
+    });
+    table(`${P}logs`).set(`f${n}`, {
+      board: "free",
+      owner: "m-1",
+      title: `바다 ${n}`,
+      format: "html",
+      text: long,
+    });
+  }
+  const size = (value) => Buffer.byteLength(JSON.stringify(value));
+  // Whole questions, as many as fit; the next page starts where it stopped.
+  const seen = [];
+  let after = null;
+  do {
+    const page = await posts.questions(ctx, { board: "qna", after });
+    assert.ok(size(page) < 64 * 1024, `${size(page)} bytes`);
+    assert.ok(page.documents.length >= 1);
+    assert.ok(page.documents.every((row) => row.data.text === long));
+    seen.push(...page.documents.map((row) => row.id));
+    after = page.nextCursor;
+  } while (after);
+  assert.equal(new Set(seen).size, 12);
+  // Skipping ahead keeps only the cursor.
+  assert.deepEqual(
+    Object.keys(
+      await posts.questions(ctx, { board: "qna", size: 20, cursorOnly: true }),
+    ),
+    ["nextCursor"],
+  );
+  // Search shows 300 characters of each, as the original's search does.
+  const found = await posts.search(ctx, { board: "free", text: "바다" });
+  assert.equal(found.documents.length, 12);
+  assert.ok(size(found) < 64 * 1024);
+  for (const row of found.documents) {
+    assert.ok(row.data.text.length <= 301);
+    assert.equal(row.data.truncated, true);
+  }
 });
 
 test("a Q&A board lets guests ask in secret and open their question with its password", async () => {

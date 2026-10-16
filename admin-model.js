@@ -603,6 +603,12 @@ export const models = {
         default: 0,
       },
       {
+        key: "messageDailyLimit",
+        label: "회원 한 명이 하루에 보낼 수 있는 쪽지 (0이면 제한 없음)",
+        type: "number",
+        default: 100,
+      },
+      {
         key: "initialStatPoints",
         label: "새 캐릭터 배분 포인트",
         type: "number",

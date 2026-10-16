@@ -264,7 +264,7 @@ export async function search(
       ? [{ in: ["character", ids(characters)] }]
       : []),
   ];
-  return ctx.list(LOGS, {
+  const page = await ctx.list(LOGS, {
     filter: { board: id },
     where: {
       all: [{ ne: ["deleted", true] }, readable(ctx, access), { any: found }],
@@ -273,6 +273,24 @@ export async function search(
     size: 20,
     after,
   });
+  // 300 characters of each, as the original's search shows (bbs/search.php):
+  // whole posts could pass a function's 64 KiB result.
+  return { ...page, documents: page.documents.map(excerpt) };
+}
+
+/** A post with its text cut to 300 plain characters; 더 보기 reads the rest. */
+function excerpt(row) {
+  const raw = row.data.text ?? "";
+  if (raw.length <= 300 && row.data.format !== "html") return row;
+  const text = plainText(raw);
+  return {
+    ...row,
+    data: {
+      ...row.data,
+      text: text.length > 300 ? `${text.slice(0, 300)}…` : text,
+      truncated: true,
+    },
+  };
 }
 
 /** readableBy as a predicate: for a list, which posts the caller may read. */
@@ -294,34 +312,61 @@ const readable = (ctx, access) =>
  * whole, except others' secret questions, which show locked until opened
  * with their password.
  */
-export async function questions(ctx, { board: id, after = null } = {}) {
+export async function questions(
+  ctx,
+  { board: id, after = null, size = 10, cursorOnly = false } = {},
+) {
   const { access, board } = await readableBoard(ctx, id);
   if (board.data.kind !== "qna")
     ctx.fail("INVALID_REQUEST", "질문 게시판이 아닙니다.", {
       reason: "invalid_input",
     });
-  if (after !== null && typeof after !== "string")
+  if (
+    (after !== null && typeof after !== "string") ||
+    !Number.isInteger(size) ||
+    size < 1 ||
+    size > 100
+  )
     ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
       reason: "invalid_input",
     });
   const query = { filter: { board: id }, where: { ne: ["deleted", true] } };
-  const page = await ctx.list(LOGS, {
-    ...query,
-    sort: [
-      ["notice", "desc"],
-      [{ metadata: "createdAt" }, "desc"],
-    ],
-    size: 10,
-    after,
-  });
-  const total = await ctx.count(LOGS, query);
+  const list = (count) =>
+    ctx.list(LOGS, {
+      ...query,
+      sort: [
+        ["notice", "desc"],
+        [{ metadata: "createdAt" }, "desc"],
+      ],
+      size: count,
+      after,
+    });
+  // Skipping to a later page: only where it starts.
+  if (cursorOnly) return { nextCursor: (await list(size)).nextCursor };
+  const page = await list(Math.min(size, 10));
   const visible = readableBy(ctx, access);
+  const documents = page.documents.map((row) =>
+    visible(row) ? row : locked(row),
+  );
+  // Whole questions, as the qna skin lists them, as many as fit in a
+  // function's result; the rest start the next page.
+  let fits = 0;
+  let bytes = 0;
+  for (const row of documents) {
+    bytes += JSON.stringify(row).length * 3;
+    if (fits && bytes > RESULT_BUDGET) break;
+    fits += 1;
+  }
   return {
-    documents: page.documents.map((row) => (visible(row) ? row : locked(row))),
-    nextCursor: page.nextCursor,
-    totalCount: total,
+    documents: documents.slice(0, fits),
+    nextCursor:
+      fits < documents.length ? (await list(fits)).nextCursor : page.nextCursor,
+    totalCount: await ctx.count(LOGS, query),
   };
 }
+
+/** Bytes of documents a list function returns: under the 64 KiB result. */
+const RESULT_BUDGET = 56 * 1024;
 
 /**
  * Opens a guest's secret question with the password it was asked with
