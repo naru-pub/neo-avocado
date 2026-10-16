@@ -469,6 +469,11 @@ test("editing keeps image and metadata and sends the revision, while a conflict 
       title: "",
       category: "",
       secret: false,
+      // The mmb skin's options, as the edit dialog shows them.
+      membersOnly: false,
+      adult: false,
+      wide: false,
+      fold: false,
     },
     options: { condition: { revision: "r1.1" } },
   });
@@ -867,6 +872,11 @@ test("a log uploads its picture, then saves the stored URL", async () => {
         title: "",
         category: "",
         secret: false,
+        wide: false,
+        fold: false,
+        membersOnly: false,
+        adult: false,
+        anonymous: false,
       },
     },
   ]);

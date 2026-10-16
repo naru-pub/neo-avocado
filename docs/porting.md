@@ -66,8 +66,8 @@ workflows to the port, and says what was left out and why.
   use the read budget.
 - **SDK 1.1.0 features used**: platform membership (approval, bans), member and
   visitor site functions, collection rules with `present`/`queryable`, document
-  secrets (guest passwords as hashes nobody can read), managed uploads (a
-  deleted post or character takes its pictures with it), `has` for `#tag`
+  secrets (guest passwords as hashes nobody can read), managed uploads (the
+  media library marks those no document names; nothing is deleted unasked), `has` for `#tag`
   search, live notices and broadcasts, and naru-dev for local testing.
 - **Membership**: Naru decides who may sign in (open, approval or closed, and
   bans, set on Naru's 데이터베이스 → 사이트 회원 page); the community's own

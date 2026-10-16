@@ -313,7 +313,7 @@ async function load({ more = false } = {}) {
           await load();
           return;
         }
-        // Uploads the row used go with it (managed uploads).
+        // Its uploads stay; Naru's media library marks them 참조 없음.
         await owner
           .collection(model.collection)
           .delete(row.id, { condition: { revision: row.revision } });
@@ -976,8 +976,8 @@ async function openForm(row = null) {
 /**
  * A file picker beside an image field: saving uploads the file to Naru Media
  * and its address takes the field's place (quest images: joins the list). The
- * upload is managed, so Naru keeps it while a document names it and deletes it
- * once none does: replacing an image or deleting the row frees its file.
+ * upload is managed: Naru's media library marks it 참조 없음 once no document
+ * names it, for the owner to delete if it is not linked elsewhere.
  */
 function imageUpload(field, value) {
   const upload = document.createElement("label");

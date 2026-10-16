@@ -32,6 +32,29 @@ export async function nativeRead(
   const rule = declared.rules ? await ruleOf(declared.rules) : null;
   const filter = { ...options.filter };
   const where = options.where ?? null;
+  // As Naru: a rule that presents documents allows queries only on its
+  // queryable fields (edge/src/rules.ts queriedFields).
+  if (rule?.present) {
+    const asked = new Set(Object.keys(filter));
+    const walk = (node) => {
+      if (!node || typeof node !== "object" || Array.isArray(node)) return;
+      for (const [operator, value] of Object.entries(node))
+        if (operator === "all" || operator === "any") value.forEach(walk);
+        else if (Array.isArray(value) && typeof value[0] === "string")
+          asked.add(value[0]);
+    };
+    walk(where);
+    for (const item of options.sort ?? [])
+      if (typeof item[0] === "string") asked.add(item[0]);
+    const refused = [...asked].filter(
+      (field) => !(rule.queryable ?? []).includes(field),
+    );
+    if (refused.length)
+      throw denied(
+        "INVALID_REQUEST",
+        `${collection} can be queried only on ${(rule.queryable ?? []).join(", ")}; not ${refused.join(", ")}.`,
+      );
+  }
   const scope = rule
     ? await rule.readable(ctx, {
         collection,

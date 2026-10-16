@@ -122,10 +122,11 @@ export async function deliverCalls(
     recipients,
     notifyAuthor = false,
     guest = null,
+    anonymous = false,
   },
 ) {
   const from = ctx.member?.id ?? null;
-  const me = from ? await ctx.get(PROFILES, from) : null;
+  const me = from && !anonymous ? await ctx.get(PROFILES, from) : null;
   const preview = text.replace(/\[\[|\]\]/g, "").slice(0, 100);
   const sent = new Set();
   const send = async (to, kind) => {
@@ -133,11 +134,14 @@ export async function deliverCalls(
     if (!(await logReadable(ctx, log, await communityAccess(ctx, to), to)))
       return;
     sent.add(to);
+    // A 익명 writer's notice names no one (view_comment.skin.php: 익명의 누군가).
     await ctx.add(CALLS, {
       to,
-      from,
-      nick: me?.data.nick ?? (guest ? `${guest} (손님)` : ""),
-      speaker: speaker?.name ?? null,
+      from: anonymous ? null : from,
+      nick: anonymous
+        ? "익명의 누군가"
+        : (me?.data.nick ?? (guest ? `${guest} (손님)` : "")),
+      speaker: anonymous ? null : (speaker?.name ?? null),
       kind,
       board: log.data.board ?? "default",
       logId: log.id,

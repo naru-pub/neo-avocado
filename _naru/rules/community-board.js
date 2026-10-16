@@ -8,6 +8,7 @@ import {
   boardAllowed,
   communityAccess,
   logReadable,
+  presentPost,
 } from "../modules/shared.js";
 const LOGS = `${PREFIX}logs`;
 const COMMENTS = `${PREFIX}comments`;
@@ -56,6 +57,18 @@ export async function readable(ctx, { collection, operation, id, filter }) {
           : { ne: ["secret", true] },
     ],
   };
+}
+// What a reader may filter and sort on. Not `owner`: asking which posts a
+// member wrote would find their 익명 ones; 로그내역 reads through posts:mine.
+export const queryable = ["board", "number", "notice", "tags", "logId"];
+
+/** 멤버공개 locked for visitors, 익명 without its author (presentPost). */
+export async function present(ctx, { document }) {
+  const actor = await communityAccess(ctx);
+  return presentPost(document, {
+    member: ctx.member?.id ?? null,
+    staff: actor.role === "moderator",
+  });
 }
 const text = (value, max) => typeof value === "string" && value.length <= max;
 const image = (value) =>

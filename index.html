@@ -347,11 +347,43 @@
           /></label>
           <p id="logHtmlHint" class="hint" hidden>
             이 게시판은 HTML 본문을 씁니다. 스크립트·폼·스타일은 표시되지
-            않습니다. 올린 그림은 본문에서 쓰는 동안 남고, 지우면 함께
-            정리됩니다.
+            않습니다. 올린 그림은 나루 미디어에 남고, 본문에서 지우면 미디어
+            라이브러리에 &lsquo;참조 없음&rsquo;으로 표시됩니다.
           </p>
           <p class="hint member-only">[[닉네임]]으로 회원을 호출합니다.</p>
           <label><input id="logDice" type="checkbox" /> 주사위</label>
+          <!-- mmb/write.skin.php's Option: 멤버공개 and 19금 for members,
+               리플창 아래로 and 로그접기, and 익명 where the board allows. -->
+          <fieldset id="logOptions" class="log-options">
+            <label class="member-only"
+              ><input id="logMembersOnly" type="checkbox" /> 멤버공개</label
+            >
+            <label class="member-only"
+              ><input id="logAdult" type="checkbox" /> 19금</label
+            >
+            <label><input id="logWide" type="checkbox" /> 리플창 아래로</label>
+            <label
+              ><input id="logFold" type="checkbox" /> 로그접기
+              <span id="logFoldHint"></span
+            ></label>
+            <label id="logAnonymousLabel" class="member-only" hidden
+              ><input id="logAnonymous" type="checkbox" /> 익명</label
+            >
+          </fieldset>
+          <!-- 조합 (ITEM 1–3) and item use are a post's, where the board
+               allows actions (write.skin.php:230-300). -->
+          <div id="logActions" class="member-only" hidden>
+            <label
+              >조합 재료 (1~3개, 고르지 않으면 조합하지 않음)
+              <select id="logMaterials" multiple size="4"></select
+            ></label>
+            <label
+              >사용할 아이템
+              <select id="logItem">
+                <option value="">사용할 아이템 없음</option>
+              </select></label
+            >
+          </div>
           <button type="submit">올리기</button>
         </form>
         <form id="boardSearch" class="board-search" role="search">
@@ -541,7 +573,12 @@
               >
                 <option value="">닉네임으로</option>
               </select>
-              <input class="comment-text" maxlength="500" placeholder="댓글" />
+              <textarea
+                class="comment-text"
+                maxlength="2000"
+                rows="2"
+                placeholder="댓글"
+              ></textarea>
               <label class="dice-option">
                 <input class="comment-dice" type="checkbox" /> 주사위
               </label>
@@ -549,18 +586,15 @@
                 <select class="comment-action" aria-label="행동">
                   <option value="">일반 행동</option>
                   <option value="explore">탐색</option>
-                  <option value="combine">조합</option>
                 </select>
-                <select
-                  class="comment-materials"
-                  aria-label="조합 재료 (최대 3개)"
-                  multiple
-                  hidden
-                ></select>
                 <select class="comment-item" aria-label="사용할 아이템">
                   <option value="">사용할 아이템 없음</option>
                 </select>
               </span>
+              <label class="comment-anonymous member-only" hidden
+                ><input class="comment-anonymous-check" type="checkbox" />
+                익명</label
+              >
               <button type="submit">달기</button>
             </form>
           </details>

@@ -62,22 +62,17 @@ $("newCharacter").onclick = () => run(() => openCharacterForm());
  * board at a time.
  */
 async function loadMyLogs() {
-  const pages = await Promise.all(
-    state.boards.map((board) =>
-      collection(COLLECTION.logs)
-        .list({
-          filter: { board: board.id },
-          where: { eq: ["owner", state.member.id] },
-          sort: [[{ metadata: "createdAt" }, "desc"]],
-          size: 20,
-        })
-        .then((page) => page.documents.map((log) => ({ board, log }))),
-    ),
-  );
-  const posts = pages
-    .flat()
-    .sort((a, b) => (a.log.createdAt < b.log.createdAt ? 1 : -1))
-    .slice(0, 30);
+  // Read by a function: readers may not ask for posts by author, which
+  // would find others' 익명 ones.
+  const { documents } = await caller().call("community/posts:mine");
+  const posts = documents
+    .map((log) => ({
+      board: state.boards.find(
+        (row) => row.id === (log.data.board ?? "default"),
+      ),
+      log,
+    }))
+    .filter((post) => post.board);
   $("myLogs").replaceChildren(
     ...posts.map(({ board, log }) => {
       const item = document.createElement("li");

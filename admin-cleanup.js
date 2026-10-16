@@ -14,7 +14,8 @@ export const cleanupTargets = (kind, id) => {
 };
 /**
  * One revision-guarded, bounded batch; retrying never discards money/history.
- * Uploads the deleted documents used go with them (managed uploads).
+ * Uploads the deleted documents used stay, marked 참조 없음 in Naru's media
+ * library.
  */
 export async function resumeCleanup(owner, kind, id) {
   const collection = `${P}${kind}`;

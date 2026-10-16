@@ -1294,3 +1294,58 @@ body.admin-page {
 #characterImages small.help {
   color: var(--pit);
 }
+/* The mmb skin's options (list.log.skin.php, mmb/style.css): 리플창 아래로
+   puts the comments under the picture, 로그접기 folds it at 470px with
+   OPEN, and 19금 covers it until clicked. */
+.log-options {
+  border: 0;
+  padding: 0;
+  margin: 6px 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.log-options label {
+  display: inline;
+  margin: 0;
+}
+.log.card.wide {
+  display: block;
+  height: auto;
+}
+.log-picture.foldable {
+  position: relative;
+}
+.log-picture.folded .log-image {
+  max-height: 470px;
+  object-fit: cover;
+  object-position: top;
+}
+.log-picture .open-log {
+  display: block;
+  width: 100%;
+}
+.log-picture.blind {
+  position: relative;
+}
+.log-picture.blind .log-image {
+  max-height: 250px;
+  object-fit: cover;
+  filter: blur(24px);
+}
+.log-picture .remove-blind {
+  display: block;
+  width: 100%;
+  white-space: normal;
+}
+.adult-mark {
+  color: #d3393d;
+}
+.comment-text {
+  width: 100%;
+  font: inherit;
+}
+.comment-time {
+  color: var(--quiet);
+  font-size: 0.85em;
+}

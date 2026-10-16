@@ -181,6 +181,41 @@ export function author(row) {
 }
 
 /**
+ * A post or comment as its reader sees it (skin/board/mmb/list.log.skin.php).
+ * 멤버공개 shows a visitor only its number, category and marks; 익명 hides
+ * who wrote it from all but its author and the staff, as "익명의 누군가".
+ * The rule's present() and the functions that return others' posts use it.
+ */
+export function presentPost(row, { member = null, staff = false } = {}) {
+  let data = row.data;
+  if (
+    data.anonymous === true &&
+    !staff &&
+    !(member && author(row) === member)
+  ) {
+    data = { ...data, owner: null };
+    for (const key of ["speaker", "character", "guest"]) delete data[key];
+  }
+  if (data.membersOnly === true && !member && !staff) {
+    const shown = {};
+    for (const key of [
+      "logId",
+      "board",
+      "number",
+      "category",
+      "notice",
+      "membersOnly",
+      "adult",
+      "anonymous",
+      "settlement",
+    ])
+      if (Object.hasOwn(data, key)) shown[key] = data[key];
+    data = { ...shown, owner: null, locked: true };
+  }
+  return data;
+}
+
+/**
  * A board the owner made, or null: as in the original, a site has no boards
  * until its admin creates them (adm/board_form.php). A post without a board
  * names "default", which is a board only once the owner makes one with that ID.
@@ -230,6 +265,8 @@ export async function logReadable(ctx, row, access, viewer = ctx.member?.id) {
   return (
     row &&
     !row.data.deleted &&
+    // 멤버공개 (wr_secret): a visitor sees it locked, with no comments.
+    (row.data.membersOnly !== true || Boolean(viewer)) &&
     boardAllowed(
       await boardOf(ctx, row.data.board ?? "default"),
       access,
@@ -242,8 +279,8 @@ export async function logReadable(ctx, row, access, viewer = ctx.member?.id) {
 /**
  * Deletes a log with its comments, or a character with what hangs off it, in
  * bounded batches: a call writes at most 25 times, so a large one is marked
- * deleted and finished by calling again. Uploads the documents used go with
- * them (managed uploads), so nothing else needs releasing.
+ * deleted and finished by calling again. Their uploads stay: Naru deletes
+ * media only when asked, and marks unreferenced uploads in its library.
  */
 export async function deleteCommunityDocument(ctx, collection, kind, row) {
   if (!["logs", "characters"].includes(kind)) {

@@ -14,7 +14,6 @@ import {
   deliverCalls,
   explore,
   useInPost,
-  combineInPost,
 } from "../../modules/roleplay.js";
 
 // Comments under posts. Visitors comment where the board lets level 1, as
@@ -22,11 +21,14 @@ import {
 export const visitors = ["write", "remove"];
 
 const COMMENTS = `${PREFIX}comments`;
+/** A comment's length: a textarea, as the original's (mmb/write_comment.php). */
+const COMMENT_LIMIT = 2000;
 
 /**
  * Writes a new comment (no `id`, with `data.logId`) or edits one. A new
- * comment may roll dice, explore, combine or use an item, as the board
- * allows; it tells the post's author and anyone it calls.
+ * comment may roll dice, explore or use an item, as the board allows
+ * (mmb/write_comment.php: 조합 is a post's); it tells the post's author and
+ * anyone it calls.
  */
 export async function write(
   ctx,
@@ -75,19 +77,21 @@ export async function write(
   value = {
     ...value,
     logId,
-    text: text(data.text ?? "", 500),
+    text: text(data.text ?? "", COMMENT_LIMIT),
     dice: previous?.data.dice ?? data.dice === true,
+    // 익명 (wr_noname) where the board allows it, for members; kept on edit.
+    anonymous:
+      previous?.data.anonymous ??
+      (!guest && board.data.anonymous === true && data.anonymous === true),
   };
   const acting =
-    !previous &&
-    (["explore", "combine"].includes(data.action) || data.item !== undefined);
+    !previous && (data.action === "explore" || data.item !== undefined);
   if (acting && (guest || board.data.actions !== true))
     ctx.fail("ACCESS_DENIED", "권한이 없습니다.", {
       reason: "access_denied",
     });
   if (
-    (data.action !== undefined &&
-      !["explore", "combine"].includes(data.action)) ||
+    (data.action !== undefined && data.action !== "explore") ||
     (data.item !== undefined && typeof data.item !== "string")
   )
     ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
@@ -110,8 +114,6 @@ export async function write(
     if (value.dice) value.rolls = rollDice();
     const actions = [];
     if (data.action === "explore") actions.push(await explore(ctx, speaker));
-    if (data.action === "combine")
-      actions.push(await combineInPost(ctx, data.materials, speaker));
     if (data.item !== undefined)
       actions.push(await useInPost(ctx, data.item, speaker));
     if (actions.length) value.actions = actions;
@@ -128,6 +130,7 @@ export async function write(
     recipients: calls.recipients,
     notifyAuthor: !previous,
     guest: guest?.name ?? null,
+    anonymous: value.anonymous,
   });
   return { document };
 }

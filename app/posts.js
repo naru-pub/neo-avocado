@@ -75,6 +75,12 @@ export function postText(text, emoticons = []) {
 /** Who wrote a post: the character it was posted as, with title and outfit, then the nickname. */
 export async function speakerLabel(row) {
   const fragment = document.createDocumentFragment();
+  // 익명 (wr_noname): readers get no author; the author and staff, a mark.
+  if (row.data.anonymous === true && !row.data.owner && !row.data.guest) {
+    fragment.append("익명의 누군가");
+    return fragment;
+  }
+  if (row.data.anonymous === true) fragment.append("(익명) ");
   // Guests sign with a name of their own.
   const nick = row.data.guest?.name
     ? `${row.data.guest.name} (손님)`

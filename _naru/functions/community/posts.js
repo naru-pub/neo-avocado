@@ -20,6 +20,7 @@ import {
   HTML_LIMIT,
   plainText,
   names,
+  presentPost,
 } from "../../modules/shared.js";
 import { notDeleted, startValue, startWrite } from "../../modules/community.js";
 import {
@@ -27,13 +28,15 @@ import {
   rollDice,
   resolveCalls,
   deliverCalls,
+  useInPost,
+  combineInPost,
 } from "../../modules/roleplay.js";
 
 // Posts (logs) on the boards. Visitors post on boards open to level 1, as
 // guests with a name and password; they search, and on Q&A boards
 // (skin/board/qna) list questions and open their own secret ones.
 export const visitors = ["write", "remove", "search", "questions", "open"];
-export const readOnly = ["search", "questions", "open"];
+export const readOnly = ["search", "questions", "open", "mine"];
 
 const LOGS = `${PREFIX}logs`;
 const COMMENTS = `${PREFIX}comments`;
@@ -120,6 +123,32 @@ export async function write(
     ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
       reason: "invalid_input",
     });
+  // The mmb skin's options (write.skin.php:327-349): 멤버공개 and 19금 for
+  // members, 리플창 아래로 and 로그접기 for anyone, and 익명 for members
+  // where the board allows it (bo_use_noname).
+  const option = (key) =>
+    Object.hasOwn(data, key)
+      ? data[key] === true
+      : previous?.data[key] === true;
+  value.membersOnly = !guest && option("membersOnly");
+  value.adult = !guest && option("adult");
+  value.wide = option("wide");
+  value.fold = option("fold");
+  value.anonymous =
+    !guest && board.data.anonymous === true && option("anonymous");
+  const acting =
+    !previous && (data.action === "combine" || data.item !== undefined);
+  if (
+    (data.action !== undefined && data.action !== "combine") ||
+    (data.item !== undefined && typeof data.item !== "string")
+  )
+    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+      reason: "invalid_input",
+    });
+  // 조합 and item use are a post's (write.skin.php:230-300), on boards that
+  // allow actions, for members.
+  if (acting && (guest || board.data.actions !== true))
+    ctx.fail("ACCESS_DENIED", "권한이 없습니다.", { reason: "access_denied" });
   if (!previous) {
     speaker = await speakerOf(ctx, data.character);
     if (speaker) {
@@ -130,6 +159,12 @@ export async function write(
       value.dice = true;
       value.rolls = rollDice();
     }
+    const actions = [];
+    if (data.action === "combine")
+      actions.push(await combineInPost(ctx, data.materials, speaker));
+    if (data.item !== undefined)
+      actions.push(await useInPost(ctx, data.item, speaker));
+    if (actions.length) value.actions = actions;
   }
   calls = guest
     ? { text: value.text, recipients: [] }
@@ -140,7 +175,7 @@ export async function write(
     tagFields(value.format === "html" ? plainText(value.text) : value.text),
   );
   if (!previous) value.number = await nextNumber(ctx, boardId);
-  // Uploads are managed (SDK 1.1.0): a document that names one keeps it.
+  // Uploads are managed (SDK 1.1.0): Naru records which documents name them.
   delete value.imageId;
   const document = previous
     ? await ctx.set(LOGS, previous.id, value)
@@ -157,6 +192,7 @@ export async function write(
     recipients: calls.recipients,
     notifyAuthor: false,
     guest: guest?.name ?? null,
+    anonymous: value.anonymous,
   });
   return { document };
 }
@@ -172,6 +208,7 @@ export async function remove(ctx, { id, guest } = {}) {
     guests: true,
     moderated: true,
   });
+  // A settled request stays (caculate/list.skin.php:109: 삭제 while wr_10 is empty).
   if (previous.data.settlement?.state && access.role !== "moderator")
     ctx.fail("CONFLICT", "이미 처리된 정산글은 지울 수 없습니다.", {
       reason: "settled",
@@ -201,9 +238,9 @@ async function announcePost(ctx, { id, data: log }) {
 const locked = (row) => ({
   id: row.id,
   createdAt: row.createdAt,
-  createdBy: row.createdBy,
+  createdBy: row.data.anonymous ? null : row.createdBy,
   data: {
-    owner: author(row),
+    owner: row.data.anonymous ? null : author(row),
     number: row.data.number ?? null,
     board: row.data.board,
     ...(row.data.guest ? { guest: row.data.guest } : {}),
@@ -258,20 +295,40 @@ export async function search(
   const found = [
     { contains: ["title", text] },
     { contains: ["text", text] },
-    ...(members.documents.length
+    // An author's name finds only posts that show it: not 익명 ones.
+    ...(members.documents.length || characters.documents.length
       ? [
-          { in: ["owner", ids(members)] },
-          { in: [{ metadata: "createdBy" }, ids(members)] },
+          {
+            all: [
+              access.role === "moderator" ? true : { ne: ["anonymous", true] },
+              {
+                any: [
+                  ...(members.documents.length
+                    ? [
+                        { in: ["owner", ids(members)] },
+                        { in: [{ metadata: "createdBy" }, ids(members)] },
+                      ]
+                    : []),
+                  ...(characters.documents.length
+                    ? [{ in: ["character", ids(characters)] }]
+                    : []),
+                ],
+              },
+            ],
+          },
         ]
-      : []),
-    ...(characters.documents.length
-      ? [{ in: ["character", ids(characters)] }]
       : []),
   ];
   const page = await ctx.list(LOGS, {
     filter: { board: id },
     where: {
-      all: [{ ne: ["deleted", true] }, readable(ctx, access), { any: found }],
+      all: [
+        { ne: ["deleted", true] },
+        readable(ctx, access),
+        // 멤버공개: a visitor's search does not look inside them.
+        ctx.member ? true : { ne: ["membersOnly", true] },
+        { any: found },
+      ],
     },
     sort: [[{ metadata: "createdAt" }, "desc"]],
     size: 20,
@@ -279,7 +336,43 @@ export async function search(
   });
   // 300 characters of each, as the original's search shows (bbs/search.php):
   // whole posts could pass a function's 64 KiB result.
-  return { ...page, documents: page.documents.map(excerpt) };
+  return {
+    ...page,
+    documents: page.documents.map((row) => shown(ctx, access, excerpt(row))),
+  };
+}
+
+/** A post as this caller sees it: 멤버공개 and 익명 (presentPost). */
+const shown = (ctx, access, row) => ({
+  ...row,
+  data: presentPost(row, {
+    member: ctx.member?.id ?? null,
+    staff: access.role === "moderator",
+  }),
+});
+
+/**
+ * 로그내역 (mypage): the member's own posts, newest first, 30 of them, on
+ * the boards they may still read. Readers cannot ask by author themselves,
+ * which would find others' 익명 posts.
+ */
+export async function mine(ctx) {
+  if (!ctx.member)
+    ctx.fail("AUTH_REQUIRED", "로그인해 주세요.", { reason: "sign_in" });
+  const access = await communityAccess(ctx);
+  const page = await ctx.list(LOGS, {
+    filter: { owner: ctx.member.id },
+    where: { ne: ["deleted", true] },
+    sort: [[{ metadata: "createdAt" }, "desc"]],
+    size: 50,
+  });
+  const documents = [];
+  for (const row of page.documents) {
+    const board = await boardOf(ctx, row.data.board ?? "default");
+    if (boardAllowed(board, access, "read")) documents.push(excerpt(row));
+    if (documents.length === 30) break;
+  }
+  return { documents };
 }
 
 /** A post with its text cut to 300 plain characters; 더 보기 reads the rest. */
@@ -350,7 +443,7 @@ export async function questions(
   const page = await list(Math.min(size, 10));
   const visible = readableBy(ctx, access);
   const documents = page.documents.map((row) =>
-    visible(row) ? row : locked(row),
+    visible(row) ? shown(ctx, access, row) : locked(row),
   );
   // Whole questions, as the qna skin lists them, as many as fit in a
   // function's result; the rest start the next page.
@@ -417,7 +510,12 @@ export async function settle(
     ctx.fail("INVALID_REQUEST", "정산 게시판이 아닙니다.", {
       reason: "invalid_input",
     });
-  const settled = text(state, 10, true);
+  // 정산완료 or 반려, as the admin's reply offers (caculate/write_comment.php:28).
+  if (!["정산완료", "반려"].includes(state))
+    ctx.fail("INVALID_REQUEST", "처리 상태는 정산완료 또는 반려입니다.", {
+      reason: "invalid_input",
+    });
+  const settled = state;
   amount(exp, "Experience");
   amount(money, "Money");
   const note = text(memo ?? "", 500);

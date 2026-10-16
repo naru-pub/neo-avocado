@@ -407,7 +407,8 @@ try {
     .waitFor();
   await alice.locator("#inventory li", { hasText: "케이크" }).waitFor();
 
-  // Deleting the post deletes its picture too (a managed upload).
+  // Deleting the post leaves its picture: Naru deletes media only when
+  // someone asks, as it may be linked from anywhere.
   const file = logPicture.split("/").pop();
   assert.equal((await fetch(`${origin}/media/1/${file}`)).status, 200);
   await menu(alice, "로그");
@@ -420,15 +421,7 @@ try {
     .locator("#logs .log")
     .filter({ hasText: "첫 로그" })
     .waitFor({ state: "detached" });
-  for (
-    let tries = 0;
-    (await fetch(`${origin}/media/1/${file}`)).status !== 404;
-    tries++
-  ) {
-    if (tries > 50)
-      throw new Error("The deleted post's picture was not deleted.");
-    await new Promise((done) => setTimeout(done, 200));
-  }
+  assert.equal((await fetch(`${origin}/media/1/${file}`)).status, 200);
 
   // A visitor posts on the public board, and edits with the password only.
   const guest = await person();
@@ -460,6 +453,32 @@ try {
     .locator("#logs .log")
     .filter({ hasText: "고친 손님 글" })
     .waitFor();
+
+  // The mmb options, on the real runtime: 멤버공개 shows a visitor the log
+  // locked, its body never sent; 19금 covers it until a member clicks.
+  await menu(alice, "로그");
+  await alice.locator("#board").selectOption("default");
+  await alice.locator("#logImage").setInputFiles(picture("log.png"));
+  await alice.locator("#logText").fill("멤버만 보는 로그");
+  await alice.locator("#logMembersOnly").check();
+  await alice.locator("#logAdult").check();
+  await alice.locator('#logForm [type="submit"]').click();
+  await alice.locator("#logs .log", { hasText: "멤버만 보는 로그" }).waitFor();
+  await guest.goto(`${origin}/#/logs/default`);
+  await guest
+    .locator("#logs .log", { hasText: "멤버 공개용 로그입니다." })
+    .waitFor();
+  assert.doesNotMatch(
+    await guest.locator("#logs").textContent(),
+    /멤버만 보는 로그/,
+  );
+  await bob.goto(`${origin}/#/logs/default`);
+  // The same address again would not reload: read the board afresh.
+  await bob.reload();
+  const covered = bob.locator("#logs .log", { hasText: "멤버만 보는 로그" });
+  await covered.locator(".log-picture.blind").waitFor();
+  await covered.locator(".remove-blind").click();
+  await covered.locator(".log-picture.blind").waitFor({ state: "detached" });
 
   // 사이트공개: a visitor reads 멤버목록 and a character's page, with only
   // its public fields.
@@ -773,13 +792,15 @@ try {
       .list({ filter: { board: "calc" } });
     await admin.call("community/posts:settle", {
       id: documents[0].id,
-      state: "완료",
+      state: "정산완료",
       money: 10,
       memo: "확인했습니다",
     });
   }, P);
   await alice.reload();
-  await alice.locator("#logs .log .log-title", { hasText: "[완료]" }).waitFor();
+  await alice
+    .locator("#logs .log .log-title", { hasText: "[정산완료]" })
+    .waitFor();
 
   // A message goes to a member named by nickname, as the original's memo
   // form takes an ID; an unknown name is refused before anything is sent.

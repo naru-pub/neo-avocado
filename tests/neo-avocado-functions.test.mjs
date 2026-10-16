@@ -1621,12 +1621,15 @@ test("a where predicate only narrows what the rules show: never deleted rows or 
   assert.deepEqual(await list("characters", { eq: ["owner", "m-1"] }), [
     "mine",
   ]);
-  // Asking for another member's secret body finds nothing.
-  assert.deepEqual(
-    await list("logs", {
-      all: [{ eq: ["board", "default"] }, { eq: ["text", "guess"] }],
-    }),
-    [],
+  // Asking for another member's secret body is refused: posts are queried
+  // only on what every reader may see (the rule's queryable).
+  assert.equal(
+    await refusal(
+      list("logs", {
+        all: [{ eq: ["board", "default"] }, { eq: ["text", "guess"] }],
+      }),
+    ),
+    "INVALID_REQUEST",
   );
 });
 
@@ -2634,7 +2637,7 @@ test("HTML boards store longer rich bodies, tag their text and preview it plainl
   );
 });
 
-test("in-post combination matches recipes by item, charges cost and consumes even on a miss", async () => {
+test("a post's 조합 matches recipes by item, charges cost and consumes even on a miss; comments do not combine", async () => {
   const { ctx, table } = roleplayWorld();
   table(`${P}items`).set("herb", { name: "Herb" });
   table(`${P}items`).set("water", { name: "Water" });
@@ -2662,10 +2665,26 @@ test("in-post combination matches recipes by item, charges cost and consumes eve
   own("i-water", "water", { character: "hero" });
   own("i-pot", "pot");
   own("i-other", "herb", { character: "someone-else" });
+  // 조합 is a post's (mmb/write.skin.php), not a comment's.
+  assert.equal(
+    await reasonOf(
+      gate(ctx, "comments", "add", {
+        data: {
+          logId: "thread",
+          text: "",
+          action: "combine",
+          materials: ["i-herb"],
+          character: "hero",
+        },
+      }),
+    ),
+    "invalid_input",
+  );
   const combine = (materials, character = "hero") =>
-    gate(ctx, "comments", "add", {
+    gate(ctx, "logs", "add", {
       data: {
-        logId: "thread",
+        board: "default",
+        image: "https://example.com/log.png",
         text: "",
         action: "combine",
         materials,
@@ -3401,19 +3420,24 @@ test("a settlement is settled by a moderator, granting experience and money, the
     })
   ).document;
   assert.equal(
-    await refusal(posts.settle(ctx, { id: request.id, state: "완료", exp: 5 })),
+    await refusal(
+      posts.settle(ctx, { id: request.id, state: "정산완료", exp: 5 }),
+    ),
     "access_denied",
   );
   table(`${P}members`).set("m-2", { level: 2, role: "moderator" });
   ctx.member = { id: "m-2" };
   await posts.settle(ctx, {
     id: request.id,
-    state: "완료",
+    state: "정산완료",
     exp: 5,
     money: 30,
     memo: "수고하셨습니다",
   });
-  assert.deepEqual(table(`${P}logs`).get(request.id).settlement.state, "완료");
+  assert.deepEqual(
+    table(`${P}logs`).get(request.id).settlement.state,
+    "정산완료",
+  );
   assert.equal(table(`${P}character_state`).get("hero").exp, 5);
   assert.equal(table(`${P}wallets`).get("m-1").balance, 30);
   const kinds = [...table(`${P}history`).values()]
@@ -3423,7 +3447,7 @@ test("a settlement is settled by a moderator, granting experience and money, the
   // The reply says what was given.
   assert.match(
     [...table(`${P}comments`).values()][0].text,
-    /\[완료\] 경험치 \+5 \+30 아보 수고하셨습니다/,
+    /\[정산완료\] 경험치 \+5 \+30 아보 수고하셨습니다/,
   );
   // The author can no longer change or delete it.
   ctx.member = { id: "m-1" };
@@ -3437,6 +3461,12 @@ test("a settlement is settled by a moderator, granting experience and money, the
     "settled",
   );
   assert.equal(await refusal(posts.remove(ctx, { id: request.id })), "settled");
+  // Only the original's two states (caculate/write_comment.php).
+  ctx.member = { id: "m-2" };
+  assert.equal(
+    await refusal(posts.settle(ctx, { id: request.id, state: "보류" })),
+    "invalid_input",
+  );
 });
 
 test("a board search reaches every post at once and pages what it finds", async () => {
@@ -3711,5 +3741,96 @@ test("기타 항목명 설정 names money, experience, 소속 and 종족 for pag
   assert.equal(
     pages.rename("경험치·아보 지급 (네오 아보카도)", names),
     "포인트·골드 지급 (네오 아보카도)",
+  );
+});
+
+test("멤버공개 is locked for visitors, and 익명 hides its author from all but them and the staff", async () => {
+  const { ctx, table } = roleplayWorld();
+  table(`${P}boards`).set("default", {
+    ...table(`${P}boards`).get("default"),
+    listLevel: 1,
+    readLevel: 1,
+    writeLevel: 1,
+    anonymous: true,
+  });
+  const post = (data) =>
+    posts.write(ctx, {
+      data: { board: "default", image: "https://example.com/a.png", ...data },
+    });
+  const hidden = (
+    await post({ text: "멤버만", membersOnly: true, adult: true, fold: true })
+  ).document;
+  const masked = (
+    await post({ text: "누가 썼을까", anonymous: true, character: "hero" })
+  ).document;
+  await comments.write(ctx, { data: { logId: hidden.id, text: "댓글" } });
+  // A visitor: the 멤버공개 post shows its number and marks, locked.
+  ctx.member = null;
+  const seen = (await gate(ctx, "logs", "get", { id: hidden.id })).document
+    .data;
+  assert.equal(seen.locked, true);
+  assert.equal(seen.adult, true);
+  assert.equal(seen.image, undefined);
+  assert.equal(seen.text, undefined);
+  assert.equal(seen.owner, null);
+  // ...and none of its comments.
+  assert.deepEqual(
+    (
+      await gate(ctx, "comments", "list", {
+        options: { filter: { logId: hidden.id } },
+      })
+    ).documents,
+    [],
+  );
+  // Another member: the 익명 post names no one.
+  ctx.member = { id: "m-2" };
+  const other = (await gate(ctx, "logs", "get", { id: masked.id })).document
+    .data;
+  assert.deepEqual(
+    [other.owner, other.speaker, other.character],
+    [null, undefined, undefined],
+  );
+  assert.equal(other.anonymous, true);
+  // Nor can they ask which posts m-1 wrote, nor find it by name.
+  assert.equal(
+    await refusal(
+      gate(ctx, "logs", "list", {
+        options: {
+          filter: { board: "default" },
+          where: { eq: ["owner", "m-1"] },
+        },
+      }),
+    ),
+    "INVALID_REQUEST",
+  );
+  const found = await posts.search(ctx, { board: "default", text: "아보" });
+  assert.equal(
+    found.documents.some((row) => row.id === masked.id),
+    false,
+  );
+  // Its author sees it as theirs, and lists it in 로그내역.
+  ctx.member = { id: "m-1" };
+  const own = (await gate(ctx, "logs", "get", { id: masked.id })).document.data;
+  assert.equal(own.owner, "m-1");
+  assert.deepEqual(
+    (await posts.mine(ctx)).documents.map((row) => row.id).sort(),
+    [hidden.id, masked.id].sort(),
+  );
+  // A guest cannot post 멤버공개, 19금 or 익명.
+  ctx.member = null;
+  const guest = (
+    await posts.write(ctx, {
+      guest: { name: "손님", password: "secret-1" },
+      data: {
+        board: "default",
+        image: "https://example.com/g.png",
+        membersOnly: true,
+        anonymous: true,
+      },
+    })
+  ).document;
+  assert.deepEqual(
+    [guest.data.membersOnly, guest.data.anonymous],
+    [false, false],
   );
 });

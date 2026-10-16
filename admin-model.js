@@ -141,8 +141,17 @@ export const models = {
       },
       {
         key: "actions",
-        label: "댓글 행동 허용 (탐색·아이템 사용)",
+        label: "행동 허용 (글: 조합·아이템 사용, 댓글: 탐색·아이템 사용)",
         type: "checkbox",
+      },
+      // bo_use_noname: members may post and comment as 익명.
+      { key: "anonymous", label: "익명 사용", type: "checkbox" },
+      // bo_gallery_height: an image log at least this tall folds (로그접기).
+      {
+        key: "foldHeight",
+        label: "로그 자동 접기 높이 (px, 0이면 직접 접은 로그만)",
+        type: "number",
+        default: 0,
       },
       {
         key: "secret",

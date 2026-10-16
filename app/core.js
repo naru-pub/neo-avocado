@@ -104,8 +104,8 @@ export function say(message) {
   $("status").textContent = message;
 }
 /**
- * A managed upload (SDK 1.1.0): Naru keeps it while a document names its
- * address and deletes it once none does, so nothing else is recorded here.
+ * A managed upload (SDK 1.1.0): Naru records which documents name its
+ * address and marks it in the media library once none does.
  */
 export async function uploadManaged(file) {
   return await state.member.media.upload(file, { managed: true });

@@ -251,6 +251,84 @@ $("boardSearch").onsubmit = (event) => {
     await loadLogs();
   });
 };
+/** 2026-10-16 15:11:33, as the original prints a comment's wr_datetime. */
+function fullTime(at) {
+  const time = new Date(at);
+  if (Number.isNaN(time.getTime())) return "";
+  const kst = new Date(time.getTime() + 9 * 60 * 60 * 1000).toISOString();
+  return `${kst.slice(0, 10)} ${kst.slice(11, 19)}`;
+}
+/**
+ * The mmb skin's options on a shown post (list.log.skin.php:41-83): 19금
+ * covered until clicked, 로그접기 (or a picture taller than the board's
+ * height) folded with OPEN, and 리플창 아래로.
+ */
+function presentOptions(item, log) {
+  if (log.data.locked) return;
+  const board = state.boards.find(
+    (row) => row.id === (log.data.board ?? "default"),
+  );
+  item.classList.toggle("wide", log.data.wide === true);
+  const picture = item.querySelector(".log-picture");
+  const fold = () => {
+    if (picture.classList.contains("foldable")) return;
+    picture.classList.add("foldable", "folded");
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "open-log";
+    toggle.textContent = "OPEN";
+    toggle.onclick = () => {
+      const folded = picture.classList.toggle("folded");
+      toggle.textContent = folded ? "OPEN" : "CLOSE";
+    };
+    picture.append(toggle);
+  };
+  if (log.data.fold === true) fold();
+  const image = item.querySelector(".log-image");
+  const height = Number(board?.data.foldHeight) || 0;
+  if (image && height > 0) {
+    const check = () => {
+      if (image.naturalHeight >= height) fold();
+    };
+    if (image.complete) check();
+    else image.addEventListener("load", check, { once: true });
+  }
+  if (log.data.adult === true) {
+    picture.classList.add("blind");
+    const reveal = document.createElement("button");
+    reveal.type = "button";
+    reveal.className = "remove-blind";
+    reveal.textContent =
+      "해당 로그는 필터 된 로그입니다. 확인을 원하실 경우 클릭해 주세요.";
+    reveal.onclick = () => {
+      picture.classList.remove("blind");
+      reveal.remove();
+    };
+    picture.append(reveal);
+  }
+}
+/** The options in a post's edit dialog, as its board allows them. */
+function optionEdits(current) {
+  if (kindOf(current.data.board) !== "image") return [];
+  const board = state.boards.find(
+    (row) => row.id === (current.data.board ?? "default"),
+  );
+  const box = (name, label) => ({
+    name,
+    label,
+    type: "checkbox",
+    value: current.data[name] === true,
+  });
+  const guest = Boolean(current.data.guest);
+  return [
+    ...(guest ? [] : [box("membersOnly", "멤버공개"), box("adult", "19금")]),
+    box("wide", "리플창 아래로"),
+    box("fold", "로그접기"),
+    ...(!guest && board?.data.anonymous === true
+      ? [box("anonymous", "익명")]
+      : []),
+  ];
+}
 export async function logItem(log) {
   const item = $("logTemplate").content.firstElementChild.cloneNode(true);
   item.dataset.id = log.id;
@@ -261,6 +339,15 @@ export async function logItem(log) {
   item
     .querySelector(".log-number")
     .replaceChildren(log.data.notice ? "공지 · " : "", number);
+  // 19금's mark (list.log.skin.php:114).
+  if (log.data.adult)
+    item.querySelector(".log-number").append(
+      Object.assign(document.createElement("span"), {
+        className: "adult-mark",
+        title: "19금",
+        textContent: " ■",
+      }),
+    );
   const pin = item.querySelector(".pin");
   const move = item.querySelector(".move");
   pin.hidden = move.hidden = state.role !== "moderator" || log.data.locked;
@@ -324,8 +411,9 @@ export async function logItem(log) {
     };
     item.querySelector(".log-text").replaceChildren("비밀 질문입니다. ", form);
   } else if (log.data.locked)
-    item.querySelector(".log-text").textContent =
-      "비밀글입니다. 본문을 볼 수 없습니다.";
+    item.querySelector(".log-text").textContent = log.data.membersOnly
+      ? "멤버 공개용 로그입니다."
+      : "비밀글입니다. 본문을 볼 수 없습니다.";
   else if (log.data.format === "html" && !log.data.truncated) {
     item.querySelector(".log-text").classList.add("rich-text");
     item
@@ -336,6 +424,12 @@ export async function logItem(log) {
     item.querySelector(".log-dice").hidden = false;
     item.querySelector(".log-dice").textContent = diceText(log);
   }
+  if (!log.data.locked)
+    for (const action of Array.isArray(log.data.actions)
+      ? log.data.actions
+      : [])
+      item.querySelector(".log-dice").before(actionItem(action));
+  presentOptions(item, log);
   item.querySelector(".log-title").textContent =
     `${log.data.settlement ? `[${log.data.settlement.state}] ` : ""}${log.data.secret ? "🔒 " : ""}${log.data.title ?? ""}${log.data.category ? ` · ${log.data.category}` : ""}`;
   if (log.data.settlement) item.classList.add("settled");
@@ -366,11 +460,11 @@ export async function logItem(log) {
           {
             name: "state",
             label: "처리 상태",
-            value: log.data.settlement?.state ?? "완료",
+            // caculate/write_comment.php: 정산완료 or 반려.
+            value: log.data.settlement?.state === "반려" ? "반려" : "정산완료",
             options: [
-              ["완료", "완료"],
+              ["정산완료", "정산완료"],
               ["반려", "반려"],
-              ["보류", "보류"],
             ],
           },
           {
@@ -449,13 +543,28 @@ export async function logItem(log) {
           multiline: true,
           max: current.data.format === "html" ? 12000 : 2000,
         },
+        ...optionEdits(current),
       ],
-      async ({ text, title, category, secret = false, password }) => {
+      async ({
+        text,
+        title,
+        category,
+        secret = false,
+        password,
+        ...options
+      }) => {
         const { document: saved } = await caller().call(
           "community/posts:write",
           {
             id: log.id,
-            data: { ...current.data, text, title, category, secret },
+            data: {
+              ...current.data,
+              text,
+              title,
+              category,
+              secret,
+              ...options,
+            },
             revision: current.revision,
             ...(guestPost ? { guest: { password } } : {}),
           },
@@ -571,28 +680,14 @@ export async function logItem(log) {
   const speakerChoice = form.querySelector(".comment-character");
   const actionChoice = form.querySelector(".comment-action");
   const itemChoice = form.querySelector(".comment-item");
-  const materialsChoice = form.querySelector(".comment-materials");
   wireSpeakerChoice(speakerChoice);
   wireItemChoice(itemChoice);
-  // Combination takes up to three of the inventory's items (make_1…make_3).
-  actionChoice.onchange = () =>
-    run(async () => {
-      materialsChoice.hidden = actionChoice.value !== "combine";
-      if (materialsChoice.hidden || materialsChoice.dataset.loaded) return;
-      materialsChoice.dataset.loaded = "1";
-      state.postItems ??= await allDocuments(COLLECTION.inventory, {
-        owner: state.member.id,
-      });
-      for (const row of state.postItems) {
-        const option = document.createElement("option");
-        option.value = row.id;
-        option.textContent = row.data.name ?? row.data.item;
-        materialsChoice.append(option);
-      }
-    });
   const board = state.boards.find(
     (row) => row.id === (log.data.board ?? "default"),
   );
+  // 익명 (write_comment.php:51) where the board allows it.
+  form.querySelector(".comment-anonymous").hidden =
+    !state.member || board?.data.anonymous !== true;
   form.querySelector(".comment-actions").hidden =
     !state.member || !board?.data.actions;
   const staff = state.role === "moderator" || state.owner;
@@ -610,11 +705,7 @@ export async function logItem(log) {
       const character = speakerChoice.value;
       const action = actionChoice.value;
       const used = itemChoice.value;
-      const materials = [...materialsChoice.selectedOptions].map(
-        (option) => option.value,
-      );
-      if (action === "combine" && (!materials.length || materials.length > 3))
-        return say("조합 재료를 1~3개 선택해 주세요.");
+      const anonymous = form.querySelector(".comment-anonymous-check").checked;
       if (!text && !dice && !action && !used) return;
       const guest = state.member ? null : guestCredentials();
       const { document: saved } = await caller().call(
@@ -626,8 +717,8 @@ export async function logItem(log) {
             dice,
             ...(character && !guest ? { character } : {}),
             ...(action && !guest ? { action } : {}),
-            ...(action === "combine" && !guest ? { materials } : {}),
             ...(used && !guest ? { item: used } : {}),
+            ...(anonymous && !guest ? { anonymous: true } : {}),
           },
           ...(guest ? { guest } : {}),
         },
@@ -635,6 +726,7 @@ export async function logItem(log) {
       item.querySelector(".comment-list").append(await commentItem(saved));
       form.querySelector(".comment-text").value = "";
       form.querySelector(".comment-dice").checked = false;
+      form.querySelector(".comment-anonymous-check").checked = false;
       actionChoice.value = "";
       if (used || action) {
         // The inventory changed: read it again when next needed.
@@ -642,9 +734,6 @@ export async function logItem(log) {
         state.shopLoaded = false;
         itemChoice.replaceChildren(itemChoice.options[0]);
         delete itemChoice.dataset.loaded;
-        materialsChoice.replaceChildren();
-        materialsChoice.hidden = true;
-        delete materialsChoice.dataset.loaded;
       }
     });
   };
@@ -676,6 +765,15 @@ async function commentItem(comment) {
     ? comment.data.actions
     : [])
     item.append(actionItem(action));
+  // The comment's time in full (view_comment.skin.php's co-footer).
+  item.append(
+    " ",
+    Object.assign(document.createElement("time"), {
+      className: "comment-time",
+      dateTime: comment.createdAt ?? "",
+      textContent: fullTime(comment.createdAt),
+    }),
+  );
   const guestComment = !state.member && Boolean(comment.data.guest);
   if (mine(comment) || state.role === "moderator" || guestComment) {
     const change = document.createElement("button");
@@ -702,7 +800,7 @@ async function commentItem(comment) {
             label: "댓글",
             value: comment.data.text,
             multiline: true,
-            max: 500,
+            max: 2000,
           },
         ],
         async ({ text, password }) => {
@@ -761,6 +859,26 @@ $("logForm").onsubmit = (event) => {
     say("올리는 중…");
     const image = file ? await uploadManaged(file) : null;
     const character = guest ? "" : $("logCharacter").value;
+    const materials = guest
+      ? []
+      : [...$("logMaterials").selectedOptions].map((option) => option.value);
+    if (materials.length > 3)
+      return say("조합 재료는 3개까지 고를 수 있습니다.");
+    const used = guest ? "" : $("logItem").value;
+    const options =
+      kindOf() === "image"
+        ? {
+            wide: $("logWide").checked,
+            fold: $("logFold").checked,
+            ...(guest
+              ? {}
+              : {
+                  membersOnly: $("logMembersOnly").checked,
+                  adult: $("logAdult").checked,
+                  anonymous: $("logAnonymous").checked,
+                }),
+          }
+        : {};
     const { document: log } = await caller().call("community/posts:write", {
       data: {
         image: image?.url ?? (address || null),
@@ -771,9 +889,21 @@ $("logForm").onsubmit = (event) => {
         secret: guest && kindOf() !== "qna" ? false : $("logSecret").checked,
         ...(character ? { character } : {}),
         ...($("logDice").checked ? { dice: true } : {}),
+        ...options,
+        ...(materials.length ? { action: "combine", materials } : {}),
+        ...(used ? { item: used } : {}),
       },
       ...(guest ? { guest } : {}),
     });
+    if (materials.length || used) {
+      // The inventory changed: read it again when next needed.
+      state.postItems = null;
+      state.shopLoaded = false;
+      $("logItem").replaceChildren($("logItem").options[0]);
+      delete $("logItem").dataset.loaded;
+      $("logMaterials").replaceChildren();
+      delete $("logMaterials").dataset.loaded;
+    }
     state.ownPosts.add(log.id);
     if (state.newPost === log.id) showNewPost(null);
     $("logs").prepend(await logItem(log));
@@ -856,10 +986,31 @@ export function configureBoard() {
     $("logForm").hidden = true;
   $("logSecret").disabled = board?.data.secret !== "optional";
   $("logSecret").checked = board?.data.secret === "required";
+  // The mmb skin's options are an image board's; 익명 where it is allowed.
+  $("logOptions").hidden = kind !== "image";
+  $("logAnonymousLabel").hidden = board?.data.anonymous !== true;
+  $("logFoldHint").textContent = board?.data.foldHeight
+    ? `(${board.data.foldHeight}px 이상은 자동으로 접힙니다.)`
+    : "";
+  $("logActions").hidden = !state.member || board?.data.actions !== true;
 }
+wireItemChoice($("logItem"));
+// 조합 takes the inventory's craft materials (it_use_recepi), up to three.
+$("logMaterials").onfocus = $("logMaterials").onpointerdown = () =>
+  run(async () => {
+    if ($("logMaterials").dataset.loaded) return;
+    $("logMaterials").dataset.loaded = "1";
+    state.postItems ??= await allDocuments(COLLECTION.inventory, {
+      owner: state.member.id,
+    });
+    for (const row of state.postItems)
+      $("logMaterials").append(
+        new Option(row.data.name ?? row.data.item, row.id),
+      );
+  });
 wireSpeakerChoice($("logCharacter"));
 // An uploaded picture goes into the HTML body at the cursor; the post's
-// address of it is what keeps the upload (managed uploads, SDK 1.1.0).
+// address of it is what Naru's media library counts as using it.
 $("logInlineFile").onchange = () =>
   run(async () => {
     const file = $("logInlineFile").files?.[0];
