@@ -340,7 +340,9 @@ export async function getDocument(
   const map = ownerMapping(ctx, collection);
   if (
     typeof id !== "string" ||
-    (map.settings && map.settings !== true && id !== map.settings.id)
+    (map.settings && map.settings !== true && id !== map.settings.id) ||
+    // History's IDs are its row numbers.
+    (map.generated && !/^\d{1,15}$/.test(id))
   )
     return null;
   const key = map.settings

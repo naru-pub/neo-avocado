@@ -96,7 +96,7 @@ const picture = (name) => ({ name, mimeType: "image/png", buffer: PNG });
 try {
   // _naru/collections.json made every collection as the site started, so
   // the owner's sign-in only signs in.
-  assert.match(log, /_naru\/collections\.json: 36 created, 0 changed/);
+  assert.match(log, /_naru\/collections\.json: 24 created, 0 changed/);
   const owner = await person();
   await owner.goto(`${origin}/admin/`);
   await owner.locator("#adminSignIn").click();
@@ -107,9 +107,12 @@ try {
     const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
     const admin = await createNaru().auth.session();
     // A day's first visit pays this (cf_login_point); the original installs 0.
-    await admin
-      .collection(`${P}settings`)
-      .set("community", { loginReward: 100 });
+    // Settings are a table: the owner writes them through a mutation.
+    await admin.mutate("admin/documents:set", {
+      collection: `${P}settings`,
+      id: "community",
+      data: { loginReward: 100 },
+    });
     // The original installs no boards: the owner makes 로그 too.
     await admin.collection(`${P}boards`).set("default", {
       name: "로그",
@@ -310,9 +313,10 @@ try {
       since: "2030-01-01",
     });
     // Shop categories: the event item shows under 이벤트 only.
-    await admin.collection(`${P}settings`).set("community", {
-      shopCategories: "일반, 이벤트",
-      shopGreeting: "어서 오세요",
+    await admin.mutate("admin/documents:set", {
+      collection: `${P}settings`,
+      id: "community",
+      data: { shopCategories: "일반, 이벤트", shopGreeting: "어서 오세요" },
     });
     await admin
       .collection(`${P}items`)
@@ -529,9 +533,15 @@ try {
         const { createNaru } =
           await import("https://naru.pub/sdk/1.1.0/naru.js");
         const admin = await createNaru().auth.session();
-        const settings = admin.collection(`${P}settings`);
-        const current = await settings.get("community");
-        await settings.set("community", { ...current.data, siteOpen: open });
+        const current = await admin.query("admin/documents:get", {
+          collection: `${P}settings`,
+          id: "community",
+        });
+        await admin.mutate("admin/documents:set", {
+          collection: `${P}settings`,
+          id: "community",
+          data: { ...current.data, siteOpen: open },
+        });
       },
       { P, open },
     );
@@ -540,23 +550,37 @@ try {
   await guest.locator("#closedNotice").waitFor();
   assert.equal(await guest.locator("#characterView").isVisible(), false);
   assert.equal(await guest.locator("#siteMenu").isVisible(), false);
-  const closedReads = await guest.evaluate(async (P) => {
-    const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
-    const naru = createNaru();
-    const ids = (name, options) =>
-      naru
-        .collection(`${P}${name}`)
-        .list(options)
-        .then(
-          (page) => page.documents.map((row) => row.id),
-          (error) => error.code,
-        );
-    return {
-      characters: await ids("characters"),
-      boards: await ids("boards"),
-      logs: await ids("logs", { filter: { board: "free" } }),
-    };
-  }, P);
+  // Members' IDs, as their pages know them.
+  const idOf = (page) =>
+    page.evaluate(async () => {
+      const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+      return (await createNaru().members.session()).id;
+    });
+  const memberIds = [await idOf(alice), await idOf(bob)];
+  const closedReads = await guest.evaluate(
+    async ({ P, memberIds }) => {
+      const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+      const naru = createNaru();
+      const ids = (name, options) =>
+        naru
+          .collection(`${P}${name}`)
+          .list(options)
+          .then(
+            (page) => page.documents.map((row) => row.id),
+            (error) => error.code,
+          );
+      return {
+        characters: await ids("characters"),
+        boards: await ids("boards"),
+        logs: await ids("logs", { filter: { board: "free" } }),
+        // Nicknames are a query's, which reads the closed site's setting.
+        nicks: await naru
+          .query("community/profiles:nicks", { ids: memberIds })
+          .then(({ nicks }) => Object.keys(nicks)),
+      };
+    },
+    { P, memberIds },
+  );
   for (const [name, read] of Object.entries(closedReads))
     assert.ok(
       (Array.isArray(read) && !read.length) || read === "ACCESS_DENIED",
@@ -565,10 +589,10 @@ try {
   await siteOpen(true);
   await guest.goto(`${origin}/`);
 
-  // The collection rules, on the real runtime: a member reads their own
-  // wallet and nobody else's; a visitor reads nicknames and no wallets.
-  const reads = (page, P) =>
-    page.evaluate(async (P) => {
+  // On the real runtime: a member reads their own wallet and nobody else's;
+  // a visitor reads nicknames and no wallet.
+  const reads = (page) =>
+    page.evaluate(async (memberIds) => {
       const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
       const naru = createNaru();
       const member = await naru.members.session();
@@ -579,59 +603,57 @@ try {
           (error) => error.code,
         );
       return {
-        wallets: await settle(
-          reader
-            .collection(`${P}wallets`)
-            .list()
-            .then((page) => page.documents.map((row) => row.id)),
-        ),
-        profiles: await settle(
-          reader
-            .collection(`${P}profiles`)
-            .list()
-            .then((page) => page.documents.map((row) => Object.keys(row.data))),
+        wallet: await settle(reader.query("economy/wallet:wallet")),
+        own: await settle(reader.query("community/profiles:own")),
+        nicks: await settle(
+          reader.query("community/profiles:nicks", { ids: memberIds }),
         ),
         me: member?.id ?? null,
       };
-    }, P);
-  const bobReads = await reads(bob, P);
-  assert.deepEqual(bobReads.wallets, [bobReads.me]);
-  assert.ok(bobReads.profiles.some((keys) => keys.includes("acceptMessages")));
-  const guestReads = await reads(guest, P);
-  assert.equal(guestReads.wallets, "ACCESS_DENIED");
-  assert.ok(guestReads.profiles.every((keys) => keys.join() === "nick"));
+    }, memberIds);
+  const bobReads = await reads(bob);
+  assert.equal(typeof bobReads.wallet.balance, "number");
+  assert.equal(bobReads.own.profile.id, bobReads.me);
+  assert.equal(typeof bobReads.own.profile.data.acceptMessages, "boolean");
+  const guestReads = await reads(guest);
+  assert.equal(guestReads.wallet, "AUTH_REQUIRED");
+  assert.equal(guestReads.own, "AUTH_REQUIRED");
+  assert.deepEqual(
+    Object.keys(guestReads.nicks.nicks).sort(),
+    [...memberIds].sort(),
+  );
 
-  // A member writes their own profile directly, as rules/profiles.js allows:
-  // nickname and preferences only, and nobody else's.
-  const profileWrites = await bob.evaluate(async (P) => {
+  // A member changes their own nickname and preferences through
+  // profiles:update; another's nickname is not theirs to take.
+  const profileWrites = await bob.evaluate(async (alice) => {
     const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
     const member = await createNaru().members.session();
-    const profiles = member.collection(`${P}profiles`);
     const settle = (promise) =>
       promise.then(
-        (saved) => saved.data.nick,
-        (error) => error.code,
+        (saved) => saved.profile.data.nick,
+        (error) => error.details?.reason ?? error.code,
       );
-    const own = await profiles.get(member.id);
-    const renamed = await settle(
-      profiles.set(member.id, { ...own.data, nick: "바뀐밥" }),
-    );
-    const again = await profiles.get(member.id);
-    const forged = await settle(
-      profiles.set(member.id, { ...again.data, owner: "someone" }),
-    );
-    const others = (await profiles.list()).documents.filter(
-      (row) => row.id !== member.id,
-    );
-    const theirs = await settle(
-      profiles.set(others[0].id, { ...others[0].data, nick: "가로채기" }),
-    );
-    return { renamed, forged, theirs };
-  }, P);
+    const update = (nick) =>
+      settle(
+        member.mutate("community/profiles:update", {
+          nick,
+          acceptMessages: true,
+          commentAlerts: true,
+        }),
+      );
+    const { nicks } = await member.query("community/profiles:nicks", {
+      ids: [alice],
+    });
+    return {
+      renamed: await update("바뀐밥"),
+      theirs: await update(nicks[alice]),
+      reserved: await update("관리자"),
+    };
+  }, memberIds[0]);
   assert.deepEqual(profileWrites, {
     renamed: "바뀐밥",
-    forged: "ACCESS_DENIED",
-    theirs: "ACCESS_DENIED",
+    theirs: "nick_taken",
+    reserved: "reserved_nick",
   });
 
   // 커뮤니티 설정 is one form, opened at once, in the original's sections

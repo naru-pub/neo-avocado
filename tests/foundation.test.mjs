@@ -833,6 +833,8 @@ test("the owner reads and writes the foundation's tables as the admin's document
               actor: "site-owner",
               note: "x",
             },
+            // As the admin's batch asks: a page's own ID is never a row's.
+            condition: { absent: true },
           },
         },
       ],

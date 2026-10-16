@@ -108,7 +108,7 @@ export async function remove(
   { collection, id }: { collection?: string; id?: string } = {},
 ) {
   const map = ownerMapping(ctx, collection);
-  if (typeof id !== "string")
+  if (typeof id !== "string" || (map.generated && !/^\d{1,15}$/.test(id)))
     ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
       reason: "invalid_input",
     });

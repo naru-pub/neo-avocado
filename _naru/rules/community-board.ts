@@ -10,6 +10,7 @@ import {
   logReadable,
   presentPost,
 } from "../modules/shared.js";
+import type { Access } from "../modules/shared.js";
 import type {
   Data,
   PresentArgs,
@@ -91,11 +92,16 @@ export const queryable = [
 ];
 
 /** 멤버공개 locked for visitors, 익명 without its author (presentPost). */
+// One rule call presents a whole page for one reader: read their access
+// once for it (a member's is a row and their roles, two reads a post).
+let reader: { id: string | null; access: Promise<Access> } | undefined;
 export async function present(
   ctx: ReadCtx,
   { document }: PresentArgs,
 ): Promise<Data> {
-  const actor = await communityAccess(ctx);
+  const id = ctx.member?.id ?? null;
+  if (reader?.id !== id) reader = { id, access: communityAccess(ctx) };
+  const actor = await reader.access;
   return presentPost(document, {
     member: ctx.member?.id ?? null,
     staff: actor.role === "moderator",
