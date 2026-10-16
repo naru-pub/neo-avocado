@@ -44,7 +44,7 @@ CREATE INDEX items_hidden ON items (hidden);
 -- senderName (se_ch_name), memo (in_memo) and receivedAt, or the owner's
 -- 지급 사유 as memo.
 CREATE TABLE inventory (
-  id INTEGER PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   owner TEXT NOT NULL,
   item_id TEXT NOT NULL,
   name TEXT NOT NULL DEFAULT '',
