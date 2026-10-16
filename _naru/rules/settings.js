@@ -14,6 +14,11 @@ export function present(ctx, { document }) {
     shopCategories: document.data.shopCategories ?? "일반, 이벤트",
     shopNpc: document.data.shopNpc ?? null,
     shopGreeting: document.data.shopGreeting ?? "",
+    characterCreation: document.data.characterCreation !== false,
+    characterEditing: document.data.characterEditing !== false,
+    characterLimit: Number.isSafeInteger(document.data.characterLimit)
+      ? document.data.characterLimit
+      : 1,
   };
 }
 

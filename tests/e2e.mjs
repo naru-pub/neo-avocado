@@ -151,7 +151,10 @@ try {
   const alice = await person();
   await signInAs(alice, "alice");
   await joinAs(alice, "앨리스");
-  await menu(alice, "신청자목록");
+  // Characters are registered from 마이페이지, as the original's
+  // mypage/character does; the lists have no form.
+  await menu(alice, "마이페이지");
+  await alice.locator("#newCharacter").click();
   await alice.locator('#characterFields [data-field="age"]').waitFor();
   await alice.locator("#characterName").fill("초록");
   await alice.locator("#characterProfile").fill("숲에서 온 초록");
@@ -163,6 +166,9 @@ try {
     .locator('#characterFields [data-field-upload="art"]')
     .setInputFiles(picture("art.png"));
   await alice.locator('#characterForm [type="submit"]').click();
+  await alice.locator("#myCharacters li", { hasText: "초록" }).waitFor();
+  assert.equal(await alice.locator("#newCharacter").isVisible(), false);
+  await menu(alice, "신청자목록");
   await alice
     .locator("#characters .character")
     .filter({ hasText: "초록" })

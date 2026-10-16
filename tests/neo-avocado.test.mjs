@@ -845,6 +845,8 @@ test("a log uploads its picture, then saves the stored URL", async () => {
 test("characters are read when their tab is first opened, and registered by members", async () => {
   const database = fakeDatabase({
     [PROFILES]: [me],
+    // Two a member: they have one, and register the second.
+    neo_avocado_settings: [{ id: "community", data: { characterLimit: 2 } }],
     [CHARACTERS]: [
       {
         id: "char-0",
@@ -884,37 +886,59 @@ test("characters are read when their tab is first opened, and registered by memb
     $("characters").querySelector(".author").textContent,
     "오너: 나",
   );
+  // The lists have no form: 마이페이지's 신규 캐릭터 등록 opens it, as
+  // mypage/character/index.php does.
+  assert.equal(
+    $("characters").closest("section").contains($("characterForm")),
+    false,
+  );
+  $("tabMypage").onclick();
+  await settle();
+  await settle();
+  assert.equal($("newCharacter").hidden, false);
+  assert.equal($("characterForm").hidden, true);
+  $("newCharacter").onclick();
+  await settle();
+  assert.equal($("characterForm").hidden, false);
   $("characterName").value = "카도";
   $("characterSide").value = "갈색단";
   $("characterClass").value = "인간";
   submit($("characterForm"));
   await settle();
   await settle();
-  assert.deepEqual(database.calls.at(-1), {
-    method: "add",
-    name: CHARACTERS,
-    data: {
-      name: "카도",
-      side: "갈색단",
-      class: "인간",
-      profile: "",
-      image: null,
-      type: "main",
-      state: "editing",
+  assert.deepEqual(
+    database.calls.filter((call) => call.method === "add").at(-1),
+    {
+      method: "add",
+      name: CHARACTERS,
+      data: {
+        name: "카도",
+        side: "갈색단",
+        class: "인간",
+        profile: "",
+        image: null,
+        type: "main",
+        state: "editing",
+      },
     },
-  });
-  assert.equal(
-    $("characters").querySelector(".character-name").textContent,
-    "카도",
   );
-  // 두 번째로 열 때는 다시 읽지 않는다.
+  await settle();
+  // 마이페이지 lists it; with two of two, the button goes.
+  assert.match($("myCharacters").textContent, /카도/);
+  assert.equal($("newCharacter").hidden, true);
+  assert.equal($("characterForm").hidden, true);
+  // The list reads the new character when next opened, and then not again.
+  const reads = () =>
+    database.calls.filter((call) => call.name === CHARACTERS).length;
+  $("tabCharacters").onclick();
+  await settle();
+  await settle();
+  assert.match($("characters").textContent, /카도/);
+  const after = reads();
   $("tabLogs").onclick();
   $("tabCharacters").onclick();
   await settle();
-  assert.equal(
-    database.calls.filter((call) => call.name === CHARACTERS).length,
-    2,
-  );
+  assert.equal(reads(), after);
 });
 
 test("an ended sign-in returns the page to the welcome screen", async () => {
@@ -1363,7 +1387,10 @@ test("custom fields render on the form, and the applicant filter queries by stat
     ],
   });
   const { $, settle, submit } = await page(database);
-  $("tabCharacters").onclick();
+  $("tabMypage").onclick();
+  await settle();
+  await settle();
+  $("newCharacter").onclick();
   await settle();
   await settle();
   const inputs = [...$("characterFields").querySelectorAll("[data-field]")];
@@ -1377,8 +1404,11 @@ test("custom fields render on the form, and the applicant filter queries by stat
   submit($("characterForm"));
   await settle();
   await settle();
-  assert.deepEqual(database.calls.at(-1).data.fields, { gender: "여" });
-  assert.equal(database.calls.at(-1).data.state, "submitted");
+  const added = database.calls.filter((call) => call.method === "add").at(-1);
+  assert.deepEqual(added.data.fields, { gender: "여" });
+  assert.equal(added.data.state, "submitted");
+  $("tabCharacters").onclick();
+  await settle();
   $("characterFilter").value = "applicants";
   $("characterFilter").onchange();
   await settle();

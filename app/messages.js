@@ -140,7 +140,7 @@ export async function openMessage(id) {
     run(async () => {
       if (
         !confirm(
-          "쪽지를 삭제하면 보낸 사람과 받는 사람 모두의 보관함에서 사라집니다. 삭제할까요?",
+          "이 쪽지를 내 보관함에서 삭제할까요? 상대의 보관함에는 그대로 남습니다.",
         )
       )
         return;

@@ -123,6 +123,12 @@ function fakeCtx({ now = Date.parse("2030-01-01T03:00:00Z"), roll = 0 } = {}) {
     },
     delete: async (name, id) => table(name).delete(id),
   };
+  // Tests give one member several characters; the limit has its own test.
+  const settingsTable = table(`${P}settings`);
+  const set = settingsTable.set.bind(settingsTable);
+  settingsTable.set = (id, data) =>
+    set(id, id === "community" ? { characterLimit: 0, ...data } : data);
+  settingsTable.set("community", {});
   return { ctx, table, sent, released };
 }
 
@@ -2711,6 +2717,52 @@ test("visits record where members are and count each Korean day, bounded", async
     await refusal(presence.seen(ctx, { where: 5 })),
     "invalid_input",
   );
+});
+
+test("the owner's switches open and close creating and editing characters, and limit them", async () => {
+  const { ctx, table } = fakeCtx();
+  const data = { name: "하나", type: "main", state: "editing" };
+  // The original's install default: one character a member.
+  table(`${P}settings`).set("community", { characterLimit: 1 });
+  const first = await sheet.save(ctx, { data });
+  assert.equal(
+    await refusal(sheet.save(ctx, { data: { ...data, name: "둘" } })),
+    "character_limit",
+  );
+  table(`${P}settings`).set("community", { characterCreation: false });
+  assert.equal(
+    await refusal(sheet.save(ctx, { data: { ...data, name: "둘" } })),
+    "creation_closed",
+  );
+  table(`${P}settings`).set("community", { characterEditing: false });
+  // An application can still be finished; an approved sheet waits.
+  const finished = await sheet.save(ctx, {
+    id: first.document.id,
+    revision: first.document.revision,
+    data: { ...data, profile: "신청 중 고침" },
+  });
+  assert.equal(finished.document.data.profile, "신청 중 고침");
+  table(`${P}characters`).set(first.document.id, {
+    ...table(`${P}characters`).get(first.document.id),
+    state: "approved",
+  });
+  assert.equal(
+    await refusal(
+      sheet.save(ctx, {
+        id: first.document.id,
+        revision: first.document.revision,
+        data: { ...data, profile: "고침" },
+      }),
+    ),
+    "editing_closed",
+  );
+  // A deleted character no longer counts.
+  table(`${P}settings`).set("community", { characterLimit: 1 });
+  table(`${P}characters`).set(first.document.id, {
+    ...table(`${P}characters`).get(first.document.id),
+    deleted: true,
+  });
+  await sheet.save(ctx, { data: { ...data, name: "둘" } });
 });
 
 test("characters choose 소속 and 종족 from the owner's lists once there are any", async () => {

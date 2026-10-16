@@ -272,7 +272,11 @@ async function characterItem(character) {
   const remove = item.querySelector(".delete");
   remove.hidden = !mine(character);
   const change = item.querySelector(".edit");
-  change.hidden = !mine(character);
+  // An approved character is edited only while the owner allows editing.
+  change.hidden =
+    !mine(character) ||
+    (character.data.state === "approved" &&
+      (await communitySettings())?.data.characterEditing === false);
   // Lists carry no custom values, so an edit starts from the full sheet.
   change.onclick = () =>
     run(async () => {
@@ -739,6 +743,22 @@ $("tabCharacters").onclick = () =>
     if (!state.charactersLoaded) await loadCharacters();
   });
 $("characterFilter").onchange = () => run(() => loadCharacters());
+/** The owner's community settings, read once a page load. */
+let settingsRead;
+const communitySettings = () =>
+  (settingsRead ??= collection(COLLECTION.settings)
+    .get("community")
+    .catch(() => null));
+
+/**
+ * mypage/character/character_form.php: the registration form, with the
+ * owner's custom fields and 소속·종족 lists, opened from 마이페이지.
+ */
+export async function openCharacterForm() {
+  await Promise.all([loadFieldCatalogue(), loadChoices()]);
+  $("characterForm").hidden = false;
+  $("characterName").focus();
+}
 $("characterForm").onsubmit = (event) => {
   event.preventDefault?.();
   run(async () => {
@@ -776,9 +796,12 @@ $("characterForm").onsubmit = (event) => {
       },
     );
     state.speakers = null;
-    $("characters").prepend(await characterItem(character));
+    // The lists read it again when next shown; 마이페이지 shows it now.
+    state.charactersLoaded = false;
     $("characterForm").reset?.();
-    say(`${name}을(를) 등록했습니다.`);
+    $("characterForm").hidden = true;
+    $("myAccountTab").click();
+    say(`${character.data.name}을(를) 등록했습니다.`);
   });
 };
 

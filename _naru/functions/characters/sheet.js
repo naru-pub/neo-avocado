@@ -1,5 +1,6 @@
 import {
   PREFIX,
+  SETTINGS,
   SIDES,
   CLASSES,
   deleteCommunityDocument,
@@ -38,12 +39,56 @@ async function listed(ctx, collection, value, kept, label) {
   return chosen;
 }
 
+/**
+ * The owner's switches, as the original's 캐릭터생성 가능 and 수정 가능
+ * (cf_2, cf_3) and cf_character_count: a member registers only while
+ * creation is open and below the limit, and edits an approved character only
+ * while editing is.
+ */
+async function checkPeriod(ctx, previous) {
+  if (ctx.owner) return;
+  const settings = (await ctx.get(SETTINGS, "community"))?.data ?? {};
+  if (previous) {
+    // An application can always be finished, as the original's viewer
+    // offers 수정 on any unapproved character (viewer.php:101).
+    if (
+      settings.characterEditing === false &&
+      previous.data.state === "approved"
+    )
+      ctx.fail("ACCESS_DENIED", "현재 캐릭터 수정 기간이 아닙니다.", {
+        reason: "editing_closed",
+      });
+    return;
+  }
+  if (settings.characterCreation === false)
+    ctx.fail("ACCESS_DENIED", "현재 캐릭터 생성 기간이 아닙니다.", {
+      reason: "creation_closed",
+    });
+  const limit = Number.isSafeInteger(settings.characterLimit)
+    ? settings.characterLimit
+    : CHARACTER_LIMIT;
+  if (limit > 0) {
+    const owned = await ctx.count(CHARACTERS, {
+      filter: { owner: ctx.member.id },
+      where: { ne: ["deleted", true] },
+    });
+    if (owned >= limit)
+      ctx.fail("CONFLICT", `캐릭터는 ${limit}명까지 만들 수 있습니다.`, {
+        reason: "character_limit",
+        limit,
+      });
+  }
+}
+/** Characters a member may have unless the owner sets another number. */
+const CHARACTER_LIMIT = 1;
+
 export async function save(
   ctx,
   { id = null, data = {}, revision = null } = {},
 ) {
   const { previous } = await startWrite(ctx, CHARACTERS, { id, revision });
   notDeleted(ctx, previous);
+  await checkPeriod(ctx, previous);
   if (!data || typeof data !== "object")
     ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
       reason: "invalid_input",

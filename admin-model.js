@@ -609,6 +609,24 @@ export const models = {
         default: 100,
       },
       {
+        key: "characterCreation",
+        label: "캐릭터 생성 가능",
+        type: "checkbox",
+        default: true,
+      },
+      {
+        key: "characterEditing",
+        label: "캐릭터 수정 가능",
+        type: "checkbox",
+        default: true,
+      },
+      {
+        key: "characterLimit",
+        label: "회원당 캐릭터 수 (0이면 제한 없음)",
+        type: "number",
+        default: 1,
+      },
+      {
         key: "initialStatPoints",
         label: "새 캐릭터 배분 포인트",
         type: "number",

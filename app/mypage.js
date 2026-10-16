@@ -16,6 +16,7 @@ import {
   STATE_NAMES,
 } from "./core.js";
 import { configureBoard, openLogNumber } from "./logs.js";
+import { openCharacterForm } from "./characters.js";
 
 /** 계정정보: the profile, the member's characters, and leaving. */
 async function loadMyPage() {
@@ -42,7 +43,18 @@ async function loadMyPage() {
     empty.textContent = "등록한 캐릭터가 없습니다.";
     $("myCharacters").append(empty);
   }
+  // 신규 캐릭터 등록 shows while the owner allows creation and the member
+  // has fewer than the limit (mypage/character/index.php); the server checks
+  // the same.
+  const settings = await collection(COLLECTION.settings)
+    .get("community")
+    .catch(() => null);
+  const open = settings?.data.characterCreation !== false;
+  const limit = settings?.data.characterLimit ?? 1;
+  $("newCharacter").hidden = !open || (limit > 0 && characters.length >= limit);
+  $("characterForm").hidden = true;
 }
+$("newCharacter").onclick = () => run(() => openCharacterForm());
 
 /**
  * 로그내역 (mypage/log): the member's own posts on every board they can read,

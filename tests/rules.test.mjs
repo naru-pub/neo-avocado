@@ -122,6 +122,9 @@ test("settings: only the community settings, trimmed to what pages use", () => {
       shopCategories: "일반, 이벤트",
       shopNpc: null,
       shopGreeting: "",
+      characterCreation: true,
+      characterEditing: true,
+      characterLimit: 1,
     },
   );
 });

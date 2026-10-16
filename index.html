@@ -214,6 +214,56 @@
         </p>
         <h2>캐릭터 <small>My Character</small></h2>
         <ul id="myCharacters" class="my-characters"></ul>
+        <!-- mypage/character/index.php: 신규 캐릭터 등록, while the owner allows
+             it and the member has fewer characters than the limit. -->
+        <p class="actions">
+          <button id="newCharacter" type="button" hidden>
+            신규 캐릭터 등록
+          </button>
+        </p>
+        <form id="characterForm" class="card" hidden>
+          <h3>신규 캐릭터 등록</h3>
+          <label>
+            이름
+            <input id="characterName" maxlength="40" required />
+          </label>
+          <label>
+            소속
+            <input id="characterSide" maxlength="40" />
+          </label>
+          <label>
+            종족
+            <input id="characterClass" maxlength="40" />
+          </label>
+          <label>
+            프로필
+            <textarea
+              id="characterProfile"
+              maxlength="4000"
+              rows="4"
+            ></textarea>
+          </label>
+          <label>
+            두상
+            <input id="characterImage" type="file" accept="image/*" />
+          </label>
+          <label
+            >종류
+            <select id="characterType">
+              <option value="main">메인</option>
+              <option value="sub">서브</option>
+            </select></label
+          >
+          <div id="characterFields"></div>
+          <label
+            >상태
+            <select id="characterState">
+              <option value="editing">수정 중</option>
+              <option value="submitted">신청 (수정 완료)</option>
+            </select></label
+          >
+          <button type="submit">등록</button>
+        </form>
         <p class="actions"><button id="myLeave" type="button">탈퇴</button></p>
       </section>
       <section id="myLogsView" hidden>
@@ -342,49 +392,6 @@
             <option value="approved">승인된 캐릭터</option>
           </select></label
         >
-        <form id="characterForm" class="card">
-          <h2>캐릭터 등록</h2>
-          <label>
-            이름
-            <input id="characterName" maxlength="40" required />
-          </label>
-          <label>
-            소속
-            <input id="characterSide" maxlength="40" />
-          </label>
-          <label>
-            종족
-            <input id="characterClass" maxlength="40" />
-          </label>
-          <label>
-            프로필
-            <textarea
-              id="characterProfile"
-              maxlength="4000"
-              rows="4"
-            ></textarea>
-          </label>
-          <label>
-            두상
-            <input id="characterImage" type="file" accept="image/*" />
-          </label>
-          <label
-            >종류
-            <select id="characterType">
-              <option value="main">메인</option>
-              <option value="sub">서브</option>
-            </select></label
-          >
-          <div id="characterFields"></div>
-          <label
-            >상태
-            <select id="characterState">
-              <option value="editing">수정 중</option>
-              <option value="submitted">신청 (수정 완료)</option>
-            </select></label
-          >
-          <button type="submit">등록</button>
-        </form>
         <ul id="characters" class="characters"></ul>
         <nav
           id="characterPages"
