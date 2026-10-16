@@ -56,7 +56,10 @@ async function build(directory) {
         published,
         await format(outputText, { filepath: published }),
       );
-    } else await cp(join(root, path), target);
+    } else if (!/\.[^./]+$/.test(entry.name))
+      // Naru serves files by extension: LICENSE and the like go as .txt.
+      await cp(join(root, path), `${target}.txt`);
+    else await cp(join(root, path), target);
   }
 }
 
