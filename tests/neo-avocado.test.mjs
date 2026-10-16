@@ -544,7 +544,7 @@ test("profile and character edits use their original revisions and preserve extr
   );
 });
 
-test("the shop exposes later pages and crafts selected inventory through the server", async () => {
+test("the shop exposes later pages and crafts from the inventory's own copies through the server", async () => {
   const database = fakeDatabase({ [PROFILES]: [me] });
   database.store.set(WALLETS, [{ id: ME, data: { balance: 100 } }]);
   database.store.set(
@@ -592,7 +592,7 @@ test("the shop exposes later pages and crafts selected inventory through the ser
     $("itemPages").querySelector("button:last-child").onclick();
   await settle();
   assert.equal($("items").children.length, 1);
-  $("inventory").querySelector(".material").checked = true;
+  // The recipe's materials are taken from the inventory, as the original's.
   submit($("craftForm"));
   await settle();
   assert.deepEqual(
@@ -1070,26 +1070,46 @@ test("the shop reads the wallet, items and own inventory when opened, and spends
   assert.equal($("balance").textContent, "120");
   // No character chosen: an item kept for one 종족 is left out
   // (shop/index.php:36), and nothing can be bought (shop.item.skin.php:24).
+  // The list shows pictures and names (shop.skin.php); picking one shows
+  // its price, and 구매하기 only for an approved character.
   const listed = () =>
     [...$("items").children].map(
-      (row) => row.querySelector("span").textContent,
+      (row) => row.querySelector(".shop-pick").textContent,
     );
-  assert.deepEqual(listed(), ["물약 · 10 아보 · 남은 3개", "기념품 · 1 아보"]);
-  assert.equal($("items").querySelector("button").hidden, true);
+  const pick = (name) =>
+    [...$("items").querySelectorAll(".shop-pick")]
+      .find((button) => button.textContent.includes(name))
+      .onclick();
+  const detailButtons = (id) =>
+    [...$(id).querySelectorAll("button")].map((button) => button.textContent);
+  assert.deepEqual(listed(), ["물물약", "기기념품"]);
+  pick("물약");
+  assert.match($("shopDetail").textContent, /물약 10 아보/);
+  assert.match($("shopDetail").textContent, /남은 수량 3개/);
+  assert.deepEqual(detailButtons("shopDetail"), []);
   assert.equal($("shopBuyNote").hidden, false);
+  // One slot an item; its detail has 판매하기, 사용하기 and 선물하기 as the
+  // item allows (inventory/skin/item.skin.php:36-44).
+  const slot = (name) =>
+    [...$("inventory").querySelectorAll(".inventory-slot button")].find(
+      (button) => button.title === name,
+    );
   assert.deepEqual(
-    [...$("inventory").children].map(
-      (row) => row.querySelector("label").textContent,
-    ),
+    [...$("inventory").querySelectorAll(".inventory-slot button")]
+      .map((button) => button.title)
+      .sort(),
     ["기념품", "물약"],
   );
-  // 판매, 사용 and 선물 follow the item (inventory/skin/item.skin.php:36-44).
-  const buttons = (index) =>
-    [...$("inventory").children[index].querySelectorAll("button")]
-      .filter((button) => !button.hidden)
-      .map((button) => button.textContent);
-  assert.deepEqual(buttons(0), ["캐릭터 이동"]);
-  assert.deepEqual(buttons(1), ["판매", "선물", "사용", "캐릭터 이동"]);
+  slot("기념품").onclick();
+  assert.deepEqual(detailButtons("inventoryDetail"), ["캐릭터 이동"]);
+  slot("물약").onclick();
+  assert.match($("inventoryDetail").textContent, /물약 5 아보/);
+  assert.deepEqual(detailButtons("inventoryDetail"), [
+    "판매하기",
+    "사용하기",
+    "선물하기",
+    "캐릭터 이동",
+  ]);
   assert.deepEqual(
     database.calls.filter((call) => call.name === INVENTORY).at(0).filter,
     { owner: ME },
@@ -1106,18 +1126,16 @@ test("the shop reads the wallet, items and own inventory when opened, and spends
   $("inventoryCharacter").value = "draft";
   $("inventoryCharacter").onchange();
   for (let n = 0; n < 4; n += 1) await settle();
-  assert.equal($("items").querySelector("button").hidden, true);
+  pick("물약");
+  assert.deepEqual(detailButtons("shopDetail"), []);
   assert.equal($("shopBuyNote").hidden, false);
   // An approved 요정 sees the 요정's bow and buys as itself.
   $("inventoryCharacter").value = "hero";
   $("inventoryCharacter").onchange();
   for (let n = 0; n < 4; n += 1) await settle();
-  assert.deepEqual(listed(), [
-    "요정 활 · 1 아보",
-    "물약 · 10 아보 · 남은 3개",
-    "기념품 · 1 아보",
-  ]);
-  assert.equal($("items").querySelector("button").hidden, false);
+  assert.deepEqual(listed(), ["요요정 활", "물물약", "기기념품"]);
+  pick("요정 활");
+  assert.deepEqual(detailButtons("shopDetail"), ["구매하기"]);
   assert.equal($("shopBuyNote").hidden, true);
   // The page never writes money or items itself: it calls the function, and
   // shows what the function decided.
@@ -1142,7 +1160,7 @@ test("the shop reads the wallet, items and own inventory when opened, and spends
   $("daily").onclick();
   for (let n = 0; n < 4; n += 1) await settle();
   assert.equal($("status").textContent, "오늘은 이미 받았습니다.");
-  $("items").querySelector("button").onclick();
+  $("shopDetail").querySelector("button").onclick();
   for (let n = 0; n < 4; n += 1) await settle();
   assert.deepEqual(
     database.calls.filter((call) => call.method === "call").at(-1),

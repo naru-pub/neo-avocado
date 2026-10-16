@@ -55,8 +55,12 @@ export async function sendMessage(ctx, { recipients, body } = {}) {
   if (daily > 0) {
     const sent = await ctx.count(MESSAGES, {
       filter: { from: ctx.member.id },
+      // A gift's notice (economy/inventory:gift) is not a 쪽지 they wrote.
       where: {
-        gte: ["sentAt", Date.parse(`${kstDay(ctx.now)}T00:00:00+09:00`)],
+        all: [
+          { gte: ["sentAt", Date.parse(`${kstDay(ctx.now)}T00:00:00+09:00`)] },
+          { ne: ["gift", true] },
+        ],
       },
     });
     if (sent + recipients.length > daily)

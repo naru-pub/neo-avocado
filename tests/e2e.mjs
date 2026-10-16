@@ -375,10 +375,11 @@ try {
 
   // Buying takes an approved character (shop/_ajax.shop_update.php:4):
   // none is offered until the owner approves 초록 and Alice picks it.
-  const cakeBuy = alice
-    .locator("#items li", { hasText: "케이크" })
-    .locator("button");
-  assert.equal(await cakeBuy.isVisible(), false);
+  const cake = alice.locator("#items .shop-pick", { hasText: "케이크" });
+  const cakeBuy = alice.locator("#shopDetail button", { hasText: "구매하기" });
+  await cake.click();
+  await alice.locator("#shopDetail", { hasText: "케이크" }).waitFor();
+  assert.equal(await cakeBuy.count(), 0);
   await alice.locator("#shopBuyNote").waitFor();
   await owner.evaluate(
     async ({ id }) => {
@@ -400,12 +401,21 @@ try {
     .locator("#inventoryCharacter option", { hasText: "초록" })
     .waitFor({ state: "attached" });
   await alice.locator("#inventoryCharacter").selectOption({ label: "초록" });
-  await cakeBuy.waitFor();
+  await alice.locator("#shopBuyNote").waitFor({ state: "hidden" });
+  await cake.click();
   await cakeBuy.click();
   await alice
     .locator("#status", { hasText: "케이크을(를) 샀습니다." })
     .waitFor();
-  await alice.locator("#inventory li", { hasText: "케이크" }).waitFor();
+  // The inventory shows it in a slot; its detail opens on a click.
+  await alice
+    .locator('#inventory .inventory-slot button[title="케이크"]')
+    .click();
+  await alice.locator("#inventoryDetail", { hasText: "케이크" }).waitFor();
+  if (process.env.E2E_SHOTS)
+    await alice.locator("#shopView").screenshot({
+      path: `${process.env.E2E_SHOTS}/shop.png`,
+    });
 
   // Deleting the post leaves its picture: Naru deletes media only when
   // someone asks, as it may be linked from anywhere.

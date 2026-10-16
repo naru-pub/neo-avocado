@@ -45,7 +45,9 @@ export const state = {
   nicks: new Map(),
   charactersLoaded: false,
   shopLoaded: false,
-  inventoryCursor: null,
+  // The chosen character's inventory, as last read: buying and crafting
+  // take their materials from it.
+  inventoryRows: [],
   itemCatalog: new Map(),
   profile: null,
   recipes: [],

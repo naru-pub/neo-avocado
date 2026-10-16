@@ -240,6 +240,15 @@ export const models = {
     fields: [
       { key: "name", label: "이름", required: true, max: 80 },
       { key: "description", label: "설명", type: "textarea", max: 2000 },
+      // it_content2: what it does, under the description in the item's detail.
+      {
+        key: "effectDescription",
+        label: "효과 설명",
+        type: "textarea",
+        max: 1000,
+      },
+      // sh_content: what the shop's NPC says of it when picked.
+      { key: "shopTalk", label: "상점 NPC 대사", type: "textarea", max: 500 },
       { key: "image", label: "이미지", type: "url", image: true, max: 2000 },
       {
         key: "shopCategory",

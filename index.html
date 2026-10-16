@@ -454,13 +454,16 @@
           <img id="shopNpc" alt="" hidden />
           <p id="shopTalk" class="shop-talk"></p>
         </div>
+        <!-- shop.item.skin.php: the item picked, its price and 구매하기. -->
+        <div id="shopDetail" class="card item-detail" hidden></div>
         <nav id="shopCategories" class="sub-tabs"></nav>
         <p id="shopBuyNote" class="hint" hidden></p>
         <ul id="items" class="items"></ul>
         <nav id="itemPages" class="pages" aria-label="상점 페이지" hidden></nav>
         <h2>내 인벤토리</h2>
+        <!-- inventory/list.skin.php: one slot an item, gifts on their own. -->
         <ul id="inventory" class="inventory"></ul>
-        <button id="moreInventory" type="button" hidden>더 보기</button>
+        <div id="inventoryDetail" class="card item-detail" hidden></div>
         <form id="craftForm" class="card">
           <h2>아이템 제작</h2>
           <label
@@ -469,7 +472,8 @@
           ></label>
           <p id="recipeDescription"></p>
           <p>
-            인벤토리에서 재료를 선택하세요. 성공하면 선택한 재료가 소모됩니다.
+            재료는 고른 캐릭터의 인벤토리에서 자동으로 고릅니다. 성공하면 재료가
+            소모됩니다.
           </p>
           <button type="submit">제작</button>
         </form>

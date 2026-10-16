@@ -17,6 +17,7 @@ import {
   requireUsable,
   restoreStat,
   lacking,
+  MESSAGES,
 } from "../../modules/shared.js";
 import { presentCharacter } from "../../modules/characters.js";
 
@@ -49,7 +50,13 @@ export async function sell(ctx, { inventory } = {}) {
   return { balance, name: owned.data.name };
 }
 
-/** The recipient must be an existing member profile, never a browser-supplied owner. */
+/**
+ * Gives an item to a character (inventory/inventory_update.php): another
+ * member's, or one of the sender's own. The recipient must be an existing
+ * member profile, never a browser-supplied owner. The item remembers who
+ * sent it and the message (se_ch_name, in_memo), and another member hears
+ * of it by 쪽지, as the original's send_memo.
+ */
 export async function gift(
   ctx,
   { inventory, recipient, character = null, memo = "" } = {},
@@ -59,9 +66,10 @@ export async function gift(
     ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
       reason: "not_owned",
     });
+  const self = recipient === ctx.member.id;
   if (
     typeof recipient !== "string" ||
-    recipient === ctx.member.id ||
+    (self && !character) ||
     !(await ctx.get(PROFILES, recipient))
   )
     ctx.fail("INVALID_REQUEST", "받는 회원을 확인해 주세요.", {
@@ -91,14 +99,38 @@ export async function gift(
     ctx.fail("INVALID_REQUEST", "캐릭터를 확인해 주세요.", {
       reason: "no_character",
     });
+  if (self && owned.data.character === character)
+    ctx.fail("INVALID_REQUEST", "이미 이 캐릭터의 아이템입니다.", {
+      reason: "same_character",
+    });
+  // By. the sending character, or the member's nickname (se_ch_name).
+  const from = owned.data.character
+    ? await ctx.get(CHARACTERS, owned.data.character)
+    : null;
+  const senderName =
+    from?.data.name ??
+    (await ctx.get(PROFILES, ctx.member.id))?.data.nick ??
+    "";
   const transferred = await ctx.set(INVENTORY, owned.id, {
     ...owned.data,
     owner: recipient,
     sender: ctx.member.id,
+    senderName,
     memo,
     receivedAt: ctx.now,
     character,
   });
+  if (!self) {
+    await ctx.add(MESSAGES, {
+      from: ctx.member.id,
+      to: recipient,
+      body: `[ ${senderName}님이 보내신 《${owned.data.name ?? item.data.name}》 아이템이 도착하였습니다. ] 캐릭터 인벤토리를 확인하세요.`,
+      sentAt: ctx.now,
+      readAt: null,
+      gift: true,
+    });
+    ctx.notify(recipient, { unread: true });
+  }
   await record(ctx, "gift", {
     item: owned.data.item,
     inventory: owned.id,

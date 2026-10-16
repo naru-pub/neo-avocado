@@ -26,14 +26,23 @@ export function namesOf(settings = {}) {
   return names;
 }
 
-/** An amount of money: "100 아보". */
+/** 1,000, as the original's number_format. */
+export function amountText(amount) {
+  return typeof amount === "number"
+    ? amount.toLocaleString("ko-KR")
+    : String(amount);
+}
+
+/** An amount of money: "1,000 아보". */
 export function moneyText(names, amount) {
-  return names.moneyUnit ? `${amount} ${names.moneyUnit}` : String(amount);
+  return names.moneyUnit
+    ? `${amountText(amount)} ${names.moneyUnit}`
+    : amountText(amount);
 }
 
 /** An amount of experience: "경험치 30" or, with a unit, "경험치 30exp". */
 export function expText(names, amount) {
-  return `${names.expName} ${amount}${names.expUnit}`;
+  return `${names.expName} ${amountText(amount)}${names.expUnit}`;
 }
 
 /**

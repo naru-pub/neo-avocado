@@ -1237,8 +1237,9 @@ test("selling checks ownership and server price and cannot pay twice", async () 
   assert.equal(table(`${P}wallets`).get("m-1").balance, 12);
 });
 
-test("gifts transfer one item only to an existing other member and retain provenance", async () => {
+test("gifts go to a character, another member's or one's own, keep who sent them and tell the recipient", async () => {
   const { ctx, table } = fakeCtx();
+  table(`${P}profiles`).set("m-1", { nick: "나" });
   table(`${P}profiles`).set("m-2", { nick: "친구" });
   table(`${P}items`).set("seed", { name: "씨앗" });
   table(`${P}inventory`).set("mine", {
@@ -1261,15 +1262,31 @@ test("gifts transfer one item only to an existing other member and retain proven
     name: "씨앗",
     from: "shop",
     sender: "m-1",
+    senderName: "나",
     memo: "선물",
     receivedAt: ctx.now,
     character: null,
   });
+  // The recipient hears of it by 쪽지 (send_memo), not counted as written.
+  const [notice] = [...table(`${P}messages`).values()];
+  assert.equal(notice.to, "m-2");
+  assert.equal(notice.gift, true);
+  assert.match(notice.body, /나님이 보내신 《씨앗》 아이템이 도착/);
   assert.equal(
     await refusal(gift(ctx, { inventory: "mine", recipient: "m-2" })),
     "not_owned",
   );
   assert.equal(await refusal(sell(ctx, { inventory: "mine" })), "not_owned");
+  // To one of the sender's own characters: no 쪽지.
+  table(`${P}characters`).set("own", { owner: "m-1", name: "내캐" });
+  table(`${P}inventory`).set("again", {
+    owner: "m-1",
+    item: "seed",
+    name: "씨앗",
+  });
+  await gift(ctx, { inventory: "again", recipient: "m-1", character: "own" });
+  assert.equal(table(`${P}inventory`).get("again").character, "own");
+  assert.equal(table(`${P}messages`).size, 1);
 });
 
 test("crafting rejects duplicate, foreign, extra and insufficient materials before spending", async () => {

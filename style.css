@@ -1349,3 +1349,88 @@ body.admin-page {
   color: var(--quiet);
   font-size: 0.85em;
 }
+/* The shop's list and the inventory (shop.skin.php, inventory/list.skin.php):
+   pictures in a grid; the one picked shows below. */
+#items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 10px;
+  list-style: none;
+  padding: 0;
+}
+.shop-pick {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 120px;
+  padding: 8px;
+}
+#inventory {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 6px;
+}
+#inventory > li.inventory-slot {
+  padding: 0;
+  border: 0;
+}
+.inventory-slot > button {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 2px;
+}
+.inventory-slot .count {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  font-style: normal;
+  font-size: 0.8em;
+  background: var(--strong);
+  color: var(--on-strong);
+  padding: 0 4px;
+}
+.inventory-slot .present {
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  font-style: normal;
+}
+.item-detail {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 4px 12px;
+  align-items: start;
+}
+.item-detail > :not(.item-portrait) {
+  grid-column: 2;
+  margin: 0;
+}
+.item-detail .item-portrait {
+  grid-row: 1 / span 6;
+}
+.item-detail .price {
+  color: var(--pit);
+  font-weight: normal;
+}
+.item-detail .effect {
+  color: var(--pit);
+}
+.gift-memo .by {
+  text-align: right;
+}
+.inventory-slot .item-portrait {
+  height: 100%;
+  margin: 0;
+}
+.inventory-slot .item-portrait > i {
+  font-size: 20px;
+}
+.shop-pick .item-portrait {
+  width: 100%;
+  margin: 0;
+}
+.item-detail .actions {
+  text-align: left;
+}
