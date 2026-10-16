@@ -302,6 +302,8 @@ async function loadFieldCatalogue() {
       const [label, input] = fieldInput(row, "");
       input.dataset.field = row.id;
       label.append(input);
+      const unit = suffixOf(row);
+      if (unit) label.append(` ${unit}`);
       if (row.data.type !== "image") return [label];
       const upload = document.createElement("label");
       upload.textContent = `${row.data.label ?? row.id} 파일 올리기`;
@@ -315,6 +317,11 @@ async function loadFieldCatalogue() {
   );
   return rows;
 }
+/** A one-line field's unit (ar_text), shown after it (viewer.skin.php:117). */
+const suffixOf = (row) =>
+  (row.data.type ?? "text") === "text" && typeof row.data.suffix === "string"
+    ? row.data.suffix.trim()
+    : "";
 /** A label and control for one custom field definition. */
 function fieldInput(row, value) {
   const label = document.createElement("label");
@@ -361,7 +368,8 @@ function renderFields(list, character) {
       link.textContent = value;
       link.rel = "noopener noreferrer";
       detail.append(link);
-    } else detail.textContent = value;
+    } else
+      detail.textContent = `${value}${suffixOf(row) ? ` ${suffixOf(row)}` : ""}`;
     list.append(term, detail);
   }
 }
@@ -412,123 +420,12 @@ async function characterItem(character) {
     !mine(character) ||
     (character.data.state === "approved" &&
       (await communitySettings())?.data.characterEditing === false);
-  // Lists carry no custom values, so an edit starts from the full sheet.
   change.onclick = () =>
-    run(async () => {
-      const catalogue = await loadFieldCatalogue();
-      const current = await collection(COLLECTION.characters).get(character.id);
-      const fields: EditField[] = [
-        {
-          name: "name",
-          label: "이름",
-          value: current.data.name,
-          required: true,
-          max: 40,
-        },
-        ...(state.names.sideTitle
-          ? [
-              choiceEdit(
-                "side",
-                state.names.sideTitle,
-                state.sides,
-                current.data.side,
-              ),
-            ]
-          : []),
-        ...(state.names.classTitle
-          ? [
-              choiceEdit(
-                "class",
-                state.names.classTitle,
-                state.classes,
-                current.data.class,
-              ),
-            ]
-          : []),
-        {
-          name: "profile",
-          label: "프로필",
-          value: current.data.profile,
-          multiline: true,
-          max: 4000,
-        },
-      ];
-      if (current.data.type !== "npc")
-        fields.push({
-          name: "type",
-          label: "종류",
-          value: current.data.type ?? "main",
-          options: [
-            ["main", "메인"],
-            ["sub", "서브"],
-          ],
-        });
-      if (current.data.state !== "approved")
-        fields.push({
-          name: "state",
-          label: "상태",
-          value: current.data.state ?? "editing",
-          options: [
-            ["editing", "수정 중"],
-            ["submitted", "신청 (수정 완료)"],
-          ],
-        });
-      fields.push(...imageEdits(current));
-      for (const row of catalogue) {
-        if (row.data.type === "image")
-          fields.push({
-            name: `upload:${row.id}`,
-            label: `${row.data.label ?? row.id} 파일 올리기 (선택)`,
-            type: "file",
-            accept: "image/*",
-          });
-        fields.push({
-          name: `field:${row.id}`,
-          label: `${row.data.label ?? row.id}${row.data.required ? " (신청 시 필수)" : ""}`,
-          value: current.data.fields?.[row.id] ?? "",
-          ...(row.data.type === "select"
-            ? {
-                options: [
-                  ["", "선택 안 함"],
-                  ...(row.data.options ?? []).map((option) => [option, option]),
-                ],
-              }
-            : row.data.type === "textarea"
-              ? { multiline: true, max: 2000 }
-              : { max: row.data.type === "text" ? 200 : 2000 }),
-        });
-      }
-      edit("캐릭터 수정", fields, async (values) => {
-        if (!values.name) throw new Error("이름을 입력해 주세요.");
-        const data = { ...current.data, fields: {} };
-        delete data.fieldMedia;
-        for (const [name, value] of Object.entries(values))
-          if (name.startsWith("field:")) {
-            if (value) data.fields[name.slice(6)] = value;
-          } else if (name.startsWith("image:")) {
-            data[name.slice(6)] = value.trim() || null;
-          } else if (
-            !name.startsWith("upload:") &&
-            !name.startsWith("imageUpload:")
-          )
-            data[name] = value;
-        for (const [name, file] of Object.entries(values))
-          if (name.startsWith("imageUpload:") && file)
-            data[name.slice(12)] = (await uploadManaged(file)).url;
-        // An uploaded file replaces the field's address with its own.
-        for (const [name, file] of Object.entries(values))
-          if (name.startsWith("upload:") && file) {
-            const uploaded = await uploadManaged(file);
-            data.fields[name.slice(7)] = uploaded.url;
-          }
-        const { document: saved } = await caller().call(
-          "characters/sheet:save",
-          { id: character.id, data, revision: current.revision },
-        );
-        state.speakers = null;
+    run(() =>
+      editCharacter(character, async (saved) => {
         item.replaceWith(await characterItem(saved));
-      });
-    });
+      }),
+    );
   remove.onclick = () =>
     run(async () => {
       if (!confirm(`${character.data.name}을(를) 지울까요?`)) return;
@@ -549,6 +446,128 @@ async function characterItem(character) {
   wireCharacterDetails(item, character);
   return item;
 }
+/**
+ * The member's character form for one of theirs (character_form.php?w=u).
+ * A 프로필수정 ticket (`ticket`, an inventory ID) opens it even while
+ * editing is closed, and the save spends it (inventory/use_item.php:27-28).
+ */
+export async function editCharacter(
+  character,
+  onSaved: (saved) => unknown,
+  ticket: string | null = null,
+) {
+  // Lists carry no custom values, so an edit starts from the full sheet.
+  const catalogue = await loadFieldCatalogue();
+  const current = await collection(COLLECTION.characters).get(character.id);
+  const fields: EditField[] = [
+    {
+      name: "name",
+      label: "이름",
+      value: current.data.name,
+      required: true,
+      max: 40,
+    },
+    ...(state.names.sideTitle
+      ? [
+          choiceEdit(
+            "side",
+            state.names.sideTitle,
+            state.sides,
+            current.data.side,
+          ),
+        ]
+      : []),
+    ...(state.names.classTitle
+      ? [
+          choiceEdit(
+            "class",
+            state.names.classTitle,
+            state.classes,
+            current.data.class,
+          ),
+        ]
+      : []),
+    {
+      name: "profile",
+      label: "프로필",
+      value: current.data.profile,
+      multiline: true,
+      max: 4000,
+    },
+  ];
+  // 메인·서브 (ch_type) is the admin's to set (character_form.php:96).
+  if (current.data.state !== "approved")
+    fields.push({
+      name: "state",
+      label: "상태",
+      value: current.data.state ?? "editing",
+      options: [
+        ["editing", "수정 중"],
+        ["submitted", "신청 (수정 완료)"],
+      ],
+    });
+  fields.push(...imageEdits(current));
+  for (const row of catalogue) {
+    if (row.data.type === "image")
+      fields.push({
+        name: `upload:${row.id}`,
+        label: `${row.data.label ?? row.id} 파일 올리기 (선택)`,
+        type: "file",
+        accept: "image/*",
+      });
+    fields.push({
+      name: `field:${row.id}`,
+      label: `${row.data.label ?? row.id}${suffixOf(row) ? ` (단위: ${suffixOf(row)})` : ""}${row.data.required ? " (신청 시 필수)" : ""}`,
+      value: current.data.fields?.[row.id] ?? "",
+      ...(row.data.type === "select"
+        ? {
+            options: [
+              ["", "선택 안 함"],
+              ...(row.data.options ?? []).map((option) => [option, option]),
+            ],
+          }
+        : row.data.type === "textarea"
+          ? { multiline: true, max: 2000 }
+          : { max: row.data.type === "text" ? 200 : 2000 }),
+    });
+  }
+  edit(
+    ticket ? "캐릭터 수정 (프로필 수정권 사용)" : "캐릭터 수정",
+    fields,
+    async (values) => {
+      if (!values.name) throw new Error("이름을 입력해 주세요.");
+      const data = { ...current.data, fields: {} };
+      delete data.fieldMedia;
+      for (const [name, value] of Object.entries(values))
+        if (name.startsWith("field:")) {
+          if (value) data.fields[name.slice(6)] = value;
+        } else if (name.startsWith("image:")) {
+          data[name.slice(6)] = value.trim() || null;
+        } else if (
+          !name.startsWith("upload:") &&
+          !name.startsWith("imageUpload:")
+        )
+          data[name] = value;
+      for (const [name, file] of Object.entries(values))
+        if (name.startsWith("imageUpload:") && file)
+          data[name.slice(12)] = (await uploadManaged(file)).url;
+      // An uploaded file replaces the field's address with its own.
+      for (const [name, file] of Object.entries(values))
+        if (name.startsWith("upload:") && file) {
+          const uploaded = await uploadManaged(file);
+          data.fields[name.slice(7)] = uploaded.url;
+        }
+      const { document: saved } = await caller().call("characters/sheet:save", {
+        id: character.id,
+        data,
+        revision: current.revision,
+        ...(ticket ? { ticket } : {}),
+      });
+      state.speakers = null;
+      await onSaved(saved);
+    },
+  );
+}
 // Which functions only read is declared in their modules (readOnly), so Naru
 // gives them the read budget; the page calls them all the same way.
 function wireCharacterDetails(item, character) {
@@ -565,7 +584,13 @@ function wireCharacterDetails(item, character) {
     !show.stats && !show.exp && !show.rank;
   item.querySelector(".stats").hidden = !show.stats;
   item.querySelector(".titles-section").hidden = !show.titles;
-  item.querySelector(".closet-section").hidden = !show.closet;
+  // The closet needs the 전신 too: an outfit is a 전신 (member/skin/
+  // viewer.skin.php:7, member/viewer.php:79).
+  // Relations are an approved character's (mypage/character/viewer.php:157,
+  // member/skin/viewer.skin.php:201).
+  item.querySelector(".relations-section").hidden =
+    character.data.state !== "approved";
+  item.querySelector(".closet-section").hidden = !show.closet || !bodyUsed();
   let loaded = false;
   const refresh = async () => {
     await loadFieldCatalogue();
@@ -707,7 +732,15 @@ function wireCharacterDetails(item, character) {
       character: character.id,
     });
     item.querySelector(".relations").replaceChildren();
-    for (const row of relations.sort((a, b) => a.data.order - b.data.order)) {
+    // rm_order, then the newest first; one with no summary is not shown
+    // (relation_list.php:4, 31-34).
+    for (const row of relations
+      .filter((row) => String(row.data.memo ?? "").trim())
+      .sort(
+        (a, b) =>
+          (a.data.order ?? 0) - (b.data.order ?? 0) ||
+          (a.createdAt < b.createdAt ? 1 : -1),
+      )) {
       const li = document.createElement("li");
       const target = await collection(COLLECTION.characters)
         .get(row.data.target)
@@ -722,14 +755,30 @@ function wireCharacterDetails(item, character) {
             textContent: target.data.name,
           })
         : "삭제된 캐릭터";
-      li.append(name, ` · 호감도 ${row.data.affinity}: ${row.data.memo}`);
-      if (row.data.link && row.data.link.startsWith("https://")) {
+      li.append(
+        name,
+        " ",
+        Object.assign(document.createElement("span"), {
+          className: "affinity",
+          textContent: hearts(row.data.affinity),
+          title: `호감도 ${affinityOf(row.data.affinity)}`,
+        }),
+        `: ${row.data.memo}`,
+      );
+      // rm_link: several addresses, one per line (viewer.skin.php:243-251).
+      const links = String(row.data.link ?? "")
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.startsWith("https://"));
+      links.forEach((address, index) => {
         const link = document.createElement("a");
-        link.href = row.data.link;
-        link.textContent = "관계 링크";
+        link.href = address;
+        link.textContent =
+          links.length > 1 ? `관계 링크 ${index + 1}` : "관계 링크";
+        link.target = "_blank";
         link.rel = "noopener noreferrer";
         li.append(" ", link);
-      }
+      });
       if (mine(character)) {
         const change = document.createElement("button");
         change.type = "button";
@@ -790,16 +839,51 @@ function wireCharacterDetails(item, character) {
             });
             await refresh();
           });
-        li.append(" ", wear, " ", remove);
+        // cloest_path_update.php: a new name or address for the outfit.
+        const change = document.createElement("button");
+        change.type = "button";
+        change.textContent = "수정";
+        change.onclick = () =>
+          edit(
+            "의상 수정",
+            [
+              {
+                name: "name",
+                label: "의상 이름",
+                value: clothing.data.name,
+                required: true,
+                max: 80,
+              },
+              {
+                name: "image",
+                label: "이미지 주소 (HTTPS)",
+                value: clothing.data.image,
+                max: 2000,
+              },
+              {
+                name: "file",
+                label: "또는 이미지 파일",
+                type: "file",
+                accept: "image/*",
+              },
+            ],
+            async ({ name, image, file }) => {
+              const uploaded = file ? await uploadManaged(file) : null;
+              await caller().call("characters/wardrobe:editOutfit", {
+                id: clothing.id,
+                name,
+                image: uploaded?.url ?? image,
+              });
+              await refresh();
+            },
+          );
+        li.append(" ", wear, " ", change, " ", remove);
       }
       item.querySelector(".wardrobe").append(li);
     }
-    const active = clothes.find((row) => row.id === character.data.outfit);
     let portrait = item.querySelector(".character-image");
-    // With a 전신 in use the outfit is the 전신 (member/viewer.php:76);
-    // without one it stands for the character's picture, as before.
-    const src =
-      (bodyUsed() ? null : active?.data.image) ?? character.data.image;
+    // The outfit is the 전신 (member/viewer.php:76), never the 두상.
+    const src = character.data.image;
     if (src && !portrait) {
       portrait = document.createElement("img");
       portrait.className = "character-image";
@@ -831,9 +915,12 @@ function wireCharacterDetails(item, character) {
           },
           {
             name: "affinity",
-            label: "호감도 (-100 ~ 100)",
-            value: row?.data.affinity ?? 0,
-            type: "number",
+            label: "호감도",
+            value: String(affinityOf(row?.data.affinity)),
+            options: [5, 4, 3, 2, 1, 0].map((n) => [
+              String(n),
+              n ? `${n} : ${"♡".repeat(n)}` : "0",
+            ]),
           },
           {
             name: "memo",
@@ -844,8 +931,9 @@ function wireCharacterDetails(item, character) {
           },
           {
             name: "link",
-            label: "관계 링크 (HTTPS)",
+            label: "관계 링크 (HTTPS, 여러 개는 한 줄에 하나씩)",
             value: row?.data.link,
+            multiline: true,
             max: 2000,
           },
           {
@@ -917,22 +1005,6 @@ function wireCharacterDetails(item, character) {
   details.ontoggle = () => {
     if (details.open && !loaded) run(refresh);
   };
-  if (character.data.outfit && !bodyUsed())
-    run(async () => {
-      const clothing = await collection(COLLECTION.wardrobe).get(
-        character.data.outfit,
-      );
-      if (clothing.data.character === character.id) {
-        let portrait = item.querySelector(".character-image");
-        if (!portrait) {
-          portrait = document.createElement("img");
-          portrait.className = "character-image";
-          portrait.alt = character.data.name;
-          item.prepend(portrait);
-        }
-        portrait.src = clothing.data.image;
-      }
-    });
 }
 $("tabCharacters").onclick = () =>
   run(async () => {
@@ -992,6 +1064,11 @@ function imageEdits(current): EditField[] {
           },
     );
 }
+/** A relation's affinity as 0 to 5 hearts; older values are clamped. */
+const affinityOf = (value) =>
+  Math.min(5, Math.max(0, Math.round(Number(value) || 0)));
+const hearts = (value) =>
+  "♥".repeat(affinityOf(value)) + "♡".repeat(5 - affinityOf(value));
 const bodyUsed = () =>
   state.images.some((slot) => slot.slot === "body" && slot.use);
 /** The 흉상 and 전신 on a character's page; the worn outfit is the 전신. */
@@ -1079,7 +1156,6 @@ $("characterForm").onsubmit = (event) => {
           ).value.trim(),
           profile: $<HTMLTextAreaElement>("characterProfile").value.trim(),
           ...images,
-          type: $<HTMLSelectElement>("characterType").value,
           state: $<HTMLSelectElement>("characterState").value,
           ...(Object.keys(fields).length ? { fields } : {}),
         },
@@ -1127,11 +1203,31 @@ export async function openCharacter(id) {
   };
   const exp = document.createElement("ul");
   exp.className = "viewer-exp";
-  for (const row of sheet.exp) {
-    const li = document.createElement("li");
-    li.textContent = `${formatTime(row.at)} · ${row.delta > 0 ? "+" : ""}${row.delta} (총 ${row.exp})${row.memo ? ` · ${row.memo}` : ""}`;
-    exp.append(li);
-  }
+  const showExp = (rows) => {
+    for (const row of rows) {
+      const li = document.createElement("li");
+      li.textContent = `${formatTime(row.at)} · ${row.delta > 0 ? "+" : ""}${row.delta} (총 ${row.exp})${row.memo ? ` · ${row.memo}` : ""}`;
+      exp.append(li);
+    }
+  };
+  showExp(sheet.exp);
+  // member/exp.php pages its history; here the next page follows on.
+  let expCursor = sheet.expCursor ?? null;
+  const moreExp = document.createElement("button");
+  moreExp.type = "button";
+  moreExp.className = "viewer-more-exp";
+  moreExp.textContent = "더 보기";
+  moreExp.hidden = !expCursor;
+  moreExp.onclick = () =>
+    run(async () => {
+      const next = await caller().call(
+        "characters/progression:characterSheet",
+        { character: id, after: expCursor },
+      );
+      showExp(next.exp);
+      expCursor = next.expCursor ?? null;
+      moreExp.hidden = !expCursor;
+    });
   if (!sheet.exp.length)
     exp.append(
       Object.assign(document.createElement("li"), {
@@ -1140,7 +1236,7 @@ export async function openCharacter(id) {
     );
   // The experience history (member/exp.php) follows ad_use_exp too.
   if (state.viewer.exp)
-    extras.append(heading(`${state.names.expName} 내역`), exp);
+    extras.append(heading(`${state.names.expName} 내역`), exp, moreExp);
   if (sheet.inventory) {
     const title = heading("인벤토리");
     if (sheet.balance !== null) {

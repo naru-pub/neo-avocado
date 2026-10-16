@@ -9,7 +9,7 @@ import {
   showTab,
 } from "./core.js";
 
-/** One side of a couple: the character's picture (or initial) and name. */
+/** One side of a couple: the character's picture (or initial) and name, linked. */
 function partner(character) {
   const side = document.createElement("div");
   side.className = "partner";
@@ -23,7 +23,13 @@ function partner(character) {
     picture.append(image);
   } else picture.textContent = character?.data.name?.charAt(0) ?? "?";
   const name = document.createElement("p");
-  name.textContent = character?.data.name ?? "삭제된 캐릭터";
+  // Each side opens the character's page (couple/skin/list.skin.php:13-17).
+  if (character) {
+    const link = document.createElement("a");
+    link.href = `#/character/${encodeURIComponent(character.id)}`;
+    link.textContent = character.data.name ?? "";
+    name.append(link);
+  } else name.textContent = "삭제된 캐릭터";
   side.append(picture, name);
   return side;
 }

@@ -957,7 +957,6 @@ test("characters are read when their tab is first opened, and registered by memb
         side: "갈색단",
         class: "인간",
         profile: "",
-        type: "main",
         state: "editing",
       },
     },
@@ -1045,7 +1044,11 @@ test("the shop reads the wallet, items and own inventory when opened, and spends
     },
   ]);
   database.store.set(CHARACTERS, [
-    { id: "hero", createdBy: ME, data: { name: "용사", state: "approved" } },
+    {
+      id: "hero",
+      createdBy: ME,
+      data: { name: "용사", state: "approved", class: "요정" },
+    },
     { id: "draft", createdBy: ME, data: { name: "초안", state: "editing" } },
   ]);
   database.store.set(INVENTORY, [
@@ -1122,10 +1125,11 @@ test("the shop reads the wallet, items and own inventory when opened, and spends
     database.calls.filter((call) => call.name === INVENTORY).at(0).filter,
     { owner: ME },
   );
-  // A character not yet approved buys nothing either.
+  // A character not yet approved buys nothing either. 종족 is the sheet's
+  // (ch_class), not a value in the official record.
   const official = {
-    draft: { approved: false },
-    hero: { approved: true, class: "요정" },
+    draft: { approved: false, class: "요정" },
+    hero: { approved: true },
   };
   database.answer = (name, args) =>
     name === "characters/progression:characterStatus"
@@ -1931,4 +1935,68 @@ test("an approved character's stats only take the points left, never going down"
   for (let n = 0; n < 6; n += 1) await settle();
   assert.match(again.querySelector(".progression").textContent, /남은 0/);
   assert.equal(again.querySelector(".allocate-stats").hidden, true);
+});
+
+test("relations are an approved character's, as hearts with their links; the closet waits for a 전신", async () => {
+  const database = fakeDatabase({
+    [PROFILES]: [me],
+    [CHARACTERS]: [
+      { id: "hero", createdBy: ME, data: { name: "용사", state: "approved" } },
+      { id: "rival", createdBy: ME, data: { name: "맞수", state: "approved" } },
+    ],
+    neo_avocado_relations: [
+      {
+        id: "r1",
+        data: {
+          owner: ME,
+          character: "hero",
+          target: "rival",
+          affinity: 40,
+          memo: "오랜 맞수",
+          link: "https://example.com/a\nhttps://example.com/b",
+          order: 0,
+        },
+      },
+      {
+        id: "r2",
+        data: { owner: ME, character: "hero", target: "rival", memo: "" },
+      },
+    ],
+  });
+  database.answer = (name) =>
+    name === "characters/progression:characterStatus"
+      ? {
+          state: { exp: 0, points: 0, approved: true, stats: {}, titles: [] },
+          definitions: [],
+          revision: null,
+          rank: "",
+        }
+      : refuse("empty");
+  const { $, settle } = await page(database);
+  $("tabCharacters").onclick();
+  for (let n = 0; n < 6; n += 1) await settle();
+  const item = [...$("characters").querySelectorAll(".character")].find(
+    (row) => row.querySelector(".character-name").textContent === "용사",
+  );
+  const details = item.querySelector(".character-details");
+  details.open = true;
+  details.ontoggle();
+  for (let n = 0; n < 8; n += 1) await settle();
+  assert.equal(item.querySelector(".relations-section").hidden, false);
+  // viewer.skin.php:209: a relation with no summary is not shown.
+  const rows = item.querySelectorAll(".relations > li");
+  assert.equal(rows.length, 1);
+  // An affinity from before is held to five hearts.
+  assert.equal(rows[0].querySelector(".affinity").textContent, "♥♥♥♥♥");
+  assert.deepEqual(
+    [...rows[0].querySelectorAll('a[href^="https://"]')].map((a) => a.href),
+    ["https://example.com/a", "https://example.com/b"],
+  );
+  // Only the 두상 is in use: no closet (viewer.skin.php:7).
+  assert.equal(item.querySelector(".closet-section").hidden, true);
+  // 메인·서브 is the admin's: the member's form does not offer it.
+  item.querySelector(".edit").onclick();
+  for (let n = 0; n < 4; n += 1) await settle();
+  assert.equal($("editorFields").querySelector('[name="type"]'), null);
+  $("editor").close();
 });

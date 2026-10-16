@@ -29,16 +29,34 @@ async function viewable(ctx: Ctx) {
     });
 }
 
+/** Experience history rows a page (member/exp.php's cf_page_rows). */
+const EXP_PAGE = 20;
+
 /**
  * What the character viewer (member/viewer.php) adds to the profile: the
- * character's experience history (member/exp.php), and, where the owner turns
- * them on (ad_use_inven, ad_use_money), its inventory and its owner's money.
+ * character's experience history (member/exp.php) a page at a time, newest
+ * first, and, where the owner turns them on (ad_use_inven, ad_use_money), its
+ * inventory and its owner's money. A later page (`after`, the `expCursor`
+ * of the one before) carries only the history.
  */
 export async function characterSheet(
   ctx: Ctx,
-  { character }: { character?: string } = {},
+  {
+    character,
+    after = null,
+    size = EXP_PAGE,
+  }: { character?: string; after?: string | null; size?: number } = {},
 ) {
   await viewable(ctx);
+  if (
+    (after !== null && typeof after !== "string") ||
+    !Number.isInteger(size) ||
+    size < 1 ||
+    size > 50
+  )
+    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+      reason: "invalid_input",
+    });
   const profile =
     typeof character === "string" ? await ctx.get(CHARACTERS, character) : null;
   if (!profile || profile.data.deleted)
@@ -47,18 +65,20 @@ export async function characterSheet(
     });
   const owner = profile.createdBy ?? profile.data.owner ?? null;
   const settings = (await ctx.get(SETTINGS, "community"))?.data ?? {};
-  const exp = (
-    await ctx.list(HISTORY, {
-      filter: { kind: "exp", character },
-      sort: [[{ metadata: "createdAt" }, "desc"]],
-      size: 50,
-    })
-  ).documents.map((row) => ({
+  const page = await ctx.list(HISTORY, {
+    filter: { kind: "exp", character },
+    sort: [[{ metadata: "createdAt" }, "desc"]],
+    size,
+    after,
+  });
+  const exp = page.documents.map((row) => ({
     at: row.data.at,
     delta: row.data.expDelta,
     exp: row.data.exp,
     memo: row.data.memo ?? "",
   }));
+  const expCursor = page.nextCursor ?? null;
+  if (after !== null) return { exp, expCursor };
   let inventory = null;
   if (settings.viewerInventory === true) {
     const rows = (
@@ -79,7 +99,7 @@ export async function characterSheet(
     settings.viewerMoney === true && owner
       ? ((await ctx.get(WALLETS, owner))?.data.balance ?? 0)
       : null;
-  return { exp, inventory, balance };
+  return { exp, expCursor, inventory, balance };
 }
 
 /** Public character progression is separate from member-editable profile fields. */
@@ -212,12 +232,14 @@ export async function equipTitle(
       reason: "not_owned",
     });
   const state = await characterState(ctx, character);
+  const row = typeof title === "string" ? await ctx.get(TITLES, title) : null;
+  // A title out of use (ti_use) cannot be shown either.
   if (
     title !== null &&
-    (typeof title !== "string" ||
+    (!row ||
       !state.data.titles?.includes(title) ||
-      !(await ctx.get(TITLES, title)) ||
-      (await ctx.get(TITLES, title))?.data.deleted)
+      row.data.deleted ||
+      row.data.enabled === false)
   )
     ctx.fail("CONFLICT", "필요한 타이틀이 없습니다.", {
       reason: "missing_title",

@@ -19,7 +19,6 @@ import {
   lacking,
   MESSAGES,
 } from "../../modules/shared.js";
-import { presentCharacter } from "../../modules/characters.js";
 import type { Ctx, Data, NaruDocument } from "../../modules/naru-types.js";
 
 /** Selling consumes exactly one owned item; prices always come from the catalog. */
@@ -283,18 +282,17 @@ export async function assignInventory(
   };
 }
 
-/** What a personal-item (create) or profile ticket (profile) sends. */
+/** What a personal-item (create) ticket sends. */
 export interface ItemUseInput {
   name?: string;
   description?: string;
   image?: string | null;
-  side?: string;
-  profile?: string;
-  /** The character's revision, for a profile ticket. */
-  revision?: string;
 }
 
-/** Four built-in item actions mirror inventory/use_item.php. */
+/**
+ * Three built-in item actions mirror inventory/use_item.php; the fourth,
+ * 프로필수정, is spent by characters/sheet:save.
+ */
 export async function useItem(
   ctx: Ctx,
   {
@@ -321,8 +319,16 @@ export async function useItem(
     ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
       reason: "not_owned",
     });
-  await requireUsable(ctx, item, character);
   const effect = item.data.effect;
+  // 프로필수정 is used by saving the character's form with it
+  // (characters/sheet:save's ticket), as the original opens that form.
+  if (effect.type === "profile")
+    ctx.fail(
+      "CONFLICT",
+      "프로필 수정 아이템은 캐릭터 수정 화면에서 저장할 때 사용됩니다.",
+      { reason: "use_from_sheet" },
+    );
+  await requireUsable(ctx, item, character);
   let result: {
     name: string;
     document?: NaruDocument | null;
@@ -367,34 +373,6 @@ export async function useItem(
       personal,
       "personal",
       owned.data.character ?? null,
-    );
-  } else if (effect.type === "profile") {
-    const target = await ownCharacter(ctx, character);
-    if (!target)
-      ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
-        reason: "not_owned",
-      });
-    if (data.revision !== target.revision)
-      ctx.fail(
-        "CONFLICT",
-        "다른 곳에서 수정되었습니다. 새로고침 후 다시 수정해 주세요.",
-        { reason: "conflict" },
-      );
-    const profile: Data = {
-      ...target.data,
-      name: text(data.name, 40, true),
-      // Left out while the owner hides 소속 (an empty cf_side_title).
-      side: Object.hasOwn(data, "side")
-        ? text(data.side ?? "", 40)
-        : (target.data.side ?? ""),
-      profile: text(data.profile ?? "", 4000),
-    };
-    if (Object.hasOwn(data, "image"))
-      profile.image = data.image ? imageUrl(data.image) : null;
-    delete profile.imageId;
-    result.document = await presentCharacter(
-      ctx,
-      await ctx.set(CHARACTERS, character, profile),
     );
   } else
     ctx.fail("CONFLICT", "사용할 수 없는 아이템입니다.", {

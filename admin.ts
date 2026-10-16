@@ -15,6 +15,8 @@ import {
   walletWrites,
   characterStateWrites,
   titleHoldings,
+  characterReview,
+  REVIEW_STATES,
   menu,
   sectionLabel,
 } from "./admin-model.js";
@@ -162,6 +164,7 @@ async function load({ more = false } = {}) {
     $("adminRows").hidden = true;
     $("adminMore").hidden = true;
     $("holdingsSearchLabel").hidden = true;
+    $("reviewTools").hidden = true;
     const row = await owner
       .collection(model.collection)
       .get(model.fixedId)
@@ -175,6 +178,7 @@ async function load({ more = false } = {}) {
   if (model.report) {
     $("adminMore").hidden = true;
     $("holdingsSearchLabel").hidden = true;
+    $("reviewTools").hidden = true;
     return model.report === "visits"
       ? visitsView()
       : model.report === "grants"
@@ -182,6 +186,7 @@ async function load({ more = false } = {}) {
         : activityView();
   }
   $("holdingsSearchLabel").hidden = !model.holdings;
+  $("reviewTools").hidden = !model.review;
   let page;
   if (model.holdings) {
     references.titles = await all("neo_avocado_titles");
@@ -200,12 +205,24 @@ async function load({ more = false } = {}) {
   } else if (model.review) {
     references.fields = await all("neo_avocado_character_fields");
     references.profiles = await all("neo_avocado_profiles");
-    page = await owner.collection(model.collection).list({
-      size: 50,
-      after: more ? cursor : null,
-      sort: [[{ metadata: "createdAt" }, "desc"]],
-      where: { ne: ["deleted", true] },
+    // Every character is read once, then searched and counted here, as
+    // the original's list does in SQL (adm/character_list.php:107-140).
+    const characters = (await all(model.collection)).sort((a, b) =>
+      a.createdAt < b.createdAt ? 1 : -1,
+    );
+    const { rows, counts } = characterReview(characters, references.profiles, {
+      field: $<HTMLSelectElement>("reviewField").value,
+      text: $<HTMLInputElement>("reviewSearch").value,
+      state: review.state,
+      side: $<HTMLSelectElement>("reviewSide").value,
+      kind: $<HTMLSelectElement>("reviewClass").value,
     });
+    reviewFilters(characters, counts);
+    const start = more ? Number(cursor) : 0;
+    page = {
+      documents: rows.slice(start, start + 50),
+      nextCursor: start + 50 < rows.length ? String(start + 50) : null,
+    };
   } else
     page = await owner.collection(model.collection).list({
       size: 50,
@@ -366,6 +383,83 @@ const STATES = {
   submitted: "신청(수정 완료)",
   approved: "승인",
 };
+/** The review list's state filter. */
+const review = { state: "" };
+/**
+ * The review's 소속 and 종족 choices (the values characters have) and its
+ * state buttons with their counts (character_list.php:285-288).
+ */
+function reviewFilters(characters, counts) {
+  for (const [id, key, title] of [
+    ["reviewSide", "side", itemNames.sideTitle || "소속"],
+    ["reviewClass", "class", itemNames.classTitle || "종족"],
+  ]) {
+    const select = $<HTMLSelectElement>(id);
+    const chosen = select.value;
+    const values = [
+      ...new Set<string>(
+        characters
+          .map((row) => row.data[key])
+          .filter((value) => typeof value === "string" && value),
+      ),
+    ].sort();
+    select.replaceChildren(
+      new Option(`${title} 전체`, ""),
+      ...values.map((value) => new Option(value, value)),
+    );
+    select.value = values.includes(chosen) ? chosen : "";
+    select.hidden = !values.length;
+  }
+  $("reviewStates").replaceChildren(
+    ...[["", "전체"], ...REVIEW_STATES.map((key) => [key, STATES[key]])].map(
+      ([key, label]) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = `${label} (${counts[key || "all"]})`;
+        button.setAttribute("aria-pressed", String(review.state === key));
+        button.onclick = () =>
+          run(async () => {
+            review.state = key;
+            await load();
+          });
+        return button;
+      },
+    ),
+  );
+}
+$("reviewTools").onsubmit = (event) => {
+  event.preventDefault();
+  run(() => load());
+};
+$("reviewSide").onchange = $("reviewClass").onchange = () => run(() => load());
+// 선택승인 (character_list_update.php): each through the review, in turn.
+$("reviewApprove").onclick = () =>
+  run(async () => {
+    const chosen = [
+      ...$("adminRows").querySelectorAll<HTMLInputElement>(
+        ".review-select:checked",
+      ),
+    ];
+    if (!chosen.length)
+      throw new Error("승인할 캐릭터를 하나 이상 선택해 주세요.");
+    if (!confirm(`선택한 ${chosen.length}명을 승인할까요?`)) return;
+    $<HTMLButtonElement>("reviewApprove").disabled = true;
+    let approved = 0;
+    try {
+      for (const box of chosen) {
+        await owner.call("characters/review:reviewCharacter", {
+          character: box.value,
+          revision: box.dataset.revision,
+          state: "approved",
+        });
+        approved++;
+      }
+    } finally {
+      $<HTMLButtonElement>("reviewApprove").disabled = false;
+      $("adminStatus").textContent = `${approved}명을 승인했습니다.`;
+      await load();
+    }
+  });
 const TYPES = [
   ["main", "메인"],
   ["sub", "서브"],
@@ -381,6 +475,13 @@ function reviewRow(row) {
     )?.data.nick ?? "알 수 없는 회원";
   const heading = document.createElement("strong");
   heading.textContent = `${row.data.name} · ${nick} · ${STATES[row.data.state] ?? "상태 없음(이전 캐릭터)"}`;
+  // Chosen for 선택 승인.
+  const select = document.createElement("input");
+  select.type = "checkbox";
+  select.className = "review-select";
+  select.value = row.id;
+  select.dataset.revision = row.revision;
+  select.setAttribute("aria-label", `${row.data.name} 선택`);
   // What the member wrote, as the application shows it: picture, 소속,
   // 종족 and 프로필, and the character's own page on the site.
   const summary = document.createElement("div");
@@ -557,7 +658,7 @@ function reviewRow(row) {
   manage.className = "review-manage";
   manage.append(edit, " ", remove, " ", moveTo, move);
   form.onsubmit = (event) => event.preventDefault();
-  form.append(heading, " ", type, summary, sheet, ...buttons, manage);
+  form.append(select, heading, " ", type, summary, sheet, ...buttons, manage);
   return form;
 }
 /**

@@ -17,7 +17,7 @@ import {
   renderPages,
   show,
 } from "./core.js";
-import { moneyText } from "./names.js";
+import { expText, moneyText } from "./names.js";
 import { configureBoard, openLogNumber } from "./logs.js";
 import { openCharacterForm } from "./characters.js";
 
@@ -74,10 +74,28 @@ async function loadMyPage() {
     });
   };
   $("myMainCharacter").replaceChildren(...(characters.length ? [main] : []));
+  // Each card's 랭킹 and 경험치 where the owner shows them (ad_use_rank,
+  // ad_use_exp; mypage/character/index.php:64-73).
+  const statuses = new Map<string, any>(
+    state.viewer.rank || state.viewer.exp
+      ? await Promise.all(
+          characters.map(async (character): Promise<[string, any]> => [
+            character.id,
+            // A card without them still shows.
+            await caller()
+              .call("characters/progression:characterStatus", {
+                character: character.id,
+              })
+              .catch(() => null),
+          ]),
+        )
+      : [],
+  );
   // Each character as a card (list-character-box): its 두상, name, 소속,
-  // 종족 and state, to its own page.
+  // 종족, 랭킹, 경험치 and state, to its own page.
   $("myCharacters").replaceChildren(
     ...characters.map((character) => {
+      const status = statuses.get(character.id);
       const item = document.createElement("li");
       item.className = "character-card";
       const link = document.createElement("a");
@@ -98,6 +116,8 @@ async function loadMyPage() {
       for (const text of [
         state.names.sideTitle && character.data.side,
         state.names.classTitle && character.data.class,
+        state.viewer.rank && status?.rank,
+        state.viewer.exp && status && expText(state.names, status.state.exp),
         STATE_NAMES[character.data.state] ?? character.data.state,
         profile?.data.mainCharacter === character.id ? "대표" : "",
       ])

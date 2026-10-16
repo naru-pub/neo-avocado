@@ -21,6 +21,7 @@ import {
 } from "./core.js";
 import { amountText, expText, moneyText } from "./names.js";
 import { onDisplay } from "../_naru/modules/display.js";
+import { editCharacter } from "./characters.js";
 
 async function loadBalance() {
   const wallet = await collection(COLLECTION.wallets)
@@ -107,7 +108,8 @@ export function showShopCategory(name) {
   showCategory();
 }
 /**
- * The chosen character's official record (approval, 세력 and 종족), which
+ * The chosen character's official record (approval) and its sheet's 세력
+ * and 종족, which
  * buying needs: the original's shop is its member's character's
  * (shop/_ajax.shop_update.php:4).
  */
@@ -120,7 +122,16 @@ async function loadShopCharacter() {
     : null;
   // A choice made while this was read wins.
   if (id !== state.inventoryCharacter) return;
-  state.shopCharacter = status ? { id, ...status.state } : null;
+  // 소속 and 종족 are the sheet's own (ch_side, ch_class), the member's pick.
+  const sheet = state.ownCharacters.find((row) => row.id === id);
+  state.shopCharacter = status
+    ? {
+        id,
+        ...status.state,
+        side: sheet?.data.side ?? "",
+        class: sheet?.data.class ?? "",
+      }
+    : null;
   const approved = state.shopCharacter?.approved === true;
   $("shopBuyNote").hidden = approved;
   $("shopBuyNote").textContent = id
@@ -582,6 +593,39 @@ async function useInventory(owned) {
       (row) => !owned.data.character || owned.data.character === row.id,
     );
     if (!characters.length) return say("사용할 내 캐릭터가 없습니다.");
+    // 프로필수정 opens the character's whole form, even after the editing
+    // period, and saving it spends the ticket (inventory/use_item.php:27-28,
+    // character_form_update.php:18,268).
+    if (effect.type === "profile") {
+      const open = (chosen) =>
+        editCharacter(
+          chosen,
+          async () => {
+            say(`${owned.data.name}을(를) 사용했습니다.`);
+            state.charactersLoaded = false;
+            await loadShop();
+          },
+          owned.id,
+        );
+      if (characters.length === 1) return await open(characters[0]);
+      return edit(
+        `${owned.data.name} 사용`,
+        [
+          {
+            name: "character",
+            label: "수정할 캐릭터",
+            required: true,
+            value: characters[0].id,
+            options: characters.map((row) => [row.id, row.data.name]),
+          },
+        ],
+        ({ character }) => {
+          const chosen = characters.find((row) => row.id === character);
+          // The form opens once this dialog has closed.
+          setTimeout(() => run(() => open(chosen)));
+        },
+      );
+    }
     fields.push({
       name: "character",
       label: "캐릭터",
@@ -589,23 +633,6 @@ async function useInventory(owned) {
       value: characters[0].id,
       options: characters.map((row) => [row.id, row.data.name]),
     });
-  }
-  if (effect.type === "profile") {
-    for (const [name, label, max, multiline] of [
-      ["name", "이름", 40, false],
-      ...(state.names.sideTitle
-        ? [["side", state.names.sideTitle, 40, false]]
-        : []),
-      ["profile", "프로필", 4000, true],
-    ] as [string, string, number, boolean][])
-      fields.push({
-        name,
-        label,
-        max,
-        multiline,
-        value: characters[0].data[name],
-        required: name === "name",
-      });
   }
   if (effect.type === "create")
     fields.push(
@@ -637,8 +664,6 @@ async function useInventory(owned) {
         const uploaded = await uploadManaged(file);
         data.image = uploaded.url;
       }
-      if (effect.type === "profile")
-        data.revision = characters.find((row) => row.id === character).revision;
       const result = await caller().call("economy/inventory:useItem", {
         inventory: owned.id,
         ...(character || owned.data.character
@@ -657,21 +682,6 @@ async function useInventory(owned) {
       state.charactersLoaded = false;
     },
   );
-  if (effect.type === "profile") {
-    $("editorFields").querySelector<HTMLSelectElement>(
-      '[name="character"]',
-    ).onchange = (event) => {
-      const selected = characters.find(
-        (row) => row.id === (event.target as HTMLSelectElement).value,
-      );
-      for (const name of ["name", "side", "profile"]) {
-        const input = $("editorFields").querySelector<
-          HTMLInputElement | HTMLTextAreaElement
-        >(`[name="${name}"]`);
-        if (input) input.value = selected.data[name] ?? "";
-      }
-    };
-  }
 }
 async function loadRecipes() {
   state.recipes = await allDocuments(COLLECTION.recipes, undefined, {

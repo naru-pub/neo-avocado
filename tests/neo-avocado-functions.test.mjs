@@ -15,6 +15,7 @@ import {
   outfit,
   wear,
   removeOutfit,
+  editOutfit,
   mainCharacter,
   characterStatus,
   characterSheet,
@@ -560,6 +561,19 @@ test("deletion marks durable work, hides partial cleanup and preserves purchased
   );
   assert.equal(table(`${P}inventory`).get("paid").character, null);
   assert.equal(table(`${P}profiles`).get("m-1").mainCharacter, null);
+  // With characters left, the oldest remaining one becomes the 대표
+  // (extend/character.lib.php:5-12); a deleted one is passed over.
+  table(`${P}characters`).set("ghost", { owner: "m-1", deleted: true });
+  table(`${P}characters`).set("elder", { owner: "m-1", name: "Elder" });
+  table(`${P}characters`).set("hero", { owner: "m-1", name: "Hero" });
+  table(`${P}characters`).set("other", { owner: "m-2", name: "Other" });
+  table(`${P}profiles`).set("m-1", { owner: "m-1", mainCharacter: "hero" });
+  await communityWrite(ctx, {
+    collection: `${P}characters`,
+    operation: "delete",
+    id: "hero",
+  });
+  assert.equal(table(`${P}profiles`).get("m-1").mainCharacter, "elder");
 });
 
 test("private mail checks parties for listing, reading and deletion and marks only recipient reads", async () => {
@@ -745,6 +759,11 @@ test("item use conditions are checked against official state before consuming ti
   assert.equal(await refusal(useItem(ctx, args)), "not_enough_exp");
   assert.equal(table(`${P}inventory`).has("ticket-a"), true);
   table(`${P}character_state`).get("hero").exp = 10;
+  // 소속 and 종족 are the sheet's (ch_side, ch_class), whatever the record holds.
+  table(`${P}characters`).get("hero").class = "human";
+  assert.equal(await refusal(useItem(ctx, args)), "restricted_character");
+  table(`${P}characters`).get("hero").class = "elf";
+  table(`${P}character_state`).get("hero").class = "human";
   await useItem(ctx, args);
   assert.equal(table(`${P}inventory`).has("ticket-a"), false);
 });
@@ -795,10 +814,12 @@ test("character-linked purchases, exchanges and limits use official state and pr
   assert.equal(await refusal(buy(ctx, args)), "not_approved");
   const state = table(`${P}character_state`).get("hero");
   state.approved = true;
-  state.side = "city";
-  state.class = "elf";
-  assert.equal(await refusal(buy(ctx, args)), "restricted_character");
+  // The sheet's own 소속 decides, not a value kept in the official record.
+  table(`${P}characters`).get("hero").side = "city";
   state.side = "forest";
+  assert.equal(await refusal(buy(ctx, args)), "restricted_character");
+  table(`${P}characters`).get("hero").side = "forest";
+  state.side = "city";
   assert.equal(
     await refusal(buy(ctx, { ...args, materials: ["seed", "seed"] })),
     "invalid_materials",
@@ -861,6 +882,13 @@ test("history ignores a caller's owner filter, paginates, and titles require act
   );
   await equipTitle(ctx, { character: "hero", title: "winner" });
   assert.equal(table(`${P}character_state`).get("hero").activeTitle, "winner");
+  // A title out of use (ti_use) cannot be shown.
+  table(`${P}titles`).get("winner").enabled = false;
+  assert.equal(
+    await refusal(equipTitle(ctx, { character: "hero", title: "winner" })),
+    "missing_title",
+  );
+  table(`${P}titles`).get("winner").enabled = true;
   table(`${P}titles`).get("winner").deleted = true;
   assert.equal(
     await refusal(equipTitle(ctx, { character: "hero", title: "winner" })),
@@ -1108,56 +1136,116 @@ test("personal-item and profile tickets cannot inject privileged catalog or char
   assert.equal(personal.effect, undefined);
   assert.equal(personal.sellPrice, undefined);
   assert.equal(table(`${P}inventory`).has("ticket"), false);
+});
+
+test("a profile ticket opens the whole sheet of an approved character once while editing is closed", async () => {
+  const { ctx, table } = fakeCtx();
+  table(`${P}settings`).set("community", { characterEditing: false });
+  table(`${P}character_fields`).set("age", {
+    label: "나이",
+    type: "select",
+    options: ["17"],
+  });
   table(`${P}characters`).set("hero", {
     owner: "m-1",
     name: "Old",
+    state: "approved",
+    type: "sub",
     outfit: "keep",
+  });
+  table(`${P}characters`).set("other", {
+    owner: "m-1",
+    name: "Other",
+    state: "approved",
   });
   table(`${P}items`).set("profile", {
     name: "수정권",
     effect: { type: "profile" },
+  });
+  table(`${P}items`).set("potion", {
+    name: "물약",
+    effect: { type: "restore", stat: "hp", amount: 1 },
   });
   table(`${P}inventory`).set("profile-ticket", {
     owner: "m-1",
     item: "profile",
     name: "수정권",
   });
+  table(`${P}inventory`).set("bound", {
+    owner: "m-1",
+    item: "profile",
+    name: "수정권",
+    character: "other",
+  });
+  table(`${P}inventory`).set("potion", { owner: "m-1", item: "potion" });
+  table(`${P}inventory`).set("theirs", { owner: "m-2", item: "profile" });
+  const save = (ticket, data = {}) =>
+    sheet.save(ctx, {
+      id: "hero",
+      revision: "r1",
+      data: { name: "New", ...data },
+      ...(ticket ? { ticket } : {}),
+    });
+  // The old partial edit is gone: the ticket is spent by the sheet.
   assert.equal(
     await refusal(
       useItem(ctx, {
         inventory: "profile-ticket",
         character: "hero",
-        data: { name: "New", revision: "old" },
+        data: { name: "New" },
       }),
     ),
-    "conflict",
+    "use_from_sheet",
+  );
+  assert.equal(await refusal(save(null)), "editing_closed");
+  for (const ticket of ["potion", "theirs", "bound", "missing"])
+    assert.equal(await refusal(save(ticket)), "invalid_ticket");
+  // The sheet is checked as any save: a bad field keeps the ticket.
+  assert.equal(
+    await refusal(save("profile-ticket", { fields: { age: "99" } })),
+    "invalid_field",
   );
   assert.equal(table(`${P}inventory`).has("profile-ticket"), true);
-  await useItem(ctx, {
-    inventory: "profile-ticket",
-    character: "hero",
-    data: { name: "New", revision: "r1", owner: "m-2", points: 99999 },
+  await save("profile-ticket", {
+    fields: { age: "17" },
+    owner: "m-2",
+    type: "main",
+    state: "editing",
   });
-  assert.deepEqual(table(`${P}characters`).get("hero"), {
-    owner: "m-1",
-    name: "New",
-    side: "",
-    profile: "",
-    outfit: "keep",
-  });
+  const saved = table(`${P}characters`).get("hero");
+  assert.equal(saved.name, "New");
+  assert.equal(saved.owner, "m-1");
+  assert.equal(saved.state, "approved");
+  assert.equal(saved.type, "sub");
+  assert.deepEqual(saved.fields, { age: "17" });
+  assert.equal(table(`${P}inventory`).has("profile-ticket"), false);
+  assert.equal(await refusal(save("profile-ticket")), "invalid_ticket");
+  // A lasting ticket (it_use_ever) stays.
+  table(`${P}items`).get("profile").reusable = true;
+  table(`${P}inventory`).set("lasting", { owner: "m-1", item: "profile" });
+  await save("lasting", { name: "Again" });
+  assert.equal(table(`${P}characters`).get("hero").name, "Again");
+  assert.equal(table(`${P}inventory`).has("lasting"), true);
 });
 
 test("character relationships validate source ownership, targets, revisions and text", async () => {
   const { ctx, table } = fakeCtx();
-  table(`${P}characters`).set("mine", { owner: "m-1", name: "내 캐릭터" });
+  table(`${P}characters`).set("mine", {
+    owner: "m-1",
+    name: "내 캐릭터",
+    state: "submitted",
+  });
   table(`${P}characters`).set("other", { owner: "m-2", name: "상대" });
   const args = {
     character: "mine",
     target: "other",
-    affinity: 20,
+    affinity: 3,
     memo: "친구",
     order: 1,
   };
+  // Only an approved character has relations (viewer.php:157-196).
+  assert.equal(await refusal(relation(ctx, args)), "not_approved");
+  table(`${P}characters`).get("mine").state = "approved";
   assert.equal(
     await refusal(
       relation(ctx, { ...args, character: "other", target: "mine" }),
@@ -1169,16 +1257,38 @@ test("character relationships validate source ownership, targets, revisions and 
     "no_character",
   );
   assert.equal(
-    await refusal(relation(ctx, { ...args, affinity: 101 })),
+    await refusal(relation(ctx, { ...args, affinity: 6 })),
     "invalid_input",
+  );
+  assert.equal(
+    await refusal(relation(ctx, { ...args, affinity: -1 })),
+    "invalid_input",
+  );
+  await assert.rejects(
+    async () =>
+      await relation(ctx, {
+        ...args,
+        link: "https://example.com/a\njavascript:alert(1)",
+      }),
+    /HTTPS/,
   );
   await assert.rejects(
     async () => await relation(ctx, { ...args, link: "javascript:alert(1)" }),
     /HTTPS/,
   );
   assert.equal(table(`${P}relations`).size, 0);
-  const created = (await relation(ctx, args)).document;
+  // Several links, one per line (rm_link); blank lines drop.
+  const created = (
+    await relation(ctx, {
+      ...args,
+      link: " https://example.com/a \n\nhttps://example.com/b",
+    })
+  ).document;
   assert.equal(created.data.owner, "m-1");
+  assert.equal(
+    created.data.link,
+    "https://example.com/a\nhttps://example.com/b",
+  );
   assert.equal(
     await refusal(
       relation(ctx, {
@@ -1245,6 +1355,38 @@ test("wardrobe protects characters, rejects unsafe addresses and keeps the activ
     await refusal(wear(ctx, { character: "other", outfit: clothing.id })),
     "not_owned",
   );
+  // cloest_path_update.php: the owner renames it or changes its address.
+  await editOutfit(ctx, {
+    id: clothing.id,
+    name: "정장",
+    image: "https://media.naru.pub/suit.png",
+  });
+  assert.equal(table(`${P}wardrobe`).get(clothing.id).name, "정장");
+  assert.equal(
+    table(`${P}wardrobe`).get(clothing.id).image,
+    "https://media.naru.pub/suit.png",
+  );
+  await assert.rejects(
+    async () =>
+      await editOutfit(ctx, {
+        id: clothing.id,
+        name: "정장",
+        image: "javascript:alert(1)",
+      }),
+    /HTTPS/,
+  );
+  ctx.member.id = "m-2";
+  assert.equal(
+    await refusal(
+      editOutfit(ctx, {
+        id: clothing.id,
+        name: "뺏기",
+        image: "https://media.naru.pub/x.png",
+      }),
+    ),
+    "not_owned",
+  );
+  ctx.member.id = "m-1";
   await wear(ctx, { character: "mine", outfit: clothing.id });
   assert.equal(table(`${P}characters`).get("mine").outfit, clothing.id);
   assert.equal(
@@ -2050,7 +2192,8 @@ test("custom profile fields validate types and hide owner/admin values from othe
     "missing_fields",
   );
   assert.equal(await reasonOf(add({ state: "approved" })), "invalid_input");
-  assert.equal(await reasonOf(add({ type: "npc" })), "invalid_input");
+  // 메인·서브 is the admin's: what a member sends is ignored, a new one is main.
+  assert.equal((await add({ type: "npc" })).document.data.type, "main");
   const created = (
     await add({
       type: "sub",
@@ -2064,7 +2207,7 @@ test("custom profile fields validate types and hide owner/admin values from othe
     secret: "hidden past",
   });
   assert.equal(created.data.state, "submitted");
-  assert.equal(created.data.type, "sub");
+  assert.equal(created.data.type, "main");
   // The site owner keeps an admin-only memo the member never sees or erases.
   table(`${P}characters`).set(created.id, {
     ...table(`${P}characters`).get(created.id),
@@ -2975,6 +3118,35 @@ test("사이트공개: visitors read characters and the viewer while the site is
   assert.equal(
     (await characterStatus(ctx, { character: "hero" })).state.owner,
     "m-1",
+  );
+});
+
+test("the viewer's experience history comes a page at a time (member/exp.php)", async () => {
+  const { ctx, table } = fakeCtx();
+  table(`${P}characters`).set("hero", { owner: "m-1", name: "Hero" });
+  for (let n = 0; n < 25; n++)
+    table(`${P}history`).set(`e${n}`, {
+      owner: "m-1",
+      kind: "exp",
+      character: "hero",
+      at: n,
+      expDelta: 1,
+      exp: n + 1,
+    });
+  const first = await characterSheet(ctx, { character: "hero" });
+  assert.equal(first.exp.length, 20);
+  assert.ok(first.expCursor);
+  assert.equal(first.inventory, null);
+  const second = await characterSheet(ctx, {
+    character: "hero",
+    after: first.expCursor,
+  });
+  assert.equal(second.exp.length, 5);
+  assert.equal(second.expCursor, null);
+  assert.equal(Object.hasOwn(second, "inventory"), false);
+  assert.equal(
+    await refusal(characterSheet(ctx, { character: "hero", size: 51 })),
+    "invalid_input",
   );
 });
 

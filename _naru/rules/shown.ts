@@ -1,4 +1,10 @@
-import { INVENTORY, ITEMS, RECIPES, siteOpen } from "../modules/shared.js";
+import {
+  INVENTORY,
+  ITEMS,
+  RECIPES,
+  TITLES,
+  siteOpen,
+} from "../modules/shared.js";
 import type { ReadArgs, ReadCtx, Where } from "../modules/naru-types.js";
 
 // Catalogue rows (items, titles, recipes, emoticons, couples, relations,
@@ -21,6 +27,9 @@ export async function readable(
   const listed: Where = { ne: ["deleted", true] };
   if (collection === RECIPES)
     return { all: [listed, { ne: ["hidden", true] }] };
+  // A title out of use (ti_use) is shown nowhere (extend/title.lib.php:7).
+  if (collection === TITLES)
+    return { all: [listed, { ne: ["enabled", false] }] };
   if (collection !== ITEMS) return listed;
   const known = new Set();
   // The reader's inventory, up to 2,000 rows (a rule reads at most 100

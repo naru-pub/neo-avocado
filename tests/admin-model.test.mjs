@@ -7,6 +7,7 @@ import {
   walletWrites,
   characterStateWrites,
   titleHoldings,
+  characterReview,
 } from "../dist/admin-model.js";
 const references = {
   profiles: [
@@ -244,8 +245,6 @@ test("official progression editing preserves purchase counts and validates title
   const values = {
     id: "hero",
     approved: true,
-    side: "forest",
-    class: "elf",
     exp: "100",
     points: "5",
     titles: ["winner"],
@@ -386,6 +385,7 @@ test("profile field definitions validate codes and options; explore misses store
         type: "select",
         options: "여성, 남성",
         help: "",
+        suffix: "",
         order: "2",
         visibility: "owner",
         required: true,
@@ -399,10 +399,16 @@ test("profile field definitions validate codes and options; explore misses store
     type: "select",
     options: ["여성", "남성"],
     help: "",
+    suffix: "",
     order: 2,
     visibility: "owner",
     required: true,
   });
+  // ar_text: a one-line field's unit.
+  assert.equal(
+    field({ id: "height", type: "text", suffix: "cm" }).data.suffix,
+    "cm",
+  );
   for (const id of ["Gender", "1st", "constructor", "has-dash"])
     assert.throws(() => field({ id }));
   assert.throws(() => field({ id: "gender", options: "" }));
@@ -638,4 +644,79 @@ test("the admin menu has every section once, in the original's groups and names"
   assert.equal(sectionLabel("wallets", names), "골드 관리");
   assert.equal(sectionLabel("levels", names), "레벨 설정");
   assert.equal(sectionLabel("sides", names), "소속 관리");
+});
+
+test("the character review searches by name or owner, filters 소속·종족 and state, and counts states", () => {
+  const rows = [
+    {
+      id: "a",
+      createdBy: "member-a",
+      data: { name: "Hero", state: "approved", side: "forest", class: "elf" },
+    },
+    {
+      id: "b",
+      data: {
+        owner: "member-b",
+        name: "Herald",
+        state: "submitted",
+        side: "city",
+      },
+    },
+    {
+      id: "c",
+      data: {
+        owner: "member-a",
+        name: "Mage",
+        state: "editing",
+        side: "forest",
+      },
+    },
+    {
+      id: "d",
+      data: {
+        owner: "member-a",
+        name: "Gone",
+        state: "submitted",
+        deleted: true,
+      },
+    },
+  ];
+  const ids = (result) => result.rows.map((row) => row.id);
+  const all = characterReview(rows, references.profiles);
+  assert.deepEqual(ids(all), ["a", "b", "c"]);
+  assert.deepEqual(all.counts, {
+    all: 3,
+    editing: 1,
+    submitted: 1,
+    approved: 1,
+  });
+  assert.deepEqual(
+    ids(characterReview(rows, references.profiles, { text: "her" })),
+    ["a", "b"],
+  );
+  const owned = characterReview(rows, references.profiles, {
+    field: "nick",
+    text: "A",
+  });
+  assert.deepEqual(ids(owned), ["a", "c"]);
+  assert.deepEqual(
+    ids(
+      characterReview(rows, references.profiles, {
+        field: "nick",
+        text: "A",
+        state: "editing",
+      }),
+    ),
+    ["c"],
+  );
+  const forest = characterReview(rows, references.profiles, {
+    side: "forest",
+    state: "approved",
+  });
+  assert.deepEqual(ids(forest), ["a"]);
+  assert.equal(forest.counts.all, 2);
+  assert.deepEqual(
+    ids(characterReview(rows, references.profiles, { kind: "elf" })),
+    ["a"],
+  );
 });
