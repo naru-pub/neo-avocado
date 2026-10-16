@@ -106,10 +106,6 @@ function fakeDatabase(rows = {}) {
     },
     async list(options = {}) {
       calls.push({ method: "list", name, ...options });
-      if (database.unprepared)
-        throw Object.assign(new Error(`Collection ${name} does not exist.`), {
-          code: "NOT_FOUND",
-        });
       const keys = options.sort ?? [[{ metadata: "id" }, "asc"]];
       // Missing values sort lowest, then strings, numbers and booleans.
       const rank = (value) =>
@@ -233,11 +229,6 @@ function fakeDatabase(rows = {}) {
         });
       // The site frame is read on every load; tests that care set database.site.
       if (name === "content/site:site") {
-        if (database.unprepared)
-          throw Object.assign(
-            new Error("Collection neo_avocado_design does not exist."),
-            { code: "NOT_FOUND" },
-          );
         return {
           level: 2,
           member: true,
@@ -608,12 +599,6 @@ function fakeDatabase(rows = {}) {
       };
       if (Object.hasOwn(foundation, name)) {
         calls.push({ method: kind, name, args });
-        // Before the site is ready, as Naru answers reads of what it has
-        // not made yet.
-        if (database.unprepared)
-          throw Object.assign(new Error(`Collection ${name} does not exist.`), {
-            code: "NOT_FOUND",
-          });
         return JSON.parse(JSON.stringify(await foundation[name]()));
       }
       // Writes: posts, comments and characters through their functions,
@@ -2120,17 +2105,6 @@ test("HTML posts render sanitized, without scripts or handlers", async () => {
   assert.equal(body.querySelector("b").textContent, "굵게");
   assert.equal(body.querySelector("script"), null);
   assert.equal(body.querySelector("img").hasAttribute("onerror"), false);
-});
-
-test("before the owner's first sign-in, the page says the site is being prepared", async () => {
-  const database = fakeDatabase();
-  database.signedIn = false;
-  database.unprepared = true;
-  // Nothing is made yet: every read the visitor makes fails NOT_FOUND.
-  const { $, settle } = await page(database);
-  await settle();
-  assert.equal($("welcome").hidden, false);
-  assert.match($("status").textContent, /사이트를 준비하고 있습니다/);
 });
 
 test("멤버목록 groups approved characters under each 소속 once there are two", async () => {

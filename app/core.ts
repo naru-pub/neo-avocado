@@ -134,13 +134,9 @@ export async function run(action) {
       return;
     }
     say(
-      // A collection that does not exist yet: Naru creates them from
-      // _naru/collections.json as the site's files arrive.
-      error?.code === "NOT_FOUND" && /^Collection /.test(error.message)
-        ? "사이트를 준비하고 있습니다. 잠시 뒤에 다시 해 주세요."
-        : (siteMessage(error) ??
-            MESSAGES[error?.code] ??
-            "요청을 처리하지 못했습니다."),
+      siteMessage(error) ??
+        MESSAGES[error?.code] ??
+        "요청을 처리하지 못했습니다.",
     );
   }
 }
