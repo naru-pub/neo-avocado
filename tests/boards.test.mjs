@@ -3,8 +3,8 @@
 // site's migrations (tests/sql-ctx.mjs): who may read and write which
 // board, posts and comments with their secrets, 멤버공개 and 익명, guests'
 // posts and passwords, roleplay in posts (speakers, dice, 탐색, items,
-// 조합, calls), the board page, search, Q&A and settlement boards, 관심,
-// rewards, and the owner's bridge to the tables.
+// 조합, calls), the board page, search, Q&A and settlement boards, 관심
+// and rewards. The owner's admin is tests/admin.test.mjs.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { testSite } from "./sql-ctx.mjs";
@@ -2006,109 +2006,4 @@ test("[[name]] removed and put back does not call them again", async () => {
       data: { ...current.data, text },
     }));
   assert.equal(callsTo(site, "m-3").length, 1);
-});
-
-test("the owner edits boards, groups and emoticons, and reads posts and comments, through the bridge", async () => {
-  const site = await testSite();
-  const set = (collection, id, data) =>
-    site.mutate(
-      "admin/documents:set",
-      { collection: `${P}${collection}`, id, data },
-      OWNER,
-    );
-  const get = (collection, id) =>
-    site.query(
-      "admin/documents:get",
-      { collection: `${P}${collection}`, id },
-      OWNER,
-    );
-  await set("board_groups", "g", { name: "그룹", membersOnly: true, order: 2 });
-  const saved = await set("boards", "free", {
-    name: "자유",
-    kind: "text",
-    group: "g",
-    listLevel: 1,
-    readLevel: 1,
-    writeLevel: 1,
-    commentLevel: 1,
-    categories: ["잡담"],
-    html: true,
-    description: "<b>안내</b>",
-    writeReward: 5,
-    secret: "off",
-  });
-  assert.deepEqual(saved.data, {
-    categories: ["잡담"],
-    html: true,
-    description: "<b>안내</b>",
-    name: "자유",
-    group: "g",
-    kind: "text",
-    enabled: true,
-    listLevel: 1,
-    readLevel: 1,
-    writeLevel: 1,
-    commentLevel: 1,
-    anonymous: false,
-    secret: "off",
-    writeReward: 5,
-    commentReward: 0,
-    writeMin: 0,
-    writeMax: 0,
-    commentMin: 0,
-    commentMax: 0,
-    editLock: 1,
-    pageRows: 15,
-    foldHeight: 600,
-  });
-  // Members see the board as the admin saved it, in its members-only group.
-  site.setRoles("m-1", ["group-g"]);
-  const [listed] = (await site.query("community/boards:boards", null, M1))
-    .boards;
-  assert.deepEqual(listed.data, { ...saved.data, membersOnly: "g" });
-  await set("emoticons", "smile", {
-    name: ":웃음:",
-    image: "https://example.com/s.png",
-  });
-  assert.deepEqual((await get("emoticons", "smile")).data, {
-    name: ":웃음:",
-    image: "https://example.com/s.png",
-  });
-  // Posts and comments are read here (활동량 관리), written elsewhere.
-  const { document: written } = await write(site, {
-    data: { board: "free", text: "안녕" },
-  });
-  comment(site, { post_id: Number(written.id), owner: "m-2", body: "댓글" });
-  const { documents: logs } = await site.query(
-    "admin/documents:list",
-    { collection: `${P}logs` },
-    OWNER,
-  );
-  assert.deepEqual(
-    [logs[0].id, logs[0].data.owner, logs[0].data.board, logs[0].createdAt],
-    [written.id, "m-1", "free", new Date(site.now).toISOString()],
-  );
-  const { documents: replies } = await site.query(
-    "admin/documents:list",
-    { collection: `${P}comments`, filter: { logId: written.id } },
-    OWNER,
-  );
-  assert.deepEqual(
-    replies.map((row) => [row.data.logId, row.data.owner]),
-    [[written.id, "m-2"]],
-  );
-  assert.equal(
-    await refusal(set("logs", written.id, { text: "고침" })),
-    "invalid_input",
-  );
-  assert.equal(
-    await refusal(
-      site.mutate(
-        "admin/documents:remove",
-        { collection: `${P}comments`, id: replies[0].id },
-        OWNER,
-      ),
-    ),
-    "invalid_input",
-  );
 });

@@ -1,14 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+// The admin's forms and their checks (buildRecord), which the owner's
+// mutations run on the server (tests/admin.test.mjs), and the page's menu.
 import {
   buildRecord,
-  scopes,
+  formValues,
   models,
-  walletWrites,
-  characterStateWrites,
-  titleHoldings,
-  characterReview,
-  memberList,
   memberSummary,
 } from "../dist/admin-model.js";
 const references = {
@@ -27,41 +24,6 @@ const references = {
     { id: "tree", data: { name: "Tree" } },
   ],
 };
-test("owner balance adjustments preserve counts and guard balance and history in one batch", () => {
-  const previous = {
-    id: "member-a",
-    revision: "r1.2",
-    data: { balance: 10, purchases: { seed: 2 } },
-  };
-  const record = buildRecord(
-    "wallets",
-    { id: "member-a", balance: "25", lastDaily: "", note: "이벤트 보상" },
-    previous,
-    references,
-  );
-  assert.deepEqual(record.data.purchases, { seed: 2 });
-  assert.equal(record.data.note, undefined);
-  const writes = walletWrites(
-    record,
-    previous,
-    "이벤트 보상",
-    1234,
-    "audit-id",
-  );
-  assert.deepEqual(writes[0].set.condition, { revision: "r1.2" });
-  assert.deepEqual(writes[1].set.condition, { absent: true });
-  assert.equal(writes[1].set.data.delta, 15);
-  assert.equal(writes[1].set.data.owner, "member-a");
-  assert.throws(() =>
-    buildRecord(
-      "wallets",
-      { id: "member-a", balance: "25", lastDaily: "", note: "" },
-      previous,
-      references,
-    ),
-  );
-  assert.throws(() => buildRecord("history", {}, null, references));
-});
 test("inventory grants validate the recipient's character and use catalog names", () => {
   const values = {
     id: "grant",
@@ -281,8 +243,6 @@ test("official progression editing preserves purchase counts and validates title
       references,
     ),
   );
-  // A table: the admin bridge reaches it, not the owner's sign-in.
-  assert.ok(!scopes.includes("neo_avocado_character_state"));
 });
 
 test("quest forms validate Korean scheduling and multiline images", () => {
@@ -300,8 +260,6 @@ test("quest forms validate Korean scheduling and multiline images", () => {
     "https://example.com/a.png",
     "https://example.com/b.png",
   ]);
-  // Quests are a table now: the sign-in does not ask for them.
-  assert.ok(!scopes.includes("neo_avocado_quests"));
   for (const change of [
     { endsAt: "2029-12-31T09:00" },
     { startsAt: "2030-02-30T09:00" },
@@ -330,45 +288,6 @@ test("quest forms validate Korean scheduling and multiline images", () => {
     }).data.side,
     "",
   );
-});
-
-test("title ownership review searches all holders and retains equipped orphan references", () => {
-  const rows = [
-    {
-      id: "hero",
-      revision: "r1",
-      data: { titles: ["winner", "winner"], activeTitle: "winner" },
-    },
-    { id: "missing", data: { titles: [], activeTitle: "gone" } },
-  ];
-  const holdings = titleHoldings(
-    rows,
-    references.characters,
-    references.titles,
-  );
-  assert.equal(holdings.length, 2);
-  assert.equal(holdings[0].active, true);
-  assert.equal(holdings[1].titleId, "gone");
-  assert.equal(
-    titleHoldings(rows, references.characters, references.titles, "Winner")
-      .length,
-    1,
-  );
-  assert.equal(
-    titleHoldings(rows, references.characters, references.titles, "Hero")
-      .length,
-    1,
-  );
-  assert.equal(
-    titleHoldings(rows, references.characters, references.titles, "nothing")
-      .length,
-    0,
-  );
-  const many = Array.from({ length: 75 }, (_, i) => ({
-    id: `c${i}`,
-    data: { titles: ["winner"] },
-  }));
-  assert.equal(titleHoldings(many, [], references.titles, "c74").length, 1);
 });
 
 test("managed content validates body sizes, artwork and read levels", () => {
@@ -435,45 +354,6 @@ test("the design's background colour is a #rrggbb code or blank, its repeat and 
     );
 });
 
-test("회원 관리 lists members by nickname with level, role, warnings, leaving and last visit", () => {
-  const members = [
-    { id: "member-a", data: { level: 3, role: "moderator", warnings: 2 } },
-    { id: "member-b", data: { role: "member", left: "2030-01-02" } },
-    { id: "member-c", data: {} },
-  ];
-  const presence = [
-    { id: "member-b", data: { at: Date.parse("2030-01-03T00:00:00Z") } },
-    { id: "member-a", data: { at: Date.parse("2030-01-01T00:00:00Z") } },
-  ];
-  const all = memberList(members, references.profiles, presence);
-  assert.deepEqual(
-    all.map((entry) => entry.nick),
-    ["B", "A", "member-c (닉네임 없음)"],
-  );
-  assert.deepEqual(
-    memberList(members, references.profiles, presence, " a ").map(
-      (entry) => entry.row.id,
-    ),
-    ["member-a"],
-  );
-  assert.deepEqual(
-    memberList(members, references.profiles, presence, "member-c").map(
-      (entry) => entry.row.id,
-    ),
-    ["member-c"],
-  );
-  const [b, a, c] = all;
-  assert.match(
-    memberSummary(a),
-    /^등급 3 · 게시물 운영자 · 경고 2회 · 최종 접속 /,
-  );
-  assert.match(
-    memberSummary(b),
-    /^등급 2 · 회원 · 탈퇴 2030-01-02 · 최종 접속 /,
-  );
-  assert.equal(memberSummary(c), "등급 2 · 회원 · 최종 접속 기록 없음");
-});
-
 test("profile field definitions validate codes and options; explore misses store null", () => {
   const field = (values) =>
     buildRecord(
@@ -524,205 +404,6 @@ test("profile field definitions validate codes and options; explore misses store
     ).data.item,
     null,
   );
-  assert.ok(!scopes.includes("neo_avocado_character_fields"));
-  assert.ok(!scopes.includes("neo_avocado_explore"));
-  assert.equal(models.character_review.collection, "neo_avocado_characters");
-});
-
-test("every collection the site names is a table, and the sign-in asks for none", async () => {
-  const { scopes } = await import("../dist/admin-model.js");
-  const { readdir, readFile } = await import("node:fs/promises");
-  const files = ["app.js", "admin.js"];
-  for (const name of await readdir(new URL("../dist/app", import.meta.url)))
-    files.push(`app/${name}`);
-  for (const dir of ["_naru/modules"])
-    for (const name of await readdir(
-      new URL(`../dist/${dir}`, import.meta.url),
-    ))
-      files.push(`${dir}/${name}`);
-  const used = new Set();
-  for (const file of files) {
-    const source = await readFile(
-      new URL(`../dist/${file}`, import.meta.url),
-      "utf8",
-    );
-    for (const [, name] of source.matchAll(
-      /(?:PREFIX\}|neo_avocado_)([a-z_]+)/g,
-    ))
-      used.add(`neo_avocado_${name}`);
-  }
-  // The site's tables are reached by queries, not collections.
-  const { mappingOf } = await import("../dist/_naru/modules/documents.js");
-  assert.deepEqual(
-    [...used].filter((name) => !scopes.includes(name) && !mappingOf(name)),
-    [],
-  );
-  assert.deepEqual(
-    scopes.filter((name) => mappingOf(name)),
-    [],
-  );
-  // No collection is left: the site declares none (no collections.json).
-  assert.deepEqual(scopes, []);
-  await assert.rejects(
-    readFile(new URL("../dist/_naru/collections.json", import.meta.url)),
-  );
-});
-
-test("a character's experience change is recorded for its owner in the same batch", () => {
-  const previous = { revision: "r1", data: { owner: "m-1", exp: 10 } };
-  const record = { id: "hero", data: { owner: "m-1", exp: 25 } };
-  const writes = characterStateWrites(record, previous, " 이벤트 ", 7, "h-1");
-  assert.equal(writes.length, 2);
-  assert.deepEqual(writes[0].set.condition, { revision: "r1" });
-  assert.deepEqual(writes[1], {
-    collection: "neo_avocado_history",
-    set: {
-      id: "h-1",
-      data: {
-        owner: "m-1",
-        kind: "exp",
-        at: 7,
-        character: "hero",
-        expDelta: 15,
-        exp: 25,
-        memo: "이벤트",
-        actor: "site-owner",
-      },
-      condition: { absent: true },
-    },
-  });
-  // Unchanged experience writes the record alone.
-  assert.equal(
-    characterStateWrites(
-      { id: "hero", data: { owner: "m-1", exp: 10 } },
-      previous,
-      "",
-      7,
-      "h-2",
-    ).length,
-    1,
-  );
-});
-
-test("visit reports total a date range and break it down as the original's tabs", async () => {
-  const { visitReport } = await import("../dist/admin-reports.js");
-  const days = [
-    {
-      data: {
-        day: "2030-01-05",
-        total: 3,
-        guests: 1,
-        members: { a: 2 },
-        hours: { 9: 2, 21: 1 },
-        browsers: { Chrome: 2, Safari: 1 },
-      },
-    },
-    {
-      data: {
-        day: "2030-01-06",
-        total: 2,
-        guests: 0,
-        members: { a: 1, b: 1 },
-        hours: { 9: 2 },
-        browsers: { Chrome: 2 },
-      },
-    },
-    { data: { day: "2030-02-01", total: 7, guests: 7, members: {} } },
-  ];
-  const january = visitReport(days, {
-    from: "2030-01-01",
-    to: "2030-01-31",
-    by: "day",
-  });
-  assert.deepEqual([january.total, january.guests, january.members], [5, 1, 2]);
-  assert.deepEqual(january.rows, [
-    { label: "2030-01-05", count: 3 },
-    { label: "2030-01-06", count: 2 },
-  ]);
-  assert.deepEqual(
-    visitReport(days, { by: "hour" }).rows.map((row) => row.label),
-    ["09시", "21시"],
-  );
-  // 2030-01-05 is a Saturday, 01-06 a Sunday: Sunday first, as in Korea.
-  assert.deepEqual(visitReport(days, { to: "2030-01-31", by: "week" }).rows, [
-    { label: "일", count: 2 },
-    { label: "토", count: 3 },
-  ]);
-  assert.deepEqual(visitReport(days, { by: "browsers" }).rows, [
-    { label: "Chrome", count: 4 },
-    { label: "Safari", count: 1 },
-  ]);
-  assert.deepEqual(visitReport(days, { by: "month" }).rows, [
-    { label: "2030-01", count: 5 },
-    { label: "2030-02", count: 7 },
-  ]);
-});
-
-test("activity counts each member's posts and comments on a board in a Korean date range", async () => {
-  const { activityReport } = await import("../dist/admin-reports.js");
-  const at = (iso) => iso;
-  const rows = activityReport(
-    {
-      profiles: [
-        { id: "a", data: { nick: "가", mainCharacter: "c1" } },
-        { id: "b", data: { nick: "나" } },
-      ],
-      members: [{ id: "b", data: { warnings: 2, warningNote: "도배" } }],
-      characters: [{ id: "c1", data: { name: "초록" } }],
-      logs: [
-        {
-          id: "l1",
-          createdBy: "a",
-          createdAt: at("2030-01-01T15:30:00Z"),
-          data: { board: "free" },
-        },
-        {
-          id: "l2",
-          createdBy: "b",
-          createdAt: at("2030-01-01T10:00:00Z"),
-          data: { board: "notice" },
-        },
-        {
-          id: "l3",
-          createdBy: "a",
-          createdAt: at("2030-01-05T00:00:00Z"),
-          data: { board: "free", deleted: true },
-        },
-      ],
-      comments: [
-        {
-          id: "m1",
-          createdBy: "b",
-          createdAt: at("2030-01-02T01:00:00Z"),
-          data: { logId: "l1" },
-        },
-        {
-          id: "m2",
-          createdBy: "b",
-          createdAt: at("2030-01-02T01:00:00Z"),
-          data: { logId: "l2" },
-        },
-      ],
-      presence: [{ id: "a", data: { at: 1234 } }],
-    },
-    // 2030-01-01T15:30Z is 01-02 in Korea.
-    { board: "free", from: "2030-01-02", to: "2030-01-31" },
-  );
-  assert.deepEqual(
-    rows.map((row) => [
-      row.nick,
-      row.mainCharacter,
-      row.logs,
-      row.comments,
-      row.lastSeen,
-      row.warnings,
-      row.warningNote,
-    ]),
-    [
-      ["가", "초록", 1, 0, 1234, 0, ""],
-      ["나", "", 0, 1, null, 2, "도배"],
-    ],
-  );
 });
 
 test("the admin menu has every section once, in the original's groups and names", async () => {
@@ -735,81 +416,6 @@ test("the admin menu has every section once, in the original's groups and names"
   assert.equal(sectionLabel("wallets", names), "골드 관리");
   assert.equal(sectionLabel("levels", names), "레벨 설정");
   assert.equal(sectionLabel("sides", names), "소속 관리");
-});
-
-test("the character review searches by name or owner, filters 소속·종족 and state, and counts states", () => {
-  const rows = [
-    {
-      id: "a",
-      createdBy: "member-a",
-      data: { name: "Hero", state: "approved", side: "forest", class: "elf" },
-    },
-    {
-      id: "b",
-      data: {
-        owner: "member-b",
-        name: "Herald",
-        state: "submitted",
-        side: "city",
-      },
-    },
-    {
-      id: "c",
-      data: {
-        owner: "member-a",
-        name: "Mage",
-        state: "editing",
-        side: "forest",
-      },
-    },
-    {
-      id: "d",
-      data: {
-        owner: "member-a",
-        name: "Gone",
-        state: "submitted",
-        deleted: true,
-      },
-    },
-  ];
-  const ids = (result) => result.rows.map((row) => row.id);
-  const all = characterReview(rows, references.profiles);
-  assert.deepEqual(ids(all), ["a", "b", "c"]);
-  assert.deepEqual(all.counts, {
-    all: 3,
-    editing: 1,
-    submitted: 1,
-    approved: 1,
-  });
-  assert.deepEqual(
-    ids(characterReview(rows, references.profiles, { text: "her" })),
-    ["a", "b"],
-  );
-  const owned = characterReview(rows, references.profiles, {
-    field: "nick",
-    text: "A",
-  });
-  assert.deepEqual(ids(owned), ["a", "c"]);
-  assert.deepEqual(
-    ids(
-      characterReview(rows, references.profiles, {
-        field: "nick",
-        text: "A",
-        state: "editing",
-      }),
-    ),
-    ["c"],
-  );
-  const forest = characterReview(rows, references.profiles, {
-    side: "forest",
-    state: "approved",
-  });
-  assert.deepEqual(ids(forest), ["a"]);
-  assert.equal(forest.counts.all, 2);
-  assert.deepEqual(
-    ids(characterReview(rows, references.profiles, { kind: "elf" })),
-    ["a"],
-  );
 });
 
 test("a board's form starts from the original's defaults and keeps its limits in order", () => {
@@ -844,5 +450,110 @@ test("a board's form starts from the original's defaults and keeps its limits in
         groups: [],
       }),
     /최소 글자 수/,
+  );
+});
+
+test("a balance needs a member and a reason, and keeps what the form does not show", () => {
+  const previous = { data: { balance: 10, purchases: { seed: 2 } } };
+  const record = buildRecord(
+    "wallets",
+    { id: "member-a", balance: "25", lastDaily: "", note: "이벤트 보상" },
+    previous,
+    references,
+  );
+  assert.deepEqual(record.data, {
+    balance: 25,
+    lastDaily: "",
+    purchases: { seed: 2 },
+  });
+  for (const change of [{ note: "" }, { id: "missing" }, { balance: "-1" }])
+    assert.throws(() =>
+      buildRecord(
+        "wallets",
+        { id: "member-a", balance: "25", lastDaily: "", note: "x", ...change },
+        previous,
+        references,
+      ),
+    );
+  assert.throws(
+    () => buildRecord("history", { id: "h" }, null, references),
+    /기록은 수정할 수 없습니다/,
+  );
+});
+
+test("a record's form values build the same record again, so a save may send only some", () => {
+  const values = {
+    ...blank("items"),
+    id: "potion",
+    name: "Potion",
+    price: "10",
+    "display.weekdays": "월, 화",
+    "requirements.items": [{ item: "seed", count: "2", consume: true }],
+  };
+  const saved = buildRecord("items", values, null, references);
+  const again = buildRecord(
+    "items",
+    { ...formValues("items", saved.data, references), id: "potion" },
+    saved,
+    references,
+  );
+  assert.deepEqual(again.data, saved.data);
+  // A new record's values are its defaults: a new item starts hidden.
+  assert.equal(formValues("items", null).hidden, true);
+  assert.equal(formValues("items", { name: "x" }).hidden, false);
+  assert.equal(
+    formValues("quests", { images: ["https://a.example/1.png", "b"] }).images,
+    "https://a.example/1.png\nb",
+  );
+  const state = formValues(
+    "character_state",
+    { stats: { hp: { allocated: 2, max: 12, current: 9, damage: 3 } } },
+    references,
+  );
+  assert.equal(state["allocated:hp"], 2);
+  assert.equal(state["damage:hp"], 3);
+});
+
+test("회원 관리 shows each member's level, role, warnings, leaving and last visit", () => {
+  assert.match(
+    memberSummary({
+      row: { data: { level: 3, role: "moderator", warnings: 2 } },
+      lastSeen: Date.parse("2030-01-01T00:00:00Z"),
+    }),
+    /^등급 3 · 게시물 운영자 · 경고 2회 · 최종 접속 /,
+  );
+  assert.match(
+    memberSummary({
+      row: { data: { role: "member", left: "2030-01-02" } },
+      lastSeen: 1,
+    }),
+    /^등급 2 · 회원 · 탈퇴 2030-01-02 · 최종 접속 /,
+  );
+  assert.equal(
+    memberSummary({ row: { data: {} }, lastSeen: null }),
+    "등급 2 · 회원 · 최종 접속 기록 없음",
+  );
+});
+
+test("no page or server code names a collection: the site declares none", async () => {
+  const { readdir, readFile } = await import("node:fs/promises");
+  const files = ["app.js", "admin.js", "admin-model.js", "admin-reports.js"];
+  for (const name of await readdir(new URL("../dist/app", import.meta.url)))
+    files.push(`app/${name}`);
+  for (const dir of ["modules", "queries", "mutations"])
+    for (const entry of await readdir(
+      new URL(`../dist/_naru/${dir}`, import.meta.url),
+      { recursive: true },
+    ))
+      if (entry.endsWith(".js")) files.push(`_naru/${dir}/${entry}`);
+  for (const file of files) {
+    const source = await readFile(
+      new URL(`../dist/${file}`, import.meta.url),
+      "utf8",
+    );
+    assert.doesNotMatch(source, /neo_avocado_|\.collection\(|\.batch\(/, file);
+  }
+  await assert.rejects(
+    readFile(new URL("../dist/_naru/collections.json", import.meta.url)),
   );
 });

@@ -1,0 +1,27 @@
+// What the admin's forms pick from, in one read: characters, titles, stats,
+// items, members (by nickname), 소속, 종족, board groups, boards and the
+// profile fields, each as { id, data }.
+import { catalogues, ownerOnly } from "../../modules/admin.js";
+import {
+  definitionDocument,
+  fieldCatalogue,
+} from "../../modules/characters.js";
+import type { QueryCtx } from "../../modules/naru-types.js";
+
+export async function references(ctx: QueryCtx) {
+  ownerOnly(ctx);
+  return {
+    ...(await catalogues(ctx, [
+      "characters",
+      "titles",
+      "stats",
+      "items",
+      "profiles",
+      "sides",
+      "classes",
+      "groups",
+      "boards",
+    ])),
+    fields: (await fieldCatalogue(ctx)).map(definitionDocument),
+  };
+}

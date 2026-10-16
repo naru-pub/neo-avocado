@@ -9,8 +9,6 @@ import { readdir, readFile } from "node:fs/promises";
 const pages = [
   "app.js",
   "admin.js",
-  "admin-titles.js",
-  "admin-tables.js",
   ...(await readdir(new URL("../dist/app", import.meta.url))).map(
     (file) => `app/${file}`,
   ),
@@ -22,7 +20,7 @@ for (const page of pages) {
     "utf8",
   );
   for (const [, reference] of source.matchAll(
-    /"((?:community|economy|characters|content|admin)\/[a-z]+:[A-Za-z]+)"/g,
+    /"((?:community|economy|characters|content|admin)\/[a-z_]+:[A-Za-z]+)"/g,
   ))
     references.add(reference);
 }

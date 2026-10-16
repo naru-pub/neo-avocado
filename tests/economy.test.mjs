@@ -2,8 +2,8 @@
 // The economy's queries and mutations on a real SQLite database with the
 // site's migrations (tests/sql-ctx.mjs): the shop and the gacha, what
 // members hold and do with it, money sent and its ledger, the owner's
-// grants, items following a deleted or moved character, the 쪽지 a gift
-// sends, and the owner's bridge to the tables.
+// grants, items following a deleted or moved character, and the 쪽지 a
+// gift sends. The owner's admin is tests/admin.test.mjs.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { testSite } from "./sql-ctx.mjs";
@@ -1179,109 +1179,4 @@ test("the shop and inventory read what the member may see, in one call", async (
     ),
     "no_character",
   );
-});
-
-test("the admin bridge reads and writes the economy's tables as the documents it knows", async () => {
-  const site = await testSite();
-  const set = (collection, id, data, condition) =>
-    site.mutate(
-      "admin/documents:set",
-      { collection: `${P}${collection}`, id, data, condition },
-      OWNER,
-    );
-  const get = (collection, id) =>
-    site.query(
-      "admin/documents:get",
-      { collection: `${P}${collection}`, id },
-      OWNER,
-    );
-  const cake = {
-    name: "케이크",
-    price: 3,
-    stock: 2,
-    hidden: true,
-    shopCategory: "이벤트",
-    display: { fromHour: 9 },
-    effect: { type: "draw" },
-    requirements: {
-      limit: 1,
-      items: [{ item: "egg", count: 2, consume: true }],
-    },
-    useRequirements: { approved: true },
-  };
-  await set("items", "cake", cake);
-  const read = (await get("items", "cake")).data;
-  for (const [key, value] of Object.entries(cake))
-    assert.deepEqual(read[key], value, key);
-  assert.equal(read.sellable, true);
-  assert.equal(read.sellPrice, undefined);
-  // An inventory row the owner adds is numbered by the table.
-  const hero = character(site);
-  const added = await set(
-    "inventory",
-    "inventory_ab12",
-    {
-      owner: "m-1",
-      item: "cake",
-      name: "케이크",
-      from: "admin",
-      character: hero,
-      memo: "사유",
-    },
-    { absent: true },
-  );
-  assert.match(added.id, /^\d+$/);
-  assert.deepEqual(added.data, {
-    owner: "m-1",
-    item: "cake",
-    name: "케이크",
-    from: "admin",
-    character: hero,
-    memo: "사유",
-  });
-  assert.equal(held(site, added.id).gift, JSON.stringify({ memo: "사유" }));
-  await set("inventory", added.id, { ...added.data, character: null });
-  assert.equal(held(site, added.id).character_id, null);
-  assert.equal(count(site, "inventory"), 1);
-  // A recipe's materials are rows of their own.
-  await set("recipes", "bake", {
-    name: "굽기",
-    item: "cake",
-    cost: 5,
-    ingredients: [
-      { item: "egg", count: 2 },
-      { item: "milk", count: 1 },
-    ],
-  });
-  assert.deepEqual(
-    (await get("recipes", "bake")).data.ingredients.sort((x, y) =>
-      x.item < y.item ? -1 : 1,
-    ),
-    [
-      { item: "egg", count: 2 },
-      { item: "milk", count: 1 },
-    ],
-  );
-  await set("recipes", "bake", {
-    name: "굽기",
-    item: "cake",
-    ingredients: [{ item: "egg", count: 1 }],
-  });
-  assert.equal(count(site, "recipe_ingredients"), 1);
-  await site.mutate(
-    "admin/documents:remove",
-    { collection: `${P}recipes`, id: "bake" },
-    OWNER,
-  );
-  assert.equal(count(site, "recipe_ingredients"), 0);
-  // A draw's miss keeps no item; weights are numbers.
-  await set("gacha", "miss", { source: "cake", item: null, weight: 0.5 });
-  assert.deepEqual((await get("gacha", "miss")).data, {
-    source: "cake",
-    weight: 0.5,
-  });
-  await set("explore", "herb", { item: "cake", weight: 2 });
-  assert.deepEqual(site.rows("SELECT * FROM explore"), [
-    { id: "herb", item_id: "cake", weight: 2 },
-  ]);
 });

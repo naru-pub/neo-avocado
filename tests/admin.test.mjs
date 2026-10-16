@@ -1,0 +1,1143 @@
+// 실행: npm test
+// The owner's admin (admin/) on a real SQLite database with the site's
+// migrations (tests/sql-ctx.mjs): each section's owner-only queries and
+// mutations, saves checked as the forms check them, members' Naru roles,
+// balances and records saved with their history, titles given and taken
+// back in one call, and the reports' SQL.
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readdir } from "node:fs/promises";
+import { testSite } from "./sql-ctx.mjs";
+
+const M1 = { member: "m-1" };
+const OWNER = { owner: true };
+
+/** The reason a call refused with (its ctx.fail details), its code, or null. */
+const refusal = (call) =>
+  call.then(
+    () => null,
+    (error) => {
+      if (error.details?.reason) return error.details.reason;
+      if (error.code) return error.code;
+      throw error;
+    },
+  );
+/** A call's refusal message, or null. */
+const refusedWith = (call) =>
+  call.then(
+    () => null,
+    (error) => error.message,
+  );
+const query = (site, name, args = {}) =>
+  site.query(`admin/${name}`, args, OWNER);
+const mutate = (site, name, args = {}) =>
+  site.mutate(`admin/${name}`, args, OWNER);
+/** Saves a new entry of a section from its form's values. */
+const create = (site, section, id, values) =>
+  mutate(site, `${section}:save`, { id, values, create: true });
+const update = (site, section, id, values) =>
+  mutate(site, `${section}:save`, { id, values });
+const profile = (site, member, nick, main = null) =>
+  site.run(
+    "INSERT INTO profiles (member, nick, main_character) VALUES (?, ?, ?)",
+    member,
+    nick,
+    main,
+  );
+/** A character row made directly; answers its ID as pages know it. */
+function character(site, data = {}) {
+  const row = { owner: "m-1", name: "Hero", created_at: site.now, ...data };
+  const columns = Object.keys(row);
+  const { lastInsertRowid } = site.run(
+    `INSERT INTO characters (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`,
+    ...Object.values(row),
+  );
+  return String(lastInsertRowid);
+}
+const history = (site) => site.rows("SELECT * FROM history ORDER BY id");
+
+/** Every admin query and mutation, by "<module>:<export>". */
+async function adminCalls(folder) {
+  const root = new URL(`../dist/_naru/${folder}/admin/`, import.meta.url);
+  const calls = [];
+  for (const file of await readdir(root)) {
+    const module = await import(new URL(file, root).href);
+    for (const name of Object.keys(module))
+      calls.push(`${file.replace(/\.js$/, "")}:${name}`);
+  }
+  return calls;
+}
+
+test("every admin query and mutation refuses a member and a visitor", async () => {
+  const site = await testSite();
+  profile(site, "m-1", "하나");
+  site.setRoles("m-1", ["staff"]);
+  const queries = await adminCalls("queries");
+  const mutations = await adminCalls("mutations");
+  assert.ok(queries.length > 20 && mutations.length > 20);
+  for (const who of [M1, {}]) {
+    for (const call of queries)
+      assert.equal(
+        await refusal(site.query(`admin/${call}`, {}, who)),
+        "owner_only",
+        call,
+      );
+    for (const call of mutations)
+      assert.equal(
+        await refusal(site.mutate(`admin/${call}`, {}, who)),
+        "owner_only",
+        call,
+      );
+  }
+});
+
+test("settings are one form each, checked as the form is, and a save may change only some", async () => {
+  const site = await testSite();
+  assert.equal(
+    await query(site, "settings:get", { section: "settings" }),
+    null,
+  );
+  assert.equal(
+    await refusal(query(site, "settings:get", { section: "members" })),
+    "invalid_input",
+  );
+  const saved = await mutate(site, "settings:save", {
+    section: "settings",
+    values: { loginReward: 100 },
+  });
+  assert.equal(saved.id, "community");
+  // The rest are the form's defaults, as a first save from the form keeps.
+  assert.equal(saved.data.loginReward, 100);
+  assert.equal(saved.data.moneyName, "아보");
+  assert.equal(saved.data.siteOpen, true);
+  assert.equal(saved.data.messageDailyLimit, 100);
+  await mutate(site, "settings:save", {
+    section: "settings",
+    values: { shopGreeting: "어서 오세요" },
+  });
+  const settings = await query(site, "settings:get", { section: "settings" });
+  assert.equal(settings.data.loginReward, 100);
+  assert.equal(settings.data.shopGreeting, "어서 오세요");
+  assert.equal(
+    (await site.query("content/site:settings", null, M1)).shopGreeting,
+    "어서 오세요",
+  );
+  // The form's checks: a negative amount, a bad colour.
+  assert.equal(
+    await refusedWith(
+      mutate(site, "settings:save", {
+        section: "settings",
+        values: { loginReward: -1 },
+      }),
+    ),
+    "숫자는 0 이상의 정수여야 합니다.",
+  );
+  assert.equal(
+    await refusedWith(
+      mutate(site, "settings:save", {
+        section: "design",
+        values: { backgroundColor: "red;}" },
+      }),
+    ),
+    "배경 색상코드는 #000000 꼴로 입력하세요.",
+  );
+  assert.equal(
+    await refusal(
+      mutate(site, "settings:save", { section: "design", values: "x" }),
+    ),
+    "invalid_input",
+  );
+  // The design is its own row, read by every page.
+  const design = await mutate(site, "settings:save", {
+    section: "design",
+    values: { title: "아보", backgroundColor: "#102030" },
+  });
+  assert.equal(design.id, "site");
+  assert.equal((await site.query("content/site:site")).design.title, "아보");
+  await mutate(site, "settings:save", {
+    section: "character_images",
+    values: { bodyUse: true },
+  });
+  assert.equal(
+    (await query(site, "settings:get", { section: "character_images" })).data
+      .bodyUse,
+    true,
+  );
+});
+
+test("boards and groups are saved as their forms check them, and members see them so", async () => {
+  const site = await testSite();
+  await create(site, "board_groups", "g", { name: "그룹", membersOnly: true });
+  const board = {
+    name: "자유",
+    kind: "text",
+    group: "g",
+    listLevel: 1,
+    readLevel: 1,
+    writeLevel: 1,
+    commentLevel: 1,
+    categories: "잡담, 잡담, 질문",
+    html: true,
+    description: "<b>안내</b>",
+    writeReward: 5,
+    secret: "off",
+  };
+  const saved = await create(site, "boards", "free", board);
+  assert.deepEqual(saved, {
+    id: "free",
+    data: {
+      name: "자유",
+      description: "<b>안내</b>",
+      kind: "text",
+      enabled: true,
+      group: "g",
+      listLevel: 1,
+      readLevel: 1,
+      writeLevel: 1,
+      commentLevel: 1,
+      categories: ["잡담", "질문"],
+      html: true,
+      actions: false,
+      anonymous: false,
+      foldHeight: 600,
+      pageRows: 15,
+      editLock: 1,
+      writeReward: 5,
+      commentReward: 0,
+      insertContent: "",
+      writeMin: 0,
+      writeMax: 0,
+      commentMin: 0,
+      commentMax: 0,
+      secret: "off",
+    },
+  });
+  site.setRoles("m-1", ["group-g"]);
+  const [listed] = (await site.query("community/boards:boards", null, M1))
+    .boards;
+  assert.deepEqual(listed.data, { ...saved.data, membersOnly: "g" });
+  // A taken ID is not made again; a gone one is not saved.
+  assert.equal(
+    await refusal(create(site, "boards", "free", board)),
+    "conflict",
+  );
+  assert.equal(
+    await refusal(update(site, "boards", "gone", board)),
+    "conflict",
+  );
+  // The form's checks hold on the server.
+  for (const [change, message] of [
+    [{ pageRows: 0 }, "한 페이지 글 수는 1~100입니다."],
+    [
+      { writeMin: 10, writeMax: 5 },
+      "최소 글자 수는 최대 글자 수보다 클 수 없습니다.",
+    ],
+    [{ group: "nothing" }, "게시판 그룹을(를) 선택하세요."],
+    [{ listLevel: 11 }, "게시판 등급은 1~10입니다."],
+  ])
+    assert.equal(
+      await refusedWith(update(site, "boards", "free", change)),
+      message,
+    );
+  // A save sends only what changes.
+  await update(site, "boards", "free", { name: "자유게시판" });
+  const read = await query(site, "boards:get", { id: "free" });
+  assert.equal(read.data.name, "자유게시판");
+  assert.deepEqual(read.data.categories, ["잡담", "질문"]);
+  assert.deepEqual(
+    (await query(site, "boards:list")).documents.map((row) => row.id),
+    ["free"],
+  );
+  await mutate(site, "boards:remove", { id: "free" });
+  assert.equal(await query(site, "boards:get", { id: "free" }), null);
+});
+
+test("content, menus, banners, quests and emoticons keep the forms' rules", async () => {
+  const site = await testSite();
+  await create(site, "content", "guide", { name: "안내", body: "<p>안내</p>" });
+  assert.equal(
+    (await query(site, "content:get", { id: "guide" })).data.readLevel,
+    1,
+  );
+  assert.equal(
+    await refusedWith(update(site, "content", "guide", { readLevel: 11 })),
+    "읽기 등급은 1~10입니다.",
+  );
+  assert.equal(
+    await refusedWith(
+      create(site, "content", "bad id", { name: "x", body: "x" }),
+    ),
+    "ID는 영문·숫자·밑줄·하이픈 1~64자로 입력하세요.",
+  );
+  await create(site, "menus", "home", { name: "홈", link: "tab:members" });
+  assert.equal(
+    await refusedWith(update(site, "menus", "home", { link: "javascript:1" })),
+    "연결은 board:ID, content:ID, tab:이름 또는 https:// 주소입니다.",
+  );
+  assert.equal(
+    await refusedWith(update(site, "menus", "home", { parent: "home" })),
+    "자기 자신은 상위 메뉴가 될 수 없습니다.",
+  );
+  await create(site, "banners", "b1", {
+    image: "https://example.com/b.png",
+    startsAt: "2030-01-01T09:00",
+  });
+  assert.equal(
+    await refusedWith(
+      update(site, "banners", "b1", { endsAt: "2029-01-01T09:00" }),
+    ),
+    "종료는 시작보다 늦어야 합니다.",
+  );
+  assert.equal(
+    await refusedWith(
+      update(site, "banners", "b1", { image: "https://u:p@example.com/b.png" }),
+    ),
+    "이미지는 인증 정보 없는 HTTPS 주소여야 합니다.",
+  );
+  // A quest's 소속 is one of the list once there is one.
+  await create(site, "sides", "forest", { name: "숲" });
+  await create(site, "quests", "q", {
+    name: "일일",
+    side: "숲",
+    images: "https://example.com/1.png\nhttps://example.com/2.png",
+  });
+  assert.deepEqual((await query(site, "quests:get", { id: "q" })).data, {
+    name: "일일",
+    type: "daily",
+    side: "숲",
+    images: ["https://example.com/1.png", "https://example.com/2.png"],
+  });
+  assert.equal(
+    await refusedWith(update(site, "quests", "q", { side: "바다" })),
+    "수행 가능 소속 (비우면 공통)을(를) 선택하세요.",
+  );
+  await create(site, "emoticons", "smile", {
+    name: ":웃음:",
+    image: "https://example.com/s.png",
+  });
+  assert.deepEqual((await query(site, "emoticons:get", { id: "smile" })).data, {
+    name: ":웃음:",
+    image: "https://example.com/s.png",
+  });
+});
+
+test("a member's level, warnings and note are a row; their role and groups are Naru roles", async () => {
+  const site = await testSite();
+  profile(site, "m-1", "하나");
+  profile(site, "m-2", "둘");
+  await create(site, "board_groups", "writers", { name: "작가" });
+  site.setRoles("m-1", ["keep"]);
+  const saved = await create(site, "members", "m-1", {
+    level: 4,
+    role: "moderator",
+    groups: ["writers"],
+    left: "",
+  });
+  assert.deepEqual(saved.data, {
+    level: 4,
+    role: "moderator",
+    groups: ["writers"],
+    adult: false,
+    warnings: 0,
+    warningNote: "",
+    left: "",
+    note: "",
+  });
+  assert.deepEqual(site.roles("m-1"), ["group-writers", "keep", "staff"]);
+  assert.equal(
+    await refusedWith(update(site, "members", "m-1", { groups: ["nothing"] })),
+    "그룹 회원 (그룹 회원만 쓰는 게시판 그룹, 여러 개 선택 가능)을(를) 확인하세요.",
+  );
+  assert.equal(
+    await refusedWith(update(site, "members", "m-1", { level: 0 })),
+    "회원 등급은 1~10입니다.",
+  );
+  // 활동량 관리 saves the warnings alone: the rest stays.
+  await update(site, "members", "m-1", { warnings: 2, warningNote: "도배" });
+  const member = await query(site, "members:get", { id: "m-1" });
+  assert.deepEqual(
+    [member.data.level, member.data.role, member.data.warnings],
+    [4, "moderator", 2],
+  );
+  assert.deepEqual(site.roles("m-1"), ["group-writers", "keep", "staff"]);
+  // A member without a record yet keeps the roles they have.
+  site.setRoles("m-2", ["staff"]);
+  await create(site, "members", "m-2", { warnings: 1 });
+  assert.deepEqual(site.roles("m-2"), ["staff"]);
+  assert.equal(
+    await refusal(create(site, "members", "m-2", { warnings: 1 })),
+    "conflict",
+  );
+  // The list: newest visit first, found by nickname or member number.
+  site.run("INSERT INTO presence (member, place, at) VALUES ('m-2', '', 5)");
+  const listed = await query(site, "members:list");
+  assert.deepEqual(
+    listed.documents.map((row) => [row.id, row.nick, row.lastSeen]),
+    [
+      ["m-2", "둘", 5],
+      ["m-1", "하나", null],
+    ],
+  );
+  assert.equal(listed.documents[1].data.role, "moderator");
+  assert.deepEqual(
+    (await query(site, "members:list", { search: "하" })).documents.map(
+      (row) => row.id,
+    ),
+    ["m-1"],
+  );
+  assert.deepEqual(
+    (await query(site, "members:list", { search: "M-2" })).documents.map(
+      (row) => row.id,
+    ),
+    ["m-2"],
+  );
+  // Deleting the record takes the role and groups, and keeps the others.
+  await mutate(site, "members:remove", { id: "m-1" });
+  assert.equal(await query(site, "members:get", { id: "m-1" }), null);
+  assert.deepEqual(site.roles("m-1"), ["keep"]);
+});
+
+test("a balance and its reason are saved with the adjustment in the member's history", async () => {
+  const site = await testSite();
+  profile(site, "m-1", "하나");
+  site.run("INSERT INTO wallets (member, balance) VALUES ('m-1', 10)");
+  const saved = await update(site, "wallets", "m-1", {
+    balance: 25,
+    note: " 이벤트 보상 ",
+  });
+  assert.deepEqual(saved, {
+    id: "m-1",
+    data: { balance: 25 },
+  });
+  assert.deepEqual(
+    history(site).map((row) => [
+      row.owner,
+      row.kind,
+      row.delta,
+      row.balance,
+      row.memo,
+      row.actor,
+      row.at,
+    ]),
+    [["m-1", "adjust", 15, 25, "이벤트 보상", "site-owner", site.now]],
+  );
+  // The reason is asked; the member must exist; a failed save keeps nothing.
+  assert.equal(
+    await refusedWith(update(site, "wallets", "m-1", { balance: 30 })),
+    "잔액 조정 사유을(를) 입력하세요.",
+  );
+  assert.equal(
+    await refusedWith(
+      create(site, "wallets", "m-9", { balance: 30, note: "x" }),
+    ),
+    "존재하는 회원을 선택하세요.",
+  );
+  assert.equal(history(site).length, 1);
+  const { documents } = await query(site, "wallets:list");
+  assert.deepEqual(
+    documents.map((row) => [row.id, row.label, row.data.balance]),
+    [["m-1", "하나", 25]],
+  );
+});
+
+test("the owner gives an item to a member's character, named from the catalogue", async () => {
+  const site = await testSite();
+  profile(site, "m-1", "하나");
+  profile(site, "m-2", "둘");
+  const hero = character(site, { owner: "m-1" });
+  const theirs = character(site, { owner: "m-2", name: "Other" });
+  await create(site, "items", "cake", { name: "케이크" });
+  const given = await create(site, "inventory", "inventory_ab12", {
+    owner: "m-1",
+    character: hero,
+    item: "cake",
+    memo: "보상",
+  });
+  assert.match(given.id, /^\d+$/);
+  assert.deepEqual(given.data, {
+    owner: "m-1",
+    item: "cake",
+    name: "케이크",
+    from: "admin",
+    character: hero,
+    memo: "보상",
+  });
+  assert.equal(
+    await refusedWith(
+      create(site, "inventory", "x", {
+        owner: "m-1",
+        character: theirs,
+        item: "cake",
+      }),
+    ),
+    "선택한 회원의 캐릭터가 아닙니다.",
+  );
+  await update(site, "inventory", given.id, { character: "" });
+  const { documents } = await query(site, "inventory:list");
+  assert.deepEqual(
+    documents.map((row) => [row.id, row.ownerNick, row.characterName]),
+    [[given.id, "하나", null]],
+  );
+  assert.equal(documents[0].data.memo, "보상");
+  await mutate(site, "inventory:remove", { id: given.id });
+  assert.deepEqual(site.rows("SELECT * FROM inventory"), []);
+});
+
+test("items, recipes, draws and exploration keep the forms' rules", async () => {
+  const site = await testSite();
+  await create(site, "stat_config", "hp", { name: "HP", initial: 10, max: 20 });
+  await create(site, "items", "egg", { name: "달걀", craftMaterial: true });
+  await create(site, "items", "milk", { name: "우유" });
+  const cake = await create(site, "items", "cake", {
+    name: "케이크",
+    price: 3,
+    stock: "2",
+    "display.fromHour": "9",
+    "effect.type": "restore",
+    "effect.stat": "hp",
+    "effect.amount": "2",
+    "requirements.sides": "숲, 숲, 도시",
+    "requirements.items": [{ item: "egg", count: "2", consume: true }],
+  });
+  assert.deepEqual(
+    [
+      cake.data.hidden,
+      cake.data.stock,
+      cake.data.display.fromHour,
+      cake.data.effect,
+      cake.data.requirements.sides,
+      cake.data.requirements.items,
+    ],
+    [
+      true,
+      2,
+      9,
+      { type: "restore", stat: "hp", amount: 2 },
+      ["숲", "도시"],
+      [{ item: "egg", count: 2, consume: true }],
+    ],
+  );
+  for (const [change, message] of [
+    [{ price: -1 }, "숫자는 0 이상의 정수여야 합니다."],
+    [{ "effect.amount": "0" }, "회복할 능력치와 양을 설정하세요."],
+    [{ "effect.stat": "mp" }, "회복할 능력치을(를) 선택하세요."],
+    [
+      { "display.weekdays": "월, 휴일" },
+      "진열 요일은 일, 월, 화, 수, 목, 금, 토 중에서 적어 주세요.",
+    ],
+  ])
+    assert.equal(
+      await refusedWith(update(site, "items", "cake", change)),
+      message,
+    );
+  // A recipe's materials are rows of their own: craft materials, a
+  // combination no other recipe has.
+  await create(site, "recipes", "bake", {
+    name: "굽기",
+    item: "cake",
+    cost: 5,
+    ingredients: [{ item: "egg", count: 2 }],
+  });
+  assert.deepEqual(
+    (await query(site, "recipes:get", { id: "bake" })).data.ingredients,
+    [{ item: "egg", count: 2 }],
+  );
+  assert.equal(
+    await refusedWith(
+      create(site, "recipes", "again", {
+        name: "또",
+        item: "cake",
+        ingredients: [{ item: "egg", count: 2 }],
+      }),
+    ),
+    "이미 등록된 레시피 조합입니다: 굽기.",
+  );
+  assert.equal(
+    await refusedWith(
+      update(site, "recipes", "bake", {
+        ingredients: [{ item: "milk", count: 1 }],
+      }),
+    ),
+    "우유은(는) 조합 재료로 사용 가능하게 설정되지 않은 아이템입니다.",
+  );
+  await mutate(site, "recipes:remove", { id: "bake" });
+  assert.deepEqual(site.rows("SELECT * FROM recipe_ingredients"), []);
+  // A draw's miss keeps no item; weights are numbers.
+  await create(site, "gacha", "miss", {
+    source: "cake",
+    item: "",
+    weight: "0.5",
+  });
+  assert.deepEqual((await query(site, "gacha:get", { id: "miss" })).data, {
+    source: "cake",
+    weight: 0.5,
+  });
+  assert.equal(
+    await refusedWith(update(site, "gacha", "miss", { item: "nothing" })),
+    "결과 아이템 (빈칸: 꽝)을(를) 선택하세요.",
+  );
+  await create(site, "explore", "herb", { item: "cake", weight: 2 });
+  assert.deepEqual(site.rows("SELECT * FROM explore"), [
+    { id: "herb", item_id: "cake", weight: 2 },
+  ]);
+});
+
+test("profile fields, stats, levels, sides and couples are saved as their forms check them", async () => {
+  const site = await testSite();
+  await create(site, "character_fields", "age", {
+    label: "나이",
+    type: "select",
+    options: "17, 18",
+    required: true,
+  });
+  assert.deepEqual((await site.query("characters/sheet:choices")).fields[0], {
+    id: "age",
+    data: {
+      label: "나이",
+      type: "select",
+      options: ["17", "18"],
+      help: "",
+      suffix: "",
+      order: 0,
+      visibility: "public",
+      required: true,
+    },
+  });
+  assert.equal(
+    await refusedWith(
+      create(site, "character_fields", "Age", { label: "x", type: "text" }),
+    ),
+    "항목 ID는 영문 소문자로 시작하는 영문 소문자·숫자·밑줄 32자 이하입니다.",
+  );
+  for (let i = 0; i < 20; i++)
+    await create(site, "stat_config", `s${i}`, { name: `S${i}` });
+  assert.equal(
+    await refusedWith(create(site, "stat_config", "s20", { name: "S20" })),
+    "능력치는 최대 20개입니다.",
+  );
+  await create(site, "levels", "one", { name: "하나", exp: 5, bonusPoints: 2 });
+  assert.deepEqual((await query(site, "levels:get", { id: "one" })).data, {
+    name: "하나",
+    exp: 5,
+    bonusPoints: 2,
+  });
+  const a = character(site);
+  const b = character(site, { name: "Other" });
+  await create(site, "couples", "pair", {
+    first: a,
+    second: b,
+    since: "2030-01-01",
+  });
+  assert.deepEqual((await query(site, "couples:get", { id: "pair" })).data, {
+    first: a,
+    second: b,
+    since: "2030-01-01",
+    order: 0,
+  });
+  for (const [change, message] of [
+    [{ second: a }, "서로 다른 캐릭터를 선택하세요."],
+    [{ first: "999" }, "존재하는 캐릭터를 선택하세요."],
+    [{ since: "2030-02-30" }, "날짜를 확인하세요."],
+  ])
+    assert.equal(
+      await refusedWith(update(site, "couples", "pair", change)),
+      message,
+    );
+});
+
+test("a character's record is saved at its version, with an experience change in its owner's history", async () => {
+  const site = await testSite();
+  const hero = character(site, { state: "approved" });
+  await create(site, "stat_config", "hp", { name: "HP", initial: 10, max: 20 });
+  await create(site, "titles", "brave", { name: "Brave" });
+  const record = await query(site, "character_state:get", { id: hero });
+  assert.deepEqual(record, {
+    id: hero,
+    label: "Hero",
+    revision: "1",
+    data: {
+      exp: 0,
+      stats: {},
+      purchases: {},
+      owner: "m-1",
+      character: hero,
+      approved: true,
+      titles: [],
+    },
+  });
+  const saved = await mutate(site, "character_state:save", {
+    id: hero,
+    revision: record.revision,
+    values: {
+      exp: 30,
+      expNote: " 이벤트 ",
+      points: 5,
+      titles: ["brave"],
+      "allocated:hp": 5,
+      "damage:hp": 3,
+    },
+  });
+  assert.deepEqual(
+    [saved.revision, saved.data.exp, saved.data.points, saved.data.titles],
+    ["2", 30, 5, ["brave"]],
+  );
+  assert.deepEqual(saved.data.stats, {
+    hp: { allocated: 5, max: 15, damage: 3, current: 12 },
+  });
+  assert.deepEqual(
+    history(site).map((row) => [
+      row.owner,
+      row.kind,
+      row.character_id,
+      row.exp_delta,
+      row.exp,
+      row.memo,
+      row.actor,
+    ]),
+    [["m-1", "exp", hero, 30, 30, "이벤트", "site-owner"]],
+  );
+  // Opened at an older version: refused. Over budget: refused, nothing kept.
+  assert.equal(
+    await refusal(
+      mutate(site, "character_state:save", {
+        id: hero,
+        revision: "1",
+        values: { exp: 40 },
+      }),
+    ),
+    "conflict",
+  );
+  assert.equal(
+    await refusedWith(
+      mutate(site, "character_state:save", {
+        id: hero,
+        values: { points: 4 },
+      }),
+    ),
+    "배분한 능력치가 총 포인트를 넘습니다.",
+  );
+  // A record is its character's: none is made alone.
+  assert.equal(
+    await refusal(
+      mutate(site, "character_state:save", {
+        id: hero,
+        values: {},
+        create: true,
+      }),
+    ),
+    "conflict",
+  );
+  // Unchanged experience writes no history.
+  await mutate(site, "character_state:save", {
+    id: hero,
+    values: { points: 6 },
+  });
+  assert.equal(history(site).length, 1);
+  assert.deepEqual(
+    (await query(site, "character_state:list")).documents.map((row) => [
+      row.id,
+      row.label,
+      row.data.points,
+    ]),
+    [[hero, "Hero", 6]],
+  );
+});
+
+test("a title is given and taken back in one call, and deleting it takes it from its holders", async () => {
+  const site = await testSite();
+  const approved = Array.from({ length: 120 }, (_, i) =>
+    character(site, { name: `C${i}`, state: "approved" }),
+  );
+  const editing = character(site, { name: "Editing" });
+  await create(site, "titles", "award", { name: "Award" });
+  await create(site, "titles", "old", { name: "Old" });
+  site.run(
+    "INSERT INTO character_titles (character_id, title_id) VALUES (?, 'old')",
+    Number(approved[0]),
+  );
+  const grant = (args) =>
+    mutate(site, "titles:grant", { title: "award", ...args });
+  assert.deepEqual(await grant({ action: "grant", allApproved: true }), {
+    completed: 120,
+  });
+  // Again changes nothing.
+  await grant({ action: "grant", allApproved: true });
+  const holders = () =>
+    site.rows(
+      "SELECT character_id FROM character_titles WHERE title_id = 'award' ORDER BY character_id",
+    ).length;
+  assert.equal(holders(), 120);
+  assert.deepEqual(
+    (
+      await query(site, "character_state:get", { id: approved[0] })
+    ).data.titles.sort(),
+    ["award", "old"],
+  );
+  // The selected, once each; a hundred at once, beyond one statement's
+  // values.
+  assert.deepEqual(
+    await grant({ action: "grant", characters: [editing, editing] }),
+    { completed: 1 },
+  );
+  assert.equal(holders(), 121);
+  site.run(
+    "UPDATE characters SET active_title = 'award' WHERE id = ?",
+    Number(approved[1]),
+  );
+  assert.deepEqual(
+    await grant({ action: "revoke", characters: approved.slice(0, 100) }),
+    { completed: 100 },
+  );
+  assert.equal(holders(), 21);
+  assert.equal(
+    site.rows(
+      "SELECT active_title FROM characters WHERE id = ?",
+      Number(approved[1]),
+    )[0].active_title,
+    null,
+  );
+  // A missing character or title is refused, and nothing is kept.
+  assert.equal(
+    await refusal(grant({ action: "grant", characters: [editing, "999"] })),
+    "no_character",
+  );
+  assert.equal(
+    await refusal(
+      mutate(site, "titles:grant", {
+        title: "none",
+        action: "grant",
+        characters: [editing],
+      }),
+    ),
+    "no_title",
+  );
+  assert.equal(
+    await refusedWith(grant({ action: "give", characters: [editing] })),
+    "지급 또는 회수를 선택하세요.",
+  );
+  assert.equal(
+    await refusedWith(grant({ action: "grant", characters: [] })),
+    "대상 캐릭터가 없습니다.",
+  );
+  // 타이틀 보유·착용 현황: every holding, found by name.
+  site.run(
+    "UPDATE characters SET active_title = 'award' WHERE id = ?",
+    Number(approved[119]),
+  );
+  const found = await query(site, "title_holdings:list", { search: "c119" });
+  assert.deepEqual(found.documents, [
+    {
+      characterId: approved[119],
+      titleId: "award",
+      character: "C119",
+      title: "Award",
+      image: null,
+      active: true,
+    },
+  ]);
+  // A page at a time: 21 hold the award, one the old title.
+  const all = await query(site, "title_holdings:list");
+  assert.equal(all.documents.length, 22);
+  assert.equal(all.nextCursor, null);
+  // Deleting the title takes it from the 21 holding or showing it.
+  assert.deepEqual(await mutate(site, "titles:remove", { id: "award" }), {
+    completed: 21,
+  });
+  assert.equal(holders(), 0);
+  assert.deepEqual(
+    site.rows("SELECT id FROM characters WHERE active_title IS NOT NULL"),
+    [],
+  );
+  assert.equal(await query(site, "titles:get", { id: "award" }), null);
+  assert.deepEqual(
+    (await query(site, "title_holdings:list", { search: "old" })).documents.map(
+      (row) => row.characterId,
+    ),
+    [approved[0]],
+  );
+});
+
+test("the review searches by name or owner, filters 소속·종족 and state, and counts states", async () => {
+  const site = await testSite();
+  profile(site, "member-a", "A");
+  profile(site, "member-b", "B");
+  const at = (n) => site.now + n;
+  const hero = character(site, {
+    owner: "member-a",
+    name: "Hero",
+    state: "approved",
+    side: "forest",
+    class: "elf",
+    created_at: at(1),
+  });
+  const herald = character(site, {
+    owner: "member-b",
+    name: "Herald",
+    state: "submitted",
+    side: "city",
+    created_at: at(2),
+  });
+  const mage = character(site, {
+    owner: "member-a",
+    name: "Mage",
+    state: "editing",
+    side: "forest",
+    fields: JSON.stringify({ memo: "운영자" }),
+    created_at: at(3),
+  });
+  const ids = (result) => result.documents.map((row) => row.id);
+  const review = (args = {}) => query(site, "character_review:list", args);
+  const all = await review();
+  assert.deepEqual(ids(all), [mage, herald, hero]);
+  assert.deepEqual(all.counts, {
+    all: 3,
+    editing: 1,
+    submitted: 1,
+    approved: 1,
+  });
+  assert.deepEqual(all.sides, ["city", "forest"]);
+  assert.deepEqual(all.classes, ["elf"]);
+  assert.equal(all.documents[0].nick, "A");
+  assert.deepEqual(all.documents[0].data.fields, { memo: "운영자" });
+  assert.equal(all.documents[0].revision, "1");
+  assert.deepEqual(ids(await review({ text: "HER" })), [herald, hero]);
+  assert.deepEqual(ids(await review({ field: "nick", text: "a" })), [
+    mage,
+    hero,
+  ]);
+  assert.deepEqual(
+    ids(await review({ field: "nick", text: "A", state: "editing" })),
+    [mage],
+  );
+  const forest = await review({ side: "forest", state: "approved" });
+  assert.deepEqual(ids(forest), [hero]);
+  assert.equal(forest.counts.all, 2);
+  assert.deepEqual(ids(await review({ kind: "elf" })), [hero]);
+  assert.equal(await refusal(review({ state: "deleted" })), "invalid_input");
+  assert.equal(
+    (await query(site, "character_review:get", { id: mage })).data.fields.memo,
+    "운영자",
+  );
+});
+
+test("visits are totalled for a range and broken down as the original's tabs, and old days pruned", async () => {
+  const site = await testSite();
+  const day = (date, data) =>
+    site.run(
+      "INSERT INTO visits (day, total, guests, members, hours, browsers) VALUES (?, ?, ?, ?, ?, ?)",
+      date,
+      data.total,
+      data.guests,
+      JSON.stringify(data.members ?? {}),
+      JSON.stringify(data.hours ?? {}),
+      JSON.stringify(data.browsers ?? {}),
+    );
+  day("2029-12-31", { total: 1, guests: 1 });
+  day("2030-01-05", {
+    total: 3,
+    guests: 1,
+    members: { a: 2 },
+    hours: { 9: 2, 21: 1 },
+    browsers: { Chrome: 2, Safari: 1 },
+  });
+  day("2030-01-06", {
+    total: 2,
+    guests: 0,
+    members: { a: 1, b: 1 },
+    hours: { 9: 2 },
+    browsers: { Chrome: 2 },
+  });
+  day("2030-02-01", { total: 7, guests: 7 });
+  const report = (args) => query(site, "visits:report", args);
+  const january = await report({
+    from: "2030-01-01",
+    to: "2030-01-31",
+    by: "day",
+  });
+  assert.deepEqual(january, {
+    total: 5,
+    guests: 1,
+    members: 2,
+    rows: [
+      { label: "2030-01-05", count: 3 },
+      { label: "2030-01-06", count: 2 },
+    ],
+    older: 1,
+  });
+  assert.deepEqual((await report({ from: "2030-01-01", by: "hour" })).rows, [
+    { label: "09시", count: 4 },
+    { label: "21시", count: 1 },
+  ]);
+  // 2030-01-05 is a Saturday, 01-06 a Sunday: Sunday first, as in Korea.
+  assert.deepEqual(
+    (await report({ from: "2030-01-01", to: "2030-01-31", by: "week" })).rows,
+    [
+      { label: "일", count: 2 },
+      { label: "토", count: 3 },
+    ],
+  );
+  assert.deepEqual((await report({ by: "browsers" })).rows, [
+    { label: "Chrome", count: 4 },
+    { label: "Safari", count: 1 },
+  ]);
+  assert.deepEqual((await report({ from: "2030-01-01", by: "month" })).rows, [
+    { label: "2030-01", count: 5 },
+    { label: "2030-02", count: 7 },
+  ]);
+  assert.equal(await refusal(report({ by: "minutes" })), "invalid_input");
+  assert.deepEqual(
+    await mutate(site, "visits:prune", { before: "2030-01-06" }),
+    { deleted: 2 },
+  );
+  assert.deepEqual(
+    site.rows("SELECT day FROM visits ORDER BY day").map((row) => row.day),
+    ["2030-01-06", "2030-02-01"],
+  );
+});
+
+test("activity counts each member's posts and comments on a board in a Korean date range", async () => {
+  const site = await testSite();
+  const main = character(site, { owner: "a", name: "초록" });
+  profile(site, "a", "가", main);
+  profile(site, "b", "나");
+  site.run(
+    "INSERT INTO members (member, warnings, warning_note) VALUES ('b', 2, '도배')",
+  );
+  site.run("INSERT INTO presence (member, place, at) VALUES ('a', '', 1234)");
+  for (const board of ["free", "notice"])
+    site.run("INSERT INTO boards (id, name) VALUES (?, ?)", board, board);
+  const post = (board, owner, at) =>
+    Number(
+      site.run(
+        "INSERT INTO posts (board, number, owner, created_at, updated_at) VALUES (?, (SELECT coalesce(max(number), 0) + 1 FROM posts WHERE board = ?), ?, ?, ?)",
+        board,
+        board,
+        owner,
+        Date.parse(at),
+        Date.parse(at),
+      ).lastInsertRowid,
+    );
+  const reply = (post, owner, at) =>
+    site.run(
+      "INSERT INTO comments (post_id, owner, created_at, updated_at) VALUES (?, ?, ?, ?)",
+      post,
+      owner,
+      Date.parse(at),
+      Date.parse(at),
+    );
+  // 2030-01-01T15:30Z is 01-02 in Korea; 01-31T15:30Z is 02-01.
+  const l1 = post("free", "a", "2030-01-01T15:30:00Z");
+  const l2 = post("notice", "b", "2030-01-01T10:00:00Z");
+  post("free", "a", "2030-01-31T15:30:00Z");
+  reply(l1, "b", "2030-01-02T01:00:00Z");
+  reply(l2, "b", "2030-01-02T01:00:00Z");
+  const report = (args) => query(site, "activity:report", args);
+  assert.deepEqual(
+    await report({ board: "free", from: "2030-01-02", to: "2030-01-31" }),
+    [
+      {
+        id: "a",
+        nick: "가",
+        mainCharacter: "초록",
+        logs: 1,
+        comments: 0,
+        lastSeen: 1234,
+        warnings: 0,
+        warningNote: "",
+        member: false,
+      },
+      {
+        id: "b",
+        nick: "나",
+        mainCharacter: "",
+        logs: 0,
+        comments: 1,
+        lastSeen: null,
+        warnings: 2,
+        warningNote: "도배",
+        member: true,
+      },
+    ],
+  );
+  const everything = await report({});
+  assert.deepEqual(
+    everything.map((row) => [row.id, row.logs, row.comments]),
+    [
+      ["b", 1, 2],
+      ["a", 2, 0],
+    ],
+  );
+  assert.equal(await refusal(report({ from: "어제" })), "invalid_input");
+});
+
+test("the history reads newest first, and the grants' log by its actor", async () => {
+  const site = await testSite();
+  profile(site, "m-1", "하나");
+  site.run(
+    "INSERT INTO history (owner, kind, at, delta, actor, details) VALUES ('m-1', 'adjust', 1, 10, 'site-owner', '{\"note\":\"x\"}')",
+  );
+  await site.mutate(
+    "economy/grants:grant",
+    { kind: "money", target: "one", name: "하나", value: 7, memo: "수고" },
+    OWNER,
+  );
+  const all = await query(site, "history:list");
+  assert.deepEqual(
+    all.documents.map((row) => [row.data.kind, row.data.actor]),
+    [
+      ["adjust", "grant"],
+      ["adjust", "site-owner"],
+    ],
+  );
+  assert.equal(all.documents[1].data.note, "x");
+  const grants = await query(site, "history:list", {
+    actor: "grant",
+    size: 20,
+  });
+  assert.deepEqual(
+    grants.documents.map((row) => [
+      row.data.owner,
+      row.data.delta,
+      row.data.memo,
+    ]),
+    [["m-1", 7, "수고"]],
+  );
+  assert.equal(
+    await refusal(query(site, "history:list", { size: 1000 })),
+    "invalid_input",
+  );
+});
+
+test("the forms' pick lists come in one read", async () => {
+  const site = await testSite();
+  profile(site, "m-1", "하나");
+  const hero = character(site);
+  await create(site, "items", "egg", { name: "달걀", craftMaterial: true });
+  await create(site, "sides", "s", { name: "숲", order: 2 });
+  await create(site, "board_groups", "g", { name: "그룹" });
+  await create(site, "boards", "free", { name: "자유" });
+  const references = await query(site, "references:references");
+  assert.deepEqual(references.characters, [
+    { id: hero, data: { name: "Hero", owner: "m-1" } },
+  ]);
+  assert.deepEqual(references.profiles, [
+    { id: "m-1", data: { nick: "하나" } },
+  ]);
+  assert.deepEqual(references.items, [
+    { id: "egg", data: { name: "달걀", craftMaterial: true } },
+  ]);
+  assert.deepEqual(references.sides, [
+    { id: "s", data: { name: "숲", order: 2 } },
+  ]);
+  assert.deepEqual(references.groups, [{ id: "g", data: { name: "그룹" } }]);
+  assert.deepEqual(references.boards, [{ id: "free", data: { name: "자유" } }]);
+  assert.deepEqual(
+    [
+      references.titles,
+      references.stats,
+      references.classes,
+      references.fields,
+    ],
+    [[], [], [], []],
+  );
+});
