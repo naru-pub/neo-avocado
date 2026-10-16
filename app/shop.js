@@ -257,63 +257,45 @@ async function loadInventory({ more = false } = {}) {
     const gift = document.createElement("button");
     gift.type = "button";
     gift.textContent = "선물";
+    // inventory/inventory_update.php: the gift goes to a character named by
+    // the sender (get_character_by_name), found with one read.
     gift.onclick = () =>
-      run(async () => {
-        const profiles = await allDocuments(COLLECTION.profiles);
-        const options = profiles
-          .filter((profile) => profile.id !== state.member.id)
-          .map((profile) => [profile.id, profile.data.nick]);
-        if (!options.length) return say("선물을 받을 회원이 없습니다.");
-        edit(
-          `${owned.data.name} 선물`,
-          [
-            {
-              name: "recipient",
-              label: "받는 회원",
-              required: true,
-              value: options[0][0],
-              options,
-            },
-            {
-              name: "character",
-              label: "받는 캐릭터",
-              value: "",
-              options: [["", "회원 인벤토리"]],
-            },
-            { name: "memo", label: "메시지", multiline: true, max: 500 },
-          ],
-          async (data) => {
-            await state.member.call("economy/inventory:gift", {
-              inventory: owned.id,
-              ...data,
-              character: data.character || null,
-            });
-            say("선물을 보냈습니다.");
-            await loadInventory();
+      edit(
+        `${owned.data.name} 선물`,
+        [
+          {
+            name: "name",
+            label: "받는 캐릭터 이름",
+            required: true,
+            max: 40,
           },
-        );
-        const characters = await allDocuments(COLLECTION.characters);
-        const recipient = $("editorFields").querySelector('[name="recipient"]');
-        const selection = $("editorFields").querySelector('[name="character"]');
-        const update = () => {
-          selection.replaceChildren();
-          const choices = characters.filter(
-            (row) => (row.createdBy ?? row.data.owner) === recipient.value,
-          );
-          for (const [value, label] of [
-            ...(owned.data.character ? [] : [["", "회원 인벤토리"]]),
-            ...choices.map((row) => [row.id, row.data.name]),
-          ]) {
-            const option = document.createElement("option");
-            option.value = value;
-            option.textContent = label;
-            selection.append(option);
-          }
-          selection.required = Boolean(owned.data.character);
-        };
-        recipient.onchange = update;
-        update();
-      });
+          { name: "memo", label: "메시지", multiline: true, max: 500 },
+        ],
+        async (data) => {
+          const { documents } = await collection(COLLECTION.characters).list({
+            where: {
+              all: [
+                { eq: ["name", data.name.trim()] },
+                { eq: ["state", "approved"] },
+              ],
+            },
+            size: 1,
+          });
+          const character = documents[0];
+          if (!character) return say("그 이름의 캐릭터를 찾을 수 없습니다.");
+          const recipient = character.createdBy ?? character.data.owner;
+          if (recipient === state.member.id)
+            return say("내 캐릭터에게는 선물할 수 없습니다.");
+          await state.member.call("economy/inventory:gift", {
+            inventory: owned.id,
+            recipient,
+            character: character.id,
+            memo: data.memo,
+          });
+          say(`${character.data.name}에게 선물을 보냈습니다.`);
+          await loadInventory();
+        },
+      );
     const use = document.createElement("button");
     use.type = "button";
     use.textContent = "사용";

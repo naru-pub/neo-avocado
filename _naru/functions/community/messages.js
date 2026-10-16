@@ -109,6 +109,7 @@ export async function mailbox(
     });
   const page = await ctx.list(MESSAGES, {
     filter: { [box === "inbox" ? "to" : "from"]: ctx.member.id },
+    where: { ne: [box === "inbox" ? "hiddenTo" : "hiddenFrom", true] },
     sort: [[{ metadata: "createdAt" }, "desc"]],
     size,
     after,
@@ -129,15 +130,28 @@ export async function mailbox(
   };
 }
 
-export async function readMessage(ctx, { id } = {}) {
-  let message = typeof id === "string" ? await ctx.get(MESSAGES, id) : null;
+/**
+ * A message the member sent or received and has not removed from their own
+ * box, or a refusal.
+ */
+async function ownMessage(ctx, id) {
+  const message = typeof id === "string" ? await ctx.get(MESSAGES, id) : null;
+  const me = ctx.member.id;
   if (
     !message ||
-    (message.data.from !== ctx.member.id && message.data.to !== ctx.member.id)
+    !(
+      (message.data.from === me && message.data.hiddenFrom !== true) ||
+      (message.data.to === me && message.data.hiddenTo !== true)
+    )
   )
     ctx.fail("NOT_FOUND", "쪽지가 없거나 읽을 권한이 없습니다.", {
       reason: "message_not_found",
     });
+  return message;
+}
+
+export async function readMessage(ctx, { id } = {}) {
+  let message = await ownMessage(ctx, id);
   const receipt =
     message.data.to === ctx.member.id && message.data.readAt === null;
   if (receipt)
@@ -151,16 +165,22 @@ export async function readMessage(ctx, { id } = {}) {
   return { document: message, unread };
 }
 
+/**
+ * Removes a message from the member's own box only, as GnuBoard 5.4 keeps a
+ * sender's and a recipient's copy (AvocadoEdition's single row let a sender
+ * erase what the recipient received). Gone once both have removed it.
+ */
 export async function removeMessage(ctx, { id } = {}) {
-  const message = typeof id === "string" ? await ctx.get(MESSAGES, id) : null;
-  if (
-    !message ||
-    (message.data.from !== ctx.member.id && message.data.to !== ctx.member.id)
-  )
-    ctx.fail("NOT_FOUND", "쪽지가 없거나 읽을 권한이 없습니다.", {
-      reason: "message_not_found",
-    });
-  await ctx.delete(MESSAGES, message.id);
+  const message = await ownMessage(ctx, id);
+  const me = ctx.member.id;
+  const data = {
+    ...message.data,
+    ...(message.data.from === me ? { hiddenFrom: true } : {}),
+    ...(message.data.to === me ? { hiddenTo: true } : {}),
+  };
+  if (data.hiddenFrom === true && data.hiddenTo === true)
+    await ctx.delete(MESSAGES, message.id);
+  else await ctx.set(MESSAGES, message.id, data);
   return null;
 }
 
@@ -168,6 +188,7 @@ export async function removeMessage(ctx, { id } = {}) {
 export async function messageStatus(ctx) {
   const page = await ctx.list(MESSAGES, {
     filter: { to: ctx.member.id, readAt: null },
+    where: { ne: ["hiddenTo", true] },
     size: 1,
   });
   return {

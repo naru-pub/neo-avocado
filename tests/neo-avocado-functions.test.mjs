@@ -543,9 +543,16 @@ test("private mail checks parties for listing, reading and deletion and marks on
   assert.deepEqual(live.at(-1), { member: "m-2", data: { unread: false } });
   await readMessage(ctx, { id });
   assert.equal(live.length, 2);
+  // Removing it takes it from the recipient's box only; the sender keeps
+  // theirs, so a sender cannot erase what was received, nor the reverse.
   await removeMessage(ctx, { id });
-  ctx.member.id = "m-1";
   assert.equal(await refusal(readMessage(ctx, { id })), "message_not_found");
+  assert.equal((await mailbox(ctx, { box: "inbox" })).documents.length, 0);
+  ctx.member.id = "m-1";
+  assert.equal((await readMessage(ctx, { id })).document.id, id);
+  assert.equal((await mailbox(ctx, { box: "sent" })).documents.length, 1);
+  await removeMessage(ctx, { id });
+  assert.equal(table(`${P}messages`).has(id), false);
 });
 
 test("a member sends so many messages a day, as the original's captcha slowed them", async () => {
@@ -2881,6 +2888,32 @@ test("a board search finds titles, text and nicknames among posts the reader may
     await refusal(posts.search(ctx, { board: "free", text: " " })),
     "invalid_input",
   );
+});
+
+test("members' new posts are announced to open pages, guests' are not", async () => {
+  const { ctx, table, sent } = fakeCtx();
+  table(`${P}boards`).set("free", {
+    name: "자유",
+    kind: "text",
+    listLevel: 1,
+    readLevel: 1,
+    writeLevel: 1,
+    secret: "optional",
+  });
+  await join(ctx, { nick: "앨리스" });
+  await posts.write(ctx, { data: { board: "free", text: "회원 글" } });
+  assert.deepEqual(
+    sent
+      .filter((message) => message.topic)
+      .map((message) => message.data.board),
+    ["free"],
+  );
+  ctx.member = null;
+  await posts.write(ctx, {
+    data: { board: "free", text: "손님 글" },
+    guest: { name: "길손", password: "pass1234" },
+  });
+  assert.equal(sent.filter((message) => message.topic).length, 1);
 });
 
 test("long questions and search results stay within a function's 64 KiB result", async () => {

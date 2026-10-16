@@ -144,7 +144,10 @@ export async function write(
   const document = previous
     ? await ctx.set(LOGS, previous.id, value)
     : await ctx.add(LOGS, value, guest ? { secret: guest.secret } : {});
-  if (!previous) await announcePost(ctx, document);
+  // A guest's post is not announced: guests may post without signing in,
+  // and a burst of them would reach every open page (up to 1,000 a site).
+  // The original has no live updates; members' posts keep theirs.
+  if (!previous && !guest) await announcePost(ctx, document);
   await deliverCalls(ctx, {
     log: document,
     comment: null,

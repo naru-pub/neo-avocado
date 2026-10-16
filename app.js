@@ -39,6 +39,9 @@ import { openRoute } from "./app/router.js";
 
 /** The address the page was opened at, before anything is shown. */
 const arrivedAt = location.hash;
+/** Whether the address the page opened at names a board, which reads its own list. */
+const arrivesAtList = () =>
+  !movedSinceOpening() && /^#\/?logs(\/|$)/.test(arrivedAt);
 import "./app/online.js";
 
 export { diceOf } from "./app/posts.js";
@@ -120,7 +123,8 @@ async function start() {
   if (profile) {
     state.nicks.set(state.member.id, Promise.resolve(profile.data.nick));
     await loadBoards();
-    await loadLogs();
+    // Read once: the board the address names, or else the first.
+    if (!arrivesAtList()) await loadLogs();
     listen();
     // The address it was opened at, unless they have moved on already.
     if (!movedSinceOpening()) await openRoute(arrivedAt);
@@ -133,7 +137,7 @@ async function visit() {
   show();
   await opening(() => showTab("home"));
   await loadBoards();
-  await loadLogs();
+  if (!arrivesAtList()) await loadLogs();
   if (state.boards.length) listen();
   if (!movedSinceOpening()) await openRoute(arrivedAt);
 }

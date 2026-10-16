@@ -517,7 +517,9 @@ export async function logItem(log) {
     if (cursor === undefined) await load(false);
     const find = () =>
       item.querySelector(`.comment[data-id="${CSS.escape(id)}"]`);
-    while (!find() && cursor) await load(true);
+    // Up to 500 comments, so a link to one that is gone ends soon.
+    for (let pages = 1; !find() && cursor && pages < 10; pages++)
+      await load(true);
     const found = find();
     found?.classList.add("linked");
     return Boolean(found);

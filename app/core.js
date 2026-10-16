@@ -142,7 +142,6 @@ export function clearPrivateViews() {
     "quests",
     "contentBody",
     "contentPage",
-    "messageRecipients",
     "calls",
     "callDetail",
   ])

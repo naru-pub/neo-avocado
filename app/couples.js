@@ -70,8 +70,13 @@ async function loadCouples() {
   }
 }
 
+// The list is read again only once it is a minute old: going back and forth
+// between tabs reads it once, as the original's page loads once.
+let couplesRead = 0;
 $("tabCouples").onclick = () =>
   run(async () => {
     showTab("couples");
+    if (Date.now() - couplesRead < 60_000) return;
     await loadCouples();
+    couplesRead = Date.now();
   });

@@ -540,6 +540,22 @@ try {
   await alice.reload();
   await alice.locator("#logs .log .log-title", { hasText: "[완료]" }).waitFor();
 
+  // A message goes to a member named by nickname, as the original's memo
+  // form takes an ID; an unknown name is refused before anything is sent.
+  await alice.evaluate(() => document.querySelector("#tabMessages").click());
+  // Bob is 바뀐밥 since he changed his nickname above.
+  await alice.locator("#messageTo").fill("바뀐밥, 없는사람");
+  await alice.locator("#messageBody").fill("안녕 밥");
+  await alice.locator('#messageForm [type="submit"]').click();
+  await alice
+    .locator("#status", { hasText: "닉네임을 찾을 수 없습니다: 없는사람" })
+    .waitFor();
+  await alice.locator("#messageTo").fill("바뀐밥");
+  await alice.locator('#messageForm [type="submit"]').click();
+  await alice.locator("#status", { hasText: "쪽지를 보냈습니다." }).waitFor();
+  await bob.evaluate(() => document.querySelector("#tabMessages").click());
+  await bob.locator("#messages li", { hasText: "안녕 밥" }).waitFor();
+
   // Bob leaves the community: from then on he is a guest here.
   await menu(bob, "마이페이지");
   await bob.locator("#myLeave").click();

@@ -2,7 +2,6 @@
 
 import {
   $,
-  allDocuments,
   caller,
   COLLECTION,
   collection,
@@ -19,7 +18,7 @@ import { showUnread } from "./live.js";
 $("tabMessages").onclick = () =>
   run(async () => {
     showTab("messages");
-    await Promise.all([loadMessageRecipients(), loadMailbox()]);
+    await Promise.all([loadMessageCost(), loadMailbox()]);
   });
 $("messageBox").onchange = () => run(() => loadMailbox());
 $("refreshMessages").onclick = () => run(() => loadMailbox());
@@ -29,14 +28,13 @@ $("messageForm").onsubmit = async (event) => {
   const button = $("messageForm").querySelector('[type="submit"]');
   button.disabled = true;
   await run(async () => {
-    const recipients = [...$("messageRecipients").selectedOptions].map(
-      (option) => option.value,
-    );
+    const recipients = await recipientsNamed($("messageTo").value);
     await caller().call("community/messages:sendMessage", {
       recipients,
       body: $("messageBody").value,
     });
     $("messageBody").value = "";
+    $("messageTo").value = "";
     $("messageBox").value = "sent";
     await loadMailbox();
     state.shopLoaded = false;
@@ -44,20 +42,36 @@ $("messageForm").onsubmit = async (event) => {
   });
   button.disabled = false;
 };
-async function loadMessageRecipients() {
-  const profiles = await allDocuments(COLLECTION.profiles, undefined, {
-    all: [
-      { ne: [{ metadata: "id" }, state.member.id] },
-      { ne: ["acceptMessages", false] },
-    ],
+/**
+ * The members named by nickname, as the original's memo form takes member IDs
+ * (bbs/memo_form.php): one read for up to 20, instead of listing everyone.
+ */
+async function recipientsNamed(text) {
+  const nicks = [
+    ...new Set(
+      text
+        .split(",")
+        .map((nick) => nick.trim())
+        .filter(Boolean),
+    ),
+  ];
+  // Worded for the page as a function's refusal is (run() shows it).
+  const refuse = (message) =>
+    Object.assign(new Error(message), { details: { reason: "recipients" } });
+  if (!nicks.length || nicks.length > 20)
+    throw refuse("받는 회원 닉네임을 1~20개 적어 주세요.");
+  const { documents } = await collection(COLLECTION.profiles).list({
+    where: { in: ["nick", nicks] },
+    size: 20,
   });
-  $("messageRecipients").replaceChildren();
-  for (const profile of profiles) {
-    const option = document.createElement("option");
-    option.value = profile.id;
-    option.textContent = profile.data.nick;
-    $("messageRecipients").append(option);
-  }
+  const missing = nicks.filter(
+    (nick) => !documents.some((profile) => profile.data.nick === nick),
+  );
+  if (missing.length)
+    throw refuse(`닉네임을 찾을 수 없습니다: ${missing.join(", ")}`);
+  return documents.map((profile) => profile.id);
+}
+async function loadMessageCost() {
   const settings = await collection(COLLECTION.settings)
     .get("community")
     .catch((error) => {
@@ -99,9 +113,8 @@ async function loadMailbox({ more = false } = {}) {
 /** 쪽지 to one member (the member list's button, memo_form.php?me_recv_mb_id). */
 export async function writeTo(member) {
   showTab("messages");
-  await Promise.all([loadMessageRecipients(), loadMailbox()]);
-  for (const option of $("messageRecipients").options)
-    option.selected = option.value === member;
+  await Promise.all([loadMessageCost(), loadMailbox()]);
+  $("messageTo").value = await nickOf(member);
   $("messageBody").focus();
 }
 
@@ -141,14 +154,11 @@ export async function openMessage(id) {
     const reply = document.createElement("button");
     reply.type = "button";
     reply.textContent = "답장";
-    reply.onclick = () => {
-      const options = [...$("messageRecipients").options];
-      if (!options.some((option) => option.value === message.data.from))
-        return say("상대가 지금은 쪽지를 받지 않습니다.");
-      for (const option of options)
-        option.selected = option.value === message.data.from;
-      $("messageBody").focus();
-    };
+    reply.onclick = () =>
+      run(async () => {
+        $("messageTo").value = await nickOf(message.data.from);
+        $("messageBody").focus();
+      });
     $("messageDetail").append(" ", reply);
   }
   $("messageDetail").hidden = false;

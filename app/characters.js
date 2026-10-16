@@ -93,17 +93,18 @@ const characterPages = cursorPages((after, { includeTotal, size }) => {
 export async function loadCharacters({ page: number = 1 } = {}) {
   const where = CHARACTER_FILTERS[$("characterFilter").value];
   if (number === 1) characterPages.reset();
-  const [, , page] = await Promise.all([
+  await Promise.all([
     loadFieldCatalogue(),
     number === 1 ? loadChoices() : null,
-    characterPages.page(number),
   ]);
-  // 멤버목록 by 소속 (member/index.php's 진영별), once there are two.
+  // 멤버목록 by 소속 (member/index.php's 진영별), once there are two: every
+  // approved character on one page, as the original lists them.
   if ($("characterFilter").value === "approved" && state.sides.length >= 2) {
     await showBySide(where);
     state.charactersLoaded = true;
     return;
   }
+  const page = await characterPages.page(number);
   await preloadNicks(page.documents);
   $("characters").replaceChildren();
   for (const character of page.documents)
@@ -608,22 +609,24 @@ function wireCharacterDetails(item, character) {
     else if (portrait) portrait.remove();
     loaded = true;
   };
+  // mypage/character/relation_list.php: the other character is named, and
+  // found by its name (relation_update.php), with one read.
   const relationEditor = (row) =>
     run(async () => {
-      const characters = await allDocuments(COLLECTION.characters);
-      const options = characters
-        .filter((target) => target.id !== character.id)
-        .map((target) => [target.id, target.data.name]);
-      if (!options.length) return say("관계를 맺을 다른 캐릭터가 없습니다.");
+      const current = row
+        ? await collection(COLLECTION.characters)
+            .get(row.data.target)
+            .catch(() => null)
+        : null;
       edit(
         "캐릭터 관계",
         [
           {
             name: "target",
-            label: "상대 캐릭터",
-            value: row?.data.target ?? options[0][0],
+            label: "상대 캐릭터 이름",
+            value: current?.data.name ?? "",
             required: true,
-            options,
+            max: 40,
           },
           {
             name: "affinity",
@@ -652,8 +655,21 @@ function wireCharacterDetails(item, character) {
           },
         ],
         async (data) => {
+          const { documents } = await collection(COLLECTION.characters).list({
+            where: {
+              all: [
+                { eq: ["name", data.target.trim()] },
+                { eq: ["state", "approved"] },
+              ],
+            },
+            size: 1,
+          });
+          const target = documents[0];
+          if (!target || target.id === character.id)
+            return say("그 이름의 다른 캐릭터를 찾을 수 없습니다.");
           await caller().call("characters/relations:relation", {
             ...data,
+            target: target.id,
             ...(row ? { id: row.id, revision: row.revision } : {}),
             character: character.id,
             affinity: Number(data.affinity),
