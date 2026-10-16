@@ -736,13 +736,17 @@ export async function logItem(log) {
       cursor = page.nextCursor;
       item.querySelector<HTMLButtonElement>(".more-comments").hidden = !cursor;
     });
+  // The first page of comments, read once: opening them and a link to one
+  // of them (which opens them too) share the read.
+  let first: Promise<void> | null = null;
+  const loadFirst = () => (first ??= load(false));
   comments.ontoggle = () => {
-    if (comments.open && cursor === undefined) load(false);
+    if (comments.open) loadFirst();
   };
   // Opens the comments at one, reading on until it is found.
   item.showComment = async (id) => {
     comments.open = true;
-    if (cursor === undefined) await load(false);
+    await loadFirst();
     const find = () =>
       item.querySelector(`.comment[data-id="${CSS.escape(id)}"]`);
     // Up to 500 comments, so a link to one that is gone ends soon.
