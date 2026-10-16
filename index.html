@@ -145,6 +145,9 @@
       <!-- main.php: the slides, a welcome, the member's card, the copyright. -->
       <section id="homeView">
         <div id="banners" class="banners" hidden></div>
+        <!-- 메인화면 구성: the owner's site_main page, in place of the
+             default decoration; the sign-in and profile card stay. -->
+        <article id="mainPage" class="main-page" hidden></article>
         <div class="home-boxes">
           <section id="welcome" class="home-welcome" hidden>
             <p class="open-only">
@@ -179,7 +182,7 @@
             </div>
           </div>
           <!-- main.php #main_banner_box: where the original links its makers. -->
-          <div class="home-banner">
+          <div id="homeDefault" class="home-banner">
             <p>NEO AVOCADO</p>
             <p>
               <a

@@ -3,6 +3,7 @@
 import { emoticonContent } from "../emoticons.js";
 import {
   allDocuments,
+  collection,
   COLLECTION,
   nickOf,
   ownCharacters,
@@ -179,16 +180,42 @@ export function wireSpeakerChoice(select) {
   select.onfocus = fill;
   select.onpointerdown = fill;
 }
-/** Fills an in-post item select with the member's own inventory. */
+/**
+ * The member's inventory with each copy's item, read once until it changes:
+ * posts offer what the owner lets them (it_use_mmb_able, it_use_recepi).
+ */
+export async function postInventory() {
+  state.postItems ??= await allDocuments(COLLECTION.inventory, {
+    owner: state.member.id,
+  });
+  const ids = [...new Set(state.postItems.map((row) => row.data.item))].filter(
+    (id) => typeof id === "string" && !state.itemCatalog.has(id),
+  );
+  for (let start = 0; start < ids.length; start += 100) {
+    const chunk = ids.slice(start, start + 100);
+    const items = await collection(COLLECTION.items).getMany(chunk);
+    items.forEach((item, index) => state.itemCatalog.set(chunk[index], item));
+  }
+  return state.postItems.map((row) => ({
+    row,
+    item: state.itemCatalog.get(row.data.item)?.data ?? null,
+  }));
+}
+/** Fills an in-post item select with what the member may use in posts. */
 export function wireItemChoice(select) {
   select.onfocus = select.onpointerdown = () =>
     run(async () => {
       if (select.dataset.loaded) return;
       select.dataset.loaded = "1";
-      state.postItems ??= await allDocuments(COLLECTION.inventory, {
-        owner: state.member.id,
-      });
-      for (const row of state.postItems) {
+      const usable = (await postInventory())
+        .filter(
+          ({ item }) =>
+            item?.effect?.type &&
+            item.usable !== false &&
+            item.usableInPosts !== false,
+        )
+        .map(({ row }) => row);
+      for (const row of usable) {
         const option = document.createElement("option");
         option.value = row.id;
         option.textContent = row.data.name ?? row.data.item;

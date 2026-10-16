@@ -22,6 +22,7 @@ import {
   names,
   presentPost,
   logReadable,
+  withExp,
 } from "../../modules/shared.js";
 import { notDeleted, startValue, startWrite } from "../../modules/community.js";
 import {
@@ -578,7 +579,11 @@ export async function settle(
       );
     const current = await characterState(ctx, character, owner);
     const total = (current.data.exp ?? 0) + exp;
-    await ctx.set(CHARACTER_STATE, character, { ...current.data, exp: total });
+    await ctx.set(
+      CHARACTER_STATE,
+      character,
+      await withExp(ctx, current.data, total),
+    );
     await ctx.add(HISTORY, {
       owner: current.data.owner ?? owner,
       kind: "exp",

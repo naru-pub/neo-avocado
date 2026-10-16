@@ -1406,6 +1406,10 @@ test("posts speak as a chosen character, show server dice, calls and actions", a
     neo_avocado_inventory: [
       { id: "inv-1", data: { owner: ME, item: "letter", name: "편지" } },
     ],
+    // Posts offer an item with an effect, usable in posts (it_use_mmb_able).
+    neo_avocado_items: [
+      { id: "letter", data: { name: "편지", effect: { type: "draw" } } },
+    ],
   });
   const { $, settle, submit } = await page(database);
   const log = $("logs").querySelector(".log");

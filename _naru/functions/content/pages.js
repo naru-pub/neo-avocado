@@ -4,6 +4,9 @@ export const readOnly = ["contentPages", "contentPage"];
 // Pages whose read level is 1 are public, as GnuBoard's guest level.
 export const visitors = ["contentPages", "contentPage"];
 
+/** The page the home shows in place of its own (main.php's site_main). */
+const MAIN_PAGE = "site_main";
+
 export async function contentPages(ctx, { after = null } = {}) {
   const page = await ctx.list(`${PREFIX}content`, { size: 10, after });
   const readable = await Promise.all(
@@ -12,7 +15,7 @@ export async function contentPages(ctx, { after = null } = {}) {
   return {
     ...page,
     documents: page.documents
-      .filter((row, index) => readable[index])
+      .filter((row, index) => readable[index] && row.id !== MAIN_PAGE)
       .map((row) => ({ id: row.id, data: { name: row.data.name } })),
   };
 }

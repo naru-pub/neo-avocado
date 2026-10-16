@@ -28,6 +28,7 @@ import {
 } from "./core.js";
 import {
   actionItem,
+  postInventory,
   diceText,
   postText,
   speakerLabel,
@@ -1019,13 +1020,11 @@ $("logMaterials").onfocus = $("logMaterials").onpointerdown = () =>
   run(async () => {
     if ($("logMaterials").dataset.loaded) return;
     $("logMaterials").dataset.loaded = "1";
-    state.postItems ??= await allDocuments(COLLECTION.inventory, {
-      owner: state.member.id,
-    });
-    for (const row of state.postItems)
-      $("logMaterials").append(
-        new Option(row.data.name ?? row.data.item, row.id),
-      );
+    for (const { row, item } of await postInventory())
+      if (item?.craftMaterial !== false)
+        $("logMaterials").append(
+          new Option(row.data.name ?? row.data.item, row.id),
+        );
   });
 wireSpeakerChoice($("logCharacter"));
 // An uploaded picture goes into the HTML body at the cursor; the post's

@@ -758,6 +758,25 @@ try {
     .locator("#adminReport tr", { hasText: "앨리스" })
     .first()
     .waitFor();
+  // 아보·경험치 지급 (adm/point_list.php): to one member, with its log.
+  await adminMenu(owner, "아이템 관리", "아보·경험치 지급");
+  await owner
+    .locator(".grant-form label", { hasText: "회원 닉네임" })
+    .locator("input")
+    .fill("앨리스");
+  await owner
+    .locator(".grant-form label", { hasText: "양" })
+    .locator("input")
+    .fill("7");
+  await owner
+    .locator(".grant-form label", { hasText: "내용" })
+    .locator("input")
+    .fill("수고 보상");
+  await owner.locator('.grant-form [type="submit"]').click();
+  await owner
+    .locator(".grant-form [role=status]", { hasText: "끝났습니다" })
+    .waitFor();
+  await owner.locator(".grant-log li", { hasText: "수고 보상" }).waitFor();
 
   // Board search finds Alice's post by its text.
   await menu(alice, "로그");

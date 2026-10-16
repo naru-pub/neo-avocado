@@ -167,7 +167,11 @@ async function load({ more = false } = {}) {
   if (model.report) {
     $("adminMore").hidden = true;
     $("holdingsSearchLabel").hidden = true;
-    return model.report === "visits" ? visitsView() : activityView();
+    return model.report === "visits"
+      ? visitsView()
+      : model.report === "grants"
+        ? grantsView()
+        : activityView();
   }
   $("holdingsSearchLabel").hidden = !model.holdings;
   let page;
@@ -1457,4 +1461,126 @@ async function activityView() {
   );
   $("adminReport").replaceChildren(bar, output);
   return draw();
+}
+
+/* ----------------------------------------------------------- grants --- */
+
+/**
+ * 아보·경험치 지급 (adm/point_list.php, exp_list.php): the form, run to the
+ * end a page of recipients a call, and the last grants.
+ */
+async function grantsView() {
+  const report = $("adminReport");
+  const form = document.createElement("form");
+  form.className = "card grant-form";
+  const kind = document.createElement("select");
+  kind.append(
+    new Option(itemNames.moneyName, "money"),
+    new Option(itemNames.expName, "exp"),
+  );
+  const target = document.createElement("select");
+  target.append(new Option("개별 지급", "one"), new Option("전체 지급", "all"));
+  const name = document.createElement("input");
+  name.maxLength = 40;
+  const value = document.createElement("input");
+  value.type = "number";
+  value.step = "1";
+  value.required = true;
+  const memo = document.createElement("input");
+  memo.maxLength = 200;
+  const nameLabel = control("", name);
+  const describe = () => {
+    nameLabel.firstChild.textContent =
+      kind.value === "money" ? "회원 닉네임" : "캐릭터 이름";
+    nameLabel.hidden = target.value === "all";
+    name.required = target.value === "one";
+  };
+  kind.onchange = target.onchange = describe;
+  const status = document.createElement("p");
+  status.setAttribute("role", "status");
+  const submit = document.createElement("button");
+  submit.type = "submit";
+  submit.textContent = "지급";
+  form.append(
+    control("종류", kind),
+    control("지급 유형", target),
+    nameLabel,
+    control("양 (깎으려면 음수)", value),
+    control("내용", memo),
+    submit,
+    status,
+  );
+  describe();
+  const log = document.createElement("ul");
+  log.className = "grant-log";
+  const showLog = async () => {
+    const page = await owner.collection("neo_avocado_history").list({
+      where: { eq: ["actor", "grant"] },
+      sort: [[{ metadata: "createdAt" }, "desc"]],
+      size: 20,
+    });
+    log.replaceChildren(
+      ...page.documents.map((row) => {
+        const item = document.createElement("li");
+        const who =
+          references.profiles.find((profile) => profile.id === row.data.owner)
+            ?.data.nick ?? row.data.owner;
+        const character = row.data.character
+          ? references.characters.find(
+              (entry) => entry.id === row.data.character,
+            )?.data.name
+          : null;
+        item.textContent = `${new Date(row.data.at).toLocaleString("ko-KR")} · ${character ? `${character} (${who})` : who} · ${
+          row.data.kind === "exp"
+            ? `${itemNames.expName} ${row.data.expDelta > 0 ? "+" : ""}${row.data.expDelta}`
+            : `${row.data.delta > 0 ? "+" : ""}${moneyText(itemNames, row.data.delta)}`
+        }${row.data.memo ? ` · ${row.data.memo}` : ""}`;
+        return item;
+      }),
+    );
+  };
+  form.onsubmit = (event) => {
+    event.preventDefault();
+    run(async () => {
+      const amount = Number(value.value);
+      if (!Number.isSafeInteger(amount) || amount === 0)
+        return (status.textContent = "0이 아닌 정수를 입력하세요.");
+      if (
+        target.value === "all" &&
+        !confirm(
+          `전체 ${kind.value === "money" ? "회원" : "승인된 캐릭터"}에게 ${amount}만큼 지급할까요?`,
+        )
+      )
+        return;
+      submit.disabled = true;
+      let after = null;
+      let granted = 0;
+      let skipped = 0;
+      try {
+        for (;;) {
+          const result = await owner.call("economy/grants:grant", {
+            kind: kind.value,
+            target: target.value,
+            name: name.value.trim(),
+            value: amount,
+            memo: memo.value.trim(),
+            after,
+          });
+          granted += result.granted;
+          skipped += result.skipped;
+          status.textContent = `${granted}명 지급${skipped ? `, ${skipped}명은 가진 것보다 많이 깎을 수 없어 건너뜀` : ""}…`;
+          if (result.done) break;
+          after = result.after;
+        }
+        status.textContent = status.textContent.replace(/…$/, ". 끝났습니다.");
+        await showLog();
+      } finally {
+        submit.disabled = false;
+      }
+    });
+  };
+  const heading = document.createElement("h3");
+  heading.textContent = "최근 지급 기록";
+  report.replaceChildren(form, heading, log);
+  await showLog();
 }

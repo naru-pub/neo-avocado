@@ -609,7 +609,7 @@ function wireCharacterDetails(item, character) {
           : "능력치 포인트 배분",
         status.definitions.map((definition) => ({
           name: definition.id,
-          label: `${definition.data.name ?? definition.id}에 배분할 포인트`,
+          label: `${definition.data.name ?? definition.id}에 배분할 포인트${definition.data.help ? ` (${definition.data.help})` : ""}`,
           type: "number",
           value: status.state.stats[definition.id].allocated,
           min: approved ? status.state.stats[definition.id].allocated : 0,

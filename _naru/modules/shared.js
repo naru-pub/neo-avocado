@@ -136,6 +136,36 @@ export function subject(word) {
   if (last < 0xac00 || last > 0xd7a3) return `${word}이(가)`;
   return `${word}${(last - 0xac00) % 28 ? "이" : "가"}`;
 }
+/**
+ * The stat points the ranks reached at `exp` add (lv_add_state, summed as
+ * extend/rank.lib.php's get_rank_exp does between two ranks).
+ */
+async function rankBonus(ctx, exp) {
+  let total = 0;
+  for (const row of await weightedRows(ctx, LEVELS))
+    if (Number(row.data.exp ?? 0) <= exp)
+      total += Number.isSafeInteger(row.data.bonusPoints)
+        ? row.data.bonusPoints
+        : 0;
+  return total;
+}
+
+/**
+ * A character's official record with experience moved to `exp`: reaching a
+ * rank adds its bonus points, falling below one takes them back
+ * (extend/exp.lib.php's insert_exp), never below none.
+ */
+export async function withExp(ctx, current, exp) {
+  amount(exp, "Experience");
+  const before = current.exp ?? 0;
+  const bonus = (await rankBonus(ctx, exp)) - (await rankBonus(ctx, before));
+  return {
+    ...current,
+    exp,
+    points: Math.max(0, (current.points ?? 0) + bonus),
+  };
+}
+
 /** "아보가 모자랍니다." in the owner's name for money or experience. */
 export async function lacking(ctx, key) {
   return `${subject((await names(ctx))[key])} 모자랍니다.`;

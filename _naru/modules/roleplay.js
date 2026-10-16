@@ -239,7 +239,8 @@ export async function useInPost(ctx, inventory, speaker) {
       reason: "not_owned",
     });
   const item = await ctx.get(ITEMS, owned.data.item);
-  if (!item || item.data.usable === false)
+  // it_use_mmb_able: an item the owner keeps out of posts is used elsewhere.
+  if (!item || item.data.usable === false || item.data.usableInPosts === false)
     ctx.fail("CONFLICT", "사용할 수 없는 아이템입니다.", {
       reason: "not_usable",
     });
@@ -328,6 +329,12 @@ export async function combineInPost(ctx, materials, speaker) {
     ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
       reason: "not_owned",
     });
+  // it_use_recepi: only craft materials go into 조합.
+  for (const row of owned)
+    if ((await ctx.get(ITEMS, row.data.item))?.data.craftMaterial === false)
+      ctx.fail("INVALID_REQUEST", "조합 재료로 쓸 수 없는 아이템입니다.", {
+        reason: "not_material",
+      });
   const key = owned
     .map((row) => row.data.item)
     .sort()

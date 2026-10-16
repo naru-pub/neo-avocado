@@ -11,6 +11,7 @@ import {
   imageSlotsOf,
   namesOf,
   viewerOf,
+  contentReadable,
   siteOpen,
 } from "../../modules/shared.js";
 
@@ -51,6 +52,8 @@ export async function site(ctx) {
     // 디자인 사용 (use_header): off, the page is plain, as a fresh install.
     enabled: saved.enabled === true,
     title: short(saved.title, 60),
+    description: short(saved.description, 300),
+    favicon: https(saved.favicon),
     logo: https(saved.logo),
     background: https(saved.background),
     headerBackground: https(saved.headerBackground),
@@ -104,6 +107,14 @@ export async function site(ctx) {
     images: imageSlotsOf(profile),
     // ...and what a character's page shows (ad_use_exp, _rank, _status…).
     viewer: viewerOf(profile),
+    // 메인화면 구성 (adm/viewer_form.php): a content page site_main the
+    // reader may see takes the home's place (main.php).
+    main: Boolean(
+      await contentReadable(
+        ctx,
+        await ctx.get(`${PREFIX}content`, "site_main"),
+      ),
+    ),
     menus,
     banners,
   };

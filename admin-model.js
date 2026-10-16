@@ -291,6 +291,19 @@ export const models = {
       { key: "sellable", label: "판매 허용", type: "checkbox", default: true },
       { key: "giftable", label: "선물 허용", type: "checkbox", default: true },
       { key: "usable", label: "사용 허용", type: "checkbox", default: true },
+      // it_use_mmb_able, it_use_recepi.
+      {
+        key: "usableInPosts",
+        label: "로그·댓글에서 사용 가능",
+        type: "checkbox",
+        default: true,
+      },
+      {
+        key: "craftMaterial",
+        label: "조합 재료로 사용 가능",
+        type: "checkbox",
+        default: true,
+      },
       { key: "reusable", label: "사용 후 남기기", type: "checkbox" },
       {
         key: "effect.type",
@@ -615,15 +628,25 @@ export const models = {
       { key: "name", label: "능력치 이름", required: true, max: 40 },
       { key: "initial", label: "기본값", type: "number", default: 0 },
       { key: "max", label: "최대값", type: "number", default: 999 },
+      // st_min, st_help (adm/status_list.php).
+      { key: "min", label: "최소값", type: "number", default: 0 },
+      { key: "help", label: "도움말 (배분할 때 보임)", max: 200 },
     ],
   },
   levels: {
     // adm/level_list.php, named by cf_rank_name.
     label: "랭킹 설정",
-    help: "캐릭터의 경험치가 기준 이상인 가장 높은 단계를 표시합니다.",
+    help: "캐릭터의 경험치가 기준 이상인 가장 높은 단계를 표시합니다. 단계에 오르면 그 단계의 추가 능력치 포인트를 받고, 경험치가 줄어 내려가면 돌려놓습니다.",
     fields: [
       { key: "name", label: "이름", required: true, max: 40 },
       { key: "exp", label: "필요 경험치", type: "number", default: 0 },
+      // lv_add_state: reaching it adds stat points; falling below takes them back.
+      {
+        key: "bonusPoints",
+        label: "달성 시 추가 능력치 포인트",
+        type: "number",
+        default: 0,
+      },
     ],
   },
   // adm/character_article_list.php's 기본 항목: the 두상, 흉상 and 전신 a
@@ -854,6 +877,15 @@ models.design = {
   fields: [
     { key: "enabled", label: "디자인 사용", type: "checkbox" },
     { key: "title", label: "사이트 이름", max: 60 },
+    // cf_site_descript, cf_favicon (head.sub.php).
+    { key: "description", label: "사이트 설명 (검색·공유에 보임)", max: 300 },
+    {
+      key: "favicon",
+      label: "파비콘 (브라우저 탭 아이콘)",
+      type: "url",
+      image: true,
+      max: 2000,
+    },
     { key: "logo", label: "로고 이미지", type: "url", image: true, max: 2000 },
     {
       key: "background",
@@ -967,6 +999,15 @@ models.visits = {
   report: "visits",
   readOnly: true,
 };
+// adm/point_list.php (화폐 관리) and exp_list.php (경험치 관리): grants with
+// a memo, to one or to everyone, and the log of them.
+models.grants = {
+  label: "아보·경험치 지급",
+  help: "회원 한 명(닉네임) 또는 전체 회원에게 아보를, 캐릭터 하나(이름) 또는 승인된 전체 캐릭터에게 경험치를 주거나 깎습니다. 내용은 받는 사람의 기록에 남고, 가진 것보다 많이 깎지는 않습니다. 경험치로 랭킹이 바뀌면 그 랭킹의 추가 능력치 포인트도 함께 바뀝니다.",
+  report: "grants",
+  readOnly: true,
+  collection: `${P}history`,
+};
 models.activity = {
   label: "활동량 관리",
   help: "게시판과 기간을 골라 회원별 로그·댓글 수와 최종 접속을 봅니다. 누적 경고와 경고 내용은 여기서 바로 고칩니다.",
@@ -1040,6 +1081,7 @@ export const menu = [
       "recipes",
       "history",
       "wallets",
+      "grants",
     ],
   },
   { label: "기타관리", sections: ["log_cleanup", "character_cleanup"] },

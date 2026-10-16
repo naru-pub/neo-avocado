@@ -19,6 +19,7 @@ import {
   lacking,
   names,
   restrictedFor,
+  withExp,
 } from "../../modules/shared.js";
 
 /** 하루 한 번, 한국 시간으로 날이 바뀌면 받는 출석 보상. */
@@ -160,8 +161,9 @@ export async function buy(
     });
   const debit = requirements.consumeMoney === false ? 0 : price;
   const balance = await pay(ctx, current, debit);
-  const next = { ...progression.data, purchases: counts };
-  if (requirements.consumeExp) next.exp -= expPrice;
+  let next = { ...progression.data, purchases: counts };
+  if (requirements.consumeExp)
+    next = await withExp(ctx, next, next.exp - expPrice);
   if (requirements.consumeTitle && requirements.title) {
     next.titles = next.titles.filter((id) => id !== requirements.title);
     if (next.activeTitle === requirements.title) next.activeTitle = null;

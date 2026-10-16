@@ -19,3 +19,4 @@ export * from "../functions/content/pages.js";
 export * from "../functions/content/site.js";
 export { DAILY_REWARD, GACHA_COST } from "./shared.js";
 export * as money from "../functions/economy/money.js";
+export * as grants from "../functions/economy/grants.js";

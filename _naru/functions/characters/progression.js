@@ -157,6 +157,13 @@ export async function allocateStats(
       ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
         reason: "invalid_input",
       });
+    // st_min: a stat starts no lower than the owner's minimum.
+    if (max < (definition.data.min ?? 0))
+      ctx.fail(
+        "INVALID_REQUEST",
+        `${definition.data.name ?? definition.id}은(는) ${definition.data.min} 이상이어야 합니다.`,
+        { reason: "below_minimum" },
+      );
     // Reallocation preserves damage, so reducing and raising a stat is not healing.
     const damage = before.damage;
     stats[definition.id] = {

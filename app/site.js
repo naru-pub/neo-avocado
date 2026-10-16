@@ -4,6 +4,7 @@ import { $, caller, run, say, showTab, state } from "./core.js";
 import { configureBoard, loadLogs } from "./logs.js";
 import { loadContentBody, loadContentPages } from "./content.js";
 import { NAME_DEFAULTS } from "./names.js";
+import { renderContent } from "../content-renderer.js";
 
 const SITE_COLORS = {
   accent: "--avocado",
@@ -27,8 +28,10 @@ export async function loadSite() {
   // without its design CSS: the title, logo, menus and slides still apply.
   document.body.classList.toggle("designed", design.enabled);
   applyNames(design);
+  applyHead(design);
   renderMenus(site.menus);
   renderBanners(site.banners);
+  await showMainPage(site.main === true);
   setMusic(site.bgm);
   if (!design.enabled) return;
   for (const [key, variable] of Object.entries(SITE_COLORS))
@@ -59,6 +62,46 @@ function applyItemNames(names) {
     element.textContent = names[element.dataset.name];
   for (const element of document.querySelectorAll("[data-name-shown]"))
     element.hidden = !names[element.dataset.nameShown];
+}
+/**
+ * cf_site_descript and cf_favicon (head.sub.php): the page's description
+ * and the browser tab's icon, when the owner sets them.
+ */
+function applyHead(design) {
+  const set = (selector, create, attribute, value) => {
+    let element = document.head.querySelector(selector);
+    if (!value) return element?.remove();
+    if (!element) document.head.append((element = create()));
+    element.setAttribute(attribute, value);
+  };
+  set(
+    'meta[name="description"]',
+    () =>
+      Object.assign(document.createElement("meta"), { name: "description" }),
+    "content",
+    design.description,
+  );
+  set(
+    'link[rel="icon"]',
+    () => Object.assign(document.createElement("link"), { rel: "icon" }),
+    "href",
+    design.favicon,
+  );
+}
+/**
+ * 메인화면 구성 (main.php): the owner's site_main page in the home's place,
+ * or the home as it is.
+ */
+async function showMainPage(enabled) {
+  $("mainPage").hidden = !enabled;
+  $("homeDefault").hidden = enabled;
+  if (enabled) $("banners").hidden = true;
+  if (!enabled) return;
+  const result = await caller().call("content/pages:contentPage", {
+    id: "site_main",
+    mobile: window.innerWidth <= 700,
+  });
+  renderContent($("mainPage"), result.page);
 }
 /** The site's name and logo, in the header and the copyright. */
 function applyNames(design) {

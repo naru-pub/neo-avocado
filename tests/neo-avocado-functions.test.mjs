@@ -37,6 +37,7 @@ import {
   posts,
   comments,
   money,
+  grants,
   sheet,
   presence,
   quests,
@@ -2530,6 +2531,8 @@ test("the site frame shows only safe design values and menus/banners a reader ma
     // 디자인 사용 is off unless the owner turns it on.
     enabled: false,
     title: "아보카도",
+    description: "",
+    favicon: null,
     logo: null,
     background: "https://cdn.example/bg.png",
     headerBackground: null,
@@ -3972,4 +3975,130 @@ test("the site's frame says what a character's page shows, and the owner is not 
   ctx.owner = false;
   await presence.seen(ctx, { where: "home" });
   assert.equal((await presence.online(ctx)).members.length, 1);
+});
+
+test("the owner grants money and experience to one or all, and ranks add their bonus points", async () => {
+  const { ctx, table } = fakeCtx();
+  for (const [id, nick] of [
+    ["m-1", "하나"],
+    ["m-2", "둘"],
+  ])
+    table(`${P}profiles`).set(id, { nick });
+  table(`${P}wallets`).set("m-2", { balance: 5 });
+  table(`${P}characters`).set("hero", {
+    owner: "m-1",
+    name: "용사",
+    state: "approved",
+  });
+  table(`${P}characters`).set("draft", {
+    owner: "m-2",
+    name: "초안",
+    state: "editing",
+  });
+  table(`${P}levels`).set("lv1", { name: "견습", exp: 0, bonusPoints: 0 });
+  table(`${P}levels`).set("lv2", { name: "숙련", exp: 100, bonusPoints: 3 });
+  const call = (args) => grants.grant(ctx, { memo: "이벤트", ...args });
+  assert.equal(
+    await refusal(call({ kind: "money", target: "all", value: 10 })),
+    "owner_only",
+  );
+  ctx.owner = true;
+  // Everyone's money, but never below nothing.
+  const all = await call({ kind: "money", target: "all", value: -10 });
+  assert.deepEqual([all.done, all.granted, all.skipped], [true, 0, 2]);
+  await call({ kind: "money", target: "all", value: 10 });
+  assert.equal(table(`${P}wallets`).get("m-1").balance, 10);
+  assert.equal(table(`${P}wallets`).get("m-2").balance, 15);
+  await call({ kind: "money", target: "one", name: "둘", value: -15 });
+  assert.equal(table(`${P}wallets`).get("m-2").balance, 0);
+  assert.equal(
+    await refusal(
+      call({ kind: "money", target: "one", name: "없음", value: 1 }),
+    ),
+    "no_member",
+  );
+  // Experience to every approved character: reaching 숙련 adds 3 points,
+  // falling back takes them away.
+  await call({ kind: "exp", target: "all", value: 120 });
+  assert.equal(table(`${P}character_state`).get("hero").exp, 120);
+  assert.equal(table(`${P}character_state`).get("hero").points, 3);
+  assert.equal(table(`${P}character_state`).has("draft"), false);
+  await call({ kind: "exp", target: "one", name: "용사", value: -50 });
+  assert.equal(table(`${P}character_state`).get("hero").points, 0);
+  const memos = [...table(`${P}history`).values()].filter(
+    (row) => row.actor === "grant",
+  );
+  assert.ok(memos.every((row) => row.memo === "이벤트"));
+});
+
+test("items stay out of posts or 조합 as the owner marks them, and stats keep their minimum", async () => {
+  const { ctx, table } = roleplayWorld();
+  table(`${P}items`).set("note", {
+    name: "쪽지",
+    effect: { type: "draw" },
+    usableInPosts: false,
+  });
+  table(`${P}items`).set("stone", { name: "돌", craftMaterial: false });
+  table(`${P}inventory`).set("i-note", {
+    owner: "m-1",
+    item: "note",
+    name: "쪽지",
+  });
+  table(`${P}inventory`).set("i-stone", {
+    owner: "m-1",
+    item: "stone",
+    name: "돌",
+  });
+  const post = (data) =>
+    gate(ctx, "logs", "add", {
+      data: {
+        board: "default",
+        image: "https://example.com/p.png",
+        text: "",
+        character: "hero",
+        ...data,
+      },
+    });
+  assert.equal(await reasonOf(post({ item: "i-note" })), "not_usable");
+  assert.equal(
+    await reasonOf(post({ action: "combine", materials: ["i-stone"] })),
+    "not_material",
+  );
+  // A fresh character: st_min keeps a stat from starting below it.
+  const fresh = fakeCtx();
+  fresh.table(`${P}characters`).set("hero", { owner: "m-1", name: "Hero" });
+  fresh.table(`${P}settings`).set("community", { initialStatPoints: 5 });
+  fresh.table(`${P}stat_config`).set("hp", {
+    name: "체력",
+    initial: 0,
+    max: 10,
+    min: 3,
+  });
+  assert.equal(
+    await refusal(
+      allocateStats(fresh.ctx, { character: "hero", allocation: { hp: 1 } }),
+    ),
+    "below_minimum",
+  );
+  await allocateStats(fresh.ctx, { character: "hero", allocation: { hp: 3 } });
+});
+
+test("a readable site_main page takes the home's place, and is not an 안내 page", async () => {
+  const { ctx, table } = fakeCtx();
+  assert.equal((await site(ctx)).main, false);
+  table(`${P}content`).set("site_main", {
+    name: "메인",
+    body: "<p>환영합니다</p>",
+    readLevel: 1,
+  });
+  table(`${P}content`).set("rules", {
+    name: "규칙",
+    body: "...",
+    readLevel: 1,
+  });
+  assert.equal((await site(ctx)).main, true);
+  assert.deepEqual(
+    (await contentPages(ctx)).documents.map((row) => row.id),
+    ["rules"],
+  );
 });
