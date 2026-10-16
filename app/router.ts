@@ -57,6 +57,9 @@ export function openRoute(hash = location.hash) {
       }
       state.tag = second === "tag" ? third : null;
       state.search = second === "search" ? third : null;
+      // #/logs/free/category/잡담, and its pages (…/category/잡담/page/2).
+      const [, , , , fourth, fifth] = parts(hash);
+      state.category = second === "category" ? third : null;
       $<HTMLInputElement>("searchText").value = state.search ?? "";
       // The readable form of a post's address: board and number.
       if (second && Number.isSafeInteger(Number(second))) {
@@ -65,9 +68,9 @@ export function openRoute(hash = location.hash) {
       }
       $("logFocus").replaceChildren();
       $("logFocusPanel").hidden = true;
-      return loadLogs({
-        page: second === "page" ? Math.max(1, Number(third) || 1) : 1,
-      });
+      const page =
+        second === "page" ? third : fourth === "page" ? fifth : undefined;
+      return loadLogs({ page: Math.max(1, Number(page) || 1) });
     }
     if (kind === "messages" && first) {
       if (!state.member) return say("회원 로그인 후 이용할 수 있습니다.");

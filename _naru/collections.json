@@ -100,7 +100,7 @@
       "read": "world",
       "write": "admin",
       "rules": "community-board",
-      "indexes": ["board", "owner"]
+      "indexes": ["board", "owner", "category"]
     },
     "neo_avocado_members": {
       "read": "admin",

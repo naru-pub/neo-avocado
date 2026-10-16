@@ -5,7 +5,10 @@ import {
   logReadable,
   deleteCommunityDocument,
   text,
+  payReward,
+  takeBackReward,
 } from "../../modules/shared.js";
+import { checkBannedWords, checkLength } from "../../modules/board-options.js";
 import { notDeleted, startValue, startWrite } from "../../modules/community.js";
 import {
   speakerOf,
@@ -124,6 +127,14 @@ export async function write(
     ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
       reason: "invalid_input",
     });
+  if (value.text)
+    checkLength(
+      ctx,
+      value.text,
+      { min: board.data.commentMin, max: board.data.commentMax },
+      access.role === "moderator",
+    );
+  await checkBannedWords(ctx, value.text);
   calls = guest
     ? { text: value.text, recipients: [] }
     : await resolveCalls(ctx, value.text, previous?.data.text ?? "");
@@ -138,8 +149,21 @@ export async function write(
     const actions = [];
     if (data.action === "explore") actions.push(await explore(ctx, speaker));
     if (data.item !== undefined)
-      actions.push(await useInPost(ctx, data.item, speaker));
+      actions.push(
+        await useInPost(ctx, data.item, speaker, { approved: false }),
+      );
     if (actions.length) value.actions = actions;
+    // The site owner's comments carry the admin mark (view_comment.skin.php:38).
+    if (ctx.owner === true && !value.anonymous) value.admin = true;
+    // 댓글쓰기 포인트 (bo_comment_point), for members; a delete takes it back.
+    const reward = guest
+      ? 0
+      : await payReward(
+          ctx,
+          board.data.commentReward,
+          `${board.data.name ?? log.data.board} ${log.data.number ?? ""} 댓글쓰기`,
+        );
+    if (reward) value.reward = reward;
   }
   parent = log;
   const document = previous
@@ -169,5 +193,18 @@ export async function remove(
     guests: true,
     moderated: true,
   });
+  // 댓글쓰기 포인트 goes back (bbs/delete_comment.php:63).
+  if (previous.data.reward > 0) {
+    const log =
+      typeof previous.data.logId === "string"
+        ? await ctx.get(`${PREFIX}logs`, previous.data.logId)
+        : null;
+    const board = await boardOf(ctx, log?.data.board ?? "default");
+    await takeBackReward(
+      ctx,
+      previous,
+      `${board?.data.name ?? "게시판"} ${log?.data.number ?? ""} 댓글삭제`,
+    );
+  }
   return await deleteCommunityDocument(ctx, COMMENTS, "comments", previous);
 }

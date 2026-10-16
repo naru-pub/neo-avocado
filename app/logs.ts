@@ -50,37 +50,60 @@ const tagOptions = (tag) => ({ where: { has: ["tags", tag] } });
 export const kindOf = (id = state.board) =>
   state.boards.find((row) => row.id === (id ?? "default"))?.data.kind ??
   "image";
-/** The current board's posts, ten to a page (or those with the tag). */
-const logPages = cursorPages(
-  (after, { includeTotal, size, cursorOnly }) =>
-    // A Q&A board shows others' secret questions locked, so a function reads it.
-    kindOf() === "qna" && !state.tag
-      ? caller().call("community/posts:questions", {
-          board: state.board,
-          after,
-          size,
-          ...(cursorOnly ? { cursorOnly: true } : {}),
-        })
-      : collection(COLLECTION.logs).list({
-          filter: { board: state.board },
-          // Notices (bo_notice) sort first: true above false and unset.
-          sort: LOG_SORT,
-          size,
-          after,
-          ...(includeTotal ? { includeTotal: true } : {}),
-          ...(state.tag ? tagOptions(state.tag) : {}),
-        }),
-  LOG_PAGE,
-);
+/**
+ * How many posts a page of the current board shows (bo_page_rows, 15 unless
+ * the owner sets it); a Q&A board's whole questions at most ten, as many as
+ * a function's result holds.
+ */
+function pageRows() {
+  const board = state.boards.find((row) => row.id === state.board);
+  const rows =
+    Number.isSafeInteger(board?.data.pageRows) && board.data.pageRows > 0
+      ? board.data.pageRows
+      : LOG_PAGE;
+  return kindOf() === "qna" && !state.tag ? Math.min(rows, 10) : rows;
+}
+/** The current board's posts, a page at a time (or those with the tag). */
+const pagesOf = (rows: number) =>
+  cursorPages(
+    (after, { includeTotal, size, cursorOnly }) =>
+      // A Q&A board shows others' secret questions locked, so a function reads it.
+      kindOf() === "qna" && !state.tag
+        ? caller().call("community/posts:questions", {
+            board: state.board,
+            after,
+            size,
+            ...(state.category ? { category: state.category } : {}),
+            ...(cursorOnly ? { cursorOnly: true } : {}),
+          })
+        : collection(COLLECTION.logs).list({
+            // 분류 (sca) narrows the board to one category.
+            filter: {
+              board: state.board,
+              ...(state.category ? { category: state.category } : {}),
+            },
+            // Notices (bo_notice) sort first: true above false and unset.
+            sort: LOG_SORT,
+            size,
+            after,
+            ...(includeTotal ? { includeTotal: true } : {}),
+            ...(state.tag ? tagOptions(state.tag) : {}),
+          }),
+    rows,
+  );
+let logRows = LOG_PAGE;
+let logPages = pagesOf(logRows);
 /** Shows a page of the board: the first unless `page` is given. */
 /**
- * The list's address: the board, and its page, tag or search
- * (#/logs/free/page/3, #/logs/free/tag/봄, #/logs/free/search/바다).
+ * The list's address: the board, and its page, tag, search or category
+ * (#/logs/free/page/3, #/logs/free/tag/봄, #/logs/free/search/바다,
+ * #/logs/free/category/잡담/page/2).
  */
 function logsPath() {
   const base = ["logs", state.board];
   if (state.search) return [...base, "search", state.search];
   if (state.tag) return [...base, "tag", state.tag];
+  if (state.category) base.push("category", state.category);
   if (state.logPage > 1) return [...base, "page", String(state.logPage)];
   return base;
 }
@@ -92,7 +115,11 @@ function routeList() {
 export async function loadLogs({ page: number = 1 } = {}) {
   if (!state.member && !state.boards.length) return $("logs").replaceChildren();
   if (state.search) return showSearch();
-  if (number === 1) logPages.reset();
+  showCategories();
+  if (logRows !== pageRows()) {
+    logRows = pageRows();
+    logPages = pagesOf(logRows);
+  } else if (number === 1) logPages.reset();
   const page = await logPages.page(number);
   state.logPage = page.number;
   routeList();
@@ -113,10 +140,42 @@ export async function loadLogs({ page: number = 1 } = {}) {
   renderPages(
     $("logPages"),
     page.number,
-    Math.ceil((logPages.total ?? 0) / LOG_PAGE),
+    Math.ceil((logPages.total ?? 0) / logRows),
     (next) => loadLogs({ page: next }),
   );
   await showCommentCounts(shown);
+}
+/**
+ * The board's 분류 links (bbs/list.mmb.php:4-25): 전체 and each category,
+ * the chosen one marked; a choice lists that category's posts.
+ */
+function showCategories() {
+  const board = state.boards.find((row) => row.id === state.board);
+  const categories: string[] = board?.data.categories ?? [];
+  const nav = $("boardCategories");
+  nav.hidden = !categories.length;
+  if (state.category && !categories.includes(state.category))
+    state.category = null;
+  nav.replaceChildren(
+    ...["", ...categories].map((name) => {
+      const link = document.createElement("a");
+      link.href = `#/${["logs", state.board, ...(name ? ["category", name] : [])].map(encodeURIComponent).join("/")}`;
+      link.textContent = name || "전체";
+      if ((state.category ?? "") === name)
+        link.setAttribute("aria-current", "page");
+      link.onclick = (event) => {
+        event.preventDefault?.();
+        run(async () => {
+          state.category = name || null;
+          state.tag = null;
+          state.search = null;
+          $<HTMLInputElement>("searchText").value = "";
+          await loadLogs();
+        });
+      };
+      return link;
+    }),
+  );
 }
 /** Fills each log's "댓글 (n)" from one read-only count call. */
 async function showCommentCounts(entries) {
@@ -204,6 +263,7 @@ $("closeFocus").onclick = () => {
 export async function searchTag(tag) {
   showTab("logs");
   state.tag = tag;
+  state.category = null;
   await loadLogs();
 }
 $("clearTag").onclick = () =>
@@ -248,6 +308,7 @@ $("boardSearch").onsubmit = (event) => {
   run(async () => {
     const text = $<HTMLInputElement>("searchText").value.trim();
     state.tag = null;
+    state.category = null;
     state.search = text || null;
     await loadLogs();
   });
@@ -286,7 +347,8 @@ function presentOptions(item, log) {
   };
   if (log.data.fold === true) fold();
   const image = item.querySelector(".log-image");
-  const height = Number(board?.data.foldHeight) || 0;
+  // bo_gallery_height, 600 unless the owner sets it (board_form.php:95).
+  const height = Number(board?.data.foldHeight ?? 600) || 0;
   if (image && height > 0) {
     const check = () => {
       if (image.naturalHeight >= height) fold();
@@ -294,7 +356,8 @@ function presentOptions(item, log) {
     if (image.complete) check();
     else image.addEventListener("load", check, { once: true });
   }
-  if (log.data.adult === true) {
+  // A member marked adult (mb_adult) sees it uncovered (list.log.skin.php:133).
+  if (log.data.adult === true && !state.adult) {
     picture.classList.add("blind");
     const reveal = document.createElement("button");
     reveal.type = "button";
@@ -329,6 +392,79 @@ function optionEdits(current) {
       ? [box("anonymous", "익명")]
       : []),
   ];
+}
+/**
+ * What a post without them may still take when edited, as the mmb skin's
+ * form offers them again (write.skin.php:196,290,319): dice, 탐색 or 조합,
+ * and an item, for the writer's own post on a board that allows actions.
+ */
+function actionEdits(current) {
+  const fields: any[] = [];
+  if (!current.data.dice)
+    fields.push({ name: "dice", label: "주사위", type: "checkbox" });
+  const board = state.boards.find(
+    (row) => row.id === (current.data.board ?? "default"),
+  );
+  if (
+    !mine(current) ||
+    board?.data.actions !== true ||
+    !current.data.character ||
+    current.data.guest
+  )
+    return fields;
+  const actions = Array.isArray(current.data.actions)
+    ? current.data.actions
+    : [];
+  if (!actions.some((row) => ["explore", "combine"].includes(row?.type))) {
+    fields.push({
+      name: "action",
+      label: "행동",
+      options: [
+        ["", "일반 행동"],
+        ["explore", "탐색"],
+        ["combine", "조합"],
+      ],
+    });
+    for (const n of [1, 2, 3])
+      fields.push({
+        name: `material${n}`,
+        label: `조합 재료 ${n}`,
+        options: [["", "재료 없음"]],
+      });
+  }
+  if (!actions.some((row) => row?.type === "use"))
+    fields.push({
+      name: "item",
+      label: "사용할 아이템",
+      options: [["", "사용할 아이템 없음"]],
+    });
+  return fields;
+}
+/** Fills the edit dialog's material and item choices from the post's character's inventory. */
+async function fillActionEdits(character) {
+  const fields = $("editorFields");
+  const materials = [1, 2, 3]
+    .map((n) => fields.querySelector(`[name="material${n}"]`))
+    .filter(Boolean);
+  const used = fields.querySelector('[name="item"]');
+  if (!character || (!materials.length && !used)) return;
+  for (const { row, item } of await postInventory()) {
+    if (row.data.character !== character || !item) continue;
+    const name = row.data.name ?? row.data.item;
+    if (item.craftMaterial !== false)
+      for (const select of materials) select.append(new Option(name, row.id));
+    if (used && item.usable !== false && item.usableInPosts !== false)
+      used.append(new Option(name, row.id));
+  }
+}
+/** The inventory changed: read it again when next needed. */
+function forgetInventory() {
+  state.postItems = null;
+  state.shopLoaded = false;
+  $("logItem").replaceChildren($<HTMLSelectElement>("logItem").options[0]);
+  delete $("logItem").dataset.loaded;
+  $("logMaterials").replaceChildren();
+  delete $("logMaterials").dataset.loaded;
 }
 export async function logItem(log) {
   // A post's card, with what opens one of its comments.
@@ -569,6 +705,7 @@ export async function logItem(log) {
           max: current.data.format === "html" ? 12000 : 2000,
         },
         ...optionEdits(current),
+        ...actionEdits(current),
       ],
       async ({
         text,
@@ -576,8 +713,17 @@ export async function logItem(log) {
         category,
         secret = false,
         password,
+        dice = false,
+        action = "",
+        material1 = "",
+        material2 = "",
+        material3 = "",
+        item: used = "",
         ...options
       }) => {
+        const materials = [material1, material2, material3].filter(Boolean);
+        if (action === "combine" && !materials.length)
+          throw new Error("조합 재료를 골라 주세요.");
         const { document: saved } = await caller().call(
           "community/posts:write",
           {
@@ -589,20 +735,27 @@ export async function logItem(log) {
               category,
               secret,
               ...options,
+              ...(dice ? { dice: true } : {}),
+              ...(action === "combine" ? { action, materials } : {}),
+              ...(action === "explore" ? { action } : {}),
+              ...(used ? { item: used } : {}),
             },
             revision: current.revision,
             ...(guestPost ? { guest: { password } } : {}),
           },
         );
+        if (action || used) forgetInventory();
         item.replaceWith(await logItem(saved));
       },
     );
+  const openEdit = (current) => {
+    beginEdit(current);
+    run(() => fillActionEdits(current.data.character));
+  };
   change.onclick = () =>
     log.data.truncated
-      ? run(async () =>
-          beginEdit(await collection(COLLECTION.logs).get(log.id)),
-        )
-      : beginEdit(log);
+      ? run(async () => openEdit(await collection(COLLECTION.logs).get(log.id)))
+      : openEdit(log);
   if (log.data.truncated && !log.data.locked) {
     const expand = document.createElement("button");
     expand.type = "button";
@@ -643,7 +796,7 @@ export async function logItem(log) {
       const list = item.querySelector(".comment-list");
       if (!more) list.replaceChildren();
       for (const comment of page.documents)
-        list.append(await commentItem(comment));
+        list.append(await commentItem(comment, log));
       cursor = page.nextCursor;
       item.querySelector<HTMLButtonElement>(".more-comments").hidden = !cursor;
     });
@@ -756,7 +909,7 @@ export async function logItem(log) {
           ...(guest ? { guest } : {}),
         },
       );
-      item.querySelector(".comment-list").append(await commentItem(saved));
+      item.querySelector(".comment-list").append(await commentItem(saved, log));
       form.querySelector<HTMLTextAreaElement>(".comment-text").value = "";
       form.querySelector<HTMLInputElement>(".comment-dice").checked = false;
       form.querySelector<HTMLInputElement>(".comment-anonymous-check").checked =
@@ -773,12 +926,31 @@ export async function logItem(log) {
   };
   return item;
 }
-async function commentItem(comment) {
+/** Who wrote a post or comment, as far as the reader is shown. */
+const writerOf = (row) => row.createdBy ?? row.data.owner ?? null;
+async function commentItem(comment, log) {
   const item = document.createElement("li");
   item.className = "comment";
   item.dataset.id = comment.id;
+  // The post's own writer commenting (view_comment.skin.php:74-80): not
+  // where either is 익명.
+  if (
+    !log.data.anonymous &&
+    !comment.data.anonymous &&
+    writerOf(comment) &&
+    writerOf(comment) === writerOf(log)
+  )
+    item.classList.add("owner");
   const author = document.createElement("strong");
   author.className = "author";
+  // The site owner's mark (view_comment.skin.php:38's ico_admin).
+  if (comment.data.admin === true && !comment.data.anonymous)
+    author.append(
+      Object.assign(document.createElement("span"), {
+        className: "admin-mark",
+        textContent: "관리자",
+      }),
+    );
   author.append(await speakerLabel(comment));
   item.append(author, " ");
   if (comment.data.dice) {
@@ -849,7 +1021,7 @@ async function commentItem(comment) {
               ...(guestComment ? { guest: { password } } : {}),
             },
           );
-          item.replaceWith(await commentItem(saved));
+          item.replaceWith(await commentItem(saved, log));
         },
       );
     item.append(" ", change);
@@ -895,11 +1067,15 @@ $("logForm").onsubmit = (event) => {
     say("올리는 중…");
     const image = file ? await uploadManaged(file) : null;
     const character = guest ? "" : $<HTMLSelectElement>("logCharacter").value;
-    const materials = guest
-      ? []
-      : [...$<HTMLSelectElement>("logMaterials").selectedOptions].map(
-          (option) => option.value,
-        );
+    const action = guest ? "" : $<HTMLSelectElement>("logAction").value;
+    const materials =
+      action === "combine"
+        ? [...$<HTMLSelectElement>("logMaterials").selectedOptions].map(
+            (option) => option.value,
+          )
+        : [];
+    if (action === "combine" && !materials.length)
+      return say("조합 재료를 골라 주세요.");
     if (materials.length > 3)
       return say("조합 재료는 3개까지 고를 수 있습니다.");
     const used = guest ? "" : $<HTMLSelectElement>("logItem").value;
@@ -931,20 +1107,13 @@ $("logForm").onsubmit = (event) => {
         ...(character ? { character } : {}),
         ...($<HTMLInputElement>("logDice").checked ? { dice: true } : {}),
         ...options,
-        ...(materials.length ? { action: "combine", materials } : {}),
+        ...(action === "combine" ? { action, materials } : {}),
+        ...(action === "explore" ? { action } : {}),
         ...(used ? { item: used } : {}),
       },
       ...(guest ? { guest } : {}),
     });
-    if (materials.length || used) {
-      // The inventory changed: read it again when next needed.
-      state.postItems = null;
-      state.shopLoaded = false;
-      $("logItem").replaceChildren($<HTMLSelectElement>("logItem").options[0]);
-      delete $("logItem").dataset.loaded;
-      $("logMaterials").replaceChildren();
-      delete $("logMaterials").dataset.loaded;
-    }
+    if (action || used) forgetInventory();
     state.ownPosts.add(log.id);
     if (state.newPost === log.id) showNewPost(null);
     $("logs").prepend(await logItem(log));
@@ -998,8 +1167,24 @@ export async function loadBoards() {
 }
 export function configureBoard() {
   const board = state.boards.find((row) => row.id === state.board);
-  $("boardDescription").textContent = board?.data.description ?? "";
-  $<HTMLTextAreaElement>("logText").maxLength = board?.data.html ? 12000 : 2000;
+  // bo_content_head: the owner's HTML, sanitized as HTML posts are.
+  $("boardDescription").replaceChildren(
+    sanitizedFragment(document, board?.data.description ?? ""),
+  );
+  showCategories();
+  const area = $<HTMLTextAreaElement>("logText");
+  // bo_write_max, under the text's own limit; HTML boards have none.
+  const most = Number(board?.data.writeMax) || 0;
+  area.maxLength = board?.data.html
+    ? 12000
+    : most > 0 && state.role !== "moderator"
+      ? Math.min(most, 2000)
+      : 2000;
+  // bo_insert_content: a new post starts from the board's text.
+  if (!area.value.trim() || area.value === area.dataset.inserted) {
+    area.value = board?.data.insertContent ?? "";
+    area.dataset.inserted = area.value;
+  }
   $("logHtmlHint").hidden = !board?.data.html;
   $("logInlineImage").hidden = !board?.data.html;
   const kind = kindOf();
@@ -1032,8 +1217,9 @@ export function configureBoard() {
   // The mmb skin's options are an image board's; 익명 where it is allowed.
   $("logOptions").hidden = kind !== "image";
   $("logAnonymousLabel").hidden = board?.data.anonymous !== true;
-  $("logFoldHint").textContent = board?.data.foldHeight
-    ? `(${board.data.foldHeight}px 이상은 자동으로 접힙니다.)`
+  const foldHeight = Number(board?.data.foldHeight ?? 600) || 0;
+  $("logFoldHint").textContent = foldHeight
+    ? `(${foldHeight}px 이상은 자동으로 접힙니다.)`
     : "";
   $("logActions").hidden = !state.member || board?.data.actions !== true;
 }
@@ -1043,10 +1229,10 @@ $("logMaterials").onfocus = $("logMaterials").onpointerdown = () =>
   run(async () => {
     if ($("logMaterials").dataset.loaded) return;
     $("logMaterials").dataset.loaded = "1";
-    for (const { row, item } of await postInventory())
-      if (item?.craftMaterial !== false)
+    for (const { row, item, owner } of await postInventory())
+      if (owner && item?.craftMaterial !== false)
         $("logMaterials").append(
-          new Option(row.data.name ?? row.data.item, row.id),
+          new Option(`${row.data.name ?? row.data.item} (${owner})`, row.id),
         );
   });
 wireSpeakerChoice($("logCharacter"));
@@ -1074,6 +1260,7 @@ $("board").onchange = () =>
     route(`logs/${state.board}`, { replace: true });
     state.tag = null;
     state.search = null;
+    state.category = null;
     $<HTMLInputElement>("searchText").value = "";
     configureBoard();
     await loadLogs();

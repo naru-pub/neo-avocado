@@ -269,6 +269,7 @@ function fakeDatabase(rows = {}) {
           status: "approved",
           role: database.role ?? "member",
           owner: database.owner === true,
+          adult: database.adult === true,
           profile,
         };
       }
@@ -734,16 +735,16 @@ test("a first visit sets a nickname under the member's own id, then reads the lo
 });
 
 test("logs are read a page at a time, newest first, and comments only when opened", async () => {
-  const logs = Array.from({ length: 12 }, (_, n) => ({
+  const logs = Array.from({ length: 17 }, (_, n) => ({
     id: `log-${n}`,
     data: { image: `https://media.naru.pub/${n}.png`, text: `로그 ${n}` },
-    createdBy: n === 11 ? ME : "member-other",
+    createdBy: n === 16 ? ME : "member-other",
   }));
   const database = fakeDatabase({
     [PROFILES]: [me, { id: "member-other", data: { nick: "남" } }],
     [LOGS]: logs,
     [COMMENTS]: [
-      { id: "c-1", data: { logId: "log-11", text: "멋져요", dice: false } },
+      { id: "c-1", data: { logId: "log-16", text: "멋져요", dice: false } },
     ],
   });
   const { $, settle } = await page(database);
@@ -765,14 +766,14 @@ test("logs are read a page at a time, newest first, and comments only when opene
         ["notice", "desc"],
         [{ metadata: "createdAt" }, "desc"],
       ],
-      size: 10,
+      size: 15,
       after: null,
       includeTotal: true,
     },
   ]);
   const items = $("logs").querySelectorAll(".log");
-  assert.equal(items.length, 10);
-  assert.equal(items[0].querySelector(".log-text").textContent, "로그 11");
+  assert.equal(items.length, 15);
+  assert.equal(items[0].querySelector(".log-text").textContent, "로그 16");
   // 자기 로그에만 삭제가 보인다.
   assert.equal(items[0].querySelector(".delete").hidden, false);
   assert.equal(items[1].querySelector(".delete").hidden, true);
@@ -803,14 +804,14 @@ test("logs are read a page at a time, newest first, and comments only when opene
     {
       method: "list",
       name: COMMENTS,
-      filter: { logId: "log-11" },
+      filter: { logId: "log-16" },
       sort: [[{ metadata: "createdAt" }, "asc"]],
       size: 50,
       after: null,
     },
   );
   assert.match(items[0].querySelector(".comment-list").textContent, /멋져요/);
-  // Numbered pages: 12 posts make two pages of ten.
+  // Numbered pages: 17 posts make two pages of 15 (cf_page_rows).
   const pageTwo = [...$("logPages").querySelectorAll("button")].find(
     (button) => button.textContent === "2",
   );
@@ -1404,9 +1405,12 @@ test("posts speak as a chosen character, show server dice, calls and actions", a
       },
     ],
     neo_avocado_inventory: [
-      { id: "inv-1", data: { owner: ME, item: "letter", name: "편지" } },
+      {
+        id: "inv-1",
+        data: { owner: ME, item: "letter", name: "편지", character: "hero" },
+      },
     ],
-    // Posts offer an item with an effect, usable in posts (it_use_mmb_able).
+    // Posts offer a character's items usable in posts (it_use_mmb_able).
     neo_avocado_items: [
       { id: "letter", data: { name: "편지", effect: { type: "draw" } } },
     ],
@@ -1920,4 +1924,88 @@ test("an approved character's stats only take the points left, never going down"
   for (let n = 0; n < 6; n += 1) await settle();
   assert.match(again.querySelector(".progression").textContent, /남은 0/);
   assert.equal(again.querySelector(".allocate-stats").hidden, true);
+});
+
+test("a board lists by 분류, shows its HTML notice and new-post text, and marks its writer's comments", async () => {
+  const database = fakeDatabase({
+    [PROFILES]: [me, { id: "member-other", data: { nick: "남" } }],
+    neo_avocado_boards: [
+      {
+        id: "default",
+        data: {
+          ...DEFAULT_BOARD.data,
+          categories: ["잡담", "공지"],
+          description: "<b>규칙</b><script>alert(1)</script>",
+          insertContent: "캐릭터: ",
+        },
+      },
+    ],
+    [LOGS]: [
+      {
+        id: "a",
+        data: {
+          image: "https://media.naru.pub/a.png",
+          text: "a",
+          category: "잡담",
+          adult: true,
+        },
+        createdBy: "member-other",
+      },
+      {
+        id: "b",
+        data: {
+          image: "https://media.naru.pub/b.png",
+          text: "b",
+          category: "공지",
+        },
+        createdBy: ME,
+      },
+    ],
+    [COMMENTS]: [
+      { id: "c-1", data: { logId: "b", text: "내 댓글" }, createdBy: ME },
+      {
+        id: "c-2",
+        data: { logId: "b", text: "운영자", admin: true },
+        createdBy: "member-other",
+      },
+    ],
+  });
+  // mb_adult: 19금 shows uncovered.
+  database.adult = true;
+  const { $, settle } = await page(database);
+  // bo_content_head, sanitized.
+  assert.equal($("boardDescription").querySelector("b").textContent, "규칙");
+  assert.equal($("boardDescription").querySelector("script"), null);
+  // bo_insert_content starts a new post.
+  assert.equal($("logText").value, "캐릭터: ");
+  assert.equal($("logs").querySelector(".blind"), null);
+  const links = () => [...$("boardCategories").querySelectorAll("a")];
+  assert.deepEqual(
+    links().map((link) => link.textContent),
+    ["전체", "잡담", "공지"],
+  );
+  links()[1].onclick({ preventDefault() {} });
+  for (let n = 0; n < 4; n += 1) await settle();
+  assert.deepEqual(
+    database.calls
+      .filter((call) => call.method === "list" && call.name === LOGS)
+      .at(-1).filter,
+    { board: "default", category: "잡담" },
+  );
+  assert.deepEqual(
+    [...$("logs").querySelectorAll(".log")].map((item) => item.dataset.id),
+    ["a"],
+  );
+  assert.equal(links()[1].getAttribute("aria-current"), "page");
+  links()[0].onclick({ preventDefault() {} });
+  for (let n = 0; n < 4; n += 1) await settle();
+  const post = $("logs").querySelector('.log[data-id="b"]');
+  const comments = post.querySelector(".comments");
+  comments.open = true;
+  comments.ontoggle();
+  for (let n = 0; n < 4; n += 1) await settle();
+  const [mine, staff] = post.querySelectorAll(".comment");
+  assert.equal(mine.classList.contains("owner"), true);
+  assert.equal(staff.classList.contains("owner"), false);
+  assert.equal(staff.querySelector(".admin-mark").textContent, "관리자");
 });

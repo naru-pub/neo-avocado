@@ -382,6 +382,18 @@ summary {
   background: var(--surface);
   border-bottom: 1px dashed var(--line);
 }
+/* The post's writer commenting (view_comment.skin.php:74-80's owner) and
+   the site owner's admin mark. */
+.comment.owner > .author {
+  color: var(--avocado);
+}
+.admin-mark {
+  margin-right: 4px;
+  padding: 0 4px;
+  border: 1px solid var(--avocado);
+  color: var(--avocado);
+  font-size: 11px;
+}
 .characters {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1173,6 +1185,21 @@ body.site:not(.designed) .pages .page {
   background: var(--avocado);
   border-color: var(--avocado);
   color: var(--paper);
+}
+
+/* 분류 (bbs/list.mmb.php's category links). */
+.board-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 10px 0;
+}
+.board-categories[hidden] {
+  display: none;
+}
+.board-categories a[aria-current="page"] {
+  font-weight: bold;
+  color: var(--avocado);
 }
 
 /* Board search, a guest's secret question, a settled request. */

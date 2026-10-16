@@ -117,6 +117,7 @@ async function start() {
   state.role = status.role;
   state.owner = status.owner === true;
   state.level = status.level ?? 2;
+  state.adult = status.adult === true;
   state.warnings = {
     count: status.warnings ?? 0,
     note: status.warningNote ?? "",
@@ -140,6 +141,7 @@ async function visit() {
   state.role = "guest";
   state.owner = false;
   state.level = 1;
+  state.adult = false;
   show();
   await opening(() => showTab("home"));
   // 사이트공개 off: the welcome and sign-in card, and nothing else read.
