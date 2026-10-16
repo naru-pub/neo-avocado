@@ -10,7 +10,6 @@ import {
   PROFILES,
   SETTINGS,
   TITLES,
-  WARDROBE,
   RECIPES,
   amount,
   pay,
@@ -84,11 +83,6 @@ export async function speakerOf(
     typeof titleId === "string" && state.data.titles?.includes(titleId)
       ? await ctx.get(TITLES, titleId)
       : null;
-  const outfit =
-    typeof character.data.outfit === "string"
-      ? await ctx.get(WARDROBE, character.data.outfit)
-      : null;
-  const worn = outfit?.data.character === character.id ? outfit : null;
   // A title out of use (ti_use) is shown nowhere (extend/title.lib.php:7).
   const shownTitle =
     title && !title.data.deleted && title.data.enabled !== false;
@@ -98,7 +92,8 @@ export async function speakerOf(
     type: character.data.type ?? "main",
     title: shownTitle ? title.data.name : null,
     titleImage: shownTitle ? https(title.data.image) : null,
-    portrait: https(worn?.data.image) ?? https(character.data.image),
+    // The 두상: an outfit dresses the 전신 only (member/viewer.php:76).
+    portrait: https(character.data.image),
   };
 }
 
@@ -134,8 +129,14 @@ export async function resolveCalls(
   ctx: Ctx,
   text: string,
   before = "",
-): Promise<{ text: string; recipients: Recipient[] }> {
+  called: unknown = [],
+): Promise<{ text: string; recipients: Recipient[]; called: string[] }> {
   const already = calledNicks(before);
+  // Who this post or comment has called before: an edit that removes a
+  // [[name]] and puts it back does not call them again.
+  const earlier = Array.isArray(called)
+    ? called.filter((id): id is string => typeof id === "string")
+    : [];
   const recipients: Recipient[] = [];
   let saved = text;
   for (const nick of calledNicks(text)) {
@@ -145,11 +146,16 @@ export async function resolveCalls(
     if (!found) saved = saved.split(`[[${nick}]]`).join("[[???]]");
     else if (
       found.id !== ctx.member.id &&
+      !earlier.includes(found.id) &&
       !recipients.some((row) => row.id === found.id)
     )
       recipients.push({ id: found.id, nick });
   }
-  return { text: saved, recipients };
+  return {
+    text: saved,
+    recipients,
+    called: [...earlier, ...recipients.map((row) => row.id)].slice(-200),
+  };
 }
 
 /**

@@ -39,13 +39,32 @@ body.site.designed::before {
   position: fixed;
   inset: 0;
   z-index: -1;
-  background-color: var(--paper);
+  background-color: var(--site-background-color, var(--paper));
   background-image: var(
     --site-background,
     linear-gradient(90deg, #474747 50%, #545454 50%),
     linear-gradient(#0d0d0d 25%, transparent 25%)
   );
   background-size: var(--site-background-size, 4px 4px, 4px 4px);
+  background-repeat: var(--site-background-repeat, repeat);
+  background-position: var(--site-background-position, left top);
+}
+/* m_background: a phone's own picture, where the owner set one. */
+@media (max-width: 700px) {
+  body.site.designed::before {
+    background-image: var(
+      --site-mobile-background,
+      var(
+        --site-background,
+        linear-gradient(90deg, #474747 50%, #545454 50%),
+        linear-gradient(#0d0d0d 25%, transparent 25%)
+      )
+    );
+    background-size: var(
+      --site-mobile-background-size,
+      var(--site-background-size, 4px 4px, 4px 4px)
+    );
+  }
 }
 body.site.designed a,
 body.site.designed .txt-point {

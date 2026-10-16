@@ -134,7 +134,11 @@ export async function gift(
     receivedAt: ctx.now,
     character,
   });
-  if (!self) {
+  // The item arrives either way; the note only to a member taking 쪽지.
+  if (
+    !self &&
+    (await ctx.get(PROFILES, recipient))?.data.acceptMessages !== false
+  ) {
     await ctx.add(MESSAGES, {
       from: ctx.member.id,
       to: recipient,

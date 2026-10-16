@@ -4,6 +4,15 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>네오 아보카도</title>
+    <!-- head.sub.php's description and share tags (cf_site_descript,
+         cf_site_img). Link previews read these as written here: edit them
+         for your site. The 디자인 settings change only the open tab. -->
+    <meta name="description" content="자캐 커뮤니티입니다." />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="네오 아보카도" />
+    <meta property="og:description" content="자캐 커뮤니티입니다." />
+    <meta property="og:image" content="" />
+    <meta name="twitter:card" content="summary_large_image" />
     <link rel="stylesheet" href="style.css" />
     <link rel="stylesheet" href="plain.css" />
     <link rel="stylesheet" href="theme.css" />
@@ -13,9 +22,10 @@
     <header class="top">
       <h1>
         <a id="homeLink" href="#"
-          ><img id="siteLogo" alt="" hidden /><span id="siteTitle"
-            >네오 아보카도</span
-          ></a
+          ><picture
+            ><source id="siteLogoMobile" media="(max-width: 700px)" />
+            <img id="siteLogo" alt="" hidden /></picture
+          ><span id="siteTitle">네오 아보카도</span></a
         >
       </h1>
       <button
@@ -63,6 +73,24 @@
     <section id="profileSetup" hidden>
       <h2>처음 오셨네요</h2>
       <form id="profileForm">
+        <!-- skin/member/basic/register.skin.php: the owner's rules, each
+             agreed to, when written (커뮤니티 설정 → 회원가입 설정). -->
+        <section id="stipulationBox" class="agreement" hidden>
+          <h3>커뮤니티 활동 규칙</h3>
+          <div id="stipulationText" class="agreement-text"></div>
+          <label>
+            <input id="stipulationAgree" type="checkbox" />
+            커뮤니티 활동 규칙 내용에 동의합니다.
+          </label>
+        </section>
+        <section id="characterNoticeBox" class="agreement" hidden>
+          <h3>캐릭터 유의사항</h3>
+          <div id="characterNoticeText" class="agreement-text"></div>
+          <label>
+            <input id="characterNoticeAgree" type="checkbox" />
+            캐릭터 유의사항 내용에 동의합니다.
+          </label>
+        </section>
         <label>
           닉네임
           <input id="nick" name="nick" maxlength="20" required />
@@ -167,10 +195,23 @@
               <p class="name">
                 <span id="cardName"></span>
                 <span id="cardRole" class="badge" hidden>운영진</span>
+                <a
+                  id="cardAdmin"
+                  class="badge admin"
+                  href="admin/"
+                  target="_blank"
+                  rel="noopener"
+                  hidden
+                  >관리자</a
+                >
               </p>
               <p id="cardDescript"></p>
               <ul class="control-group member-only">
-                <li><button id="cardMessages" type="button">쪽지</button></li>
+                <li>
+                  <button id="cardMessages" type="button">
+                    쪽지 <i id="cardUnread" hidden></i>
+                  </button>
+                </li>
                 <li><button id="cardMyPage" type="button">계정관리</button></li>
                 <li>
                   <button id="cardSignOut" type="button">로그아웃</button>
@@ -212,6 +253,9 @@
           <dd id="myCommentAlerts"></dd>
           <dt>회원 번호</dt>
           <dd id="myMemberId"></dd>
+          <!-- mypage/index.php's 가입일: when the nickname was first set. -->
+          <dt id="myJoinedTerm" hidden>가입일</dt>
+          <dd id="myJoined" hidden></dd>
           <!-- mypage/index.php's 경고내역, when the owner has warned them. -->
           <dt id="myWarningsTerm" hidden>경고내역</dt>
           <dd id="myWarnings" hidden></dd>

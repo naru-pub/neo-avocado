@@ -260,8 +260,14 @@ export async function write(
   }
   calls = guest
     ? { text: value.text, recipients: [] }
-    : await resolveCalls(ctx, value.text, previous?.data.text ?? "");
+    : await resolveCalls(
+        ctx,
+        value.text,
+        previous?.data.text ?? "",
+        previous?.data.called,
+      );
   value.text = calls.text;
+  if (!guest) value.called = calls.called;
   Object.assign(
     value,
     tagFields(value.format === "html" ? plainText(value.text) : value.text),
@@ -792,6 +798,17 @@ export async function settle(
   amount(money, "Money");
   const note = text(memo ?? "", 500);
   const owner = author(row);
+  // A request is paid once: settling it again only changes its state
+  // (caculate/write_comment_update.skin.php pays on a new reply, w != cu).
+  if (row.data.settlement?.state && (exp > 0 || money > 0))
+    ctx.fail("CONFLICT", "이미 처리된 정산글에는 다시 지급할 수 없습니다.", {
+      reason: "settled",
+    });
+  // A moderator does not pay their own request; the site owner may.
+  if (!ctx.owner && owner === ctx.member?.id && (exp > 0 || money > 0))
+    ctx.fail("ACCESS_DENIED", "자기 정산글에는 지급할 수 없습니다.", {
+      reason: "own_settlement",
+    });
   const character = row.data.character ?? null;
   if (exp > 0) {
     if (!character)
@@ -825,6 +842,10 @@ export async function settle(
       });
     const wallet = await ctx.get(WALLETS, owner);
     const balance = (wallet?.data.balance ?? 0) + money;
+    if (!Number.isSafeInteger(balance))
+      ctx.fail("INVALID_REQUEST", "지급할 수 있는 금액을 넘었습니다.", {
+        reason: "invalid_input",
+      });
     await ctx.set(WALLETS, owner, { ...wallet?.data, balance });
     await ctx.add(HISTORY, {
       owner,

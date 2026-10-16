@@ -52,6 +52,10 @@ export async function send(
   const balance = await pay(ctx, current, sent);
   const theirs = await ctx.get(WALLETS, recipient);
   const received = (theirs?.data.balance ?? 0) + sent;
+  if (!Number.isSafeInteger(received))
+    ctx.fail("INVALID_REQUEST", "받는 사람이 더 받을 수 없습니다.", {
+      reason: "invalid_input",
+    });
   await ctx.set(WALLETS, recipient, { ...theirs?.data, balance: received });
   await record(ctx, "moneySent", {
     delta: -sent,
@@ -70,15 +74,17 @@ export async function send(
     },
     recipient,
   );
-  await ctx.add(MESSAGES, {
-    from: ctx.member.id,
-    to: recipient,
-    body: `${from?.data.nick ?? ""}님이 ${sent.toLocaleString("ko-KR")}${named.moneyUnit ? ` ${named.moneyUnit}` : ""} 보냈습니다.`,
-    sentAt: ctx.now,
-    readAt: null,
-    gift: true,
-  });
-  ctx.notify(recipient, { unread: true });
+  // The money arrives either way; the note only to a member taking 쪽지.
+  if (to.data.acceptMessages !== false)
+    await ctx.add(MESSAGES, {
+      from: ctx.member.id,
+      to: recipient,
+      body: `${from?.data.nick ?? ""}님이 ${sent.toLocaleString("ko-KR")}${named.moneyUnit ? ` ${named.moneyUnit}` : ""} 보냈습니다.`,
+      sentAt: ctx.now,
+      readAt: null,
+      gift: true,
+    });
+  if (to.data.acceptMessages !== false) ctx.notify(recipient, { unread: true });
   return { balance, nick: to.data.nick };
 }
 

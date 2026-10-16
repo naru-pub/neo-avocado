@@ -61,7 +61,7 @@ test("profiles: visitors read nicknames only, members the whole profile", async 
   assert.ok(!profiles.queryable.includes("commentAlerts"));
 });
 
-test("profiles: a member edits their own nickname and preferences, nothing else", () => {
+test("profiles: a member edits their own nickname and preferences, nothing else", async () => {
   const before = {
     id: "m-1",
     data: {
@@ -72,26 +72,54 @@ test("profiles: a member edits their own nickname and preferences, nothing else"
       mainCharacter: "hero",
     },
   };
-  const write = (member, data, operation = "update", id = "m-1") =>
-    profiles.canWrite(rulesCtx(member), {
+  const write = (member, data, operation = "update", id = "m-1", tables) =>
+    profiles.canWrite(rulesCtx(member, tables), {
       operation,
       before: { ...before, id },
       after: { id, data: { ...before.data, ...data } },
     });
-  assert.equal(write("m-1", { nick: "카도", acceptMessages: false }), true);
+  assert.equal(
+    await write("m-1", { nick: "카도", acceptMessages: false }),
+    true,
+  );
   // Not someone else's, not by a visitor, not made or deleted directly.
-  assert.equal(write("m-2", { nick: "카도" }, "update", "m-1"), false);
-  assert.equal(write(null, { nick: "카도" }), false);
-  assert.equal(write("m-1", {}, "create"), false);
-  assert.equal(write("m-1", {}, "delete"), false);
+  assert.equal(await write("m-2", { nick: "카도" }, "update", "m-1"), false);
+  assert.equal(await write(null, { nick: "카도" }), false);
+  assert.equal(await write("m-1", {}, "create"), false);
+  assert.equal(await write("m-1", {}, "delete"), false);
   // Fields site functions keep stay as they were.
-  assert.equal(write("m-1", { mainCharacter: "villain" }), false);
-  assert.equal(write("m-1", { owner: "m-2" }), false);
+  assert.equal(await write("m-1", { mainCharacter: "villain" }), false);
+  assert.equal(await write("m-1", { owner: "m-2" }), false);
   // A nickname is 1–20 characters without surrounding spaces.
-  assert.equal(write("m-1", { nick: " 아보" }), false);
-  assert.equal(write("m-1", { nick: "" }), false);
-  assert.equal(write("m-1", { nick: "가".repeat(21) }), false);
-  assert.equal(write("m-1", { commentAlerts: "yes" }), false);
+  assert.equal(await write("m-1", { nick: " 아보" }), false);
+  assert.equal(await write("m-1", { nick: "" }), false);
+  assert.equal(await write("m-1", { nick: "가".repeat(21) }), false);
+  assert.equal(await write("m-1", { commentAlerts: "yes" }), false);
+  // Not a reserved word (cf_prohibit_id): the original's list until the
+  // owner writes their own, matched whole and ignoring case.
+  assert.equal(await write("m-1", { nick: "관리자" }), false);
+  assert.equal(await write("m-1", { nick: "Admin" }), false);
+  assert.equal(await write("m-1", { nick: "관리자님" }), true);
+  const own = {
+    [`${P}settings`]: { community: { reservedNicks: "카도, 별" } },
+  };
+  assert.equal(await write("m-1", { nick: "별" }, "update", "m-1", own), false);
+  assert.equal(
+    await write("m-1", { nick: "관리자" }, "update", "m-1", own),
+    true,
+  );
+  // A nickname taken before it was reserved may stay as preferences change.
+  assert.equal(
+    await profiles.canWrite(rulesCtx("m-1"), {
+      operation: "update",
+      before: { id: "m-1", data: { ...before.data, nick: "운영자" } },
+      after: {
+        id: "m-1",
+        data: { ...before.data, nick: "운영자", acceptMessages: false },
+      },
+    }),
+    true,
+  );
 });
 
 test("own: a member reads their own wallet and inventory, a visitor nothing", () => {
@@ -128,7 +156,33 @@ test("settings: only the community settings, trimmed to what pages use", () => {
       characterCreation: true,
       characterEditing: true,
       characterLimit: 1,
+      stipulation: "",
+      characterNotice: "",
+      reservedNicks:
+        "admin,administrator,관리자,운영자,어드민,주인장,webmaster,웹마스터,sysop,시삽,시샵,manager,매니저,메니저,root,루트,su,guest,방문객",
     },
+  );
+  // The rules to agree to, for a member about to join.
+  assert.deepEqual(
+    Object.entries(
+      settings.present(rulesCtx("m-1"), {
+        document: {
+          id: "community",
+          data: {
+            stipulation: "규칙",
+            characterNotice: "유의",
+            reservedNicks: "",
+          },
+        },
+      }),
+    ).filter(([key]) =>
+      ["stipulation", "characterNotice", "reservedNicks"].includes(key),
+    ),
+    [
+      ["stipulation", "규칙"],
+      ["characterNotice", "유의"],
+      ["reservedNicks", ""],
+    ],
   );
 });
 

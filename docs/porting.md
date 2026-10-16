@@ -53,6 +53,12 @@ workflows to the port, and says what was left out and why.
 - 췩 (`bo_use_chick`, posting by uploading pictures first): a post already
   takes its picture as a managed upload in the same form.
 - 글읽기 포인트 (`bo_read_point`): it would write a ledger row on every read.
+- The Twitter timeline widget (`{{TWITTER}}`, `templete/txt.twitter.php`):
+  the embed no longer works; the placeholder is removed from site_main.
+- Deleting old mail automatically (`cf_memo_del`, 180 days): the owner prefers
+  that nothing is deleted unasked; members remove mail from their own box.
+- Birth year (`mb_birth`) on 계정정보: neo-avocado asks for none; the join
+  date (the profile's making) is shown.
 
 ## How it is built
 

@@ -1,6 +1,8 @@
 // The community settings members' pages need (message cost, starting stat
-// points, the shop's categories, NPC and greeting), and nothing else the admin
-// keeps there.
+// points, the shop's categories, NPC and greeting, the rules a new member
+// agrees to and the reserved nicknames), and nothing else the admin keeps
+// there. A signed-in Naru member reads them before joining the community.
+import { RESERVED_NICKS } from "../modules/shared.js";
 import type {
   Data,
   PresentArgs,
@@ -26,6 +28,20 @@ export function present(ctx: ReadCtx, { document }: PresentArgs): Data {
     characterLimit: Number.isSafeInteger(document.data.characterLimit)
       ? document.data.characterLimit
       : 1,
+    // 커뮤니티 활동 규칙 and 캐릭터 유의사항 (cf_stipulation, cf_privacy),
+    // shown when joining (skin/member/basic/register.skin.php).
+    stipulation:
+      typeof document.data.stipulation === "string"
+        ? document.data.stipulation
+        : "",
+    characterNotice:
+      typeof document.data.characterNotice === "string"
+        ? document.data.characterNotice
+        : "",
+    reservedNicks:
+      typeof document.data.reservedNicks === "string"
+        ? document.data.reservedNicks
+        : RESERVED_NICKS,
   };
 }
 

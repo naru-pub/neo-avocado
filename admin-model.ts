@@ -45,15 +45,17 @@ export interface Model {
 export const models: Record<string, Model> = {
   content: {
     label: "내용 페이지",
-    help: "안내·소개 페이지를 만듭니다. 모바일 본문이 비어 있으면 기본 본문을 표시합니다. 읽기 등급은 회원 등급 기준입니다.",
+    help: "안내·소개 페이지를 만듭니다. 모바일 본문이 비어 있으면 기본 본문을 표시합니다. 읽기 등급은 회원 등급 기준이고, 1이면 손님도 읽습니다. ID를 site_main으로 만들면 메인 화면을 대신하며, 본문의 {{VISUAL_SLIDE}}는 메인 슬라이드, {{OUTLOGIN}}은 회원 카드, {{LOGIN}}·{{JOIN}}은 손님에게 보이는 로그인 링크, {{LOGOUT}}·{{MYPAGE}}는 회원에게 보이는 로그아웃·마이페이지 링크가 됩니다. {{BGM}}과 {{TWITTER}}는 지워집니다(배경음악은 상단의 재생 버튼으로 듣습니다).",
     fields: [
       { key: "name", label: "제목", required: true, max: 120 },
       { key: "enabled", label: "공개 중", type: "checkbox", default: true },
       {
         key: "readLevel",
-        label: "읽기 등급 (1~10)",
+        label: "읽기 등급 (1~10, 1: 손님도 읽음)",
         type: "number",
-        default: 2,
+        // The original's content pages have no read level (bbs/content.php):
+        // everyone reads them, site_main included (main.php).
+        default: 1,
       },
       {
         key: "format",
@@ -122,7 +124,17 @@ export const models: Record<string, Model> = {
           ["weekly", "주간"],
         ],
       },
-      { key: "side", label: "세력 (빈칸: 공통)", max: 40 },
+      // quest_form.php's 수행가능: one of the 소속 list, or everyone's.
+      {
+        key: "side",
+        label: "수행 가능 소속 (비우면 공통)",
+        type: "pick",
+        from: "sides",
+        valueBy: "name",
+        optional: true,
+        fallbackText: true,
+        max: 40,
+      },
       {
         key: "startsAt",
         label: "시작 (한국 시간)",
@@ -271,7 +283,7 @@ export const models: Record<string, Model> = {
   },
   members: {
     label: "회원 등급·운영 역할",
-    help: "가입 승인·차단은 나루 데이터베이스의 사이트 회원 관리에서 변경합니다. 여기서는 회원 번호별 게시판 등급과 운영 역할만 정합니다.",
+    help: "가입 승인·차단은 나루 데이터베이스의 사이트 회원 관리에서 변경합니다. 여기서는 회원 번호별 게시판 등급과 운영 역할만 정합니다. 목록은 최근 접속 순으로 등급·역할·경고·탈퇴일·최종 접속을 보여 주고, 닉네임이나 회원 번호로 찾습니다.",
     fields: [
       { key: "level", label: "회원 등급 (1~10)", type: "number", default: 2 },
       {
@@ -849,7 +861,7 @@ export const models: Record<string, Model> = {
   // adm/community_form.php (커뮤니티 설정): one page, in its sections.
   settings: {
     label: "커뮤니티 설정",
-    help: "커뮤니티 전체에 적용되는 설정입니다: 공개 여부, 캐릭터 생성·수정, 탐색, 로그인·가입 보상, 쪽지, 상점, 캐릭터 보기와 화폐·경험치·소속·종족의 이름. 원본의 커뮤니티 설정과 같습니다.",
+    help: "커뮤니티 전체에 적용되는 설정입니다: 공개 여부, 가입할 때 동의받을 규칙과 쓸 수 없는 닉네임, 캐릭터 생성·수정, 탐색, 로그인·가입 보상, 쪽지, 상점, 캐릭터 보기와 화폐·경험치·소속·종족의 이름. 원본의 커뮤니티 설정과 같습니다.",
     fixedId: "community",
     fields: [
       { type: "heading", label: "홈페이지 기본환경 설정" },
@@ -865,6 +877,31 @@ export const models: Record<string, Model> = {
         key: "bgm",
         label: "배경음악 (유튜브 재생목록·영상 주소, 빈칸: 끄기)",
         max: 300,
+      },
+      // adm/config_form.php's 회원가입 설정: what a new member agrees to
+      // (cf_stipulation, cf_privacy) and the nicknames no one may take
+      // (cf_prohibit_id, the original's list until changed).
+      { type: "heading", label: "회원가입 설정" },
+      {
+        key: "stipulation",
+        label:
+          "커뮤니티 활동 규칙 (가입할 때 동의를 받습니다, 빈칸: 묻지 않음)",
+        type: "textarea",
+        max: 20000,
+      },
+      {
+        key: "characterNotice",
+        label: "캐릭터 유의사항 (가입할 때 동의를 받습니다, 빈칸: 묻지 않음)",
+        type: "textarea",
+        max: 20000,
+      },
+      {
+        key: "reservedNicks",
+        label: "사용할 수 없는 닉네임 (쉼표로 구분)",
+        type: "textarea",
+        default:
+          "admin,administrator,관리자,운영자,어드민,주인장,webmaster,웹마스터,sysop,시삽,시샵,manager,매니저,메니저,root,루트,su,guest,방문객",
+        max: 2000,
       },
       { type: "heading", label: "기능 설정" },
       {
@@ -1007,13 +1044,18 @@ const schedule = [
 ];
 models.design = {
   label: "디자인",
-  help: "사이트 이름, 로고, 배경과 색을 정합니다. 디자인 사용을 끄면 원본처럼 꾸미지 않은 기본 화면이고, 켜면 아래 배경·글꼴·색이 적용됩니다. 이미지는 파일로 올리거나 HTTPS 주소로 입력합니다. 회원과 손님 모두에게 적용됩니다.",
+  help: "사이트 이름, 로고, 배경(색상·반복·위치, 모바일 배경)과 색을 정합니다. 디자인 사용을 끄면 원본처럼 꾸미지 않은 기본 화면이고, 켜면 아래 배경·글꼴·색이 적용됩니다. 이미지는 파일로 올리거나 HTTPS 주소로 입력합니다. 회원과 손님 모두에게 적용됩니다.",
   fixedId: "site",
   fields: [
     { key: "enabled", label: "디자인 사용", type: "checkbox" },
     { key: "title", label: "사이트 이름", max: 60 },
     // cf_site_descript, cf_favicon (head.sub.php).
-    { key: "description", label: "사이트 설명 (검색·공유에 보임)", max: 300 },
+    // Link previews read index.html's own tags (README, 링크 미리보기).
+    {
+      key: "description",
+      label: "사이트 설명 (링크 미리보기는 index.html에서 고칩니다)",
+      max: 300,
+    },
     {
       key: "favicon",
       label: "파비콘 (브라우저 탭 아이콘)",
@@ -1022,12 +1064,60 @@ models.design = {
       max: 2000,
     },
     { key: "logo", label: "로고 이미지", type: "url", image: true, max: 2000 },
+    // adm/design_form.php's m_logo and m_background, and the background's
+    // 색상코드, 배경반복 and 배경위치.
+    {
+      key: "mobileLogo",
+      label: "모바일 로고 이미지 (빈칸: 로고 이미지)",
+      type: "url",
+      image: true,
+      max: 2000,
+    },
     {
       key: "background",
       label: "배경 이미지",
       type: "url",
       image: true,
       max: 2000,
+    },
+    {
+      key: "mobileBackground",
+      label: "모바일 배경 이미지 (빈칸: 배경 이미지)",
+      type: "url",
+      image: true,
+      max: 2000,
+    },
+    {
+      key: "backgroundColor",
+      label: "배경 색상코드 (#000000 꼴, 빈칸: 바탕색)",
+      max: 7,
+    },
+    {
+      key: "backgroundRepeat",
+      label: "배경 반복",
+      type: "choice",
+      options: [
+        ["repeat", "반복"],
+        ["no-repeat", "반복없음"],
+        ["repeat-x", "가로반복"],
+        ["repeat-y", "세로반복"],
+      ],
+    },
+    {
+      key: "backgroundPosition",
+      label: "배경 위치",
+      type: "choice",
+      options: [
+        ["left top", "왼쪽 상단"],
+        ["left center", "왼쪽 중단"],
+        ["left bottom", "왼쪽 하단"],
+        ["center top", "중간 상단"],
+        ["center center", "중간 중단"],
+        ["center bottom", "중간 하단"],
+        ["right top", "오른쪽 상단"],
+        ["right center", "오른쪽 중단"],
+        ["right bottom", "오른쪽 하단"],
+      ],
     },
     {
       key: "headerBackground",
@@ -1486,6 +1576,12 @@ export function buildRecord(section, values, previous, references) {
         `이미 등록된 레시피 조합입니다: ${same.data.name ?? same.id}.`,
       );
   }
+  if (
+    section === "design" &&
+    data.backgroundColor &&
+    !/^#[0-9a-fA-F]{6}$/.test(data.backgroundColor)
+  )
+    throw new Error("배경 색상코드는 #000000 꼴로 입력하세요.");
   if (section === "content" && (data.readLevel < 1 || data.readLevel > 10))
     throw new Error("읽기 등급은 1~10입니다.");
   if (section === "quests") {
@@ -1801,4 +1897,39 @@ export function characterReview(
     rows: state ? searched.filter((row) => row.data.state === state) : searched,
     counts,
   };
+}
+
+/**
+ * 회원 관리's list (adm/member_list.php): each member record with its
+ * nickname, level, role, warnings, leaving date and last visit (presence),
+ * found by nickname or member number, newest visit first.
+ */
+export function memberList(members, profiles, presence, query = "") {
+  const needle = query.trim().toLocaleLowerCase();
+  return members
+    .map((row) => {
+      const nick = profiles.find((profile) => profile.id === row.id)?.data.nick;
+      const lastSeen =
+        presence.find((visit) => visit.id === row.id)?.data.at ?? null;
+      return { row, nick: nick ?? `${row.id} (닉네임 없음)`, lastSeen };
+    })
+    .filter(
+      ({ row, nick }) =>
+        !needle || `${nick} ${row.id}`.toLocaleLowerCase().includes(needle),
+    )
+    .sort((a, b) => (b.lastSeen ?? 0) - (a.lastSeen ?? 0));
+}
+
+/** One member's line in 회원 관리: what the original's columns show. */
+export function memberSummary({ row, lastSeen }) {
+  const data = row.data;
+  return [
+    `등급 ${Number.isSafeInteger(data.level) ? data.level : 2}`,
+    data.role === "moderator" ? "게시물 운영자" : "회원",
+    data.warnings > 0 ? `경고 ${data.warnings}회` : "",
+    data.left ? `탈퇴 ${data.left}` : "",
+    `최종 접속 ${lastSeen ? new Date(lastSeen).toLocaleString("ko-KR") : "기록 없음"}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }

@@ -11,7 +11,7 @@ import {
   lacking,
 } from "../../modules/shared.js";
 import { callsUnread } from "../../modules/roleplay.js";
-import type { Ctx, NaruDocument } from "../../modules/naru-types.js";
+import type { Ctx, NaruDocument, Where } from "../../modules/naru-types.js";
 
 export const readOnly = ["messageStatus", "conversations"];
 
@@ -133,10 +133,10 @@ export async function readMessage(ctx: Ctx, { id }: { id?: string } = {}) {
       ...message.data,
       readAt: ctx.now,
     });
-  const { unread } = await messageStatus(ctx);
+  const status = await unreadOf(ctx);
   // The member's other tabs clear their notice too.
-  if (receipt) ctx.notify(ctx.member.id, { unread });
-  return { document: message, unread };
+  if (receipt) ctx.notify(ctx.member.id, status);
+  return { document: message, ...status };
 }
 
 /**
@@ -158,40 +158,58 @@ export async function removeMessage(ctx: Ctx, { id }: { id?: string } = {}) {
   return null;
 }
 
-/** Unread mail, and calls/comment notices since the member last looked. */
+/**
+ * Unread mail (how many, as outlogin.skin.2.php's $memo_not_read), and
+ * calls/comment notices since the member last looked.
+ */
 export async function messageStatus(ctx: Ctx) {
-  const page = await ctx.list(MESSAGES, {
+  const count = await ctx.count(MESSAGES, {
     filter: { to: ctx.member.id, readAt: null },
     where: { ne: ["hiddenTo", true] },
-    size: 1,
   });
   return {
-    unread: page.documents.length > 0,
+    unread: count > 0,
+    unreadCount: count,
     calls: await callsUnread(ctx),
   };
 }
 
-/** The messages between the member and others, as many as a list reads. */
-async function correspondence(
-  ctx: Ctx,
-  partner: string | null = null,
-): Promise<NaruDocument[]> {
+/** Messages a 쪽지함 reads from each box: see correspondence. */
+const BOX_LIMIT = 1000;
+/** Messages a conversation shows at a time, newest first. */
+const THREAD_PAGE = 50;
+
+/**
+ * The member's inbox and sent box, newest first. Each box is read 100 at a
+ * time up to BOX_LIMIT messages: 20 of a call's 100 operations, and at most
+ * 2,000 messages of up to 5,000 characters inside a call's 32 MiB. A member
+ * with more sees correspondents from their 1,000 newest of each in the
+ * 쪽지함 (counts over those); a conversation reads its pair's own messages
+ * by date, so older ones stay reachable there (이전 쪽지 더 보기).
+ */
+async function correspondence(ctx: Ctx): Promise<NaruDocument[]> {
   const me = ctx.member.id;
-  const read = (box: "inbox" | "sent") =>
-    ctx.list(MESSAGES, {
-      filter: {
-        [box === "inbox" ? "to" : "from"]: me,
-        ...(partner ? { [box === "inbox" ? "from" : "to"]: partner } : {}),
-      },
-      where: { ne: [box === "inbox" ? "hiddenTo" : "hiddenFrom", true] },
-      sort: [[{ metadata: "createdAt" }, "desc"]],
-      size: 100,
-    });
+  const read = async (box: "inbox" | "sent") => {
+    const rows: NaruDocument[] = [];
+    let after: string | null = null;
+    do {
+      const page = await ctx.list(MESSAGES, {
+        filter: { [box === "inbox" ? "to" : "from"]: me },
+        where: { ne: [box === "inbox" ? "hiddenTo" : "hiddenFrom", true] },
+        sort: [[{ metadata: "createdAt" }, "desc"]],
+        size: 100,
+        after,
+      });
+      rows.push(...page.documents);
+      after = page.nextCursor;
+    } while (after && rows.length < BOX_LIMIT);
+    return rows;
+  };
   const [inbox, sent] = await Promise.all([read("inbox"), read("sent")]);
-  return [...inbox.documents, ...sent.documents].sort(
-    (a, b) => b.data.sentAt - a.data.sentAt || (a.id < b.id ? 1 : -1),
-  );
+  return [...inbox, ...sent].sort(newestFirst);
 }
+const newestFirst = (a: NaruDocument, b: NaruDocument) =>
+  b.data.sentAt - a.data.sentAt || (a.id < b.id ? 1 : -1);
 
 /**
  * 쪽지함 as the original's (mypage/memo/index.php): one entry a member the
@@ -229,38 +247,75 @@ export async function conversations(
   return {
     total: all.length,
     documents: all.slice((page - 1) * 5, page * 5),
-    unread: (await messageStatus(ctx)).unread,
+    ...(await unreadOf(ctx)),
   };
+}
+
+/** What a page's mail notice shows: whether any is unread, and how many. */
+async function unreadOf(ctx: Ctx) {
+  const { unread, unreadCount } = await messageStatus(ctx);
+  return { unread, unreadCount };
 }
 
 /**
  * The messages between the member and one other (memo_view.php), oldest
- * first; what they sent is read now.
+ * first: the newest 50, or with `before` (the oldest one's sentAt) the 50
+ * before those. What the other sent and the member has not read is read
+ * now, the newest 20 a call.
  */
 export async function conversation(
   ctx: Ctx,
-  { partner }: { partner?: string } = {},
+  { partner, before = null }: { partner?: string; before?: number | null } = {},
 ) {
-  if (typeof partner !== "string" || partner === ctx.member.id)
+  if (
+    typeof partner !== "string" ||
+    partner === ctx.member.id ||
+    (before !== null && !Number.isSafeInteger(before))
+  )
     ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
       reason: "invalid_input",
     });
-  const rows = await correspondence(ctx, partner);
+  const me = ctx.member.id;
+  const read = (from: string, to: string, hidden: string) =>
+    ctx.list(MESSAGES, {
+      filter: { from, to },
+      where: {
+        all: [
+          { ne: [hidden, true] },
+          ...(before === null ? [] : [{ lt: ["sentAt", before] } as Where]),
+        ],
+      },
+      sort: [["sentAt", "desc"]],
+      size: THREAD_PAGE + 1,
+    });
+  const [received, sent] = await Promise.all([
+    read(partner, me, "hiddenTo"),
+    read(me, partner, "hiddenFrom"),
+  ]);
+  const all = [...received.documents, ...sent.documents].sort(newestFirst);
+  const rows = all.slice(0, THREAD_PAGE);
+  const more =
+    all.length > THREAD_PAGE ||
+    Boolean(received.nextCursor) ||
+    Boolean(sent.nextCursor);
   // At most 20 receipts a call, inside a call's write budget; the rest
-  // are read the next time the conversation opens.
-  let read = 0;
-  for (const row of rows)
-    if (
-      row.data.to === ctx.member.id &&
-      row.data.readAt === null &&
-      read < 20
-    ) {
-      row.data = (
-        await ctx.set(MESSAGES, row.id, { ...row.data, readAt: ctx.now })
-      ).data;
-      read += 1;
-    }
-  const { unread } = await messageStatus(ctx);
-  if (read) ctx.notify(ctx.member.id, { unread });
-  return { documents: rows.reverse(), unread };
+  // are read the next time the conversation opens. Older unread ones count
+  // too, so a long conversation does not leave its 쪽지 notice on.
+  const unread = await ctx.list(MESSAGES, {
+    filter: { from: partner, to: me, readAt: null },
+    where: { ne: ["hiddenTo", true] },
+    sort: [["sentAt", "desc"]],
+    size: 20,
+  });
+  for (const row of unread.documents) {
+    const saved = await ctx.set(MESSAGES, row.id, {
+      ...row.data,
+      readAt: ctx.now,
+    });
+    const shown = rows.find((message) => message.id === row.id);
+    if (shown) shown.data = saved.data;
+  }
+  const status = await unreadOf(ctx);
+  if (unread.documents.length) ctx.notify(me, status);
+  return { documents: rows.reverse(), more, ...status };
 }

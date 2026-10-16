@@ -106,6 +106,14 @@ function fakeCtx({ now = Date.parse("2030-01-01T03:00:00Z"), roll = 0 } = {}) {
               ([key, value]) => row.data[key] === value,
             ) && matches(row, options.where),
         );
+      // Sorted by data fields; metadata keys keep the order written.
+      for (const [key, direction] of [...(options.sort ?? [])].reverse())
+        if (typeof key === "string")
+          rows.sort((a, b) => {
+            const [x, y] = [a.data[key], b.data[key]];
+            const order = x < y ? -1 : x > y ? 1 : 0;
+            return direction === "desc" ? -order : order;
+          });
       const start = Number(options.after ?? 0);
       const end = start + (options.size ?? 50);
       return {
@@ -174,12 +182,12 @@ async function communityWrite(
     const after = { id, data };
     if (
       !before ||
-      profileRule.canWrite(ctx, {
+      (await profileRule.canWrite(ctx, {
         collection,
         operation: "update",
         before,
         after,
-      }) !== true
+      })) !== true
     )
       throw Object.assign(new Error("Denied."), { code: "ACCESS_DENIED" });
     return { document: await ctx.set(collection, id, data) };
@@ -606,7 +614,10 @@ test("private mail checks parties for listing, reading and deletion and marks on
   assert.equal((await readMessage(ctx, { id })).document.data.readAt, ctx.now);
   assert.equal((await messageStatus(ctx)).unread, false);
   // The receipt tells the recipient's other tabs; a second read sends nothing.
-  assert.deepEqual(live.at(-1), { member: "m-2", data: { unread: false } });
+  assert.deepEqual(live.at(-1), {
+    member: "m-2",
+    data: { unread: false, unreadCount: 0 },
+  });
   await readMessage(ctx, { id });
   assert.equal(live.length, 2);
   // Removing it takes it from the recipient's box only; the sender keeps
@@ -705,7 +716,10 @@ test("a conversation shows both sides oldest first and reads what the other sent
     ["안녕", "반가워"],
   );
   assert.equal(talk.unread, false);
-  assert.deepEqual(live.at(-1), { member: "m-1", data: { unread: false } });
+  assert.deepEqual(live.at(-1), {
+    member: "m-1",
+    data: { unread: false, unreadCount: 0 },
+  });
   assert.equal((await conversations(ctx)).documents[0].unread, false);
   assert.equal(
     await refusal(conversation(ctx, { partner: "m-1" })),
@@ -2091,7 +2105,7 @@ test("logs and comments speak as the member's own live character, fixed at posti
     type: "main",
     title: "Brave",
     titleImage: "https://example.com/brave.png",
-    portrait: "https://example.com/coat.png",
+    portrait: "https://example.com/hero.png",
   });
   for (const character of ["rival", "gone", "missing", 7])
     assert.equal(
@@ -2809,6 +2823,11 @@ test("the site frame shows only safe design values and menus/banners a reader ma
     title: "아보카도",
     logo: "javascript:alert(1)",
     background: "https://cdn.example/bg.png",
+    mobileBackground: "http://cdn.example/m.png",
+    mobileLogo: "https://cdn.example/m-logo.png",
+    backgroundColor: "red;}",
+    backgroundRepeat: "space;}",
+    backgroundPosition: "center bottom",
     font: "comic",
     colors: { accent: "#123456", ink: "red;}" },
   });
@@ -2847,7 +2866,13 @@ test("the site frame shows only safe design values and menus/banners a reader ma
     description: "",
     favicon: null,
     logo: null,
+    mobileLogo: "https://cdn.example/m-logo.png",
     background: "https://cdn.example/bg.png",
+    // Only HTTPS pictures, a #rrggbb colour and the listed choices.
+    mobileBackground: null,
+    backgroundColor: null,
+    backgroundRepeat: "repeat",
+    backgroundPosition: "center bottom",
     headerBackground: null,
     font: "sans",
     colors: { accent: "#123456" },
@@ -4552,10 +4577,10 @@ test("items stay out of posts or 조합 as the owner marks them, and stats keep 
 test("a readable site_main page takes the home's place, and is not an 안내 page", async () => {
   const { ctx, table } = fakeCtx();
   assert.equal((await site(ctx)).main, false);
+  // Without a read level a page is everyone's, as the original's have none.
   table(`${P}content`).set("site_main", {
     name: "메인",
     body: "<p>환영합니다</p>",
-    readLevel: 1,
   });
   table(`${P}content`).set("rules", {
     name: "규칙",
@@ -4566,6 +4591,96 @@ test("a readable site_main page takes the home's place, and is not an 안내 pag
   assert.deepEqual(
     (await contentPages(ctx)).documents.map((row) => row.id),
     ["rules"],
+  );
+  ctx.member = null;
+  assert.equal((await site(ctx)).main, true);
+  assert.equal(
+    (await contentPage(ctx, { id: "site_main" })).page.body,
+    "<p>환영합니다</p>",
+  );
+});
+
+test("joining refuses reserved nicknames and asks agreement to the owner's rules", async () => {
+  const { ctx, table } = fakeCtx();
+  // The original's cf_prohibit_id until the owner writes their own.
+  assert.equal(await refusal(join(ctx, { nick: "운영자" })), "reserved_nick");
+  assert.equal(await refusal(join(ctx, { nick: "ADMIN" })), "reserved_nick");
+  table(`${P}settings`).set("community", {
+    reservedNicks: "별, 달",
+    stipulation: "서로 존중합니다.",
+    characterNotice: "",
+  });
+  assert.equal(await refusal(join(ctx, { nick: "달" })), "reserved_nick");
+  assert.equal(await refusal(join(ctx, { nick: "아보" })), "not_agreed");
+  assert.equal(table(`${P}profiles`).has("m-1"), false);
+  ctx.now += 1000;
+  await join(ctx, { nick: "운영자", agreed: true });
+  assert.equal(table(`${P}profiles`).get("m-1").nick, "운영자");
+  assert.deepEqual(table(`${P}members`).get("m-1"), {
+    role: "member",
+    requestedAt: ctx.now,
+    agreedAt: ctx.now,
+  });
+  // The site's owner may take a reserved word.
+  ctx.member.id = "m-2";
+  ctx.owner = true;
+  table(`${P}settings`).set("community", { reservedNicks: "별" });
+  await join(ctx, { nick: "별" });
+  assert.equal(table(`${P}members`).get("m-2").agreedAt, undefined);
+});
+
+test("mail beyond a hundred messages stays in the 쪽지함, and a conversation pages back", async () => {
+  const { ctx, table } = fakeCtx();
+  const start = ctx.now;
+  // 130 from m-2 long ago, then one each from 150 others.
+  for (let n = 0; n < 130; n++)
+    table(`${P}messages`).set(`old-${n}`, {
+      from: "m-2",
+      to: "m-1",
+      body: `옛 쪽지 ${n}`,
+      sentAt: start + n,
+      readAt: null,
+    });
+  for (let n = 0; n < 150; n++)
+    table(`${P}messages`).set(`new-${n}`, {
+      from: `other-${n}`,
+      to: "m-1",
+      body: "안녕",
+      sentAt: start + 1000 + n,
+      readAt: start,
+    });
+  const listed = await conversations(ctx, { page: 31 });
+  assert.equal(listed.total, 151);
+  assert.deepEqual(
+    listed.documents.map((entry) => [entry.partner, entry.count]),
+    [["m-2", 130]],
+  );
+  assert.equal(listed.unreadCount, 130);
+  assert.equal((await messageStatus(ctx)).unreadCount, 130);
+  // The newest 50, oldest first; the newest 20 unread are read.
+  const first = await conversation(ctx, { partner: "m-2" });
+  assert.equal(first.documents.length, 50);
+  assert.equal(first.documents[0].data.body, "옛 쪽지 80");
+  assert.equal(first.documents.at(-1).data.body, "옛 쪽지 129");
+  assert.equal(first.more, true);
+  assert.equal(first.unreadCount, 110);
+  assert.equal(first.documents.at(-1).data.readAt, ctx.now);
+  assert.equal(first.documents.at(-21).data.readAt, null);
+  const second = await conversation(ctx, {
+    partner: "m-2",
+    before: first.documents[0].data.sentAt,
+  });
+  assert.equal(second.documents[0].data.body, "옛 쪽지 30");
+  assert.equal(second.documents.at(-1).data.body, "옛 쪽지 79");
+  const third = await conversation(ctx, {
+    partner: "m-2",
+    before: second.documents[0].data.sentAt,
+  });
+  assert.equal(third.documents.length, 30);
+  assert.equal(third.more, false);
+  assert.equal(
+    await refusal(conversation(ctx, { partner: "m-2", before: "soon" })),
+    "invalid_input",
   );
 });
 
@@ -4885,4 +5000,76 @@ test("the board rule lets comments as long as the comments function does", async
     });
   assert.equal(await write("가".repeat(2000)), true);
   assert.equal(await write("가".repeat(2001)), false);
+});
+
+test("a settlement pays once and not its own moderator; calls reach a member once a post; tags don't reveal 멤버공개", async () => {
+  const { ctx, table, sent } = fakeCtx();
+  table(`${P}boards`).set("calc", {
+    name: "정산",
+    kind: "settlement",
+    categories: ["이벤트"],
+  });
+  table(`${P}characters`).set("hero", { owner: "m-1", name: "용사" });
+  table(`${P}members`).set("m-2", { level: 2, role: "moderator" });
+  const request = (
+    await posts.write(ctx, {
+      data: {
+        board: "calc",
+        category: "이벤트",
+        text: "참여",
+        character: "hero",
+      },
+    })
+  ).document;
+  ctx.member = { id: "m-2" };
+  await posts.settle(ctx, { id: request.id, state: "정산완료", money: 10 });
+  assert.equal(
+    await refusal(
+      posts.settle(ctx, { id: request.id, state: "정산완료", money: 10 }),
+    ),
+    "settled",
+  );
+  // Changing only the state is still the staff's.
+  await posts.settle(ctx, { id: request.id, state: "반려" });
+  assert.equal(table(`${P}wallets`).get("m-1").balance, 10);
+  const own = (
+    await posts.write(ctx, {
+      data: { board: "calc", category: "이벤트", text: "내 것" },
+    })
+  ).document;
+  assert.equal(
+    await refusal(
+      posts.settle(ctx, { id: own.id, state: "정산완료", money: 5 }),
+    ),
+    "own_settlement",
+  );
+
+  // [[name]] removed and put back does not call them again.
+  table(`${P}profiles`).set("m-1", { nick: "하나" });
+  table(`${P}profiles`).set("m-3", { nick: "셋" });
+  ctx.member = { id: "m-1" };
+  const post = (
+    await posts.write(ctx, {
+      data: {
+        board: "default",
+        image: "https://example.com/a.png",
+        text: "[[셋]] 안녕",
+      },
+    })
+  ).document;
+  const calls = () =>
+    [...table(`${P}calls`).values()].filter((row) => row.to === "m-3").length;
+  assert.equal(calls(), 1);
+  let current = post;
+  for (const text of ["안녕", "[[셋]] 다시"]) {
+    current = (
+      await posts.write(ctx, {
+        id: current.id,
+        revision: current.revision,
+        data: { ...current.data, text },
+      })
+    ).document;
+  }
+  assert.equal(calls(), 1);
+  void sent;
 });

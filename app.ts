@@ -33,7 +33,7 @@ import "./app/shop.js";
 import "./app/messages.js";
 import "./app/calls.js";
 import "./app/content.js";
-import "./app/mypage.js";
+import { createCharacter } from "./app/mypage.js";
 import "./app/couples.js";
 import { openRoute } from "./app/router.js";
 
@@ -78,6 +78,8 @@ $("editProfile").onclick = () => {
     ],
     async ({ nick, acceptMessages, commentAlerts }) => {
       if (!nick) throw new Error("닉네임을 입력해 주세요.");
+      if (nick !== profile.data.nick && reserved(await settings(), nick))
+        throw new Error(RESERVED);
       // A member's own profile is written directly; rules/profiles.js
       // lets them change their nickname and preferences only.
       const saved = await state.member
@@ -94,6 +96,40 @@ $("editProfile").onclick = () => {
     },
   );
 };
+/** The community settings (rules/settings.js), or none while unreadable. */
+const settings = () =>
+  collection(COLLECTION.settings)
+    .get("community")
+    .then(
+      (row) => row.data,
+      () => ({}),
+    );
+const RESERVED = "이미 예약된 단어로 사용할 수 없는 닉네임입니다.";
+/**
+ * Whether a nickname is reserved (cf_prohibit_id, lib/register.lib.php);
+ * the profiles rule and membership:join refuse it too. The owner may.
+ */
+function reserved(community, nick) {
+  if (state.owner) return false;
+  return String(community.reservedNicks ?? "")
+    .split(",")
+    .some(
+      (word) => word.trim() && word.trim().toLowerCase() === nick.toLowerCase(),
+    );
+}
+/**
+ * Before joining, the owner's 커뮤니티 활동 규칙 and 캐릭터 유의사항, each
+ * with a box to tick (register.skin.php), where written.
+ */
+async function showAgreements() {
+  const community = await settings();
+  for (const key of ["stipulation", "characterNotice"]) {
+    const text = typeof community[key] === "string" ? community[key] : "";
+    $(`${key}Text`).textContent = text;
+    $(`${key}Box`).hidden = !text.trim();
+    $<HTMLInputElement>(`${key}Agree`).required = Boolean(text.trim());
+  }
+}
 async function start() {
   await connect();
   state.member = await state.naru.members.session();
@@ -124,6 +160,7 @@ async function start() {
   };
   const profile = status.profile;
   show(profile);
+  if (!profile) await showAgreements();
   // Decoration: the card keeps its placeholder if this fails.
   showMainCharacter(profile).catch((error) => console.error(error));
   if (profile) {
@@ -167,7 +204,11 @@ $("gotoTop").onclick = (event) => {
   event.preventDefault();
   window.scrollTo({ top: 0, behavior: "smooth" });
 };
-/** The card shows the member's main character, as the original's thumbnail. */
+/**
+ * The card shows the member's main character, as the original's thumbnail;
+ * without one, 캐릭터 생성 while the owner allows it, or that it is not the
+ * time (outlogin.skin.2.php).
+ */
 async function showMainCharacter(profile) {
   const id = profile?.data.mainCharacter;
   const character = id
@@ -175,12 +216,32 @@ async function showMainCharacter(profile) {
         .get(id)
         .catch(() => null)
     : null;
-  $("cardThumb").replaceChildren(
-    character?.data.image
-      ? Object.assign(new Image(), { src: character.data.image, alt: "" })
-      : "⌘",
-  );
-  if (character) $("cardDescript").textContent = character.data.name;
+  if (character) {
+    $("cardThumb").replaceChildren(
+      character.data.image
+        ? Object.assign(new Image(), { src: character.data.image, alt: "" })
+        : "⌘",
+    );
+    $("cardDescript").textContent = character.data.name;
+    return;
+  }
+  $("cardThumb").replaceChildren("⌘");
+  if (!profile) return;
+  const settings = await collection(COLLECTION.settings)
+    .get("community")
+    .catch(() => null);
+  const open = settings?.data.characterCreation !== false;
+  $("cardDescript").textContent = open
+    ? "보유중인 캐릭터가 없습니다."
+    : "캐릭터 생성기간이 아닙니다.";
+  if (open) {
+    const create = document.createElement("button");
+    create.type = "button";
+    create.className = "point";
+    create.textContent = "캐릭터 생성";
+    create.onclick = createCharacter;
+    $("cardThumb").replaceChildren(create);
+  }
 }
 $("signOut").onclick = () =>
   run(async () => {
@@ -202,10 +263,15 @@ $("profileForm").onsubmit = (event) => {
     const nick = $<HTMLInputElement>("nick").value.trim();
     if (!nick) return;
     // 회원 번호를 ID로 쓰는 문서는 그 회원만 만들 수 있다.
-    const joined = await caller().call("community/membership:join", { nick });
+    const joined = await caller().call("community/membership:join", {
+      nick,
+      // The boxes shown are required, so the form is sent only once ticked.
+      agreed: !$("stipulationBox").hidden || !$("characterNoticeBox").hidden,
+    });
     const profile = joined.profile;
     state.nicks.set(state.member.id, Promise.resolve(nick));
     show(profile);
+    showMainCharacter(profile).catch((error) => console.error(error));
     await loadBoards();
     await loadLogs();
     listen();

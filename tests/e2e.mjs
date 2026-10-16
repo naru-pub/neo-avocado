@@ -641,7 +641,9 @@ try {
   assert.equal(await owner.locator("#adminNew").isVisible(), false);
   assert.deepEqual(await owner.locator("#adminFields h3").allTextContents(), [
     "홈페이지 기본환경 설정",
+    "회원가입 설정",
     "기능 설정",
+    "화폐",
     "쪽지",
     "상점",
     "캐릭터 보기",

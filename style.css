@@ -805,8 +805,7 @@ h1 {
   font-weight: normal;
 }
 .banners {
-  display: grid;
-  gap: 8px;
+  position: relative;
   margin: 10px 0;
 }
 .banners img,
@@ -814,6 +813,60 @@ h1 {
   display: block;
   max-width: 100%;
   height: auto;
+}
+/* templete/txt.visual.php: one slide at a time, with 이전·다음 buttons. */
+.banners .slide[hidden] {
+  display: none;
+}
+.banners .slide img {
+  margin: 0 auto;
+}
+.banners .slide-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  min-width: 32px;
+  padding: 4px 8px;
+  border: 0;
+  background: rgb(0 0 0 / 0.5);
+  color: #fff;
+  font-size: 20px;
+  line-height: 1;
+}
+.banners .slide-nav.previous {
+  left: 0;
+}
+.banners .slide-nav.next {
+  right: 0;
+}
+/* intro.php: each picture is the way to the next. */
+#introImages .intro-item {
+  display: block;
+  margin: 0 auto 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+/* register.skin.php's rules, kept as the owner wrote their lines. */
+.agreement-text {
+  max-height: 200px;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--line);
+  white-space: pre-wrap;
+}
+#cardUnread {
+  font-style: normal;
+  font-weight: bold;
+}
+@media (max-width: 700px) {
+  body.site {
+    background-image: var(
+      --site-mobile-background,
+      var(--site-background, none)
+    );
+  }
 }
 .intro {
   max-width: min(800px, calc(100vw - 32px));

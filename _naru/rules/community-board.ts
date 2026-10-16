@@ -22,7 +22,7 @@ const LOGS = `${PREFIX}logs`;
 const COMMENTS = `${PREFIX}comments`;
 export async function readable(
   ctx: ReadCtx,
-  { collection, operation, id, filter }: ReadArgs,
+  { collection, operation, id, filter, where }: ReadArgs,
 ): Promise<Where> {
   // Visitors (ctx.member null, with world read) have the guest level 1.
   const actor = await communityAccess(ctx);
@@ -51,10 +51,17 @@ export async function readable(
     (operation === "list" && !boardAllowed(target, actor, "list"))
   )
     return false;
+  // A visitor asking by #tag is not shown a 멤버공개 post's: its tags are
+  // its hidden body's, and a match alone would tell them.
+  const byTag =
+    !ctx.member &&
+    actor.role !== "moderator" &&
+    JSON.stringify(where ?? null).includes('"tags"');
   return {
     all: [
       { eq: ["board", boardId] },
       { ne: ["deleted", true] },
+      ...(byTag ? [{ ne: ["membersOnly", true] } as Where] : []),
       actor.role === "moderator"
         ? true
         : ctx.member

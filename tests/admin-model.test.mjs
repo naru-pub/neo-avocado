@@ -8,6 +8,8 @@ import {
   characterStateWrites,
   titleHoldings,
   characterReview,
+  memberList,
+  memberSummary,
 } from "../dist/admin-model.js";
 const references = {
   profiles: [
@@ -308,6 +310,25 @@ test("quest forms validate Korean scheduling and multiline images", () => {
     assert.throws(() =>
       buildRecord("quests", { ...values, ...change }, null, references),
     );
+  // 수행가능 is picked from the 소속 list once there is one.
+  const sides = [{ id: "s1", data: { name: "숲" } }];
+  assert.equal(
+    buildRecord("quests", { ...values, side: "숲" }, null, {
+      ...references,
+      sides,
+    }).data.side,
+    "숲",
+  );
+  assert.throws(() =>
+    buildRecord("quests", values, null, { ...references, sides }),
+  );
+  assert.equal(
+    buildRecord("quests", { ...values, side: "" }, null, {
+      ...references,
+      sides,
+    }).data.side,
+    "",
+  );
 });
 
 test("title ownership review searches all holders and retains equipped orphan references", () => {
@@ -374,6 +395,82 @@ test("managed content validates body sizes, artwork and read levels", () => {
     assert.throws(() =>
       buildRecord("content", { ...values, ...change }, null, references),
     );
+});
+
+test("content pages are everyone's by default, as the original's have no read level", () => {
+  assert.equal(
+    models.content.fields.find((field) => field.key === "readLevel").default,
+    1,
+  );
+});
+
+test("the design's background colour is a #rrggbb code or blank, its repeat and position listed", () => {
+  const values = {
+    enabled: true,
+    font: "sans",
+    backgroundRepeat: "no-repeat",
+    backgroundPosition: "center top",
+    backgroundColor: "#102030",
+  };
+  for (const field of models.design.fields)
+    if (field.type === "color") values[field.key] = field.default;
+    else if (!(field.key in values) && field.type !== "checkbox")
+      values[field.key] = "";
+  const row = buildRecord("design", values, null, references);
+  assert.equal(row.data.backgroundColor, "#102030");
+  assert.equal(row.data.backgroundPosition, "center top");
+  assert.equal(
+    buildRecord("design", { ...values, backgroundColor: "" }, null, references)
+      .data.backgroundColor,
+    "",
+  );
+  for (const change of [
+    { backgroundColor: "red;}" },
+    { backgroundRepeat: "space" },
+    { backgroundPosition: "middle" },
+  ])
+    assert.throws(() =>
+      buildRecord("design", { ...values, ...change }, null, references),
+    );
+});
+
+test("회원 관리 lists members by nickname with level, role, warnings, leaving and last visit", () => {
+  const members = [
+    { id: "member-a", data: { level: 3, role: "moderator", warnings: 2 } },
+    { id: "member-b", data: { role: "member", left: "2030-01-02" } },
+    { id: "member-c", data: {} },
+  ];
+  const presence = [
+    { id: "member-b", data: { at: Date.parse("2030-01-03T00:00:00Z") } },
+    { id: "member-a", data: { at: Date.parse("2030-01-01T00:00:00Z") } },
+  ];
+  const all = memberList(members, references.profiles, presence);
+  assert.deepEqual(
+    all.map((entry) => entry.nick),
+    ["B", "A", "member-c (닉네임 없음)"],
+  );
+  assert.deepEqual(
+    memberList(members, references.profiles, presence, " a ").map(
+      (entry) => entry.row.id,
+    ),
+    ["member-a"],
+  );
+  assert.deepEqual(
+    memberList(members, references.profiles, presence, "member-c").map(
+      (entry) => entry.row.id,
+    ),
+    ["member-c"],
+  );
+  const [b, a, c] = all;
+  assert.match(
+    memberSummary(a),
+    /^등급 3 · 게시물 운영자 · 경고 2회 · 최종 접속 /,
+  );
+  assert.match(
+    memberSummary(b),
+    /^등급 2 · 회원 · 탈퇴 2030-01-02 · 최종 접속 /,
+  );
+  assert.equal(memberSummary(c), "등급 2 · 회원 · 최종 접속 기록 없음");
 });
 
 test("profile field definitions validate codes and options; explore misses store null", () => {

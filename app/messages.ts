@@ -91,7 +91,7 @@ async function loadMailbox(page = 1) {
   const result = await caller().call("community/messages:conversations", {
     page,
   });
-  showUnread(result.unread);
+  showUnread(result.unread, result.unreadCount);
   $("messages").replaceChildren();
   $("messageDetail").hidden = true;
   for (const entry of result.documents) {
@@ -134,51 +134,77 @@ async function loadMailbox(page = 1) {
   );
 }
 
+/** One message of a conversation, with its 삭제 button. */
+function messageItem(message) {
+  const mine = message.data.from === state.member.id;
+  const item = document.createElement("li");
+  item.className = mine ? "mine" : "theirs";
+  item.id = `message-${message.id}`;
+  const body = document.createElement("p");
+  body.className = "message-body";
+  body.textContent = message.data.body;
+  const meta = document.createElement("p");
+  meta.className = "meta";
+  meta.textContent = `${formatTime(message.data.sentAt)}${mine ? (message.data.readAt === null ? " · 안 읽음" : " · 읽음") : ""}`;
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.textContent = "삭제";
+  remove.onclick = () =>
+    run(async () => {
+      if (
+        !confirm(
+          "이 쪽지를 내 보관함에서 삭제할까요? 상대의 보관함에는 그대로 남습니다.",
+        )
+      )
+        return;
+      await caller().call("community/messages:removeMessage", {
+        id: message.id,
+      });
+      item.remove();
+    });
+  meta.append(" ", remove);
+  item.append(body, meta);
+  return item;
+}
+
 /**
  * The messages with one member (memo_view.php), oldest first, theirs on one
- * side and the member's on the other, with a reply box below.
+ * side and the member's on the other, with a reply box below. The newest 50
+ * show; 이전 쪽지 더 보기 reads the 50 before the oldest shown.
  */
 async function openConversation(partner, focus = null) {
   const result = await caller().call("community/messages:conversation", {
     partner,
   });
-  showUnread(result.unread);
+  showUnread(result.unread, result.unreadCount);
   const nick = await nickOf(partner);
   const heading = document.createElement("h3");
   heading.textContent = `${nick}님과의 쪽지`;
   const list = document.createElement("ol");
   list.className = "messages-thread";
-  for (const message of result.documents) {
-    const mine = message.data.from === state.member.id;
-    const item = document.createElement("li");
-    item.className = mine ? "mine" : "theirs";
-    item.id = `message-${message.id}`;
-    const body = document.createElement("p");
-    body.className = "message-body";
-    body.textContent = message.data.body;
-    const meta = document.createElement("p");
-    meta.className = "meta";
-    meta.textContent = `${formatTime(message.data.sentAt)}${mine ? (message.data.readAt === null ? " · 안 읽음" : " · 읽음") : ""}`;
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.textContent = "삭제";
-    remove.onclick = () =>
-      run(async () => {
-        if (
-          !confirm(
-            "이 쪽지를 내 보관함에서 삭제할까요? 상대의 보관함에는 그대로 남습니다.",
-          )
-        )
-          return;
-        await caller().call("community/messages:removeMessage", {
-          id: message.id,
-        });
-        item.remove();
+  list.append(...result.documents.map(messageItem));
+  let oldest = result.documents[0]?.data.sentAt ?? null;
+  const older = document.createElement("button");
+  older.type = "button";
+  older.className = "older-messages";
+  older.textContent = "이전 쪽지 더 보기";
+  older.hidden = !result.more;
+  const readOlder = async () => {
+    older.disabled = true;
+    try {
+      const page = await caller().call("community/messages:conversation", {
+        partner,
+        before: oldest,
       });
-    meta.append(" ", remove);
-    item.append(body, meta);
-    list.append(item);
-  }
+      showUnread(page.unread, page.unreadCount);
+      list.prepend(...page.documents.map(messageItem));
+      oldest = page.documents[0]?.data.sentAt ?? oldest;
+      older.hidden = !page.more || !page.documents.length;
+    } finally {
+      older.disabled = false;
+    }
+  };
+  older.onclick = () => run(readOlder);
   const reply = document.createElement("form");
   reply.className = "reply";
   const text = document.createElement("textarea");
@@ -202,8 +228,18 @@ async function openConversation(partner, focus = null) {
       await openConversation(partner);
     });
   };
-  $("messageDetail").replaceChildren(heading, list, reply);
+  $("messageDetail").replaceChildren(heading, older, list, reply);
   $("messageDetail").hidden = false;
+  // A linked message older than the newest 50: read back to it, a few times.
+  for (
+    let tries = 0;
+    tries < 5 &&
+    focus &&
+    !document.getElementById(`message-${focus}`) &&
+    !older.hidden;
+    tries++
+  )
+    await readOlder();
   document.getElementById(`message-${focus}`)?.scrollIntoView?.();
 }
 

@@ -137,8 +137,14 @@ export async function write(
   await checkBannedWords(ctx, value.text);
   calls = guest
     ? { text: value.text, recipients: [] }
-    : await resolveCalls(ctx, value.text, previous?.data.text ?? "");
+    : await resolveCalls(
+        ctx,
+        value.text,
+        previous?.data.text ?? "",
+        previous?.data.called,
+      );
   value.text = calls.text;
+  if (!guest) value.called = calls.called;
   if (!previous) {
     speaker = await speakerOf(ctx, data.character);
     if (speaker) {
