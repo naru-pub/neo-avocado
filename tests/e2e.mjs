@@ -333,6 +333,40 @@ try {
   await alice.goto(`${origin}/#/shop/${encodeURIComponent("이벤트")}`);
   await alice.locator("#items li", { hasText: "케이크" }).waitFor();
 
+  // Buying takes an approved character (shop/_ajax.shop_update.php:4):
+  // none is offered until the owner approves 초록 and Alice picks it.
+  const cakeBuy = alice
+    .locator("#items li", { hasText: "케이크" })
+    .locator("button");
+  assert.equal(await cakeBuy.isVisible(), false);
+  await alice.locator("#shopBuyNote").waitFor();
+  await owner.evaluate(
+    async ({ id }) => {
+      const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+      const admin = await createNaru().auth.session();
+      await admin.call("characters/review:reviewCharacter", {
+        character: id,
+        state: "approved",
+      });
+    },
+    { id: greenId },
+  );
+  await alice.reload();
+  await alice.locator("#daily").click();
+  await alice.waitForFunction(
+    () => document.querySelector("#balance").textContent === "100",
+  );
+  await alice
+    .locator("#inventoryCharacter option", { hasText: "초록" })
+    .waitFor({ state: "attached" });
+  await alice.locator("#inventoryCharacter").selectOption({ label: "초록" });
+  await cakeBuy.waitFor();
+  await cakeBuy.click();
+  await alice
+    .locator("#status", { hasText: "케이크을(를) 샀습니다." })
+    .waitFor();
+  await alice.locator("#inventory li", { hasText: "케이크" }).waitFor();
+
   // Deleting the post deletes its picture too (a managed upload).
   const file = logPicture.split("/").pop();
   assert.equal((await fetch(`${origin}/media/1/${file}`)).status, 200);
@@ -386,6 +420,65 @@ try {
     .locator("#logs .log")
     .filter({ hasText: "고친 손님 글" })
     .waitFor();
+
+  // 사이트공개: a visitor reads 멤버목록 and a character's page, with only
+  // its public fields.
+  await menu(guest, "멤버목록");
+  await guest
+    .locator("#characters .character")
+    .filter({ hasText: "초록" })
+    .waitFor();
+  await guest.goto(`${origin}/#/character/${greenId}`);
+  await guest
+    .locator("#characterSheet .character-fields", { hasText: "17" })
+    .waitFor();
+  assert.doesNotMatch(
+    await guest.locator("#characterSheet").textContent(),
+    /비밀 일기/,
+  );
+  // Closed, a visitor sees the sign-in card only and the rules read them
+  // nothing (extend/community.config.php sends guests to log in).
+  const siteOpen = (open) =>
+    owner.evaluate(
+      async ({ P, open }) => {
+        const { createNaru } =
+          await import("https://naru.pub/sdk/1.1.0/naru.js");
+        const admin = await createNaru().auth.session();
+        const settings = admin.collection(`${P}settings`);
+        const current = await settings.get("community");
+        await settings.set("community", { ...current.data, siteOpen: open });
+      },
+      { P, open },
+    );
+  await siteOpen(false);
+  await guest.reload();
+  await guest.locator("#closedNotice").waitFor();
+  assert.equal(await guest.locator("#characterView").isVisible(), false);
+  assert.equal(await guest.locator("#siteMenu").isVisible(), false);
+  const closedReads = await guest.evaluate(async (P) => {
+    const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+    const naru = createNaru();
+    const ids = (name, options) =>
+      naru
+        .collection(`${P}${name}`)
+        .list(options)
+        .then(
+          (page) => page.documents.map((row) => row.id),
+          (error) => error.code,
+        );
+    return {
+      characters: await ids("characters"),
+      boards: await ids("boards"),
+      logs: await ids("logs", { filter: { board: "free" } }),
+    };
+  }, P);
+  for (const [name, read] of Object.entries(closedReads))
+    assert.ok(
+      (Array.isArray(read) && !read.length) || read === "ACCESS_DENIED",
+      `${name}: ${JSON.stringify(read)}`,
+    );
+  await siteOpen(true);
+  await guest.goto(`${origin}/`);
 
   // The collection rules, on the real runtime: a member reads their own
   // wallet and nobody else's; a visitor reads nicknames and no wallets.
@@ -520,7 +613,7 @@ try {
         listLevel: 1,
         readLevel: 1,
         writeLevel: 1,
-        commentLevel: 9,
+        commentLevel: 1,
         ...data,
       });
   }, P);
@@ -538,7 +631,13 @@ try {
   await question.waitFor();
   await question.locator(".open-secret input").fill("pass1234");
   await question.locator(".open-secret button").click();
-  await asker.locator("#logs .log", { hasText: "환불되나요?" }).waitFor();
+  const opened = asker.locator("#logs .log", { hasText: "환불되나요?" });
+  await opened.waitFor();
+  // Only the staff answer (skin/board/qna/list.skin.php:85-87).
+  assert.equal(
+    await opened.locator(".comment-form").evaluate((form) => form.hidden),
+    true,
+  );
 
   await alice.goto(`${origin}/#/logs/calc`);
   await alice.locator("#logCategory").selectOption("이벤트");

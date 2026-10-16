@@ -28,7 +28,7 @@ workflows to the port, and says what was left out and why.
 | Addresses, character viewer, member list by 소속      | page URLs, `member/viewer.php`, `member/index.php`, `shop/index.php`                     | Implemented: an address for every page (shareable, reloadable, back and forward), the viewer page with experience history and (opt-in) inventory and money, the member list by 소속 with 쪽지 links, shop display dates, hours and weekdays                                     |
 | Page numbers, board search, Q&A and settlement boards | `lib/common.lib.php` `get_paging`, `skin/board/qna`, `skin/board/caculate`               | Implemented: numbered pages for posts, characters and the shop; a search over every readable post of a board, 500 a call; Q&A boards with guests' secret questions opened by password; settlement boards settled by moderators with experience and money                        |
 | My page, couples, shop front and music                | `mypage/*`, `member/exp.php`, `bbs/member_leave.php`, `couple`, `shop/skin`, `bgm.php`   | Implemented: account, own characters, own posts, experience history (recorded when the owner changes experience), leaving (soft, as the original), couple list, shop categories with NPC and greeting, YouTube background music                                                 |
-| Browser and server acceptance                         | Naru release checklist                                                                   | 106 unit and page tests, and the e2e suite on naru-dev (a real Chromium against the real edge Worker: owner, members and guests) pass                                                                                                                                           |
+| Browser and server acceptance                         | Naru release checklist                                                                   | 147 unit and page tests, and the e2e suite on naru-dev (a real Chromium against the real edge Worker: owner, members and guests) pass                                                                                                                                           |
 
 ## Not ported, with reasons
 
@@ -56,8 +56,10 @@ workflows to the port, and says what was left out and why.
 - **Collections** are declared in `_naru/collections.json`, which Naru
   installs when the files arrive: logs and comments readable by members (and visitors, on level-1
   boards) through the `community-board` rule, characters through the
-  `characters` rule (which trims custom fields a reader may not see), profiles
-  with unique nicknames, and everything else admin-only.
+  `characters` rule (which trims custom fields a reader may not see), the
+  character lists and viewer readable by visitors too while 사이트공개
+  (`cf_open`) is on, profiles with unique nicknames, and everything else
+  admin-only.
 - **Reads** of logs, comments and characters are native SDK reads filtered by
   those rules. **Writes**, cascades and the economy run in site functions
   (`_naru/functions/`), each in one transaction; functions declared read-only

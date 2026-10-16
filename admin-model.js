@@ -596,6 +596,14 @@ export const models = {
     help: "새 캐릭터가 받을 기본 배분 포인트입니다. 기존 캐릭터 값은 따로 변경하세요.",
     fixedId: "community",
     fields: [
+      // cf_open (adm/community_form.php:45): off, visitors see only the
+      // sign-in screen. The original installs it off; here it starts on.
+      {
+        key: "siteOpen",
+        label: "사이트공개",
+        type: "checkbox",
+        default: true,
+      },
       {
         key: "messageCost",
         label: "쪽지 발송 비용 (회원 한 명당)",

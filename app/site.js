@@ -16,6 +16,7 @@ const SITE_COLORS = {
 export async function loadSite() {
   const site = await caller().call("content/site:site");
   const { design } = site;
+  state.siteOpen = site.open !== false;
   const root = document.documentElement.style;
   // Without 디자인 사용 the page is plain (plain.css), as the original
   // without its design CSS: the title, logo, menus and slides still apply.
@@ -82,9 +83,9 @@ function menuLink(menu) {
 // boards first and neo-avocado's quests and pages after.
 const DEFAULT_MENUS = [
   ["로그", "tab:logs"],
-  ["멤버목록", "tab:members", true],
-  ["신청자목록", "tab:applicants", true],
-  ["커플목록", "tab:couples", true],
+  ["멤버목록", "tab:members"],
+  ["신청자목록", "tab:applicants"],
+  ["커플목록", "tab:couples"],
   ["상점", "tab:shop", true],
   ["마이페이지", "tab:mypage", true],
   ["현재접속자", "tab:online", true],
@@ -232,9 +233,9 @@ export async function follow(link) {
     $("contentPage").value = id;
     return loadContentBody();
   }
-  // member/ and member/ready.php: the character list, approved or not yet.
+  // member/ and member/ready.php: the character list, approved or not yet,
+  // open to visitors as the original's are while the site is (사이트공개).
   if (id === "members" || id === "applicants") {
-    if (!state.member) return say("회원 로그인 후 이용할 수 있습니다.");
     const filter = id === "members" ? "approved" : "applicants";
     // A list already read under another filter is read again, once.
     if ($("characterFilter").value !== filter) {

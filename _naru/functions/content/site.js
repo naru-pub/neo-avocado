@@ -8,6 +8,7 @@ import {
   backgroundMusic,
   communityAccess,
   scheduled,
+  siteOpen,
 } from "../../modules/shared.js";
 
 export const readOnly = ["site"];
@@ -89,6 +90,8 @@ export async function site(ctx) {
   return {
     level: access.level,
     member: Boolean(ctx.member),
+    // 사이트공개 (cf_open): off, visitors see only the sign-in screen.
+    open: await siteOpen(ctx),
     design,
     bgm: backgroundMusic(settings.bgm),
     menus,

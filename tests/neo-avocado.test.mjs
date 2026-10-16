@@ -6,6 +6,19 @@ import { SourceTextModule, SyntheticModule } from "node:vm";
 import { JSDOM } from "jsdom";
 import { matches } from "./where.mjs";
 const root = new URL("../", import.meta.url);
+/** What _naru/collections.json lets visitors read (the rules narrow it on Naru). */
+const WORLD = new Set(
+  Object.entries(
+    JSON.parse(await readFile(new URL("_naru/collections.json", root), "utf8"))
+      .collections,
+  )
+    .filter(([, entry]) => entry.read === "world")
+    .map(([name]) => name)
+    // Posts and comments only where a test opens them (visitorWorld).
+    .filter(
+      (name) => !["neo_avocado_logs", "neo_avocado_comments"].includes(name),
+    ),
+);
 
 /** How a fake Naru answers a call its test did not expect: ctx.fail. */
 function refuse(reason, message = reason) {
@@ -233,7 +246,12 @@ function fakeDatabase(rows = {}) {
             if (error.code === "NOT_FOUND") return null;
             throw error;
           });
-        return { status: "approved", role: "member", profile };
+        return {
+          status: "approved",
+          role: database.role ?? "member",
+          owner: database.owner === true,
+          profile,
+        };
       }
       if (name === "community/membership:join")
         return {
@@ -250,7 +268,7 @@ function fakeDatabase(rows = {}) {
         "characters/sheet": CHARACTERS,
       };
       const [path, operation] = name.split(":");
-      if (writes[path]) {
+      if (writes[path] && ["write", "save", "remove"].includes(operation)) {
         const handle = member.collection(writes[path]);
         if (operation === "remove") {
           await handle.delete(args.id, args.guest ? { guest: args.guest } : {});
@@ -334,14 +352,7 @@ async function page(database) {
         // Visitors read what the declaration makes world-readable; posts
         // only where the test opens them (the board rule decides on Naru).
         collection: (name) => {
-          if (
-            database.visitorWorld ||
-            [
-              "neo_avocado_boards",
-              "neo_avocado_profiles",
-              "neo_avocado_emoticons",
-            ].includes(name)
-          )
+          if (database.visitorWorld || WORLD.has(name))
             return database.member.collection(name);
           const denied = async () => {
             throw Object.assign(new Error("Members only"), {
@@ -971,7 +982,13 @@ test("the shop reads the wallet, items and own inventory when opened, and spends
   database.store.set(ITEMS, [
     {
       id: "potion",
-      data: { name: "물약", price: 10, stock: 3 },
+      data: {
+        name: "물약",
+        price: 10,
+        stock: 3,
+        sellPrice: 5,
+        effect: { type: "restore", stat: "hp", amount: 1 },
+      },
       createdAt: "1",
     },
     {
@@ -979,6 +996,20 @@ test("the shop reads the wallet, items and own inventory when opened, and spends
       data: { name: "비밀", price: 1, hidden: true },
       createdAt: "2",
     },
+    {
+      id: "elven",
+      data: { name: "요정 활", price: 1, requirements: { classes: ["요정"] } },
+      createdAt: "5",
+    },
+    {
+      id: "token",
+      data: { name: "기념품", price: 1, sellable: false, giftable: false },
+      createdAt: "6",
+    },
+  ]);
+  database.store.set(CHARACTERS, [
+    { id: "hero", createdBy: ME, data: { name: "용사", state: "approved" } },
+    { id: "draft", createdBy: ME, data: { name: "초안", state: "editing" } },
   ]);
   database.store.set(INVENTORY, [
     {
@@ -990,6 +1021,11 @@ test("the shop reads the wallet, items and own inventory when opened, and spends
       id: "i-2",
       data: { owner: "member-other", item: "potion", name: "남의 물약" },
       createdAt: "4",
+    },
+    {
+      id: "i-3",
+      data: { owner: ME, item: "token", name: "기념품" },
+      createdAt: "7",
     },
   ]);
   const { $, settle } = await page(database);
@@ -1003,28 +1039,66 @@ test("the shop reads the wallet, items and own inventory when opened, and spends
   for (let n = 0; n < 4; n += 1) await settle();
   assert.equal($("shopView").hidden, false);
   assert.equal($("balance").textContent, "120");
-  assert.deepEqual(
+  // No character chosen: an item kept for one 종족 is left out
+  // (shop/index.php:36), and nothing can be bought (shop.item.skin.php:24).
+  const listed = () =>
     [...$("items").children].map(
       (row) => row.querySelector("span").textContent,
-    ),
-    ["물약 · 10 아보 · 남은 3개"],
-  );
+    );
+  assert.deepEqual(listed(), ["물약 · 10 아보 · 남은 3개", "기념품 · 1 아보"]);
+  assert.equal($("items").querySelector("button").hidden, true);
+  assert.equal($("shopBuyNote").hidden, false);
   assert.deepEqual(
     [...$("inventory").children].map(
       (row) => row.querySelector("label").textContent,
     ),
-    ["물약"],
+    ["기념품", "물약"],
   );
+  // 판매, 사용 and 선물 follow the item (inventory/skin/item.skin.php:36-44).
+  const buttons = (index) =>
+    [...$("inventory").children[index].querySelectorAll("button")]
+      .filter((button) => !button.hidden)
+      .map((button) => button.textContent);
+  assert.deepEqual(buttons(0), ["캐릭터 이동"]);
+  assert.deepEqual(buttons(1), ["판매", "선물", "사용", "캐릭터 이동"]);
   assert.deepEqual(
     database.calls.filter((call) => call.name === INVENTORY).at(0).filter,
     { owner: ME },
   );
+  // A character not yet approved buys nothing either.
+  const official = {
+    draft: { approved: false },
+    hero: { approved: true, class: "요정" },
+  };
+  database.answer = (name, args) =>
+    name === "characters/progression:characterStatus"
+      ? { state: official[args.character], definitions: [], revision: null }
+      : refuse("empty");
+  $("inventoryCharacter").value = "draft";
+  $("inventoryCharacter").onchange();
+  for (let n = 0; n < 4; n += 1) await settle();
+  assert.equal($("items").querySelector("button").hidden, true);
+  assert.equal($("shopBuyNote").hidden, false);
+  // An approved 요정 sees the 요정's bow and buys as itself.
+  $("inventoryCharacter").value = "hero";
+  $("inventoryCharacter").onchange();
+  for (let n = 0; n < 4; n += 1) await settle();
+  assert.deepEqual(listed(), [
+    "요정 활 · 1 아보",
+    "물약 · 10 아보 · 남은 3개",
+    "기념품 · 1 아보",
+  ]);
+  assert.equal($("items").querySelector("button").hidden, false);
+  assert.equal($("shopBuyNote").hidden, true);
   // The page never writes money or items itself: it calls the function, and
   // shows what the function decided.
-  database.answer = (name) =>
+  const status = database.answer;
+  database.answer = (name, args) =>
     name === "economy/shop:gacha"
       ? { balance: 70, owned: { data: { name: "황금 아보카도" } } }
-      : refuse("already", "오늘은 이미 받았습니다.");
+      : name === "characters/progression:characterStatus"
+        ? status(name, args)
+        : refuse("already", "오늘은 이미 받았습니다.");
   $("gacha").onclick();
   for (let n = 0; n < 4; n += 1) await settle();
   assert.deepEqual(
@@ -1033,7 +1107,7 @@ test("the shop reads the wallet, items and own inventory when opened, and spends
         (call) => call.method === "call" && call.name === "economy/shop:gacha",
       )
       .at(0),
-    { method: "call", name: "economy/shop:gacha", args: null },
+    { method: "call", name: "economy/shop:gacha", args: { character: "hero" } },
   );
   assert.match($("status").textContent, /황금 아보카도/);
   $("daily").onclick();
@@ -1046,7 +1120,7 @@ test("the shop reads the wallet, items and own inventory when opened, and spends
     {
       method: "call",
       name: "economy/shop:buy",
-      args: { item: "potion" },
+      args: { item: "elven", character: "hero" },
     },
   );
   assert.equal(
@@ -1598,4 +1672,201 @@ test("멤버목록 groups approved characters under each 소속 once there are t
       (button) => button.textContent === "쪽지",
     ),
   );
+});
+
+test("사이트공개 off: a visitor sees the welcome and sign-in card only, whatever the address", async () => {
+  const database = fakeDatabase({
+    [CHARACTERS]: [{ id: "hero", data: { name: "용사", state: "approved" } }],
+  });
+  database.signedIn = false;
+  database.site = { open: false };
+  const { $, settle, window } = await page(database);
+  for (let n = 0; n < 4; n += 1) await settle();
+  const body = window.document.body;
+  assert.ok(body.classList.contains("site-closed"));
+  assert.equal($("welcome").hidden, false);
+  assert.equal($("homeView").hidden, false);
+  // extend/community.config.php sends guests to log in: nothing is read.
+  assert.deepEqual(
+    database.calls.filter((call) => call.method !== "call"),
+    [],
+  );
+  for (const hash of ["#/members", "#/character/hero", "#/logs/default"]) {
+    window.location.hash = hash;
+    for (let n = 0; n < 4; n += 1) await settle();
+    assert.equal($("homeView").hidden, false, hash);
+    assert.equal($("charactersView").hidden, true, hash);
+    assert.equal($("characterView").hidden, true, hash);
+    assert.equal($("logsView").hidden, true, hash);
+  }
+  assert.deepEqual(
+    database.calls.filter((call) => call.method !== "call"),
+    [],
+  );
+  $("cardSignIn").onclick();
+  await settle();
+  assert.deepEqual(database.calls.at(-1), { method: "signIn" });
+});
+
+test("사이트공개 on: a visitor opens 멤버목록, 신청자목록 and a character's page", async () => {
+  const database = fakeDatabase({
+    [PROFILES]: [{ id: "owner-1", data: { nick: "주인" } }],
+    [CHARACTERS]: [
+      {
+        id: "hero",
+        createdBy: "owner-1",
+        data: { name: "용사", state: "approved", owner: "owner-1" },
+      },
+      {
+        id: "draft",
+        createdBy: "owner-1",
+        data: { name: "지원자", state: "submitted", owner: "owner-1" },
+      },
+    ],
+  });
+  database.signedIn = false;
+  database.answer = (name) =>
+    name === "characters/progression:characterStatus"
+      ? {
+          state: { exp: 3, points: 0, stats: {}, titles: [] },
+          definitions: [],
+          revision: null,
+          rank: "",
+        }
+      : name === "characters/progression:characterSheet"
+        ? { exp: [], inventory: null, balance: null }
+        : refuse("empty");
+  const { $, settle, window } = await page(database);
+  assert.ok(!window.document.body.classList.contains("site-closed"));
+  const open = async (label) => {
+    [...$("siteMenu").querySelectorAll("a")]
+      .find((link) => link.textContent === label)
+      .onclick({ preventDefault() {} });
+    for (let n = 0; n < 6; n += 1) await settle();
+  };
+  const names = () =>
+    [...$("characters").querySelectorAll(".character-name")].map(
+      (name) => name.textContent,
+    );
+  // member/index.php and member/ready.php, without signing in.
+  await open("멤버목록");
+  assert.equal($("charactersView").hidden, false);
+  assert.deepEqual(names(), ["용사"]);
+  await open("신청자목록");
+  assert.deepEqual(names(), ["지원자"]);
+  // Nothing of the owner's is offered to a visitor.
+  for (const button of $("characters").querySelectorAll(
+    ".edit, .delete, .main-character, .allocate-stats",
+  ))
+    assert.equal(button.hidden, true);
+  // member/viewer.php through its address.
+  window.location.hash = "#/character/hero";
+  for (let n = 0; n < 8; n += 1) await settle();
+  assert.equal($("characterView").hidden, false);
+  assert.equal(
+    $("characterSheet").querySelector(".character-name").textContent,
+    "용사",
+  );
+  assert.ok(
+    database.visitor.calls.some(
+      (call) => call.name === "characters/progression:characterSheet",
+    ),
+  );
+});
+
+test("on a Q&A board the comment form is the staff's alone", async () => {
+  const board = {
+    id: "default",
+    data: {
+      name: "문의",
+      kind: "qna",
+      enabled: true,
+      listLevel: 1,
+      readLevel: 1,
+      writeLevel: 1,
+      commentLevel: 1,
+    },
+  };
+  const question = {
+    id: "q-1",
+    createdBy: "member-other",
+    createdAt: "2030-01-01T00:00:00.000Z",
+    data: { board: "default", text: "환불되나요?" },
+  };
+  const formHidden = async (setup) => {
+    const database = fakeDatabase({
+      [PROFILES]: [me, { id: "member-other", data: { nick: "남" } }],
+      neo_avocado_boards: [board],
+      [LOGS]: [question],
+    });
+    setup(database);
+    database.answer = (name) =>
+      name === "community/posts:questions"
+        ? { documents: [question], nextCursor: null, totalCount: 1 }
+        : name === "community/messages:messageStatus"
+          ? { unread: false }
+          : refuse("empty");
+    const { $, settle } = await page(database);
+    for (let n = 0; n < 6; n += 1) await settle();
+    const log = $("logs").querySelector(".log");
+    assert.ok(log, "the question is listed");
+    return log.querySelector(".comment-form").hidden;
+  };
+  // skin/board/qna/list.skin.php:85-87: members and guests do not answer.
+  assert.equal(await formHidden(() => {}), true);
+  assert.equal(
+    await formHidden((database) => (database.role = "moderator")),
+    false,
+  );
+  assert.equal(await formHidden((database) => (database.owner = true)), false);
+});
+
+test("an approved character's stats only take the points left, never going down", async () => {
+  const database = fakeDatabase({
+    [PROFILES]: [me],
+    [CHARACTERS]: [
+      { id: "hero", createdBy: ME, data: { name: "용사", state: "approved" } },
+    ],
+  });
+  let points = 10;
+  database.answer = (name) =>
+    name === "characters/progression:characterStatus"
+      ? {
+          state: {
+            exp: 0,
+            points,
+            approved: true,
+            stats: { hp: { allocated: 4, max: 4, current: 4, damage: 0 } },
+            titles: [],
+          },
+          definitions: [{ id: "hp", data: { name: "HP" } }],
+          revision: "r1",
+          rank: "",
+        }
+      : refuse("empty");
+  const { $, settle } = await page(database);
+  $("tabCharacters").onclick();
+  for (let n = 0; n < 6; n += 1) await settle();
+  const item = $("characters").querySelector(".character");
+  const details = item.querySelector(".character-details");
+  details.open = true;
+  details.ontoggle();
+  for (let n = 0; n < 6; n += 1) await settle();
+  assert.match(item.querySelector(".progression").textContent, /남은 6/);
+  const allocate = item.querySelector(".allocate-stats");
+  assert.equal(allocate.hidden, false);
+  allocate.onclick();
+  // status.inc.php's data-min: what the stat has once approved.
+  assert.equal($("editorFields").querySelector('[name="hp"]').min, "4");
+  $("editor").close();
+  // With nothing left there is nothing to change (status_modify false).
+  points = 4;
+  $("characterFilter").onchange();
+  for (let n = 0; n < 6; n += 1) await settle();
+  const again = $("characters").querySelector(".character");
+  again.querySelector(".character-details").open = true;
+  again.querySelector(".character-details").ontoggle();
+  for (let n = 0; n < 6; n += 1) await settle();
+  assert.match(again.querySelector(".progression").textContent, /남은 0/);
+  assert.equal(again.querySelector(".allocate-stats").hidden, true);
 });

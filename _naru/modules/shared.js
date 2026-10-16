@@ -90,8 +90,26 @@ export function tagFields(text) {
 /** A visitor's access: level 1, as GnuBoard gives a guest. */
 export const GUEST_ACCESS = Object.freeze({ level: 1, role: "guest" });
 
+/**
+ * 사이트공개 (cf_open): whether visitors who are not signed in may see the
+ * community. On unless the owner turns it off (the original's install starts
+ * with it off, extend/community.config.php sending guests to the login page).
+ */
+export async function siteOpen(ctx) {
+  return (await ctx.get(SETTINGS, "community"))?.data.siteOpen !== false;
+}
+
+/** A visitor of a closed site: below every board's and page's level 1. */
+export const CLOSED_ACCESS = Object.freeze({
+  level: 0,
+  role: "guest",
+  closed: true,
+});
+
 export async function communityAccess(ctx, id = ctx.member?.id) {
-  if (!id) return GUEST_ACCESS;
+  // A closed site (cf_open off) shows visitors nothing, as the original
+  // sends them to log in from every page (check_site_auth).
+  if (!id) return (await siteOpen(ctx)) ? GUEST_ACCESS : CLOSED_ACCESS;
   const row = await ctx.get(MEMBERS, id);
   // A member who left (bbs/member_leave.php) is a guest until the owner
   // clears their leave date.

@@ -12,9 +12,21 @@ import {
   amount,
   weightedRows,
   characterState,
+  siteOpen,
 } from "../../modules/shared.js";
 
 export const readOnly = ["characterStatus", "characterSheet"];
+// The character viewer (member/viewer.php) is open to visitors while the site
+// is (사이트공개); a closed site sends them to log in.
+export const visitors = ["characterStatus", "characterSheet"];
+
+/** Refuses a visitor while the site is closed (extend/community.config.php). */
+async function viewable(ctx) {
+  if (!ctx.member && !(await siteOpen(ctx)))
+    ctx.fail("ACCESS_DENIED", "회원 로그인 후 이용할 수 있습니다.", {
+      reason: "site_closed",
+    });
+}
 
 /**
  * What the character viewer (member/viewer.php) adds to the profile: the
@@ -22,6 +34,7 @@ export const readOnly = ["characterStatus", "characterSheet"];
  * them on (ad_use_inven, ad_use_money), its inventory and its owner's money.
  */
 export async function characterSheet(ctx, { character } = {}) {
+  await viewable(ctx);
   const profile =
     typeof character === "string" ? await ctx.get(CHARACTERS, character) : null;
   if (!profile || profile.data.deleted)
@@ -67,6 +80,7 @@ export async function characterSheet(ctx, { character } = {}) {
 
 /** Public character progression is separate from member-editable profile fields. */
 export async function characterStatus(ctx, { character } = {}) {
+  await viewable(ctx);
   const profile =
     typeof character === "string" ? await ctx.get(CHARACTERS, character) : null;
   if (!profile || profile.data.deleted)
@@ -130,6 +144,14 @@ export async function allocateStats(
     const count = amount(allocation[definition.id], "Allocation");
     spent += count;
     const before = state.data.stats[definition.id];
+    // An approved character only spends what is left: no stat goes below
+    // what it has (mypage/character/status.inc.php's status_fix).
+    if (state.data.approved === true && count < before.allocated)
+      ctx.fail(
+        "CONFLICT",
+        "승인된 캐릭터는 남은 포인트만 배분할 수 있고, 배분한 능력치를 줄일 수 없습니다.",
+        { reason: "approved_stats" },
+      );
     const max = (definition.data.initial ?? 0) + count;
     if (!Number.isSafeInteger(max) || max > (definition.data.max ?? 999))
       ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {

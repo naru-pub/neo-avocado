@@ -734,6 +734,14 @@ body.visitor .member-only,
 body:not(.visitor) .guest-only {
   display: none !important;
 }
+/* A closed site (사이트공개 off) shows visitors only the sign-in card. */
+body.site-closed .tabs,
+body.site-closed #siteMenu,
+body.site-closed #menuToggle,
+body.site-closed .open-only,
+body:not(.site-closed) .closed-only {
+  display: none !important;
+}
 body {
   background-image: var(--site-background, none);
   background-attachment: fixed;

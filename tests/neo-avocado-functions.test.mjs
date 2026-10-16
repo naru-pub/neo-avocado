@@ -874,6 +874,37 @@ test("stat allocation is bounded by server points and preserves damage through z
   );
 });
 
+test("an approved character only spends its points left, and no stat goes down", async () => {
+  const { ctx, table } = fakeCtx();
+  table(`${P}characters`).set("hero", { owner: "m-1", state: "approved" });
+  table(`${P}stat_config`).set("hp", { name: "HP", initial: 0, max: 100 });
+  table(`${P}stat_config`).set("mp", { name: "MP", initial: 0, max: 100 });
+  table(`${P}character_state`).set("hero", {
+    owner: "m-1",
+    character: "hero",
+    points: 10,
+    exp: 0,
+    stats: {
+      hp: { allocated: 4, max: 4, damage: 0, current: 4 },
+      mp: { allocated: 2, max: 2, damage: 0, current: 2 },
+    },
+    titles: [],
+    approved: true,
+  });
+  const allocate = (allocation) =>
+    allocateStats(ctx, { character: "hero", allocation, revision: "r1" });
+  // mypage/character/status.inc.php:17-25: approved, the form starts from
+  // what each stat has (status_fix), and only the space point is spent.
+  assert.equal(await refusal(allocate({ hp: 3, mp: 3 })), "approved_stats");
+  assert.equal(await refusal(allocate({ hp: 6, mp: 5 })), "not_enough_points");
+  await allocate({ hp: 6, mp: 4 });
+  assert.equal(table(`${P}character_state`).get("hero").stats.hp.max, 6);
+  // Before approval the owner moves points freely.
+  table(`${P}character_state`).get("hero").approved = false;
+  await allocate({ hp: 0, mp: 10 });
+  assert.equal(table(`${P}character_state`).get("hero").stats.mp.max, 10);
+});
+
 test("recovery uses the catalog effect, caps health, consumes once and refuses foreign characters", async () => {
   const { ctx, table } = fakeCtx();
   table(`${P}characters`).set("hero", { owner: "m-1" });
@@ -1301,29 +1332,96 @@ test("gacha follows every page and rejects corrupt weights rather than changing 
   assert.equal(table(`${P}wallets`).get("m-1").balance, GACHA_COST);
 });
 
+/** One of m-1's characters, approved as the owner's review approves it. */
+function approvedCharacter(table, id = "hero", official = {}) {
+  table(`${P}characters`).set(id, {
+    owner: "m-1",
+    name: id,
+    state: "approved",
+  });
+  table(`${P}character_state`).set(id, {
+    owner: "m-1",
+    character: id,
+    points: 0,
+    exp: 0,
+    stats: {},
+    titles: [],
+    approved: true,
+    ...official,
+  });
+}
+
 test("buying checks the item, its stock and the balance before taking anything", async () => {
   const { ctx, table } = fakeCtx();
+  approvedCharacter(table);
+  const character = "hero";
   table(`${P}items`).set("sword", { name: "검", price: 80, stock: 1 });
   table(`${P}items`).set("potion", { name: "물약", price: 10 });
   table(`${P}items`).set("secret", { name: "비밀", price: 1, hidden: true });
-  assert.equal(await refusal(buy(ctx, { item: "sword" })), "not_enough");
+  assert.equal(
+    await refusal(buy(ctx, { item: "sword", character })),
+    "not_enough",
+  );
   assert.equal(table(`${P}wallets`).size, 0);
   await daily(ctx);
-  const bought = await buy(ctx, { item: "sword" });
+  const bought = await buy(ctx, { item: "sword", character });
   assert.equal(bought.balance, DAILY_REWARD - 80);
   assert.deepEqual(bought.owned.data, {
     owner: "m-1",
     item: "sword",
     name: "검",
     from: "shop",
+    character,
   });
   assert.equal(table(`${P}items`).get("sword").stock, 0);
-  assert.equal(await refusal(buy(ctx, { item: "sword" })), "sold_out");
+  assert.equal(
+    await refusal(buy(ctx, { item: "sword", character })),
+    "sold_out",
+  );
   // No stock is no limit.
-  await buy(ctx, { item: "potion" });
+  await buy(ctx, { item: "potion", character });
   assert.equal(table(`${P}items`).get("potion").stock, undefined);
   for (const item of ["secret", "missing", undefined, 7])
-    assert.equal(await refusal(buy(ctx, { item })), "no_item");
+    assert.equal(await refusal(buy(ctx, { item, character })), "no_item");
+});
+
+test("buying takes an approved character of the member's own, and limits count per character", async () => {
+  const { ctx, table } = fakeCtx();
+  table(`${P}wallets`).set("m-1", { balance: 100 });
+  table(`${P}items`).set("cake", {
+    name: "케이크",
+    price: 1,
+    requirements: { limit: 1 },
+  });
+  // shop/_ajax.shop_update.php:4: no character, or one not approved, buys
+  // nothing; nor does someone else's.
+  assert.equal(await refusal(buy(ctx, { item: "cake" })), "no_character");
+  table(`${P}characters`).set("draft", { owner: "m-1", state: "submitted" });
+  assert.equal(
+    await refusal(buy(ctx, { item: "cake", character: "draft" })),
+    "not_approved",
+  );
+  approvedCharacter(table, "theirs");
+  table(`${P}characters`).get("theirs").owner = "m-2";
+  assert.equal(
+    await refusal(buy(ctx, { item: "cake", character: "theirs" })),
+    "no_character",
+  );
+  assert.equal(table(`${P}wallets`).get("m-1").balance, 100);
+  // The limit is each character's (_ajax.shop_update.php:89), not the wallet's.
+  approvedCharacter(table, "hero");
+  approvedCharacter(table, "sidekick");
+  await buy(ctx, { item: "cake", character: "hero" });
+  assert.equal(
+    await refusal(buy(ctx, { item: "cake", character: "hero" })),
+    "purchase_limit",
+  );
+  await buy(ctx, { item: "cake", character: "sidekick" });
+  assert.equal(table(`${P}wallets`).get("m-1").balance, 98);
+  assert.equal(table(`${P}wallets`).get("m-1").purchases, undefined);
+  assert.deepEqual(table(`${P}character_state`).get("hero").purchases, {
+    cake: 1,
+  });
 });
 
 test("gacha picks by weight with the server's roll, and costs what it says", async () => {
@@ -2232,7 +2330,7 @@ test("visitors read and post only on level-1 boards, as named guests with a pass
     ).documents[0].data,
     { nick: "회원" },
   );
-  for (const collection of ["wallets", "inventory", "characters", "messages"])
+  for (const collection of ["wallets", "inventory", "messages"])
     assert.equal(
       await refusal(
         read({ collection: `${P}${collection}`, operation: "list" }),
@@ -2611,14 +2709,106 @@ test("the characters rule shows members only the custom fields they may see", as
   });
   assert.deepEqual((await present("m-2")).fields, { age: "17" });
   assert.equal((await present("m-2")).fieldMedia, undefined);
-  // Hidden fields cannot be queried; visitors read nothing.
+  // Hidden fields cannot be queried; visitors see the public ones only.
   assert.ok(!characterRule.queryable.includes("fields"));
+  assert.deepEqual(
+    (
+      await characterRule.present(
+        { ...ctx, member: null },
+        { collection: `${P}characters`, document: sheet },
+      )
+    ).fields,
+    { age: "17" },
+  );
+});
+
+test("사이트공개: visitors read characters and the viewer while the site is open, and nothing once it is closed", async () => {
+  const { ctx, table } = fakeCtx();
+  table(`${P}boards`).set("free", PUBLIC_BOARD);
+  table(`${P}characters`).set("hero", {
+    owner: "m-1",
+    name: "Hero",
+    state: "approved",
+    fields: { age: "17", diary: "secret" },
+  });
+  table(`${P}character_fields`).set("age", { label: "나이" });
+  table(`${P}character_fields`).set("diary", {
+    label: "일기",
+    visibility: "owner",
+  });
+  table(`${P}sides`).set("forest", { name: "숲" });
+  table(`${P}profiles`).set("m-1", { nick: "회원" });
+  table(`${P}logs`).set("post", {
+    board: "free",
+    text: "공개 글",
+    owner: "m-1",
+  });
+  ctx.member = null;
+  const read = (collection, operation = "list", id) =>
+    nativeRead(ctx, { collection: `${P}${collection}`, operation, id });
+  const ids = async (collection, options) =>
+    (
+      await nativeRead(ctx, {
+        collection: `${P}${collection}`,
+        operation: "list",
+        options,
+      })
+    ).documents.map((row) => row.id);
+  // Open (the default): the lists, the viewer and its functions.
+  assert.deepEqual(await ids("characters"), ["hero"]);
+  assert.deepEqual((await read("characters", "get", "hero")).document.data, {
+    owner: "m-1",
+    name: "Hero",
+    state: "approved",
+    fields: { age: "17" },
+  });
+  for (const collection of ["character_fields", "sides"])
+    assert.equal((await ids(collection)).length > 0, true, collection);
   assert.equal(
-    await characterRule.readable(
-      { ...ctx, member: null },
-      { collection: `${P}characters` },
+    (await characterStatus(ctx, { character: "hero" })).state.owner,
+    "m-1",
+  );
+  assert.deepEqual((await characterSheet(ctx, { character: "hero" })).exp, []);
+  assert.equal((await site(ctx)).open, true);
+  // Closed: visitors read no characters, boards, posts or nicknames, and
+  // the viewer's functions refuse them, as the original sends them to log in.
+  table(`${P}settings`).set("community", { siteOpen: false });
+  assert.equal((await site(ctx)).open, false);
+  for (const collection of [
+    "characters",
+    "character_fields",
+    "sides",
+    "boards",
+    "profiles",
+  ])
+    assert.deepEqual(await ids(collection), [], collection);
+  assert.deepEqual(await ids("logs", { filter: { board: "free" } }), []);
+  assert.equal(
+    await refusal(characterStatus(ctx, { character: "hero" })),
+    "site_closed",
+  );
+  assert.equal(
+    await refusal(characterSheet(ctx, { character: "hero" })),
+    "site_closed",
+  );
+  assert.deepEqual((await site(ctx)).menus, []);
+  assert.equal(
+    await refusal(
+      communityWrite(ctx, {
+        collection: `${P}logs`,
+        operation: "add",
+        data: { board: "free", image: null, text: "손님 글" },
+        options: { guest: { name: "길손", password: "1234" } },
+      }),
     ),
-    false,
+    "access_denied",
+  );
+  // Members read on as before.
+  ctx.member = { id: "m-2" };
+  assert.deepEqual(await ids("characters"), ["hero"]);
+  assert.equal(
+    (await characterStatus(ctx, { character: "hero" })).state.owner,
+    "m-1",
   );
 });
 
@@ -2837,15 +3027,17 @@ test("shop items show and sell only within their dates, hours and weekdays, in K
   assert.equal(onDisplay({ weekdays: ["토", "일"] }, at), true);
   assert.equal(onDisplay({ weekdays: ["금"] }, at), false);
   const { ctx, table } = fakeCtx({ now: at });
+  approvedCharacter(table);
   table(`${P}wallets`).set("m-1", { balance: 100 });
   table(`${P}items`).set("lunch", {
     name: "점심",
     price: 1,
     display: { fromHour: 11, untilHour: 14 },
   });
-  assert.equal(await refusal(buy(ctx, { item: "lunch" })), "not_on_display");
+  const args = { item: "lunch", character: "hero" };
+  assert.equal(await refusal(buy(ctx, args)), "not_on_display");
   ctx.now = Date.parse("2030-01-05T03:00:00Z"); // 12:00 in Korea
-  assert.equal(await refusal(buy(ctx, { item: "lunch" })), null);
+  assert.equal(await refusal(buy(ctx, args)), null);
 });
 
 test("a character's viewer shows its experience to members, and its inventory and money when the owner allows", async () => {
@@ -3079,6 +3271,39 @@ test("a Q&A board lets guests ask in secret and open their question with its pas
     await refusal(posts.questions(ctx, { board: "free" })),
     "invalid_input",
   );
+});
+
+test("on a Q&A board only moderators and the owner answer", async () => {
+  const { ctx, table } = fakeCtx();
+  // Comments open to everyone, so only the board's kind keeps them out.
+  table(`${P}boards`).set("qna", {
+    name: "문의",
+    kind: "qna",
+    listLevel: 1,
+    readLevel: 1,
+    writeLevel: 1,
+    commentLevel: 1,
+    secret: "optional",
+  });
+  table(`${P}logs`).set("ask", { board: "qna", text: "환불되나요?" });
+  const answer = (guest) =>
+    comments.write(ctx, {
+      data: { logId: "ask", text: "답변" },
+      ...(guest ? { guest } : {}),
+    });
+  // skin/board/qna/list.skin.php:85-87: the reply link is $is_admin's.
+  assert.equal(await refusal(answer()), "answers_staff_only");
+  ctx.member = null;
+  assert.equal(
+    await refusal(answer({ name: "길손", password: "pass1234" })),
+    "answers_staff_only",
+  );
+  ctx.member = { id: "m-1" };
+  table(`${P}members`).set("m-1", { role: "moderator" });
+  assert.equal((await answer()).document.data.text, "답변");
+  table(`${P}members`).set("m-1", { role: "member" });
+  ctx.owner = true;
+  assert.equal((await answer()).document.data.text, "답변");
 });
 
 test("a settlement is settled by a moderator, granting experience and money, then stays", async () => {

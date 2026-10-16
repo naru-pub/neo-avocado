@@ -2,11 +2,14 @@
 // profile (message and alert preferences) only members. A member edits their
 // own nickname and preferences directly; joining, which makes the profile, is
 // the community/membership site function's.
+import { siteOpen } from "../modules/shared.js";
 
 /** What members may filter on: nothing a visitor cannot already see matters. */
 export const queryable = ["nick", "acceptMessages", "owner"];
 
-export function readable() {
+export async function readable(ctx) {
+  // A closed site (사이트공개 off) shows visitors nothing, nicknames included.
+  if (!ctx.member && !(await siteOpen(ctx))) return false;
   return { ne: ["deleted", true] };
 }
 

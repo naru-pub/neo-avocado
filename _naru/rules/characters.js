@@ -1,8 +1,9 @@
 // Publish as _naru/rules/characters.js and enable it on neo_avocado_characters
-// (member read, admin write): members read character sheets natively, and see
-// only the custom fields they may (public, or owner-visible on their own).
-// Writes go through the characters/sheet site function.
-import { PREFIX } from "../modules/shared.js";
+// (world read, admin write): members, and visitors while the site is open
+// (사이트공개), read character sheets natively, and see only the custom
+// fields they may (public, or owner-visible on their own). Writes go through
+// the characters/sheet site function.
+import { PREFIX, siteOpen } from "../modules/shared.js";
 import { fieldCatalogue, fieldVisible } from "../modules/characters.js";
 
 const CHARACTERS = `${PREFIX}characters`;
@@ -11,7 +12,9 @@ const CHARACTERS = `${PREFIX}characters`;
 export const queryable = ["owner", "name", "side", "state", "type", "deleted"];
 
 export async function readable(ctx, { collection }) {
-  if (!ctx.member || collection !== CHARACTERS) return false;
+  if (collection !== CHARACTERS) return false;
+  // A closed site sends visitors to log in (extend/community.config.php).
+  if (!ctx.member && !(await siteOpen(ctx))) return false;
   return { ne: ["deleted", true] };
 }
 

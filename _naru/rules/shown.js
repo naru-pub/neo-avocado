@@ -1,4 +1,4 @@
-import { INVENTORY, ITEMS, RECIPES } from "../modules/shared.js";
+import { INVENTORY, ITEMS, RECIPES, siteOpen } from "../modules/shared.js";
 
 // Catalogue rows (items, titles, recipes, emoticons, couples, relations,
 // outfits) the admin or a site function has not marked deleted.
@@ -8,7 +8,12 @@ import { INVENTORY, ITEMS, RECIPES } from "../modules/shared.js";
 // never read them. Items hidden from the shop (상점에서 숨기기), such as
 // prizes and crafted goods, show only as the original shows them: in the
 // reader's own inventory, or as part of a recipe they can see.
+//
+// Visitors read the world-readable ones (emoticons, board groups, and the
+// character viewer's 소속, 종족, titles, relations, outfits and couples) only
+// while the site is open (사이트공개, cf_open).
 export async function readable(ctx, { collection }) {
+  if (!ctx.member && !(await siteOpen(ctx))) return false;
   const listed = { ne: ["deleted", true] };
   if (collection === RECIPES)
     return { all: [listed, { ne: ["hidden", true] }] };

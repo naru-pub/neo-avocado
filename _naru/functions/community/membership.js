@@ -12,6 +12,8 @@ export async function membership(ctx) {
   const access = await communityAccess(ctx);
   return {
     ...access,
+    // The site owner signed in here answers as staff (Q&A answers).
+    owner: ctx.owner === true,
     memberId: ctx.member.id,
     profile: await ctx.get(PROFILES, ctx.member.id),
   };

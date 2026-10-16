@@ -410,8 +410,16 @@ function wireCharacterDetails(item, character) {
         character: character.id,
       },
     );
+    // The points not yet given to a stat (status.inc.php's space point).
+    const spent = status.definitions.reduce(
+      (total, definition) =>
+        total + (status.state.stats[definition.id]?.allocated ?? 0),
+      0,
+    );
+    const left = Math.max(0, status.state.points - spent);
+    const approved = status.state.approved === true;
     item.querySelector(".progression").textContent =
-      `경험치 ${status.state.exp}${status.rank ? ` · ${status.rank}` : ""} · 능력치 포인트 ${status.state.points}`;
+      `경험치 ${status.state.exp}${status.rank ? ` · ${status.rank}` : ""} · 능력치 포인트 ${status.state.points} (남은 ${left})`;
     item.querySelector(".stats").replaceChildren();
     for (const definition of status.definitions) {
       const li = document.createElement("li");
@@ -419,15 +427,21 @@ function wireCharacterDetails(item, character) {
       li.textContent = `${definition.data.name ?? definition.id}: ${stat.current} / ${stat.max}`;
       item.querySelector(".stats").append(li);
     }
-    allocate.hidden = !mine(character) || !status.definitions.length;
+    // Once approved, only the points left are spent, and no stat goes below
+    // what it has (mypage/character/status.inc.php:17-25, 60).
+    allocate.hidden =
+      !mine(character) || !status.definitions.length || (approved && !left);
     allocate.onclick = () =>
       edit(
-        "능력치 포인트 배분",
+        approved
+          ? `남은 능력치 포인트 배분 (남은 ${left})`
+          : "능력치 포인트 배분",
         status.definitions.map((definition) => ({
           name: definition.id,
           label: `${definition.data.name ?? definition.id}에 배분할 포인트`,
           type: "number",
           value: status.state.stats[definition.id].allocated,
+          min: approved ? status.state.stats[definition.id].allocated : 0,
         })),
         async (allocation) => {
           await caller().call("characters/progression:allocateStats", {

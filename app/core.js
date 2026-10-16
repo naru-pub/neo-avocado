@@ -47,10 +47,16 @@ export const state = {
   profile: null,
   recipes: [],
   inventoryCharacter: null,
+  // The shop's chosen character's official record: buying needs it approved.
+  shopCharacter: null,
   ownCharacters: [],
   historyCursor: null,
   messageCursor: null,
   admission: null,
+  // 사이트공개 (cf_open), from the site's frame: off, visitors see nothing.
+  siteOpen: true,
+  // The site owner, signed in here, is staff as moderators are.
+  owner: false,
   role: "member",
   level: 2,
   emoticons: null,
@@ -284,6 +290,10 @@ export function show(profile) {
   $("admissionPanel").hidden = true;
   const member = state.member;
   document.body.classList.toggle("visitor", !member);
+  document.body.classList.toggle(
+    "site-closed",
+    !member && state.siteOpen === false,
+  );
   $("signIn").hidden = Boolean(member);
   $("signOut").hidden = !member;
   $("editProfile").hidden = !member || !profile;
@@ -326,6 +336,7 @@ export function edit(title, fields, save) {
     else if (field.type !== "file") input.value = field.value ?? "";
     input.required = Boolean(field.required);
     if (field.max) input.maxLength = field.max;
+    if (field.min !== undefined) input.min = String(field.min);
     label.append(input);
     $("editorFields").append(label);
     inputs[field.name] = input;

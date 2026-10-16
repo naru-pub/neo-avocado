@@ -20,7 +20,7 @@
       "indexes": ["to"]
     },
     "neo_avocado_character_fields": {
-      "read": "member",
+      "read": "world",
       "write": "admin",
       "rules": "character-fields"
     },
@@ -29,13 +29,13 @@
       "write": "admin"
     },
     "neo_avocado_characters": {
-      "read": "member",
+      "read": "world",
       "write": "admin",
       "rules": "characters",
       "indexes": ["owner", "state"]
     },
     "neo_avocado_classes": {
-      "read": "member",
+      "read": "world",
       "write": "admin",
       "rules": "shown"
     },
@@ -54,7 +54,7 @@
       "write": "admin"
     },
     "neo_avocado_couples": {
-      "read": "member",
+      "read": "world",
       "write": "admin",
       "rules": "shown",
       "indexes": ["first", "second"]
@@ -135,7 +135,7 @@
       "rules": "shown"
     },
     "neo_avocado_relations": {
-      "read": "member",
+      "read": "world",
       "write": "admin",
       "rules": "shown"
     },
@@ -145,7 +145,7 @@
       "rules": "settings"
     },
     "neo_avocado_sides": {
-      "read": "member",
+      "read": "world",
       "write": "admin",
       "rules": "shown"
     },
@@ -154,7 +154,7 @@
       "write": "admin"
     },
     "neo_avocado_titles": {
-      "read": "member",
+      "read": "world",
       "write": "admin",
       "rules": "shown"
     },
@@ -168,7 +168,7 @@
       "rules": "own"
     },
     "neo_avocado_wardrobe": {
-      "read": "member",
+      "read": "world",
       "write": "admin",
       "rules": "shown"
     }

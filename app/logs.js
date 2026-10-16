@@ -590,8 +590,11 @@ export async function logItem(log) {
   );
   form.querySelector(".comment-actions").hidden =
     !state.member || !board?.data.actions;
+  const staff = state.role === "moderator" || state.owner;
   form.hidden =
     board?.data.enabled === false ||
+    // Only the staff answer a Q&A board's questions (qna/list.skin.php:85).
+    (board?.data.kind === "qna" && !staff) ||
     (state.role !== "moderator" &&
       state.level < (board?.data.commentLevel ?? 2));
   form.onsubmit = (event) => {

@@ -32,7 +32,10 @@ function parts(hash) {
 export function openRoute(hash = location.hash) {
   const [kind = "", first, second] = parts(hash);
   return opening(async () => {
-    if (!kind) return showTab("home");
+    // A closed site (사이트공개 off) shows a visitor the sign-in card only,
+    // whatever the address (extend/community.config.php's check_site_auth).
+    if (!kind || (!state.member && state.siteOpen === false))
+      return showTab("home");
     if (kind === "post" && first) {
       // #/post/<id>, or #/post/<id>/comment/<id>.
       const [, , , comment] = parts(hash);
@@ -71,10 +74,8 @@ export function openRoute(hash = location.hash) {
       $("tabMessages").click();
       return openMessage(first);
     }
-    if (kind === "character" && first) {
-      if (!state.member) return say("회원 로그인 후 이용할 수 있습니다.");
-      return openCharacter(first);
-    }
+    // The character viewer (member/viewer.php), open to visitors too.
+    if (kind === "character" && first) return openCharacter(first);
     if (kind === "content" && first) return follow(`content:${first}`);
     if (kind === "shop") {
       if (!state.member) return say("회원 로그인 후 이용할 수 있습니다.");

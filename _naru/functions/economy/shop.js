@@ -29,7 +29,9 @@ export async function daily(ctx) {
   return { balance };
 }
 
-/** 상점에서 하나 산다. 재고(stock)가 없으면 무제한이다. */
+/**
+ * 상점에서 승인된 내 캐릭터로 하나 산다. 재고(stock)가 없으면 무제한이다.
+ */
 export async function buy(
   ctx,
   { item, character = null, materials = [] } = {},
@@ -46,31 +48,21 @@ export async function buy(
   if (stock !== undefined) amount(stock, "Stock");
   if (typeof stock === "number" && stock < 1)
     ctx.fail("CONFLICT", "품절입니다.", { reason: "sold_out" });
+  // Buying is a character's, and only an approved one's
+  // (shop/_ajax.shop_update.php:4, shop.item.skin.php:24).
+  if (!(await ownCharacter(ctx, character)))
+    ctx.fail("INVALID_REQUEST", "구매할 내 캐릭터를 골라 주세요.", {
+      reason: "no_character",
+    });
+  const progression = await characterState(ctx, character);
+  if (progression.data.approved !== true)
+    ctx.fail("CONFLICT", "승인된 캐릭터만 할 수 있습니다.", {
+      reason: "not_approved",
+    });
   const current = await wallet(ctx);
   if (current.balance < price)
     ctx.fail("CONFLICT", "아보가 모자랍니다.", { reason: "not_enough" });
   const requirements = listing.data.requirements ?? {};
-  const needsCharacter =
-    character ||
-    requirements.approved ||
-    requirements.sides?.length ||
-    requirements.classes?.length ||
-    requirements.exp ||
-    requirements.title;
-  const ownedCharacter = needsCharacter
-    ? await ownCharacter(ctx, character)
-    : null;
-  if (needsCharacter && !ownedCharacter)
-    ctx.fail("INVALID_REQUEST", "캐릭터를 확인해 주세요.", {
-      reason: "no_character",
-    });
-  const progression = ownedCharacter
-    ? await characterState(ctx, character)
-    : null;
-  if (requirements.approved && progression.data.approved !== true)
-    ctx.fail("CONFLICT", "승인된 캐릭터만 할 수 있습니다.", {
-      reason: "not_approved",
-    });
   for (const [key, field] of [
     ["sides", "side"],
     ["classes", "class"],
@@ -102,9 +94,8 @@ export async function buy(
     ctx.fail("CONFLICT", "필요한 타이틀이 없습니다.", {
       reason: "missing_title",
     });
-  const counts = {
-    ...(progression ? progression.data.purchases : current.purchases),
-  };
+  // Limits count the character's purchases (_ajax.shop_update.php:89).
+  const counts = { ...progression.data.purchases };
   const previous = amount(
     Object.hasOwn(counts, listing.id) ? counts[listing.id] : 0,
     "Purchase count",
@@ -161,21 +152,14 @@ export async function buy(
       reason: "invalid_materials",
     });
   const debit = requirements.consumeMoney === false ? 0 : price;
-  const balance = await pay(
-    ctx,
-    current,
-    debit,
-    progression ? {} : { purchases: counts },
-  );
-  if (progression) {
-    const next = { ...progression.data, purchases: counts };
-    if (requirements.consumeExp) next.exp -= expPrice;
-    if (requirements.consumeTitle && requirements.title) {
-      next.titles = next.titles.filter((id) => id !== requirements.title);
-      if (next.activeTitle === requirements.title) next.activeTitle = null;
-    }
-    await ctx.set(CHARACTER_STATE, character, next);
+  const balance = await pay(ctx, current, debit);
+  const next = { ...progression.data, purchases: counts };
+  if (requirements.consumeExp) next.exp -= expPrice;
+  if (requirements.consumeTitle && requirements.title) {
+    next.titles = next.titles.filter((id) => id !== requirements.title);
+    if (next.activeTitle === requirements.title) next.activeTitle = null;
   }
+  await ctx.set(CHARACTER_STATE, character, next);
   for (const row of supplied)
     if (needed.get(row.data.item).consume) await ctx.delete(INVENTORY, row.id);
   if (typeof stock === "number")

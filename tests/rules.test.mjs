@@ -6,6 +6,7 @@ import * as own from "../_naru/rules/own.js";
 import * as settings from "../_naru/rules/settings.js";
 import * as characterFields from "../_naru/rules/character-fields.js";
 import * as shown from "../_naru/rules/shown.js";
+import * as characters from "../_naru/rules/characters.js";
 import { matches } from "./where.mjs";
 
 const P = "neo_avocado_";
@@ -42,7 +43,7 @@ test("boards: each level lists only the boards it may", async () => {
   assert.equal(boards.canWrite(), false);
 });
 
-test("profiles: visitors read nicknames only, members the whole profile", () => {
+test("profiles: visitors read nicknames only, members the whole profile", async () => {
   const document = {
     id: "m-1",
     data: { nick: "아보", acceptMessages: false, commentAlerts: true },
@@ -54,7 +55,9 @@ test("profiles: visitors read nicknames only, members the whole profile", () => 
     profiles.present(rulesCtx("m-2"), { document }),
     document.data,
   );
-  assert.deepEqual(profiles.readable(), { ne: ["deleted", true] });
+  assert.deepEqual(await profiles.readable(rulesCtx(null)), {
+    ne: ["deleted", true],
+  });
   assert.ok(!profiles.queryable.includes("commentAlerts"));
 });
 
@@ -130,13 +133,47 @@ test("settings: only the community settings, trimmed to what pages use", () => {
 });
 
 test("character fields and catalogues hide what members may not see", async () => {
-  assert.deepEqual(characterFields.readable(), {
+  assert.deepEqual(await characterFields.readable(rulesCtx("m-1")), {
     all: [{ ne: ["deleted", true] }, { ne: ["visibility", "admin"] }],
   });
   assert.deepEqual(
     await shown.readable(rulesCtx("m-1"), { collection: `${P}titles` }),
     { ne: ["deleted", true] },
   );
+});
+
+test("사이트공개 off: visitors read no characters, fields, catalogues or nicknames; members read on", async () => {
+  const closed = { [`${P}settings`]: { community: { siteOpen: false } } };
+  for (const [rule, collection] of [
+    [characters, "characters"],
+    [characterFields, "character_fields"],
+    [shown, "sides"],
+    [shown, "classes"],
+    [shown, "titles"],
+    [shown, "relations"],
+    [shown, "wardrobe"],
+    [shown, "couples"],
+    [shown, "emoticons"],
+    [profiles, "profiles"],
+  ]) {
+    const scope = (member, tables) =>
+      rule.readable(rulesCtx(member, tables), {
+        collection: `${P}${collection}`,
+      });
+    assert.equal(await scope(null, closed), false, collection);
+    assert.notEqual(await scope(null, {}), false, collection);
+    assert.notEqual(await scope("m-1", closed), false, collection);
+  }
+  // The boards rule (and with it posts) has the closed site's level 0.
+  const boardsOf = (tables) =>
+    boards.readable(
+      rulesCtx(null, {
+        [`${P}boards`]: { open: { listLevel: 1 } },
+        ...tables,
+      }),
+    );
+  assert.equal(await boardsOf(closed), false);
+  assert.deepEqual(await boardsOf({}), { in: [{ metadata: "id" }, ["open"]] });
 });
 
 test("hidden recipes are no one's to read; hidden items only where the original shows them", async () => {

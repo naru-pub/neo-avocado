@@ -115,6 +115,7 @@ async function start() {
     return showAdmission("left");
   }
   state.role = status.role;
+  state.owner = status.owner === true;
   state.level = status.level ?? 2;
   const profile = status.profile;
   show(profile);
@@ -133,9 +134,12 @@ async function start() {
 /** A visitor's view: public boards and pages at GnuBoard's guest level 1. */
 async function visit() {
   state.role = "guest";
+  state.owner = false;
   state.level = 1;
   show();
   await opening(() => showTab("home"));
+  // 사이트공개 off: the welcome and sign-in card, and nothing else read.
+  if (state.siteOpen === false) return;
   await loadBoards();
   if (!arrivesAtList()) await loadLogs();
   if (state.boards.length) listen();

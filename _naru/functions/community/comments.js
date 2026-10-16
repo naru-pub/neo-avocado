@@ -62,6 +62,16 @@ export async function write(
     ctx.fail("ACCESS_DENIED", "권한이 없습니다.", {
       reason: "access_denied",
     });
+  // On a Q&A board only the staff answer (skin/board/qna/list.skin.php:85-87
+  // shows the reply link to $is_admin alone).
+  if (board.data.kind === "qna" && !ctx.owner && access.role !== "moderator")
+    ctx.fail(
+      "ACCESS_DENIED",
+      "질문 답변 게시판은 운영진만 답변할 수 있습니다.",
+      {
+        reason: "answers_staff_only",
+      },
+    );
   value = {
     ...value,
     logId,

@@ -52,7 +52,7 @@ async function loadShop() {
   // Independent panels, read at once.
   await Promise.all([
     loadBalance(),
-    loadShopFront().then(() => loadItems()),
+    Promise.all([loadShopFront(), loadShopCharacter()]).then(() => loadItems()),
     loadInventory(),
     loadRecipes(),
     $("historyPanel").open ? loadHistory() : null,
@@ -104,6 +104,44 @@ export function showShopCategory(name) {
     button.setAttribute("aria-pressed", String(button.textContent === name));
   showCategory();
 }
+/**
+ * The chosen character's official record (approval, 세력 and 종족), which
+ * buying needs: the original's shop is its member's character's
+ * (shop/_ajax.shop_update.php:4).
+ */
+async function loadShopCharacter() {
+  const id = state.inventoryCharacter;
+  const status = id
+    ? await caller().call("characters/progression:characterStatus", {
+        character: id,
+      })
+    : null;
+  // A choice made while this was read wins.
+  if (id !== state.inventoryCharacter) return;
+  state.shopCharacter = status ? { id, ...status.state } : null;
+  const approved = state.shopCharacter?.approved === true;
+  $("shopBuyNote").hidden = approved;
+  $("shopBuyNote").textContent = id
+    ? "승인된 캐릭터만 구매할 수 있습니다."
+    : "구매하려면 위에서 승인된 내 캐릭터를 고르세요.";
+}
+/**
+ * Whether the chosen character may see an item: one kept for some 세력 or
+ * 종족 is left out for the others, and for no character (shop/index.php:33,36).
+ */
+function forCharacter(item) {
+  const requirements = item.data.requirements ?? {};
+  const character = state.shopCharacter;
+  return [
+    ["sides", "side"],
+    ["classes", "class"],
+  ].every(
+    ([key, field]) =>
+      !Array.isArray(requirements[key]) ||
+      !requirements[key].length ||
+      (character && requirements[key].includes(character[field])),
+  );
+}
 /** The shop's items of the chosen category, from what has been read. */
 function showCategory(number = 1) {
   const first = state.shopCategories?.[0];
@@ -111,7 +149,8 @@ function showCategory(number = 1) {
     (item) =>
       !item.data.hidden &&
       onDisplay(item.data.display, Date.now()) &&
-      (item.data.shopCategory || first) === state.shopCategory,
+      (item.data.shopCategory || first) === state.shopCategory &&
+      forCharacter(item),
   );
   // Ten to a page (shop/index.php's page_rows).
   const pages = Math.ceil(shown.length / SHOP_PAGE);
@@ -165,14 +204,14 @@ function shopItem(item) {
   buy.type = "button";
   buy.textContent = item.data.stock === 0 ? "품절" : "사기";
   buy.disabled = item.data.stock === 0;
+  // 구매하기 shows only for an approved character (shop.item.skin.php:24).
+  buy.hidden = state.shopCharacter?.approved !== true;
   buy.onclick = () =>
     spend(
       "economy/shop:buy",
       {
         item: item.id,
-        ...(state.inventoryCharacter
-          ? { character: state.inventoryCharacter }
-          : {}),
+        character: state.shopCharacter.id,
         ...(item.data.requirements?.items?.length
           ? {
               materials: [
@@ -325,6 +364,14 @@ async function loadInventory({ more = false } = {}) {
           await loadInventory();
         },
       );
+    // 판매, 사용 and 선물 only where the item allows them
+    // (inventory/skin/item.skin.php:36-44); the functions refuse the rest.
+    const item = state.itemCatalog.get(owned.data.item)?.data;
+    sell.hidden = !(
+      typeof item?.sellPrice === "number" && item.sellable !== false
+    );
+    use.hidden = !(item?.effect?.type && item.usable !== false);
+    gift.hidden = !item || item.giftable === false;
     row.append(" ", sell, " ", gift, " ", use, " ", assign);
     $("inventory").append(row);
   }
@@ -334,7 +381,10 @@ async function loadInventory({ more = false } = {}) {
 $("inventoryCharacter").onchange = () =>
   run(async () => {
     state.inventoryCharacter = $("inventoryCharacter").value || null;
-    await loadInventory();
+    await Promise.all([
+      loadInventory(),
+      loadShopCharacter().then(() => showCategory()),
+    ]);
   });
 const HISTORY_NAMES = {
   adjust: "운영자 잔액 조정",
