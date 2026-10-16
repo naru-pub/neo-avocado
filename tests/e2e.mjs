@@ -87,6 +87,13 @@ async function joinAs(page, nick) {
   await page.waitForFunction(() => navigator.serviceWorker.controller);
   await page.locator("#community").waitFor();
 }
+/**
+ * Waits for the next minute: a member's queries are counted with read-only
+ * calls, 120 a minute, in fixed minutes, and this script reads faster than
+ * anyone (native reads, which boards were, allowed 600).
+ */
+const nextMinute = () =>
+  new Promise((done) => setTimeout(done, 60_500 - (Date.now() % 60_000)));
 const PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGNk+M8ABIwMDP8ZGBgYAAAhCAMBaVPDaAAAAABJRU5ErkJggg==",
   "base64",
@@ -96,7 +103,7 @@ const picture = (name) => ({ name, mimeType: "image/png", buffer: PNG });
 try {
   // _naru/collections.json made every collection as the site started, so
   // the owner's sign-in only signs in.
-  assert.match(log, /_naru\/collections\.json: 8 created, 0 changed/);
+  assert.match(log, /_naru\/collections\.json: 1 created, 0 changed/);
   const owner = await person();
   await owner.goto(`${origin}/admin/`);
   await owner.locator("#adminSignIn").click();
@@ -113,8 +120,15 @@ try {
       id: "community",
       data: { loginReward: 100 },
     });
-    // The original installs no boards: the owner makes 로그 too.
-    await admin.collection(`${P}boards`).set("default", {
+    // The original installs no boards: the owner makes 로그 too. Boards are
+    // a table (0002_boards.sql).
+    const board = (id, data) =>
+      admin.mutate("admin/documents:set", {
+        collection: `${P}boards`,
+        id,
+        data,
+      });
+    await board("default", {
       name: "로그",
       kind: "image",
       enabled: true,
@@ -126,7 +140,7 @@ try {
       categories: [],
       actions: true,
     });
-    await admin.collection(`${P}boards`).set("free", {
+    await board("free", {
       name: "자유",
       kind: "text",
       enabled: true,
@@ -172,7 +186,12 @@ try {
   const smile = await owner.evaluate(async (P) => {
     const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
     const admin = await createNaru().auth.session();
-    return (await admin.collection(`${P}emoticons`).get("smile")).data.image;
+    return (
+      await admin.query("admin/documents:get", {
+        collection: `${P}emoticons`,
+        id: "smile",
+      })
+    ).data.image;
   }, P);
   assert.match(smile, /^https:\/\/media\.naru\.pub\/1\//);
   assert.equal(
@@ -247,7 +266,7 @@ try {
   );
   const logPicture = await post.locator("img.log-image").getAttribute("src");
   assert.match(logPicture, /^https:\/\/media\.naru\.pub\/1\//);
-  // #tag searches with `has`.
+  // #tag lists the board's posts with the tag.
   await post.locator(".hash-tag").click();
   await alice.locator("#tagFilter").waitFor();
   assert.equal(await alice.locator("#logs .log").count(), 1);
@@ -348,6 +367,8 @@ try {
   await alice.locator("#items li", { hasText: "케이크" }).waitFor();
 
   // Every page has an address: a character's viewer, a post, a category.
+  // Each reload reads the site anew; give Alice a fresh minute for them.
+  await nextMinute();
   const greenId = await alice.evaluate(async (P) => {
     const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
     const member = await createNaru().members.session();
@@ -575,22 +596,20 @@ try {
     async ({ P, memberIds }) => {
       const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
       const naru = createNaru();
-      const ids = (name, options) =>
-        naru
-          .collection(`${P}${name}`)
-          .list(options)
-          .then(
-            (page) => page.documents.map((row) => row.id),
-            (error) => error.code,
-          );
+      const ids = (name, args, list) =>
+        naru.query(name, args).then(
+          (answer) => answer[list].map((row) => row.id),
+          (error) => error.code,
+        );
       return {
         // Characters are a query's, which reads the closed site's setting.
         characters: await naru.query("characters/sheet:list").then(
           (page) => page.documents.map((row) => row.id),
           (error) => error.code,
         ),
-        boards: await ids("boards"),
-        logs: await ids("logs", { filter: { board: "free" } }),
+        // So are the boards and their posts.
+        boards: await ids("community/boards:boards", null, "boards"),
+        logs: await ids("community/posts:page", { board: "free" }, "documents"),
         // Nicknames are a query's, which reads the closed site's setting.
         nicks: await naru
           .query("community/profiles:nicks", { ids: memberIds })
@@ -835,13 +854,17 @@ try {
       ["ask", { name: "문의", kind: "qna", secret: "optional" }],
       ["calc", { name: "정산", kind: "settlement", categories: ["이벤트"] }],
     ])
-      await admin.collection(`${P}boards`).set(id, {
-        enabled: true,
-        listLevel: 1,
-        readLevel: 1,
-        writeLevel: 1,
-        commentLevel: 1,
-        ...data,
+      await admin.mutate("admin/documents:set", {
+        collection: `${P}boards`,
+        id,
+        data: {
+          enabled: true,
+          listLevel: 1,
+          readLevel: 1,
+          writeLevel: 1,
+          commentLevel: 1,
+          ...data,
+        },
       });
   }, P);
   const asker = await person();
@@ -866,6 +889,8 @@ try {
     true,
   );
 
+  // Alice has read the site some 120 times this minute: her next minute.
+  await nextMinute();
   await alice.goto(`${origin}/#/logs/calc`);
   await alice.locator("#logCategory").selectOption("이벤트");
   await alice.locator("#logText").fill("이벤트 참여 정산 부탁드려요");
@@ -874,10 +899,12 @@ try {
   await owner.evaluate(async (P) => {
     const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
     const admin = await createNaru().auth.session();
-    const { documents } = await admin
-      .collection(`${P}logs`)
-      .list({ filter: { board: "calc" } });
-    await admin.call("community/posts:settle", {
+    // Posts are read here as the admin's 활동량 관리 reads them.
+    const { documents } = await admin.query("admin/documents:list", {
+      collection: `${P}logs`,
+      filter: { board: "calc" },
+    });
+    await admin.mutate("community/posts:settle", {
       id: documents[0].id,
       state: "정산완료",
       money: 10,

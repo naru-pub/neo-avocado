@@ -62,7 +62,11 @@ const initialState = {
   logPage: 1,
   live: null,
   // The board whose newest post the page keeps in view (live.js).
-  boardWatch: null as { board: string; handle: { close(): void } } | null,
+  boardWatch: null as {
+    board: string;
+    reader: unknown;
+    handle: { close(): void };
+  } | null,
   newPost: null,
   ownPosts: new Set(),
   // The member's characters for posting, and items for in-post use: read on

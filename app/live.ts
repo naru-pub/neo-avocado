@@ -1,6 +1,6 @@
 // Live updates: new posts, unread messages and notifications as they happen.
 
-import { $, caller, run, state, stopLive, subscribe } from "./core.js";
+import { $, caller, run, state, subscribe } from "./core.js";
 
 /** How many messages are unread, as last told. */
 let unreadCount = 0;
@@ -41,7 +41,9 @@ async function refreshUnread() {
  */
 export function watchBoard() {
   const board = state.board;
-  if (state.boardWatch?.board === board) return;
+  const reader = caller();
+  if (state.boardWatch?.board === board && state.boardWatch.reader === reader)
+    return;
   state.boardWatch?.handle.close();
   state.boardWatch = null;
   if (!state.boards.some((row) => row.id === board)) return;
@@ -59,7 +61,7 @@ export function watchBoard() {
       /* A notice missed is no reason to bother anyone. */
     },
   );
-  state.boardWatch = { board, handle };
+  state.boardWatch = { board, reader, handle };
 }
 
 /**
@@ -70,7 +72,9 @@ export function watchBoard() {
  * opens or reopens.
  */
 export function listen() {
-  stopLive();
+  // The board's subscription stays while the reader does (watchBoard).
+  state.live?.close();
+  state.live = null;
   watchBoard();
   const member = state.member;
   if (!member) return;
