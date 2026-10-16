@@ -114,6 +114,31 @@ export async function siteOpen(ctx: ReadCtx): Promise<boolean> {
 }
 
 /**
+ * 닉네임 금지 단어 (cf_prohibit_id), as the original installs it
+ * (install/install_db.php). The admin's community settings keep the owner's
+ * own list, comma-separated; an empty list reserves nothing.
+ */
+export const RESERVED_NICKS =
+  "admin,administrator,관리자,운영자,어드민,주인장,webmaster,웹마스터,sysop,시삽,시샵,manager,매니저,메니저,root,루트,su,guest,방문객";
+
+/**
+ * Whether a nickname is one of the reserved words (lib/register.lib.php's
+ * reserve_mb_nick), ignoring case. The site owner may take one.
+ */
+export async function reservedNick(
+  ctx: ReadCtx,
+  nick: string,
+): Promise<boolean> {
+  if (ctx.owner) return false;
+  const saved = (await ctx.get(SETTINGS, "community"))?.data.reservedNicks;
+  const list = typeof saved === "string" ? saved : RESERVED_NICKS;
+  const wanted = nick.trim().toLowerCase();
+  return list
+    .split(",")
+    .some((word) => word.trim() && word.trim().toLowerCase() === wanted);
+}
+
+/**
  * The owner's names (기타 항목명 설정: cf_money, cf_money_pice, cf_exp_name,
  * cf_exp_pice, cf_rank_name, cf_side_title, cf_class_title), the template's
  * own until changed. An empty 소속 or 종족 title hides it, as in the original.
@@ -709,6 +734,10 @@ export async function restoreStat(ctx: Ctx, effect: Data, character: string) {
   return await ctx.set(CHARACTER_STATE, character, state.data);
 }
 
+/**
+ * Whether the reader may see a content page. The original's pages have no
+ * read level (bbs/content.php, main.php), so a page without one is everyone's.
+ */
 export async function contentReadable(
   ctx: ReadCtx,
   row: NaruDocument | null,
@@ -717,7 +746,7 @@ export async function contentReadable(
     row &&
     row.data.enabled !== false &&
     !row.data.deleted &&
-    (await communityAccess(ctx)).level >= (row.data.readLevel ?? 2)
+    (await communityAccess(ctx)).level >= (row.data.readLevel ?? 1)
   );
 }
 

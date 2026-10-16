@@ -31,19 +31,32 @@ export async function loadSite() {
   applyHead(design);
   renderMenus(site.menus);
   renderBanners(site.banners);
-  await showMainPage(site.main === true);
+  await showMainPage(site.main === true, site.banners);
   setMusic(site.bgm);
   if (!design.enabled) return;
   for (const [key, variable] of Object.entries(SITE_COLORS))
     if (design.colors[key]) root.setProperty(variable, design.colors[key]);
   if (design.background) {
-    // The owner's picture tiles at its own size, as background_repeat did.
+    // The owner's picture at its own size, repeated and placed as they
+    // chose (background_repeat, background_position).
     root.setProperty("--site-background-size", "auto");
     root.setProperty(
       "--site-background",
       `url("${encodeURI(design.background)}")`,
     );
   }
+  // m_background: a phone's own picture (style.css's narrow layout).
+  if (design.mobileBackground) {
+    root.setProperty("--site-mobile-background-size", "auto");
+    root.setProperty(
+      "--site-mobile-background",
+      `url("${encodeURI(design.mobileBackground)}")`,
+    );
+  }
+  root.setProperty("--site-background-repeat", design.backgroundRepeat);
+  root.setProperty("--site-background-position", design.backgroundPosition);
+  if (design.backgroundColor)
+    root.setProperty("--site-background-color", design.backgroundColor);
   if (design.headerBackground)
     root.setProperty(
       "--site-header-background",
@@ -67,12 +80,14 @@ function applyItemNames(names) {
 }
 /**
  * cf_site_descript and cf_favicon (head.sub.php): the page's description
- * and the browser tab's icon, when the owner sets them.
+ * and the browser tab's icon, when the owner sets them, for the open tab.
  */
 function applyHead(design) {
+  // Without the owner's own, index.html's tags stay (link previews read
+  // those: crawlers do not run this page's script).
   const set = (selector, create, attribute, value) => {
     let element = document.head.querySelector(selector);
-    if (!value) return element?.remove();
+    if (!value) return;
     if (!element) document.head.append((element = create()));
     element.setAttribute(attribute, value);
   };
@@ -92,9 +107,11 @@ function applyHead(design) {
 }
 /**
  * 메인화면 구성 (main.php): the owner's site_main page in the home's place,
- * or the home as it is.
+ * or the home as it is. Its placeholders become the parts they name.
  */
-async function showMainPage(enabled) {
+async function showMainPage(enabled, banners) {
+  // The card a previous {{OUTLOGIN}} moved returns home first.
+  cardHome.parent.insertBefore($("profileCard"), cardHome.next);
   $("mainPage").hidden = !enabled;
   $("homeDefault").hidden = enabled;
   if (enabled) $("banners").hidden = true;
@@ -104,6 +121,72 @@ async function showMainPage(enabled) {
     mobile: window.innerWidth <= 700,
   });
   renderContent($("mainPage"), result.page);
+  expandPlaceholders(
+    $("mainPage"),
+    banners.filter((banner) => banner.place === "main"),
+  );
+}
+/** Where the member card lives on the home, for {{OUTLOGIN}} to give back. */
+const cardHome = {
+  parent: $("profileCard").parentElement,
+  next: $("profileCard").nextSibling,
+};
+/** A link that does what a page control does, for a placeholder. */
+function controlLink(text, href, className, action) {
+  const link = document.createElement("a");
+  link.href = href;
+  link.className = className;
+  link.textContent = text;
+  link.onclick = (event) => {
+    event.preventDefault();
+    action();
+  };
+  return link;
+}
+/**
+ * extend/community.config.php's get_site_content: {{VISUAL_SLIDE}} the main
+ * slides, {{OUTLOGIN}} the member card, {{LOGIN}}, {{JOIN}}, {{LOGOUT}} and
+ * {{MYPAGE}} links that show to guests or members as the original's, and
+ * {{BGM}} and {{TWITTER}} nothing (the music plays from the header; the
+ * timeline embed is gone). Others stay as written. The page is sanitized
+ * already; the parts are the page's own elements, put in as nodes.
+ */
+function expandPlaceholders(container: HTMLElement, slides) {
+  const parts = {
+    VISUAL_SLIDE: () => {
+      const element = document.createElement("div");
+      showSlides(element, slides);
+      return element;
+    },
+    OUTLOGIN: () => $("profileCard"),
+    LOGIN: () =>
+      controlLink("로그인", "#", "guest-only", () => $("signIn").click()),
+    // Naru's sign-in is where a visitor becomes a member.
+    JOIN: () =>
+      controlLink("회원가입", "#", "guest-only", () => $("signIn").click()),
+    LOGOUT: () =>
+      controlLink("로그아웃", "#", "member-only", () => $("signOut").click()),
+    MYPAGE: () =>
+      controlLink("마이페이지", "#/mypage", "member-only", () =>
+        $("tabMypage").click(),
+      ),
+    BGM: () => null,
+    TWITTER: () => null,
+  };
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  const texts: Text[] = [];
+  while (walker.nextNode()) texts.push(walker.currentNode as Text);
+  for (const node of texts) {
+    const pieces = node.data.split(/\{\{([A-Z_]+)\}\}/);
+    if (pieces.length === 1) continue;
+    // split() with a group: text, name, text, name, …, text.
+    const replacement = pieces.map((piece, index) => {
+      if (index % 2 === 0) return piece;
+      if (!Object.hasOwn(parts, piece)) return `{{${piece}}}`;
+      return parts[piece]() ?? "";
+    });
+    node.replaceWith(...replacement);
+  }
 }
 /** The site's name and logo, in the header and the copyright. */
 function applyNames(design) {
@@ -118,6 +201,10 @@ function applyNames(design) {
     $<HTMLImageElement>("siteLogo").src = design.logo;
     $<HTMLImageElement>("siteLogo").alt = design.title || "";
   }
+  // m_logo: a phone's own logo, as the original's mobile header.
+  if (design.logo && design.mobileLogo)
+    $<HTMLSourceElement>("siteLogoMobile").srcset = design.mobileLogo;
+  else $("siteLogoMobile").removeAttribute("srcset");
 }
 function menuLink(menu) {
   const link = document.createElement("a");
@@ -189,7 +276,7 @@ function renderMenus(menus) {
   nav.append(list);
   nav.hidden = false;
 }
-function bannerPicture(banner) {
+function bannerPicture(banner, linked = true) {
   const picture = document.createElement("picture");
   if (banner.mobileImage) {
     const source = document.createElement("source");
@@ -201,7 +288,7 @@ function bannerPicture(banner) {
   image.src = banner.image;
   image.alt = banner.alt;
   picture.append(image);
-  if (!banner.url) return picture;
+  if (!banner.url || !linked) return picture;
   const link = document.createElement("a");
   link.href = banner.url;
   if (banner.newWindow) {
@@ -211,20 +298,130 @@ function bannerPicture(banner) {
   link.append(picture);
   return link;
 }
+/** How to stop each slider's turning, when it is drawn again. */
+const stopping = new WeakMap<HTMLElement, () => void>();
+/**
+ * templete/txt.visual.php's slider (display_banner(…, 'slide', '5000')): one
+ * slide at a time, the next every five seconds, held while the pointer or
+ * focus is on it, with 이전·다음 buttons. With reduced motion asked for, it
+ * turns only by the buttons.
+ */
+function showSlides(container: HTMLElement, banners) {
+  stopping.get(container)?.();
+  stopping.delete(container);
+  container.className = "banners";
+  container.setAttribute("role", "region");
+  container.setAttribute("aria-roledescription", "carousel");
+  container.setAttribute("aria-label", "메인 슬라이드");
+  const slides = banners.map((banner, index) => {
+    const slide = document.createElement("div");
+    slide.className = "slide";
+    slide.setAttribute("role", "group");
+    slide.setAttribute("aria-roledescription", "slide");
+    slide.setAttribute("aria-label", `${index + 1} / ${banners.length}`);
+    slide.hidden = index > 0;
+    slide.append(bannerPicture(banner));
+    return slide;
+  });
+  container.replaceChildren(...slides);
+  if (slides.length < 2) return;
+  let current = 0;
+  const go = (step) => {
+    slides[current].hidden = true;
+    current = (current + step + slides.length) % slides.length;
+    slides[current].hidden = false;
+  };
+  const button = (text, className, step) => {
+    const element = document.createElement("button");
+    element.type = "button";
+    element.className = `slide-nav ${className}`;
+    element.setAttribute("aria-label", text);
+    element.textContent = step < 0 ? "‹" : "›";
+    element.onclick = () => go(step);
+    return element;
+  };
+  container.append(
+    button("이전 슬라이드", "previous", -1),
+    button("다음 슬라이드", "next", 1),
+  );
+  if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+  let held = 0;
+  const hold = (change) => () => (held = Math.max(0, held + change));
+  container.addEventListener("mouseenter", hold(1));
+  container.addEventListener("mouseleave", hold(-1));
+  container.addEventListener("focusin", hold(1));
+  container.addEventListener("focusout", hold(-1));
+  // It turns while the page is in view, and stops once off the page.
+  let timer = null;
+  const stop = () => {
+    clearInterval(timer);
+    document.removeEventListener("visibilitychange", turn);
+  };
+  function turn() {
+    clearInterval(timer);
+    timer = null;
+    if (document.hidden) return;
+    timer = setInterval(() => {
+      if (!container.isConnected) return stop();
+      if (!held) go(1);
+    }, 5000);
+  }
+  document.addEventListener("visibilitychange", turn);
+  stopping.set(container, stop);
+  turn();
+}
+/** Whether the page was opened at the home (no address, or #/home). */
+const arrivedHome = /^(#\/?(home)?\/?)?$/.test(location.hash);
+const INTRO_KEY = "neo-avocado-intro-closed";
 function renderBanners(banners) {
   const main = banners.filter((banner) => banner.place === "main");
-  $("banners").replaceChildren(...main.map(bannerPicture));
+  showSlides($("banners"), main);
   $("banners").hidden = !main.length;
   const intro = banners.filter((banner) => banner.place === "intro");
-  let entered = false;
+  // intro.php: only on the main page, and not for a day once seen through
+  // (its intro_close cookie, 24 hours).
+  let closed = false;
   try {
-    entered = sessionStorage.getItem("neo-avocado-entered") === "1";
+    closed = Number(localStorage.getItem(INTRO_KEY)) > Date.now();
   } catch {
-    /* Without storage the intro shows on each load. */
+    /* Without storage the intro shows on each arrival. */
   }
-  if (!intro.length || entered || $<HTMLDialogElement>("intro").open) return;
-  $("introImages").replaceChildren(...intro.map(bannerPicture));
+  if (
+    !intro.length ||
+    !arrivedHome ||
+    closed ||
+    $<HTMLDialogElement>("intro").open
+  )
+    return;
+  showIntro(intro, 0);
   $<HTMLDialogElement>("intro").showModal?.();
+}
+/**
+ * One intro picture at a time, each click the next (intro.php's stacked
+ * .intro-item); the last one's click enters the site.
+ */
+function showIntro(intro, index) {
+  const next = document.createElement("button");
+  next.type = "button";
+  next.className = "intro-item";
+  next.setAttribute(
+    "aria-label",
+    index + 1 < intro.length
+      ? `다음 (${index + 1} / ${intro.length})`
+      : "입장하기",
+  );
+  next.append(bannerPicture(intro[index], false));
+  next.onclick = () =>
+    index + 1 < intro.length ? showIntro(intro, index + 1) : enterSite();
+  $("introImages").replaceChildren(next);
+}
+function enterSite() {
+  try {
+    localStorage.setItem(INTRO_KEY, String(Date.now() + 24 * 3600 * 1000));
+  } catch {
+    /* The intro shows again next time. */
+  }
+  $<HTMLDialogElement>("intro").close();
 }
 /**
  * The owner's background music (cf_bgm): a YouTube playlist or video, played
@@ -265,14 +462,7 @@ document.addEventListener("click", (event) => {
   )
     document.body.classList.remove("open-gnb");
 });
-$("enterSite").onclick = () => {
-  try {
-    sessionStorage.setItem("neo-avocado-entered", "1");
-  } catch {
-    /* The intro shows again next time. */
-  }
-  $<HTMLDialogElement>("intro").close();
-};
+$("enterSite").onclick = enterSite;
 /** Opens what a menu entry names: a board, a content page or a member tab. */
 export async function follow(link) {
   const [kind, id] = link.split(":");

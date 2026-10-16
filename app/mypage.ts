@@ -30,6 +30,13 @@ async function loadMyPage() {
   $("myCommentAlerts").textContent =
     profile?.data.commentAlerts === false ? "받지 않음" : "받음";
   $("myMemberId").textContent = state.member?.id ?? "";
+  // 가입일: the profile's making, joining the community (no birth year is
+  // asked, so the original's 생년 is not shown).
+  const joined = Date.parse(profile?.createdAt ?? "");
+  $("myJoinedTerm").hidden = $("myJoined").hidden = !Number.isFinite(joined);
+  $("myJoined").textContent = Number.isFinite(joined)
+    ? new Date(joined).toLocaleDateString("ko-KR")
+    : "";
   const warned = state.warnings.count > 0;
   $("myWarningsTerm").hidden = $("myWarnings").hidden = !warned;
   $("myWarnings").replaceChildren();
@@ -327,6 +334,13 @@ const openMyPage = () =>
     await loadMyPage();
   });
 $("tabMypage").onclick = openMyPage;
+/** The main page card's 캐릭터 생성 (outlogin.skin.2.php): 마이페이지's form. */
+export const createCharacter = () =>
+  run(async () => {
+    showTab("mypage");
+    await loadMyPage();
+    await openCharacterForm();
+  });
 $("myAccountTab").onclick = openMyPage;
 $("cardMyPage").onclick = openMyPage;
 $("myLogsTab").onclick = () =>

@@ -2,7 +2,7 @@
 // profile (message and alert preferences) only members. A member edits their
 // own nickname and preferences directly; joining, which makes the profile, is
 // the community/membership site function's.
-import { siteOpen } from "../modules/shared.js";
+import { reservedNick, siteOpen } from "../modules/shared.js";
 import type {
   Data,
   PresentArgs,
@@ -32,10 +32,10 @@ export function present(ctx: ReadCtx, { document }: PresentArgs): Data {
 /** What a member may change on their own profile. */
 const EDITABLE = ["nick", "acceptMessages", "commentAlerts"];
 
-export function canWrite(
+export async function canWrite(
   ctx: ReadCtx,
   { operation, before, after }: WriteArgs,
-): boolean {
+): Promise<boolean> {
   if (!ctx.member || operation !== "update") return false;
   if (before.id !== ctx.member.id || before.data.deleted) return false;
   const { nick, acceptMessages, commentAlerts } = after.data;
@@ -47,6 +47,10 @@ export function canWrite(
     typeof acceptMessages !== "boolean" ||
     typeof commentAlerts !== "boolean"
   )
+    return false;
+  // A new nickname may not be a reserved word (cf_prohibit_id); one taken
+  // before the owner reserved it may stay.
+  if (nick !== before.data.nick && (await reservedNick(ctx, nick)))
     return false;
   // Everything else (kept by site functions) stays as it was.
   const keys = new Set([

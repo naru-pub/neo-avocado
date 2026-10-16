@@ -24,6 +24,22 @@ const MENUS = `${PREFIX}menus`;
 const BANNERS = `${PREFIX}banners`;
 
 const COLORS = ["accent", "muted", "paper", "ink", "line", "surface"];
+// The background's 배경반복 and 배경위치 (adm/design_form.php's cs_etc_2,
+// cs_etc_3); the first of each is the original's blank, the default.
+const REPEATS = ["repeat", "no-repeat", "repeat-x", "repeat-y"];
+const POSITIONS = [
+  "left top",
+  "left center",
+  "left bottom",
+  "center top",
+  "center center",
+  "center bottom",
+  "right top",
+  "right center",
+  "right bottom",
+];
+const choice = (value: unknown, choices: string[]): string =>
+  choices.includes(value as string) ? (value as string) : choices[0];
 const https = (value: unknown): string | null =>
   typeof value === "string" &&
   value.length <= 2000 &&
@@ -56,7 +72,15 @@ export async function site(ctx: Ctx) {
     description: short(saved.description, 300),
     favicon: https(saved.favicon),
     logo: https(saved.logo),
+    // m_logo, m_background: what a phone shows instead, when set.
+    mobileLogo: https(saved.mobileLogo),
     background: https(saved.background),
+    mobileBackground: https(saved.mobileBackground),
+    backgroundColor: /^#[0-9a-f]{6}$/i.test(saved.backgroundColor ?? "")
+      ? saved.backgroundColor
+      : null,
+    backgroundRepeat: choice(saved.backgroundRepeat, REPEATS),
+    backgroundPosition: choice(saved.backgroundPosition, POSITIONS),
     headerBackground: https(saved.headerBackground),
     font: ["sans", "serif", "mono"].includes(saved.font) ? saved.font : "sans",
     colors,

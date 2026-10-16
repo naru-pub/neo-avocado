@@ -272,13 +272,15 @@ function fakeDatabase(rows = {}) {
           profile,
         };
       }
-      if (name === "community/membership:join")
+      if (name === "community/membership:join") {
+        database.joined = args;
         return {
           status: "approved",
           profile: await member
             .collection(PROFILES)
             .set(ME, { nick: args.nick }),
         };
+      }
       // Writes: posts, comments and characters through their functions,
       // kept in the same store native reads come from.
       const writes = {
@@ -710,16 +712,22 @@ test("a first visit sets a nickname under the member's own id, then reads the lo
   const database = fakeDatabase();
   const { $, settle, submit } = await page(database);
   assert.equal($("profileSetup").hidden, false);
-  assert.equal(database.calls.length, 1);
-  assert.deepEqual(database.calls.at(0), {
-    method: "get",
-    name: PROFILES,
-    id: ME,
-  });
+  // The profile, and the settings for the rules to agree to (none here).
+  assert.deepEqual(
+    [database.calls.at(0), database.calls.at(1)],
+    [
+      { method: "get", name: PROFILES, id: ME },
+      { method: "get", name: "neo_avocado_settings", id: "community" },
+    ],
+  );
+  assert.equal(database.calls.length, 2);
+  assert.equal($("stipulationBox").hidden, true);
+  assert.equal($("characterNoticeBox").hidden, true);
   $("nick").value = " 아보 ";
   submit($("profileForm"));
   await settle();
-  assert.deepEqual(database.calls.at(1), {
+  assert.equal(database.joined.agreed, false);
+  assert.deepEqual(database.calls.at(2), {
     method: "set",
     name: PROFILES,
     id: ME,
@@ -731,6 +739,146 @@ test("a first visit sets a nickname under the member's own id, then reads the lo
     database.calls.some((call) => call.method === "list" && call.name === LOGS),
     true,
   );
+});
+
+test("joining shows the owner's rules with boxes to tick, and says they were agreed to", async () => {
+  const database = fakeDatabase({
+    neo_avocado_settings: [
+      {
+        id: "community",
+        data: { stipulation: "첫째 줄\n둘째 줄", characterNotice: "" },
+      },
+    ],
+  });
+  const { $, settle, submit } = await page(database);
+  assert.equal($("stipulationBox").hidden, false);
+  assert.equal($("stipulationText").textContent, "첫째 줄\n둘째 줄");
+  assert.equal($("stipulationAgree").required, true);
+  assert.equal($("characterNoticeBox").hidden, true);
+  assert.equal($("characterNoticeAgree").required, false);
+  $("stipulationAgree").checked = true;
+  $("nick").value = "아보";
+  submit($("profileForm"));
+  await settle();
+  assert.equal(database.joined.agreed, true);
+});
+
+const slide = (id, place = "main") => ({
+  id,
+  place,
+  image: `https://cdn.example/${id}.png`,
+  mobileImage: null,
+  alt: id,
+  url: null,
+  newWindow: false,
+});
+
+test("site_main's placeholders become the slides, the member card and links, as nodes", async () => {
+  const database = fakeDatabase({ [PROFILES]: [me] });
+  database.site = { main: true, banners: [slide("one"), slide("two")] };
+  database.answer = (name) => {
+    if (name === "content/pages:contentPage")
+      return {
+        page: {
+          name: "메인",
+          format: "html",
+          body: '<p>{{VISUAL_SLIDE}}</p><div id="x">{{OUTLOGIN}} {{MYPAGE}} {{LOGIN}} {{UNKNOWN}}{{TWITTER}}</div><img src="x.png" onerror="alert(1)"><p title="{{LOGIN}}">text</p>',
+        },
+      };
+    if (name === "community/messages:messageStatus") return { unread: false };
+    return refuse("empty");
+  };
+  const { $, settle } = await page(database);
+  await settle();
+  const main = $("mainPage");
+  // The slider is the page's own, one slide at a time; the home's is hidden.
+  assert.equal($("banners").hidden, true);
+  const slides = [...main.querySelectorAll(".banners .slide")];
+  assert.deepEqual(
+    slides.map((element) => element.hidden),
+    [false, true],
+  );
+  main.querySelector(".slide-nav.next").onclick();
+  assert.deepEqual(
+    slides.map((element) => element.hidden),
+    [true, false],
+  );
+  main.querySelector(".slide-nav.next").onclick();
+  assert.equal(slides[0].hidden, false);
+  main.querySelector(".slide-nav.previous").onclick();
+  assert.equal(slides[1].hidden, false);
+  assert.equal(main.contains($("profileCard")), true);
+  assert.deepEqual(
+    [...main.querySelectorAll("a.member-only, a.guest-only")].map(
+      (link) => link.textContent,
+    ),
+    ["마이페이지", "로그인"],
+  );
+  // Unknown ones stay as written; the gone timeline leaves nothing.
+  assert.match(main.textContent, /\{\{UNKNOWN\}\}/);
+  assert.doesNotMatch(main.textContent, /TWITTER|VISUAL_SLIDE|OUTLOGIN/);
+  // Expanded after sanitizing: attributes are not, and nothing runs.
+  assert.equal(main.querySelector("img").hasAttribute("onerror"), false);
+  assert.equal(main.querySelector("p[title]").title, "{{LOGIN}}");
+});
+
+test("the main page's card counts unread mail, offers 캐릭터 생성 and links the owner to 관리자", async () => {
+  const database = fakeDatabase({
+    [PROFILES]: [me],
+    neo_avocado_settings: [{ id: "community", data: {} }],
+  });
+  database.owner = true;
+  database.answer = (name) =>
+    name === "community/messages:messageStatus"
+      ? { unread: true, unreadCount: 3 }
+      : refuse("empty");
+  const { $, settle } = await page(database);
+  await settle();
+  database.live.options.onStatus("open");
+  await settle();
+  assert.equal($("cardUnread").textContent, "3");
+  assert.equal($("cardUnread").hidden, false);
+  // A notice without a count is one more message.
+  database.live.options.onMessage({ type: "notice", data: { unread: true } });
+  assert.equal($("cardUnread").textContent, "4");
+  database.live.options.onMessage({
+    type: "notice",
+    data: { unread: false, unreadCount: 0 },
+  });
+  assert.equal($("cardUnread").hidden, true);
+  assert.equal($("cardAdmin").hidden, false);
+  assert.equal($("cardDescript").textContent, "보유중인 캐릭터가 없습니다.");
+  assert.equal(
+    $("cardThumb").querySelector("button").textContent,
+    "캐릭터 생성",
+  );
+});
+
+test("the intro shows one picture at a time on arriving home, then not for a day", async () => {
+  const database = fakeDatabase({ [PROFILES]: [me] });
+  database.site = {
+    banners: [slide("a", "intro"), slide("b", "intro"), slide("main")],
+  };
+  database.answer = (name) =>
+    name === "community/messages:messageStatus"
+      ? { unread: false }
+      : refuse("empty");
+  const { $, settle, window } = await page(database);
+  await settle();
+  assert.equal($("intro").open, true);
+  const picture = () => $("introImages").querySelector("img").src;
+  assert.equal(picture(), "https://cdn.example/a.png");
+  // An intro picture is not a link: a click is the next one.
+  assert.equal($("introImages").querySelector("a"), null);
+  $("introImages").querySelector("button").onclick();
+  assert.equal(picture(), "https://cdn.example/b.png");
+  $("introImages").querySelector("button").onclick();
+  assert.equal($("intro").open, false);
+  const until = Number(window.localStorage.getItem("neo-avocado-intro-closed"));
+  assert.ok(until > Date.now() + 23 * 3600 * 1000);
+  // The main slides: one, so no buttons to turn it.
+  assert.equal($("banners").querySelectorAll(".slide").length, 1);
+  assert.equal($("banners").querySelector(".slide-nav"), null);
 });
 
 test("logs are read a page at a time, newest first, and comments only when opened", async () => {

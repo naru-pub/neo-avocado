@@ -331,6 +331,8 @@ export function show(profile?) {
   // The main page's card (templete/txt.outlogin.php).
   $("cardName").textContent = profile ? profile.data.nick : "손님";
   $("cardRole").hidden = state.role !== "moderator";
+  // outlogin.skin.2.php's 관리자 link, for the site's owner.
+  $("cardAdmin").hidden = !member || !state.owner;
   $("cardDescript").textContent = profile ? "" : "회원 로그인해 주세요.";
   state.profile = profile ?? null;
 }

@@ -15,6 +15,8 @@ import {
   walletWrites,
   characterStateWrites,
   titleHoldings,
+  memberList,
+  memberSummary,
   menu,
   sectionLabel,
 } from "./admin-model.js";
@@ -162,6 +164,7 @@ async function load({ more = false } = {}) {
     $("adminRows").hidden = true;
     $("adminMore").hidden = true;
     $("holdingsSearchLabel").hidden = true;
+    $("memberSearchLabel").hidden = true;
     const row = await owner
       .collection(model.collection)
       .get(model.fixedId)
@@ -175,6 +178,7 @@ async function load({ more = false } = {}) {
   if (model.report) {
     $("adminMore").hidden = true;
     $("holdingsSearchLabel").hidden = true;
+    $("memberSearchLabel").hidden = true;
     return model.report === "visits"
       ? visitsView()
       : model.report === "grants"
@@ -182,7 +186,10 @@ async function load({ more = false } = {}) {
         : activityView();
   }
   $("holdingsSearchLabel").hidden = !model.holdings;
+  $("memberSearchLabel").hidden = section !== "members";
   let page;
+  // 회원 관리 (adm/member_list.php): every member, found by nickname.
+  const memberEntries = new Map();
   if (model.holdings) {
     references.titles = await all("neo_avocado_titles");
     references.characters = await all("neo_avocado_characters");
@@ -195,6 +202,21 @@ async function load({ more = false } = {}) {
     const start = more ? Number(cursor) : 0;
     page = {
       documents: rows.slice(start, start + 50),
+      nextCursor: start + 50 < rows.length ? String(start + 50) : null,
+    };
+  } else if (section === "members") {
+    references.profiles = await all("neo_avocado_profiles");
+    const rows = memberList(
+      await all(model.collection),
+      references.profiles,
+      await all("neo_avocado_presence"),
+      $<HTMLInputElement>("memberSearch").value,
+    );
+    const start = more ? Number(cursor) : 0;
+    for (const entry of rows.slice(start, start + 50))
+      memberEntries.set(entry.row.id, entry);
+    page = {
+      documents: rows.slice(start, start + 50).map((entry) => entry.row),
       nextCursor: start + 50 < rows.length ? String(start + 50) : null,
     };
   } else if (model.review) {
@@ -300,6 +322,8 @@ async function load({ more = false } = {}) {
         row.id,
       " ",
     );
+    if (section === "members")
+      li.append(`· ${memberSummary(memberEntries.get(row.id))} `);
     if (section === "wallets")
       li.append(`${moneyText(itemNames, row.data.balance)} `);
     if (section === "inventory")
@@ -1256,6 +1280,13 @@ $("titleGrantForm").onsubmit = async (event) => {
 };
 
 $("holdingsFind").onclick = () => run(() => load());
+$("memberFind").onclick = () => run(() => load());
+$("memberSearch").onkeydown = (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    run(() => load());
+  }
+};
 $("holdingsSearch").onkeydown = (event) => {
   if (event.key === "Enter") {
     event.preventDefault();

@@ -50,6 +50,12 @@ workflows to the port, and says what was left out and why.
   presentation details of PHP themes.
 - Pruning old call rows and deleting single calls: calls of deleted posts are
   hidden, not removed.
+- The Twitter timeline widget (`{{TWITTER}}`, `templete/txt.twitter.php`):
+  the embed no longer works; the placeholder is removed from site_main.
+- Deleting old mail automatically (`cf_memo_del`, 180 days): the owner prefers
+  that nothing is deleted unasked; members remove mail from their own box.
+- Birth year (`mb_birth`) on 계정정보: neo-avocado asks for none; the join
+  date (the profile's making) is shown.
 
 ## How it is built
 
