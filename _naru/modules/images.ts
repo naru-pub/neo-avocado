@@ -1,4 +1,4 @@
-// The character pictures, shared by the site functions and the pages,
+// The character pictures, shared by the queries and mutations and the pages,
 // which read this file as it is published.
 
 /**

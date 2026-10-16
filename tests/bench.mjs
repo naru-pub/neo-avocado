@@ -27,7 +27,6 @@ const RUNS = Number(process.env.RUNS ?? 3);
 const port = Number(process.env.BENCH_PORT ?? 4400);
 const origin = `http://localhost:${port}`;
 const state = await mkdtemp(join(tmpdir(), "neo-avocado-bench-"));
-const P = "neo_avocado_";
 
 const naru = spawn(
   "pnpm",
@@ -127,30 +126,23 @@ try {
   await owner.page.goto(`${origin}/admin/`);
   await owner.page.locator("#adminSignIn").click();
   await owner.page.locator("#adminWorkspace").waitFor();
-  await owner.page.evaluate(async (P) => {
+  await owner.page.evaluate(async () => {
     const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
     const admin = await createNaru().auth.session();
-    await admin.collection(`${P}boards`).set("default", {
+    const save = (section, id, values) =>
+      admin.mutate(`admin/${section}:save`, { id, values, create: true });
+    await save("boards", "default", {
       name: "자유",
       kind: "text",
-      enabled: true,
       listLevel: 1,
       readLevel: 1,
       writeLevel: 1,
       commentLevel: 1,
-      secret: "optional",
-      categories: [],
       actions: true,
     });
-    await admin
-      .collection(`${P}character_fields`)
-      .set("age", { label: "나이", type: "text", visibility: "public" });
-    await admin.collection(`${P}items`).set("apple", {
-      name: "사과",
-      price: 10,
-      enabled: true,
-    });
-  }, P);
+    await save("character_fields", "age", { label: "나이", type: "text" });
+    await save("items", "apple", { name: "사과", price: 10, hidden: false });
+  });
   const people = {};
   for (const [name, nick] of [
     ["alice", "앨리스"],
@@ -161,45 +153,30 @@ try {
     await who.page.locator("#nick").fill(nick);
     await who.page.locator("#profileForm button").click();
     await who.page.locator("#community").waitFor();
-    await who.page.evaluate(
-      async ({ P, nick }) => {
-        const { createNaru } =
-          await import("https://naru.pub/sdk/1.1.0/naru.js");
-        const member = await createNaru().members.session();
-        const call = (args) =>
-          member.call("community/data:communityData", args);
-        const character = await call({
-          collection: `${P}characters`,
-          operation: "add",
-          data: {
-            name: `${nick}의 캐릭터`,
-            profile: "",
-            fields: { age: "17" },
-          },
-        });
-        if (!character.ok) throw new Error(JSON.stringify(character));
-        for (let n = 0; n < 8; n++) {
-          const post = await call({
-            collection: `${P}logs`,
-            operation: "add",
+    await who.page.evaluate(async (nick) => {
+      const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+      const member = await createNaru().members.session();
+      await member.mutate("characters/sheet:save", {
+        data: { name: `${nick}의 캐릭터`, profile: "", fields: { age: "17" } },
+      });
+      for (let n = 0; n < 8; n++) {
+        const { document: post } = await member.mutate(
+          "community/posts:write",
+          {
             data: {
               board: "default",
               image: null,
               text: `${nick}의 로그 ${n}`,
             },
+          },
+        );
+        if (n % 2)
+          await member.mutate("community/comments:write", {
+            data: { logId: post.id, text: "댓글" },
           });
-          if (!post.ok) throw new Error(JSON.stringify(post));
-          if (n % 2)
-            await call({
-              collection: `${P}comments`,
-              operation: "add",
-              data: { logId: post.document.id, text: "댓글" },
-            });
-        }
-        await member.call("community/presence:seen", { where: "home" });
-      },
-      { P, nick },
-    );
+      }
+      await member.mutate("community/presence:seen", { where: "home" });
+    }, nick);
     people[name] = who;
   }
   const visitor = await person();

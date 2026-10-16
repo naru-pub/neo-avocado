@@ -1,12 +1,12 @@
 // Notifications: calls and replies to the member.
 
-import { $, caller, formatTime, run, showTab, state } from "./core.js";
+import { $, formatTime, mutate, query, run, showTab, state } from "./core.js";
 import { showCalls } from "./live.js";
 
 /** ajax/board_call.php's alarm list: calls and comment notices, newest first. */
 async function loadCalls({ more = false } = {}) {
   const member = state.member;
-  const page = await caller().call("community/calls:callHistory", {
+  const page = await query("community/calls:callHistory", {
     after: more ? state.callCursor : null,
     size: 20,
   });
@@ -29,7 +29,7 @@ async function loadCalls({ more = false } = {}) {
   state.callCursor = page.nextCursor;
   $("moreCalls").hidden = !page.nextCursor;
   // Opening the list is looking at it, as the original's close_call.php.
-  if (page.unread) await caller().call("community/calls:seeCalls");
+  if (page.unread) await mutate("community/calls:seeCalls");
   showCalls(false);
 }
 $("tabCalls").onclick = () =>

@@ -1,16 +1,18 @@
 // A board's own settings for what is written on it (adm/board_form.php):
 // lengths, the site's banned words, and when a post may no longer be edited.
-import { PREFIX, SETTINGS } from "./shared.js";
-import type { Access } from "./shared.js";
-import type { Ctx, Data, NaruDocument, Where } from "./naru-types.js";
+import { communitySettings, one } from "./access.js";
+import type { Access, SqlCtx } from "./access.js";
+import type { Board, PostRow } from "./boards.js";
+import type { QueryCtx } from "./naru-types.js";
 
-const COMMENTS = `${PREFIX}comments`;
+type FailCtx = SqlCtx & Pick<QueryCtx, "fail">;
 
 /**
  * A board's settings where the owner has not saved one: 15 posts a page
  * (bo_page_rows from cf_page_rows, install_db.php:157), pictures folded from
  * 600px (bo_gallery_height, board_form.php:95), and no edits once another
- * member has commented (bo_count_modify, board_form.php:89).
+ * member has commented (bo_count_modify, board_form.php:89). The boards
+ * table starts its columns at these.
  */
 export const BOARD_DEFAULTS = Object.freeze({
   pageRows: 15,
@@ -20,7 +22,7 @@ export const BOARD_DEFAULTS = Object.freeze({
 
 /** A board's number setting, or its default when unset or malformed. */
 export function boardNumber(
-  board: NaruDocument | null,
+  board: Board | null,
   key: keyof typeof BOARD_DEFAULTS,
 ): number {
   const value = board?.data[key];
@@ -35,7 +37,7 @@ export function boardNumber(
  * view_comment.php:111-119): 0 is no limit, and the staff are not held to it.
  */
 export function checkLength(
-  ctx: Ctx,
+  ctx: Pick<QueryCtx, "fail">,
   value: string,
   { min, max }: { min: unknown; max: unknown },
   staff: boolean,
@@ -54,7 +56,7 @@ export function checkLength(
 }
 
 /** The site's banned words (cf_filter), comma-separated in the settings. */
-export function bannedWords(settings: Data | undefined): string[] {
+export function bannedWords(settings: Record<string, any> | undefined) {
   const list = settings?.bannedWords;
   return typeof list === "string"
     ? list
@@ -69,10 +71,8 @@ export function bannedWords(settings: Data | undefined): string[] {
  * case, as bbs/ajax.filter.php checks the subject and content before a post
  * or comment is saved.
  */
-export async function checkBannedWords(ctx: Ctx, ...texts: string[]) {
-  const words = bannedWords(
-    (await ctx.get(SETTINGS, "community"))?.data ?? undefined,
-  );
+export async function checkBannedWords(ctx: FailCtx, ...texts: string[]) {
+  const words = bannedWords(await communitySettings(ctx));
   for (const text of texts) {
     const lower = text.toLowerCase();
     const found = words.find((word) => lower.includes(word.toLowerCase()));
@@ -88,27 +88,22 @@ export async function checkBannedWords(ctx: Ctx, ...texts: string[]) {
 /**
  * Fails when others have commented on a post as many times as the board's
  * editLock (bo_count_modify, bbs/write.php:84-91): only the staff edit it
- * then. Comments by its own writer do not count.
+ * then. Comments by its own writer do not count, nor guests'.
  */
 export async function checkEditable(
-  ctx: Ctx,
-  log: NaruDocument,
-  board: NaruDocument,
+  ctx: FailCtx,
+  post: PostRow,
+  board: Board,
   access: Access,
 ) {
   const lock = boardNumber(board, "editLock");
   if (!lock || access.role === "moderator") return;
   const me = ctx.member?.id ?? null;
-  const others: Where = me
-    ? {
-        all: [{ ne: ["owner", me] }, { ne: [{ metadata: "createdBy" }, me] }],
-      }
-    : // A guest's comments carry no member: only members' count.
-      { ne: ["owner", null] };
-  const count = await ctx.count(COMMENTS, {
-    filter: { logId: log.id },
-    where: others,
-  });
+  const { count } = await one<{ count: number }>(
+    ctx,
+    "SELECT count(*) AS count FROM comments WHERE post_id = ? AND owner IS NOT NULL AND owner IS NOT ?",
+    [post.id, me],
+  );
   if (count >= lock)
     ctx.fail(
       "CONFLICT",

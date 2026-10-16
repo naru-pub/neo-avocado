@@ -1,42 +1,42 @@
-# Server functions
+# Queries and mutations
 
-`functions/` contains callable entry points grouped by community, economy,
-characters and content. `modules/shared.js` contains shared validation,
-authorization and transaction helpers; `modules/characters.js` holds character
-sheets (custom fields, visibility, application state) and `modules/roleplay.js`
-posting as a character, dice, exploration, in-post items and calls. These are ordinary JavaScript modules:
-Naru SDK 1.1.0 loads their static relative imports directly. No generated runtime
-files or bundling step is needed.
+`queries/` holds the site's read-only entry points and `mutations/` the
+writing ones, grouped by community, economy, characters, content and admin;
+`modules/` holds what they share (`access.js`: who may do what and the
+owner's settings; `boards.js`, `characters.js`, `economy.js`, `mail.js`,
+`members.js`: each area's rows; `admin.js` and `admin-model.js`: the
+owner's admin). They are ordinary JavaScript modules that
+Naru SDK 1.1.0 loads by their static relative imports; nothing is bundled.
 
-Pages call a function by `"<module/path>:<export>"`, as the SDK takes it:
-`member.call("economy/shop:buy", { item })`. A function that refuses calls
-`ctx.fail(code, "한국어 메시지", { reason })`; its writes roll back and the page
-shows the message. `tests/function-modules.test.mjs` checks that every reference
-names an export and every export is called. Shared modules cannot be called
-directly. The `modules/index.js` barrel is for Node tests; production calls load
-only their entry point and its dependencies.
+Pages call them by `"<module/path>:<export>"`:
+`query("community/messages:conversations", { page })`,
+`mutate("community/messages:sendMessage", { recipients, body })`, and keep
+an answer current with `subscribe(...)`. One that refuses calls
+`ctx.fail(code, "한국어 메시지", { reason })`; its writes roll back and the
+page shows the message. `tests/function-modules.test.mjs` checks that every
+reference names an export and every export is called. Shared modules cannot
+be called directly.
 
-Deploy the entire site together through GitHub or a template install. If editing
-individual files, save shared dependencies first. Naru validates and activates a
-revision after file changes; an invalid import leaves the prior revision running.
-This requires the Naru Worker and control plane with native import support.
+The data is the site's own tables, which `migrations/` make: the foundation
+(`0001`), the boards (`0002`), characters (`0003`), the economy (`0004`) and
+mail (`0005`). There are no collections, rules or site functions. Nothing is
+pushed to pages: they subscribe to `community/inbox:status` (unread 쪽지 and
+calls) and `community/posts:latest`, and Naru answers again when a mutation
+writes a table those read.
 
-`rules/` holds collection rules, not callable functions: what members and
-visitors may read of each collection, and how much of each document. Pages
-read natively through them; `_naru/collections.json` names the rule of each
-collection.
+`admin/` is the owner's: one module per section of the admin page
+(`admin/boards`, `admin/members`, `admin/items`, …) with `list`, `get`,
+`save` and `remove` where the section has them, each refusing anyone but
+the owner. A save takes the form's values and checks them with the
+section's model (`modules/admin-model.js`, which the page draws its forms
+from), so the forms' rules hold whoever calls; values left out keep the
+record's own. Changes that go together are one mutation: a balance and its
+history entry, a character's record (at its version) and its experience
+history, a title given to or taken from many characters. The reports
+(`admin/visits:report`, `admin/activity:report`), the character review and
+회원 관리 are queries that search, filter and count in SQL.
 
-- `community-board.js`: posts and comments, by board level and secret posts.
-- `characters.js`: characters, with only the custom fields the reader may see.
-- `boards.js`: the boards the reader's level may list.
-- `profiles.js`: nicknames for everyone, whole profiles for members; a member
-  edits their own nickname and preferences directly (`canWrite`).
-- `own.js`: a member's own wallet and inventory.
-- `settings.js`, `character-fields.js`, `shown.js`: community settings, field
-  definitions without admin-only ones, and catalogues without deleted rows.
-
-Rules import `modules/shared.js` for member access, boards and secret
-visibility, so they and the site functions that write the community
-(`functions/community/posts.js` and `comments.js`, `functions/characters/sheet.js`,
-which start from `modules/community.js`) share one implementation. Naru publishes rules with the
-function revision. Functions and shared modules cannot import a rule.
+Deploy the entire site together through GitHub or a template install. If
+editing individual files, save shared dependencies first. Naru validates and
+activates a revision after file changes; an invalid import leaves the prior
+revision running.

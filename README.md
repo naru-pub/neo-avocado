@@ -12,21 +12,15 @@
 
 1. **사이트에 설치합니다.** 둘 중 하나를 고르세요.
    - 나루 게시판의 네오 아보카도 템플릿에서 **적용하기**를 누르고, 적용할 폴더를
-     **사이트 맨 위(루트)**로 고릅니다. 서버 함수가 들어 있는 `_naru/` 폴더는
+     **사이트 맨 위(루트)**로 고릅니다. 테이블과 서버 코드가 들어 있는 `_naru/` 폴더는
      사이트 맨 위에 있어야 동작하므로, 하위 폴더에 적용하면 회원 기능이 켜지지
      않습니다.
    - 또는 이 저장소를 내 GitHub로 가져가 나루의 GitHub 배포를 사이트 맨 위에
      연결합니다. 이후 푸시할 때마다 사이트가 갱신됩니다.
-2. **컬렉션은 파일과 함께 준비됩니다.** `_naru/collections.json`이 이 사이트에
-   필요한 컬렉션과 권한을 선언하고, 나루는 파일이 올라오는 순간 없는 컬렉션을
-   만듭니다: 로그·댓글은 `community-board` 규칙과 함께 회원(공개 게시판은
-   손님도)이 읽고, 캐릭터는 `characters` 규칙이 볼 수 있는 항목만 회원과
-   (사이트공개 중에는) 손님에게 보여 주며, 프로필은 닉네임 중복 금지, 나머지는
-   관리자만 읽고 씁니다. 이미 있는 컬렉션의 설정을 바꿔야 하면(예: 손님이
-   멤버목록을 보도록 캐릭터·추가 항목·소속·종족·타이틀·관계·옷장·커플을 ‘누구나
-   읽기’로 바꾼 것) 나루의 데이터베이스 화면에 표시되고, 확인한 뒤 적용하기를
-   누르면 바뀝니다. 그다음 `admin/`(운영 화면)에서 운영자 로그인을
-   누릅니다.
+2. **테이블은 파일과 함께 준비됩니다.** 사이트의 데이터는 모두 테이블이고,
+   `_naru/migrations/`가 파일이 올라오는 순간 만듭니다. 컬렉션은 쓰지 않으므로
+   운영자 로그인은 아무 권한도 따로 묻지 않습니다. `admin/`(운영 화면)에서 운영자
+   로그인을 누릅니다.
 3. **가입 방식을 정합니다.** 나루의 데이터베이스 → 사이트 회원에서 누구나 가입,
    운영자 승인 후 이용, 신규 가입 중단 중 하나를 고르고, 필요하면 이메일을
    인증한 계정만 받도록 합니다.
@@ -66,14 +60,14 @@
 1로 두면 누구나 읽고, 글쓰기·댓글 등급을 1로 두면 손님이 이름과 비밀번호로
 씁니다. 손님 글은 그 비밀번호로만 고치고 지웁니다. 손님은 비밀글, 캐릭터,
 탐색·아이템, 호출, 파일 올리기를 쓸 수 없고 그림은 HTTPS 주소로 넣습니다.
-비밀번호는 나루가 글의 쓰기 비밀(secret)로 PBKDF2 해시만 보관하며, 아무도 읽을 수
-없습니다. 읽기 등급이 1인 안내 페이지도 공개됩니다(새 안내 페이지와 읽기 등급이 없는
+비밀번호는 나루의 `ctx.passwords`가 만든 해시로만 글과 댓글의 행에 보관하고, 어떤
+쿼리도 그 해시를 내보내지 않으며, 한 글에 한 시간 열 번까지만 틀릴 수 있습니다. 읽기 등급이 1인 안내 페이지도 공개됩니다(새 안내 페이지와 읽기 등급이 없는
 페이지는 원본처럼 1입니다).
 
 **커뮤니티 설정**의 **사이트공개**(원본 `cf_open`)가 켜져 있으면 손님도
 멤버목록, 신청자목록, 커플목록과 캐릭터 보기(`#/character/캐릭터ID`)를 볼 수 있고,
 캐릭터의 추가 항목은 공개 항목만 보입니다. 끄면 손님에게는 인사말과 회원
-로그인 카드만 보이고, 게시판·글·캐릭터·닉네임도 규칙이 읽어 주지 않습니다(원본은
+로그인 카드만 보이고, 게시판·글·캐릭터·닉네임도 쿼리가 읽어 주지 않습니다(원본은
 모든 페이지에서 손님을 로그인 페이지로 보냅니다). 원본은 설치 직후 꺼져
 있지만, 여기서는 지금까지처럼 손님이 볼 수 있도록 켜진 채로 시작합니다.
 
@@ -212,8 +206,8 @@ NPC 대사와 함께 가격(돈 + 소모 경험치 + 교환 아이템), 설명, 
 있습니다. 계정정보에는 가입일(처음 닉네임을 정한 날)도 보입니다. 우편함은 원본처럼
 상대별 대화로 묶여, 마지막 쪽지와 통수, 안 읽은 쪽지 표시(N)를 보여 주고, 열면
 주고받은 쪽지를 최근 50통부터 차례로 보며(**이전 쪽지 더 보기**로 그 전 50통씩) 그
-자리에서 답장합니다. 상대 목록은 받은 쪽지함과 보낸 쪽지함에서 각각 최근 1,000통으로
-만듭니다(서버 함수 한 번에 읽을 수 있는 양). 메인 화면의 회원 카드는 원본처럼 안 읽은
+자리에서 답장합니다. 상대 목록은 주고받은 쪽지 전부를 상대별로 묶어 만듭니다. 안 읽은
+쪽지와 새 알림은 새로고침 없이 바로 표시됩니다. 메인 화면의 회원 카드는 원본처럼 안 읽은
 쪽지 수, 캐릭터가 없으면 **캐릭터 생성** 버튼(생성 기간이 아니면 그렇다는 안내),
 사이트 운영자에게는 **관리자** 링크를 보여 줍니다. 캐릭터는 원본처럼 마이페이지의 **신규 캐릭터
 등록**으로 만들고, 멤버목록과 신청자목록은 목록만 보여 줍니다. 멤버목록은 원본처럼
@@ -321,34 +315,42 @@ HTML은 [DOMPurify](https://github.com/cure53/DOMPurify)로 정리하여 표시�
 
 ## 코드 둘러보기
 
-기능 하나가 화면 파일 하나와 서버 함수 파일로 나뉘어 있습니다. 둘 다 TypeScript로
+기능 하나가 화면 파일과 서버 코드(쿼리·뮤테이션)로 나뉘어 있습니다. 둘 다 TypeScript로
 쓰고 같은 경로의 JavaScript로 빌드합니다(아래 표의 `.js`는 빌드 결과, 소스는 같은
-이름의 `.ts`). 화면 쪽은 브라우저에서 도는 모듈이고, 서버 함수는 나루가 사이트 소유자
-권한으로 실행합니다.
-돈·재고·주사위처럼 회원이 마음대로 정하면 안 되는 값은 서버 함수만 바꿉니다.
+이름의 `.ts`). 화면 쪽은 브라우저에서 도는 모듈이고, 쿼리(`_naru/queries/`, 읽기만)와
+뮤테이션(`_naru/mutations/`, 한 번의 트랜잭션)은 나루에서 사이트의 테이블에 SQL을
+실행합니다. 누구나 부를 수 있으므로 코드가 부른 사람(`ctx.member`, `ctx.owner`,
+`ctx.visitor`)을 보고 무엇을 읽고 쓸지 정합니다.
+돈·재고·주사위처럼 회원이 마음대로 정하면 안 되는 값은 뮤테이션만 바꿉니다.
 
-| 기능                   | 화면                                   | 서버 함수                                                        |
-| ---------------------- | -------------------------------------- | ---------------------------------------------------------------- |
-| 로그인·가입·닉네임     | `app.js`                               | `_naru/functions/community/membership.js`                        |
-| 게시판·로그·댓글       | `app/logs.js`, `app/posts.js`          | `_naru/functions/community/posts.js`, `comments.js`, `boards.js` |
-| 캐릭터                 | `app/characters.js`                    | `_naru/functions/characters/` (`sheet.js`가 등록·수정·삭제)      |
-| 상점·인벤토리·제작     | `app/shop.js`                          | `_naru/functions/economy/`                                       |
-| 쪽지                   | `app/messages.js`                      | `_naru/functions/community/messages.js`                          |
-| 알림(호출)             | `app/calls.js`                         | `_naru/functions/community/calls.js`                             |
-| 퀘스트·안내 페이지     | `app/content.js`                       | `_naru/functions/content/`                                       |
-| 디자인·메뉴·배너       | `app/site.js`                          | `_naru/functions/content/site.js`                                |
-| 새 글·알림 실시간 수신 | `app/live.js`                          |                                                                  |
-| 운영 화면              | `admin/`, `admin.js`, `admin-model.js` | `_naru/functions/characters/review.js`                           |
+| 기능                   | 화면                                   | 서버 코드                                                          |
+| ---------------------- | -------------------------------------- | ------------------------------------------------------------------ |
+| 로그인·가입·닉네임     | `app.js`                               | `_naru/queries/community/`, `_naru/mutations/community/`           |
+| 게시판·로그·댓글       | `app/logs.js`, `app/posts.js`          | `_naru/queries/community/`, `_naru/mutations/community/`           |
+| 캐릭터                 | `app/characters.js`, `app/couples.js`  | `_naru/queries/characters/`, `_naru/mutations/characters/`         |
+| 상점·인벤토리·제작     | `app/shop.js`                          | `_naru/queries/economy/`, `_naru/mutations/economy/`               |
+| 쪽지                   | `app/messages.js`                      | `_naru/queries/community/messages.js`, `mutations/community/`      |
+| 알림(호출)             | `app/calls.js`                         | `_naru/queries/community/calls.js`, `mutations/community/calls.js` |
+| 퀘스트·안내 페이지     | `app/content.js`                       | `_naru/queries/content/`                                           |
+| 디자인·메뉴·배너       | `app/site.js`                          | `_naru/queries/content/site.js`                                    |
+| 새 글·알림 실시간 수신 | `app/live.js`                          | `_naru/queries/community/inbox.js`, `posts.js`                     |
+| 운영 화면              | `admin/`, `admin.js`, `admin-model.js` | `_naru/queries/admin/`, `_naru/mutations/admin/`                   |
 
-`app/core.js`는 모든 화면이 함께 쓰는 것(컬렉션 이름, 상태, 오류 표시, 편집 창)입니다.
+`app/core.js`는 모든 화면이 함께 쓰는 것(상태, 오류 표시, 편집 창)입니다.
 
-화면은 컬렉션을 SDK로 직접 읽습니다(`member.collection(...)`, 손님은
-`naru.collection(...)`). 누가 무엇을 읽는지는 `_naru/rules/`의 규칙이 정합니다.
-쓰기는 서버 함수(`community/posts:write`, `community/comments:write`,
-`characters/sheet:save` 등)로 하고, 회원 자신의 프로필(닉네임·알림 설정)만
-`rules/profiles.js`가 허락하는 대로 직접 씁니다.
+모든 기능이 `_naru/migrations/`의 테이블을 쓰고, 화면은 `query`·`mutate`·`subscribe`
+(`app/core.js`)로 `_naru/queries/`·`_naru/mutations/`를 부릅니다(`docs/port.md`).
+누가 무엇을 읽고 쓰는지는 그 코드가 정합니다(게시판은 `_naru/modules/boards.js`).
+새 쪽지와 알림은 `community/inbox:status`를 구독해 받습니다: 나루는 쪽지·호출을 쓰는
+mutation이 끝날 때마다 그 답을 다시 보내 줍니다.
 
-화면은 서버 함수를 `"파일 경로:함수 이름"`으로 부릅니다.
+운영 화면은 섹션마다 운영자만 부를 수 있는 쿼리·뮤테이션(`admin/boards:save`,
+`admin/members:list` 등)을 씁니다. 저장은 양식에 적은 값을 그대로 보내고, 서버가
+양식과 같은 규칙(`_naru/modules/admin-model.js`)으로 검사한 뒤 테이블에 씁니다.
+잔액과 그 조정 기록, 경험치와 그 기록, 여러 캐릭터의 타이틀 지급·회수는 각각 한 번의
+뮤테이션입니다.
+
+화면은 쿼리와 뮤테이션을 `"파일 경로:함수 이름"`으로 부릅니다.
 
 ```js
 // app/shop.js: 뽑기 버튼
@@ -364,7 +366,7 @@ $("gacha").onclick = () =>
 
 function spend(reference, args, success) {
   return run(async () => {
-    const result = await state.member.call(reference, args);
+    const result = await mutate(reference, args);
     say(success(result));
     await loadShop();
   });
@@ -372,8 +374,10 @@ function spend(reference, args, success) {
 ```
 
 ```js
-// _naru/functions/economy/shop.js (줄임)
-export async function gacha(ctx, { character = null } = {}) {
+// _naru/mutations/economy/shop.js (줄임)
+export async function gacha(ctx, args) {
+  signedIn(ctx);
+  const { character = null } = args ?? {};
   const current = await wallet(ctx);
   if (current.balance < GACHA_COST)
     ctx.fail("CONFLICT", await lacking(ctx, "moneyName"), {
@@ -390,8 +394,8 @@ export async function gacha(ctx, { character = null } = {}) {
 }
 ```
 
-`ctx.fail`은 호출을 멈추고 그때까지의 쓰기를 모두 되돌립니다. `call`은 그 메시지로
-오류를 던지고, `run`이 그 메시지를 화면에 그대로 보여 줍니다. 공통 코드는 `_naru/modules/`에 있고 서버 함수가 정적 import합니다.
+`ctx.fail`은 호출을 멈추고 그때까지의 쓰기를 모두 되돌립니다. `mutate`는 그 메시지로
+오류를 던지고, `run`이 그 메시지를 화면에 그대로 보여 줍니다. 공통 코드는 `_naru/modules/`에 있고 쿼리와 뮤테이션이 정적 import합니다.
 번들 생성은 필요하지 않습니다. 자세한 구조는 [_naru/README.md](_naru/README.md)를
 참고하세요.
 

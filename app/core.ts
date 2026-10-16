@@ -1,33 +1,10 @@
-// What every part of the page shares: collection names, the page's state,
-// status messages and run(), the community collections and the edit dialog.
+// What every part of the page shares: the page's state, status messages and
+// run(), the site's queries and mutations, and the edit dialog.
 // It imports no other part but names.js, so it is always ready before them.
 
 import { NAME_DEFAULTS } from "./names.js";
 import { imageSlotsOf, viewerOf } from "../_naru/modules/images.js";
 
-const PREFIX = "neo_avocado_";
-export const COLLECTION = {
-  profiles: `${PREFIX}profiles`,
-  characters: `${PREFIX}characters`,
-  logs: `${PREFIX}logs`,
-  comments: `${PREFIX}comments`,
-  wallets: `${PREFIX}wallets`,
-  inventory: `${PREFIX}inventory`,
-  items: `${PREFIX}items`,
-  recipes: `${PREFIX}recipes`,
-  relations: `${PREFIX}relations`,
-  wardrobe: `${PREFIX}wardrobe`,
-  characterState: `${PREFIX}character_state`,
-  titles: `${PREFIX}titles`,
-  couples: `${PREFIX}couples`,
-  settings: `${PREFIX}settings`,
-  boards: `${PREFIX}boards`,
-  emoticons: `${PREFIX}emoticons`,
-  characterFields: `${PREFIX}character_fields`,
-  sides: `${PREFIX}sides`,
-  classes: `${PREFIX}classes`,
-  boardGroups: `${PREFIX}board_groups`,
-};
 export const SHOP_PAGE = 10;
 export const STATE_NAMES = {
   editing: "수정 중",
@@ -35,10 +12,7 @@ export const STATE_NAMES = {
   approved: "승인",
 };
 export const TYPE_NAMES = { main: "메인", sub: "서브", npc: "NPC" };
-/** A board's posts a page unless the owner sets one (cf_page_rows, install_db.php:157). */
-export const LOG_PAGE = 15;
 export const CHARACTER_PAGE = 20;
-export const COMMENT_PAGE = 50;
 export const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
   document.getElementById(id) as T;
 const initialState = {
@@ -58,7 +32,6 @@ const initialState = {
   shopCharacter: null,
   ownCharacters: [],
   historyCursor: null,
-  messageCursor: null,
   admission: null,
   // 사이트공개 (cf_open), from the site's frame: off, visitors see nothing.
   siteOpen: true,
@@ -87,6 +60,12 @@ const initialState = {
   // The board list's page, for its address.
   logPage: 1,
   live: null,
+  // The board whose newest post the page keeps in view (live.js).
+  boardWatch: null as {
+    board: string;
+    reader: unknown;
+    handle: { close(): void };
+  } | null,
   newPost: null,
   ownPosts: new Set(),
   // The member's characters for posting, and items for in-post use: read on
@@ -116,8 +95,9 @@ const MESSAGES = {
   CONFLICT: "다른 곳에서 수정되었습니다. 새로고침 후 다시 수정해 주세요.",
 };
 /**
- * The site's own words for an error: a site function's ctx.fail message
- * (it passes a reason in its details), or the unique field a write hit.
+ * The site's own words for an error: a query's or mutation's ctx.fail
+ * message (it passes a reason in its details), or the unique field a write
+ * hit.
  */
 function siteMessage(error) {
   if (error?.details?.unique === "nick") return "이미 쓰는 닉네임입니다.";
@@ -154,13 +134,9 @@ export async function run(action) {
       return;
     }
     say(
-      // A collection that does not exist yet: Naru creates them from
-      // _naru/collections.json as the site's files arrive.
-      error?.code === "NOT_FOUND" && /^Collection /.test(error.message)
-        ? "사이트를 준비하고 있습니다. 잠시 뒤에 다시 해 주세요."
-        : (siteMessage(error) ??
-            MESSAGES[error?.code] ??
-            "요청을 처리하지 못했습니다."),
+      siteMessage(error) ??
+        MESSAGES[error?.code] ??
+        "요청을 처리하지 못했습니다.",
     );
   }
 }
@@ -198,32 +174,21 @@ export const formatTime = (value) =>
 export const mine = (document) =>
   state.member !== null &&
   (document.createdBy ?? document.data.owner) === state.member.id;
-/** Narrows a read to the member's own characters; `mine` still decides. */
+/** The member's own characters, oldest first (characters/sheet:mine). */
 export const ownCharacters = async () =>
-  (
-    await allDocuments(COLLECTION.characters, undefined, {
-      any: [
-        { eq: ["owner", state.member.id] },
-        { eq: [{ metadata: "createdBy" }, state.member.id] },
-      ],
-    })
-  ).filter(mine);
+  (await query("characters/sheet:mine")).documents;
 /** Resolve the distinct authors for a page in bounded batches before rendering. */
 export async function preloadNicks(rows) {
   const member = state.member;
-  const missing = [
-    ...new Set(rows.map((row) => row.createdBy ?? row.data.owner)),
+  const missing: string[] = [
+    ...new Set<string>(rows.map((row) => row.createdBy ?? row.data.owner)),
   ].filter((id) => id && !state.nicks.has(id));
-  for (let offset = 0; offset < missing.length; offset += 50) {
-    const ids = missing.slice(offset, offset + 50);
-    const profiles = await collection(COLLECTION.profiles).getMany(ids);
+  for (let offset = 0; offset < missing.length; offset += 100) {
+    const ids = missing.slice(offset, offset + 100);
+    const { nicks } = await query("community/profiles:nicks", { ids });
     if (state.member !== member) return;
-    profiles.forEach((profile, index) =>
-      state.nicks.set(
-        ids[index],
-        Promise.resolve(profile?.data.nick ?? "이름 없음"),
-      ),
-    );
+    for (const id of ids)
+      state.nicks.set(id, Promise.resolve(nicks[id] ?? "이름 없음"));
   }
 }
 /** 글쓴이의 닉네임. 처음 보는 회원만 한 번 묻는다. */
@@ -232,17 +197,37 @@ export async function nickOf(memberId) {
   if (!state.nicks.has(memberId))
     state.nicks.set(
       memberId,
-      collection(COLLECTION.profiles)
-        .get(memberId)
-        .then(
-          (profile) => profile.data.nick,
-          () => "이름 없음",
-        ),
+      query("community/profiles:nicks", { ids: [memberId] }).then(
+        ({ nicks }) => nicks[memberId] ?? "이름 없음",
+        () => "이름 없음",
+      ),
     );
   return state.nicks.get(memberId);
 }
-/** Who calls site functions: the signed-in member, else the visitor's client. */
+/**
+ * The community settings members' pages need (content/site:settings), or
+ * none while they cannot be read.
+ */
+export const memberSettings = (): Promise<Record<string, any>> =>
+  query("content/site:settings").catch(() => ({}));
+/** Who calls queries and mutations: the signed-in member, else the visitor's client. */
 export const caller = () => state.member ?? state.naru;
+/**
+ * Runs one of the site's queries (_naru/queries/<module>.ts) as whoever is
+ * reading: the member, or a visitor. The query's code decides what each sees.
+ */
+export const query = <R = any>(name: string, args: any = null): Promise<R> =>
+  caller().query(name, args);
+/** Runs one of the site's mutations (_naru/mutations/<module>.ts), in one transaction. */
+export const mutate = <R = any>(name: string, args: any = null): Promise<R> =>
+  caller().mutate(name, args);
+/** A query's answer, kept current while the page holds it (`close()` ends it). */
+export const subscribe = <R = any>(
+  name: string,
+  args: any,
+  onResult: (result: R) => void,
+  onError?: (error: any) => void,
+) => caller().subscribe(name, args, onResult, { onError });
 /** The name and password a visitor posts with (bbs/write.php's wr_name, wr_password). */
 export function guestCredentials() {
   const name = $<HTMLInputElement>("guestName").value.trim();
@@ -271,23 +256,6 @@ export function withGuestPassword(title, action) {
     ],
     ({ password }) => action({ password }),
   );
-}
-/**
- * The SDK's collection for whoever is reading: the member, or a visitor. The
- * collection rules in _naru/rules/ decide what each of them sees. Pages write
- * through site functions (community/posts, community/comments,
- * characters/sheet), except a member's own profile.
- */
-export function collection(name) {
-  return (state.member ?? state.naru).collection(name);
-}
-
-/**
- * Calls a site function that deletes in bounded steps (a post with its
- * comments, a character with what hangs off it) until it answers `done`.
- */
-export async function removeAll(reference, args) {
-  while (!(await caller().call(reference, args)).done);
 }
 export function showAdmission(status) {
   state.admission = status;
@@ -426,21 +394,8 @@ $("cancelEditor").onclick = () => $<HTMLDialogElement>("editor").close();
 export function stopLive() {
   state.live?.close();
   state.live = null;
-}
-export async function allDocuments(name, filter?, where?) {
-  const documents = [];
-  let after = null;
-  do {
-    const page = await collection(name).list({
-      size: 100,
-      after,
-      ...(filter ? { filter } : {}),
-      ...(where ? { where } : {}),
-    });
-    documents.push(...page.documents);
-    after = page.nextCursor;
-  } while (after);
-  return documents;
+  state.boardWatch?.handle.close();
+  state.boardWatch = null;
 }
 /** Where a member is, as 현재접속자 shows it, for each view. */
 const PLACES = {
@@ -530,16 +485,14 @@ export function noteVisit(place) {
   } catch {
     /* No referrer to count. */
   }
-  caller()
-    .call("community/presence:seen", {
-      where: place,
-      ...(visit
-        ? { visit: true, ...client(), ...(domain ? { domain } : {}) }
-        : {}),
-    })
-    .catch(() => {
-      /* A visit not counted is no reason to bother anyone. */
-    });
+  mutate("community/presence:seen", {
+    where: place,
+    ...(visit
+      ? { visit: true, ...client(), ...(domain ? { domain } : {}) }
+      : {}),
+  }).catch(() => {
+    /* A visit not counted is no reason to bother anyone. */
+  });
 }
 
 /**
@@ -644,52 +597,6 @@ export function showTab(name) {
     $(tab).setAttribute("aria-pressed", String(name === key));
     $(view).hidden = name !== key;
   }
-}
-
-/**
- * Numbered pages over a list the SDK reads by cursor (lib's get_paging,
- * pg_wrap). `read(after, { includeTotal, size, cursorOnly })` reads `size`
- * documents from `after`. The total comes with the first page, and a page
- * past it is empty, as the original's LIMIT past the end shows nothing. A
- * page not reached yet is skipped to from the nearest known one, up to 100
- * documents a read, keeping only the cursor.
- */
-export function cursorPages(read, size) {
-  const starts = new Map([[1, null]]);
-  // As many pages as one read of at most 100 documents covers.
-  const skip = Math.max(1, Math.floor(100 / size));
-  return {
-    total: null,
-    reset() {
-      starts.clear();
-      starts.set(1, null);
-      this.total = null;
-    },
-    async page(number) {
-      if (this.total === null) {
-        const first = await read(null, { includeTotal: true, size });
-        this.total = first.totalCount ?? null;
-        if (first.nextCursor) starts.set(2, first.nextCursor);
-        if (number <= 1) return { ...first, number: 1 };
-      }
-      const pages = Math.max(1, Math.ceil((this.total ?? 0) / size));
-      if (number > pages) return { documents: [], nextCursor: null, number };
-      let known = Math.max(...[...starts.keys()].filter((at) => at <= number));
-      while (known < number) {
-        const jump = Math.min(skip, number - known);
-        const step = await read(starts.get(known), {
-          size: size * jump,
-          cursorOnly: true,
-        });
-        if (!step.nextCursor) break;
-        known += jump;
-        starts.set(known, step.nextCursor);
-      }
-      const page = await read(starts.get(known), { size });
-      if (page.nextCursor) starts.set(known + 1, page.nextCursor);
-      return { ...page, number: known };
-    },
-  };
 }
 
 /**

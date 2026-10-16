@@ -1,5 +1,6 @@
-// The site on a local Naru: naru-dev runs the real edge Worker (documents,
-// rules, functions, limits) and stands in for naru.pub. Nothing here imitates
+// The site on a local Naru: naru-dev runs the real edge Worker (the site's
+// tables, queries, mutations, live queries and limits) and stands in for
+// naru.pub. Nothing here imitates
 // Naru; a real Chromium drives the real pages.
 //
 //   NARU_REPO_PATH=/path/to/naru PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs \
@@ -20,7 +21,6 @@ const site = fileURLToPath(new URL("../dist/", import.meta.url));
 const port = Number(process.env.E2E_PORT ?? 4300);
 const origin = `http://localhost:${port}`;
 const state = await mkdtemp(join(tmpdir(), "neo-avocado-e2e-"));
-const P = "neo_avocado_";
 
 const naru = spawn(
   "pnpm",
@@ -94,24 +94,29 @@ const PNG = Buffer.from(
 const picture = (name) => ({ name, mimeType: "image/png", buffer: PNG });
 
 try {
-  // _naru/collections.json made every collection as the site started, so
-  // the owner's sign-in only signs in.
-  assert.match(log, /_naru\/collections\.json: 36 created, 0 changed/);
+  // Every collection became a table: the site declares none, and the
+  // owner's sign-in asks for none.
+  assert.doesNotMatch(log, /collections\.json/);
   const owner = await person();
   await owner.goto(`${origin}/admin/`);
   await owner.locator("#adminSignIn").click();
   await owner.locator("#adminWorkspace").waitFor();
-  assert.match(log, /owner signed in: \d+ collections, 0 created/);
+  assert.match(log, /owner signed in: 0 collections, 0 created/);
   // Setup through the owner's own SDK handle: a public board and fields.
-  await owner.evaluate(async (P) => {
+  await owner.evaluate(async () => {
     const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
     const admin = await createNaru().auth.session();
     // A day's first visit pays this (cf_login_point); the original installs 0.
-    await admin
-      .collection(`${P}settings`)
-      .set("community", { loginReward: 100 });
+    // The owner's admin mutations check what they save as the forms do, and
+    // a save may send only the fields it changes.
+    await admin.mutate("admin/settings:save", {
+      section: "settings",
+      values: { loginReward: 100 },
+    });
     // The original installs no boards: the owner makes 로그 too.
-    await admin.collection(`${P}boards`).set("default", {
+    const board = (id, values) =>
+      admin.mutate("admin/boards:save", { id, values, create: true });
+    await board("default", {
       name: "로그",
       kind: "image",
       enabled: true,
@@ -120,10 +125,10 @@ try {
       writeLevel: 2,
       commentLevel: 2,
       secret: "optional",
-      categories: [],
+      categories: "",
       actions: true,
     });
-    await admin.collection(`${P}boards`).set("free", {
+    await board("free", {
       name: "자유",
       kind: "text",
       enabled: true,
@@ -132,9 +137,9 @@ try {
       writeLevel: 1,
       commentLevel: 1,
       secret: "optional",
-      categories: [],
+      categories: "",
     });
-    for (const [code, data] of [
+    for (const [code, values] of [
       ["age", { label: "나이", type: "text", visibility: "public", order: 1 }],
       [
         "diary",
@@ -142,8 +147,12 @@ try {
       ],
       ["art", { label: "전신", type: "image", visibility: "public", order: 3 }],
     ])
-      await admin.collection(`${P}character_fields`).set(code, data);
-  }, P);
+      await admin.mutate("admin/character_fields:save", {
+        id: code,
+        values,
+        create: true,
+      });
+  });
 
   // An image field in the admin forms takes a file: it goes to Naru Media
   // and its address is what the row keeps.
@@ -161,11 +170,12 @@ try {
       /[^…]$/.test(document.querySelector("#adminFormStatus").textContent),
   );
   assert.equal(await owner.locator("#adminFormStatus").textContent(), "");
-  const smile = await owner.evaluate(async (P) => {
+  const smile = await owner.evaluate(async () => {
     const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
     const admin = await createNaru().auth.session();
-    return (await admin.collection(`${P}emoticons`).get("smile")).data.image;
-  }, P);
+    return (await admin.query("admin/emoticons:get", { id: "smile" })).data
+      .image;
+  });
   assert.match(smile, /^https:\/\/media\.naru\.pub\/1\//);
   assert.equal(
     (await fetch(`${origin}/media/${new URL(smile).pathname.slice(1)}`)).status,
@@ -239,7 +249,7 @@ try {
   );
   const logPicture = await post.locator("img.log-image").getAttribute("src");
   assert.match(logPicture, /^https:\/\/media\.naru\.pub\/1\//);
-  // #tag searches with `has`.
+  // #tag lists the board's posts with the tag.
   await post.locator(".hash-tag").click();
   await alice.locator("#tagFilter").waitFor();
   assert.equal(await alice.locator("#logs .log").count(), 1);
@@ -268,7 +278,7 @@ try {
     .filter({ hasText: "비밀 일기" })
     .waitFor();
 
-  // Bob calls Alice in a comment; her live connection marks the call.
+  // Bob calls Alice in a comment; her subscription marks the call.
   await menu(bob, "로그");
   const thread = bob.locator("#logs .log").filter({ hasText: "첫 로그" });
   await thread.locator(".comments > summary").click();
@@ -299,27 +309,66 @@ try {
   await alice.locator("#myLogsTab").click();
   await alice.locator("#myLogs li", { hasText: "첫 로그" }).waitFor();
 
-  // The owner pairs two characters; members see them in 커플목록.
-  await owner.evaluate(async (P) => {
+  // The owner pairs two characters, as the form does: 초록 and one the
+  // owner registers for Bob. Members see them in 커플목록.
+  const partner = await owner.evaluate(async () => {
     const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
     const admin = await createNaru().auth.session();
-    const { documents } = await admin.collection(`${P}characters`).list();
-    await admin.collection(`${P}couples`).set("pair", {
-      first: documents[0].id,
-      second: documents[documents.length - 1].id,
-      since: "2030-01-01",
+    const { characters } = await admin.query("admin/references:references");
+    const { document } = await admin.mutate("characters/sheet:save", {
+      nick: "밥",
+      data: {
+        name: "파랑",
+        side: "",
+        class: "",
+        profile: "",
+        image: "",
+        head: "",
+        body: "",
+        type: "npc",
+        state: "approved",
+        fields: {},
+      },
+    });
+    await admin.mutate("admin/couples:save", {
+      id: "pair",
+      values: {
+        first: characters[0].id,
+        second: document.id,
+        since: "2030-01-01",
+      },
+      create: true,
     });
     // Shop categories: the event item shows under 이벤트 only.
-    await admin.collection(`${P}settings`).set("community", {
-      shopCategories: "일반, 이벤트",
-      shopGreeting: "어서 오세요",
+    await admin.mutate("admin/settings:save", {
+      section: "settings",
+      values: { shopCategories: "일반, 이벤트", shopGreeting: "어서 오세요" },
     });
-    await admin
-      .collection(`${P}items`)
-      .set("cake", { name: "케이크", price: 1, shopCategory: "이벤트" });
-  }, P);
+    // A new item starts hidden, as the form's does: this one is on sale.
+    await admin.mutate("admin/items:save", {
+      id: "cake",
+      values: {
+        name: "케이크",
+        price: 1,
+        shopCategory: "이벤트",
+        hidden: false,
+      },
+      create: true,
+    });
+    return document.id;
+  });
   await menu(alice, "커플목록");
   await alice.locator("#coupleList li", { hasText: "초록" }).waitFor();
+  assert.match(
+    await alice.locator("#coupleList li", { hasText: "초록" }).textContent(),
+    /파랑/,
+  );
+  // Bob's character goes again, and the couple with it.
+  await owner.evaluate(async (id) => {
+    const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+    const admin = await createNaru().auth.session();
+    await admin.mutate("characters/sheet:remove", { id });
+  }, partner);
   await menu(alice, "상점");
   await alice.locator("#shopTalk", { hasText: "어서 오세요" }).waitFor();
   assert.equal(
@@ -330,14 +379,14 @@ try {
   await alice.locator("#items li", { hasText: "케이크" }).waitFor();
 
   // Every page has an address: a character's viewer, a post, a category.
-  const greenId = await alice.evaluate(async (P) => {
+  const greenId = await alice.evaluate(async () => {
     const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
     const member = await createNaru().members.session();
-    const { documents } = await member.collection(`${P}characters`).list({
-      where: { eq: ["name", "초록"] },
+    const { document } = await member.query("characters/sheet:named", {
+      name: "초록",
     });
-    return documents[0].id;
-  }, P);
+    return document.id;
+  });
   await alice.goto(`${origin}/#/character/${greenId}`);
   await alice
     .locator("#characterSheet .character-name", { hasText: "초록" })
@@ -402,7 +451,7 @@ try {
     async ({ id }) => {
       const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
       const admin = await createNaru().auth.session();
-      await admin.call("characters/review:reviewCharacter", {
+      await admin.mutate("characters/review:reviewCharacter", {
         character: id,
         state: "approved",
       });
@@ -524,39 +573,52 @@ try {
   // Closed, a visitor sees the sign-in card only and the rules read them
   // nothing (extend/community.config.php sends guests to log in).
   const siteOpen = (open) =>
-    owner.evaluate(
-      async ({ P, open }) => {
-        const { createNaru } =
-          await import("https://naru.pub/sdk/1.1.0/naru.js");
-        const admin = await createNaru().auth.session();
-        const settings = admin.collection(`${P}settings`);
-        const current = await settings.get("community");
-        await settings.set("community", { ...current.data, siteOpen: open });
-      },
-      { P, open },
-    );
+    owner.evaluate(async (open) => {
+      const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+      const admin = await createNaru().auth.session();
+      await admin.mutate("admin/settings:save", {
+        section: "settings",
+        values: { siteOpen: open },
+      });
+    }, open);
   await siteOpen(false);
   await guest.reload();
   await guest.locator("#closedNotice").waitFor();
   assert.equal(await guest.locator("#characterView").isVisible(), false);
   assert.equal(await guest.locator("#siteMenu").isVisible(), false);
-  const closedReads = await guest.evaluate(async (P) => {
-    const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
-    const naru = createNaru();
-    const ids = (name, options) =>
-      naru
-        .collection(`${P}${name}`)
-        .list(options)
-        .then(
-          (page) => page.documents.map((row) => row.id),
+  // Members' IDs, as their pages know them.
+  const idOf = (page) =>
+    page.evaluate(async () => {
+      const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+      return (await createNaru().members.session()).id;
+    });
+  const memberIds = [await idOf(alice), await idOf(bob)];
+  const closedReads = await guest.evaluate(
+    async ({ memberIds }) => {
+      const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+      const naru = createNaru();
+      const ids = (name, args, list) =>
+        naru.query(name, args).then(
+          (answer) => answer[list].map((row) => row.id),
           (error) => error.code,
         );
-    return {
-      characters: await ids("characters"),
-      boards: await ids("boards"),
-      logs: await ids("logs", { filter: { board: "free" } }),
-    };
-  }, P);
+      return {
+        // Characters are a query's, which reads the closed site's setting.
+        characters: await naru.query("characters/sheet:list").then(
+          (page) => page.documents.map((row) => row.id),
+          (error) => error.code,
+        ),
+        // So are the boards and their posts.
+        boards: await ids("community/boards:boards", null, "boards"),
+        logs: await ids("community/posts:page", { board: "free" }, "documents"),
+        // Nicknames are a query's, which reads the closed site's setting.
+        nicks: await naru
+          .query("community/profiles:nicks", { ids: memberIds })
+          .then(({ nicks }) => Object.keys(nicks)),
+      };
+    },
+    { memberIds },
+  );
   for (const [name, read] of Object.entries(closedReads))
     assert.ok(
       (Array.isArray(read) && !read.length) || read === "ACCESS_DENIED",
@@ -565,10 +627,10 @@ try {
   await siteOpen(true);
   await guest.goto(`${origin}/`);
 
-  // The collection rules, on the real runtime: a member reads their own
-  // wallet and nobody else's; a visitor reads nicknames and no wallets.
-  const reads = (page, P) =>
-    page.evaluate(async (P) => {
+  // On the real runtime: a member reads their own wallet and nobody else's;
+  // a visitor reads nicknames and no wallet.
+  const reads = (page) =>
+    page.evaluate(async (memberIds) => {
       const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
       const naru = createNaru();
       const member = await naru.members.session();
@@ -579,59 +641,57 @@ try {
           (error) => error.code,
         );
       return {
-        wallets: await settle(
-          reader
-            .collection(`${P}wallets`)
-            .list()
-            .then((page) => page.documents.map((row) => row.id)),
-        ),
-        profiles: await settle(
-          reader
-            .collection(`${P}profiles`)
-            .list()
-            .then((page) => page.documents.map((row) => Object.keys(row.data))),
+        wallet: await settle(reader.query("economy/wallet:wallet")),
+        own: await settle(reader.query("community/profiles:own")),
+        nicks: await settle(
+          reader.query("community/profiles:nicks", { ids: memberIds }),
         ),
         me: member?.id ?? null,
       };
-    }, P);
-  const bobReads = await reads(bob, P);
-  assert.deepEqual(bobReads.wallets, [bobReads.me]);
-  assert.ok(bobReads.profiles.some((keys) => keys.includes("acceptMessages")));
-  const guestReads = await reads(guest, P);
-  assert.equal(guestReads.wallets, "ACCESS_DENIED");
-  assert.ok(guestReads.profiles.every((keys) => keys.join() === "nick"));
+    }, memberIds);
+  const bobReads = await reads(bob);
+  assert.equal(typeof bobReads.wallet.balance, "number");
+  assert.equal(bobReads.own.profile.id, bobReads.me);
+  assert.equal(typeof bobReads.own.profile.data.acceptMessages, "boolean");
+  const guestReads = await reads(guest);
+  assert.equal(guestReads.wallet, "AUTH_REQUIRED");
+  assert.equal(guestReads.own, "AUTH_REQUIRED");
+  assert.deepEqual(
+    Object.keys(guestReads.nicks.nicks).sort(),
+    [...memberIds].sort(),
+  );
 
-  // A member writes their own profile directly, as rules/profiles.js allows:
-  // nickname and preferences only, and nobody else's.
-  const profileWrites = await bob.evaluate(async (P) => {
+  // A member changes their own nickname and preferences through
+  // profiles:update; another's nickname is not theirs to take.
+  const profileWrites = await bob.evaluate(async (alice) => {
     const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
     const member = await createNaru().members.session();
-    const profiles = member.collection(`${P}profiles`);
     const settle = (promise) =>
       promise.then(
-        (saved) => saved.data.nick,
-        (error) => error.code,
+        (saved) => saved.profile.data.nick,
+        (error) => error.details?.reason ?? error.code,
       );
-    const own = await profiles.get(member.id);
-    const renamed = await settle(
-      profiles.set(member.id, { ...own.data, nick: "바뀐밥" }),
-    );
-    const again = await profiles.get(member.id);
-    const forged = await settle(
-      profiles.set(member.id, { ...again.data, owner: "someone" }),
-    );
-    const others = (await profiles.list()).documents.filter(
-      (row) => row.id !== member.id,
-    );
-    const theirs = await settle(
-      profiles.set(others[0].id, { ...others[0].data, nick: "가로채기" }),
-    );
-    return { renamed, forged, theirs };
-  }, P);
+    const update = (nick) =>
+      settle(
+        member.mutate("community/profiles:update", {
+          nick,
+          acceptMessages: true,
+          commentAlerts: true,
+        }),
+      );
+    const { nicks } = await member.query("community/profiles:nicks", {
+      ids: [alice],
+    });
+    return {
+      renamed: await update("바뀐밥"),
+      theirs: await update(nicks[alice]),
+      reserved: await update("관리자"),
+    };
+  }, memberIds[0]);
   assert.deepEqual(profileWrites, {
     renamed: "바뀐밥",
-    forged: "ACCESS_DENIED",
-    theirs: "ACCESS_DENIED",
+    theirs: "nick_taken",
+    reserved: "reserved_nick",
   });
 
   // 커뮤니티 설정 is one form, opened at once, in the original's sections
@@ -668,6 +728,16 @@ try {
   await owner
     .locator("#adminNav a", { hasText: "소속 관리" })
     .waitFor({ state: "attached" });
+
+  // A settings form's own address opens it, as the form gives it.
+  await owner.goto(`${origin}/admin/#/settings/community`);
+  await owner.reload();
+  await owner.locator('#adminFields [name="moneyName"]').waitFor();
+  assert.equal(
+    await owner.locator('#adminFields [name="moneyName"]').inputValue(),
+    "아보",
+  );
+  assert.equal(await owner.locator("#adminStatus").textContent(), "");
 
   // The admin page has addresses too: an entry's form, and old links to
   // admin.html carry on to /admin/ with their address.
@@ -788,22 +858,26 @@ try {
 
   // A Q&A board: a guest asks in secret and opens it with the password;
   // a settlement board: Alice asks as her character, the owner settles.
-  await owner.evaluate(async (P) => {
+  await owner.evaluate(async () => {
     const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
     const admin = await createNaru().auth.session();
-    for (const [id, data] of [
+    for (const [id, values] of [
       ["ask", { name: "문의", kind: "qna", secret: "optional" }],
-      ["calc", { name: "정산", kind: "settlement", categories: ["이벤트"] }],
+      ["calc", { name: "정산", kind: "settlement", categories: "이벤트" }],
     ])
-      await admin.collection(`${P}boards`).set(id, {
-        enabled: true,
-        listLevel: 1,
-        readLevel: 1,
-        writeLevel: 1,
-        commentLevel: 1,
-        ...data,
+      await admin.mutate("admin/boards:save", {
+        id,
+        values: {
+          enabled: true,
+          listLevel: 1,
+          readLevel: 1,
+          writeLevel: 1,
+          commentLevel: 1,
+          ...values,
+        },
+        create: true,
       });
-  }, P);
+  });
   const asker = await person();
   await asker.goto(`${origin}/#/logs/ask`);
   await asker.locator("#logText").waitFor();
@@ -831,19 +905,20 @@ try {
   await alice.locator("#logText").fill("이벤트 참여 정산 부탁드려요");
   await alice.locator('#logForm [type="submit"]').click();
   await alice.locator("#logs .log", { hasText: "정산 부탁" }).waitFor();
-  await owner.evaluate(async (P) => {
+  await owner.evaluate(async () => {
     const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
     const admin = await createNaru().auth.session();
-    const { documents } = await admin
-      .collection(`${P}logs`)
-      .list({ filter: { board: "calc" } });
-    await admin.call("community/posts:settle", {
+    // The owner reads the board as its staff.
+    const { documents } = await admin.query("community/posts:page", {
+      board: "calc",
+    });
+    await admin.mutate("community/posts:settle", {
       id: documents[0].id,
       state: "정산완료",
       money: 10,
       memo: "확인했습니다",
     });
-  }, P);
+  });
   await alice.reload();
   await alice
     .locator("#logs .log .log-title", { hasText: "[정산완료]" })
@@ -862,6 +937,13 @@ try {
   await alice.locator("#messageTo").fill("바뀐밥");
   await alice.locator('#messageForm [type="submit"]').click();
   await alice.locator("#status", { hasText: "쪽지를 보냈습니다." }).waitFor();
+  // Bob's page hears of it without reloading (community/inbox:status), the
+  // tab and the home card's count alike.
+  await bob.waitForFunction(
+    () =>
+      document.querySelector("#tabMessages").textContent.includes("새 쪽지") &&
+      document.querySelector("#cardUnread").textContent === "1",
+  );
   await bob.evaluate(() => document.querySelector("#tabMessages").click());
   await bob.locator("#messages li", { hasText: "안녕 밥" }).waitFor();
   // 쪽지함 as the original's: the conversation opens, and a reply goes
@@ -873,6 +955,15 @@ try {
   await bob.locator("#messageDetail .reply textarea").fill("고마워");
   await bob.locator("#messageDetail .reply button").click();
   await bob.locator("#messageDetail .mine", { hasText: "고마워" }).waitFor();
+  // Opening the conversation read Alice's: Bob's notice goes, and Alice's
+  // comes with his reply.
+  await bob.waitForFunction(
+    () =>
+      !document.querySelector("#tabMessages").textContent.includes("새 쪽지"),
+  );
+  await alice.waitForFunction(() =>
+    document.querySelector("#tabMessages").textContent.includes("새 쪽지"),
+  );
   await alice.evaluate(() => document.querySelector("#tabMessages").click());
   await alice
     .locator("#messages .conversation-entry", { hasText: "고마워" })

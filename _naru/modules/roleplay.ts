@@ -2,33 +2,36 @@
 // posting as a character, server-rolled dice, exploration (탐색), items used
 // in a post, and [[nick]] calls with comment notices.
 import {
-  CALLS,
-  CHARACTER_STATE,
-  EXPLORE,
-  INVENTORY,
-  ITEMS,
-  PROFILES,
-  SETTINGS,
-  TITLES,
-  RECIPES,
   amount,
-  pay,
-  wallet,
-  weightedRows,
-  author,
-  characterState,
   communityAccess,
+  communitySettings,
+  kstDay,
+  lacking,
+  one,
+  parsed,
+} from "./access.js";
+import {
   draw,
   give,
-  kstDay,
-  logReadable,
-  ownCharacter,
+  itemById,
+  itemsByIds,
+  openRecipes,
   ownedItem,
+  ownedItems,
+  pay,
   record,
   requireUsable,
-  lacking,
-} from "./shared.js";
-import type { Ctx, NaruDocument } from "./naru-types.js";
+  spend,
+  wallet,
+} from "./economy.js";
+import { characterState, ownCharacter, saveState } from "./characters.js";
+import { profileByNick, profileOf } from "./members.js";
+import { postReadable } from "./boards.js";
+import type { PostRow } from "./boards.js";
+import type { MutationCtx, QueryCtx } from "./naru-types.js";
+import type { SqlCtx } from "./access.js";
+
+type Ctx = MutationCtx;
 
 /** Who a post or comment speaks as (speakerOf). */
 export interface Speaker {
@@ -77,23 +80,25 @@ export async function speakerOf(
     ctx.fail("ACCESS_DENIED", "내 캐릭터로만 쓸 수 있습니다.", {
       reason: "not_owned",
     });
-  const state = await ctx.get(CHARACTER_STATE, character.id);
-  const titleId = state?.data.activeTitle;
-  const title =
-    typeof titleId === "string" && state.data.titles?.includes(titleId)
-      ? await ctx.get(TITLES, titleId)
-      : null;
-  // A title out of use (ti_use) is shown nowhere (extend/title.lib.php:7).
-  const shownTitle =
-    title && !title.data.deleted && title.data.enabled !== false;
+  // The title it shows, if it still holds it and it is in use (ti_use is
+  // shown nowhere otherwise, extend/title.lib.php:7).
+  const title = await one<{ name: string; image: string | null }>(
+    ctx,
+    `SELECT titles.name, titles.image FROM characters
+     JOIN character_titles ON character_titles.character_id = characters.id
+       AND character_titles.title_id = characters.active_title
+     JOIN titles ON titles.id = character_titles.title_id
+     WHERE characters.id = ? AND titles.enabled != 0`,
+    [character.id],
+  );
   return {
-    character: character.id,
-    name: character.data.name,
-    type: character.data.type ?? "main",
-    title: shownTitle ? title.data.name : null,
-    titleImage: shownTitle ? https(title.data.image) : null,
+    character: String(character.id),
+    name: character.name,
+    type: character.type ?? "main",
+    title: title?.name ?? null,
+    titleImage: https(title?.image),
     // The 두상: an outfit dresses the 전신 only (member/viewer.php:76).
-    portrait: https(character.data.image),
+    portrait: https(character.image),
   };
 }
 
@@ -104,10 +109,10 @@ export function rollDice(): number[] {
 
 const CALL = /\[\[([^[\]\r\n]{1,20})\]\]/g;
 /**
- * The original calls everyone a text names. Each call here is a notice row
- * written within the 25 writes the function keeps to, beside the post, its number, its
- * reward and its 조합 or 탐색 and item (up to 13), so a text calls at most
- * this many members: more than a scene names.
+ * The original calls everyone a text names. Each call here takes four
+ * statements (the nickname, the member's access, the board, the notice) of
+ * a call's 100, beside the post, its reward and its 조합 or 탐색 and item,
+ * so a text calls at most this many members: more than a scene names.
  */
 export const MAX_CALLS = 10;
 
@@ -141,11 +146,10 @@ export async function resolveCalls(
   let saved = text;
   for (const nick of calledNicks(text)) {
     if (already.includes(nick)) continue;
-    const found = (await ctx.list(PROFILES, { filter: { nick }, size: 1 }))
-      .documents[0];
+    const found = await profileByNick(ctx, nick);
     if (!found) saved = saved.split(`[[${nick}]]`).join("[[???]]");
     else if (
-      found.id !== ctx.member.id &&
+      found.id !== ctx.member?.id &&
       !earlier.includes(found.id) &&
       !recipients.some((row) => row.id === found.id)
     )
@@ -159,14 +163,15 @@ export async function resolveCalls(
 }
 
 /**
- * Records and sends calls and the comment notice after a post is saved. A
- * member who could not read the post is not told about it; the post's author
- * may turn comment notices off (profile.commentAlerts).
+ * Records calls and the comment notice after a post or comment is saved. A
+ * member who could not read the post is not told about it; the post's
+ * author may turn comment notices off (profile.commentAlerts). Members see
+ * them by subscribing to community/inbox:status.
  */
 export async function deliverCalls(
   ctx: Ctx,
   {
-    log,
+    post,
     comment = null,
     text,
     speaker,
@@ -175,8 +180,9 @@ export async function deliverCalls(
     guest = null,
     anonymous = false,
   }: {
-    log: NaruDocument;
-    comment?: NaruDocument | null;
+    post: PostRow;
+    /** The comment's ID, for a comment. */
+    comment?: number | null;
     text: string;
     speaker: Speaker | null;
     recipients: Recipient[];
@@ -187,35 +193,26 @@ export async function deliverCalls(
   },
 ): Promise<string[]> {
   const from = ctx.member?.id ?? null;
-  const me = from && !anonymous ? await ctx.get(PROFILES, from) : null;
+  const me = from && !anonymous ? await profileOf(ctx, from) : null;
   const preview = text.replace(/\[\[|\]\]/g, "").slice(0, 100);
   const sent = new Set<string>();
   const send = async (to: string, kind: "call" | "comment") => {
     if (sent.has(to) || to === from) return;
-    if (!(await logReadable(ctx, log, await communityAccess(ctx, to), to)))
+    if (!(await postReadable(ctx, post, await communityAccess(ctx, to), to)))
       return;
     sent.add(to);
     // A 익명 writer's notice names no one (view_comment.skin.php: 익명의 누군가).
-    await ctx.add(CALLS, {
-      to,
-      from: anonymous ? null : from,
-      nick: anonymous
-        ? "익명의 누군가"
-        : (me?.data.nick ?? (guest ? `${guest} (손님)` : "")),
-      speaker: anonymous ? null : (speaker?.name ?? null),
-      kind,
-      board: log.data.board ?? "default",
-      logId: log.id,
-      commentId: comment?.id ?? null,
-      preview,
-      at: ctx.now,
-    });
-    ctx.notify(to, { calls: true });
+    await ctx.sql`INSERT INTO calls (recipient, sender, nick, speaker, kind, board, post_id, comment_id, preview, at)
+      VALUES (${to}, ${anonymous ? null : from}, ${
+        anonymous
+          ? "익명의 누군가"
+          : (me?.data.nick ?? (guest ? `${guest} (손님)` : ""))
+      }, ${anonymous ? null : (speaker?.name ?? null)}, ${kind}, ${post.board}, ${post.id}, ${comment}, ${preview}, ${ctx.now})`;
   };
   for (const recipient of recipients) await send(recipient.id, "call");
-  const owner = author(log);
+  const owner = post.owner;
   if (notifyAuthor && owner && !sent.has(owner)) {
-    const profile = await ctx.get(PROFILES, owner);
+    const profile = await profileOf(ctx, owner);
     if (profile && profile.data.commentAlerts !== false)
       await send(owner, "comment");
   }
@@ -223,17 +220,15 @@ export async function deliverCalls(
 }
 
 /** Whether the member has calls newer than they last looked (profile.callsSeenAt). */
-export async function callsUnread(ctx: Ctx): Promise<boolean> {
-  const profile = await ctx.get(PROFILES, ctx.member.id);
-  const seen = Number.isFinite(profile?.data.callsSeenAt)
-    ? profile.data.callsSeenAt
-    : 0;
-  const page = await ctx.list(CALLS, {
-    filter: { to: ctx.member.id },
-    where: { gt: ["at", seen] },
-    size: 1,
-  });
-  return page.documents.length > 0;
+export async function callsUnread(ctx: SqlCtx): Promise<boolean> {
+  return Boolean(
+    await one(
+      ctx,
+      `SELECT 1 FROM calls WHERE recipient = ?
+       AND at > coalesce((SELECT calls_seen_at FROM profiles WHERE member = ?), 0) LIMIT 1`,
+      [ctx.member.id, ctx.member.id],
+    ),
+  );
 }
 
 /**
@@ -247,7 +242,7 @@ export async function explore(ctx: Ctx, speaker: Speaker | null) {
       reason: "no_character",
     });
   const limit = amount(
-    (await ctx.get(SETTINGS, "community"))?.data.exploreLimit ?? 0,
+    (await communitySettings(ctx)).exploreLimit ?? 0,
     "Explore limit",
   );
   if (!limit)
@@ -255,7 +250,7 @@ export async function explore(ctx: Ctx, speaker: Speaker | null) {
       reason: "explore_closed",
     });
   const state = await characterState(ctx, speaker.character);
-  if (state.data.approved !== true)
+  if (!state.data.approved)
     ctx.fail("CONFLICT", "승인된 캐릭터만 할 수 있습니다.", {
       reason: "not_approved",
     });
@@ -268,10 +263,10 @@ export async function explore(ctx: Ctx, speaker: Speaker | null) {
     ctx.fail("CONFLICT", "이 캐릭터는 오늘 탐색을 모두 했습니다.", {
       reason: "explore_limit",
     });
-  const outcome = await draw(ctx, null, EXPLORE);
+  const outcome = await draw(ctx, null, "explore");
   const prize = outcome.prize;
   if (prize) await give(ctx, prize, "explore", speaker.character);
-  await ctx.set(CHARACTER_STATE, speaker.character, {
+  await saveState(ctx, speaker.character, {
     ...state.data,
     explore: { day: today, count: used + 1 },
   });
@@ -294,7 +289,7 @@ export async function explore(ctx: Ctx, speaker: Speaker | null) {
  * (write.skin.php:196,290).
  */
 async function requireApproved(ctx: Ctx, speaker: Speaker) {
-  if ((await characterState(ctx, speaker.character)).data.approved !== true)
+  if (!(await characterState(ctx, speaker.character)).data.approved)
     ctx.fail("CONFLICT", "승인된 캐릭터만 할 수 있습니다.", {
       reason: "not_approved",
     });
@@ -323,7 +318,7 @@ export async function useInPost(
     ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
       reason: "not_owned",
     });
-  const item = await ctx.get(ITEMS, owned.data.item);
+  const item = await itemById(ctx, owned.data.item);
   // it_use_mmb_able: an item the owner keeps out of posts is used elsewhere.
   if (!item || item.data.usable === false || item.data.usableInPosts !== true)
     ctx.fail("CONFLICT", "사용할 수 없는 아이템입니다.", {
@@ -353,7 +348,7 @@ export async function useInPost(
       ? { item: outcome.prize.id, name: outcome.prize.data.name }
       : null;
   } else used.description = String(item.data.description ?? "").slice(0, 200);
-  if (item.data.reusable !== true) await ctx.delete(INVENTORY, owned.id);
+  if (item.data.reusable !== true) await spend(ctx, [owned]);
   await record(ctx, "use", {
     item: item.id,
     inventory: owned.id,
@@ -392,15 +387,19 @@ export async function combineInPost(
     ctx.fail("INVALID_REQUEST", "레시피에 맞는 재료를 선택해 주세요.", {
       reason: "invalid_materials",
     });
-  const owned = await Promise.all(materials.map((id) => ownedItem(ctx, id)));
+  const owned = await ownedItems(ctx, materials);
   if (owned.some((row) => !row || row.data.character !== speaker.character))
     ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
       reason: "not_owned",
     });
   await requireApproved(ctx, speaker);
   // it_use_recepi: only craft materials go into 조합.
+  const catalogue = await itemsByIds(
+    ctx,
+    owned.map((row) => row.data.item),
+  );
   for (const row of owned)
-    if ((await ctx.get(ITEMS, row.data.item))?.data.craftMaterial !== true)
+    if (catalogue.get(row.data.item)?.data.craftMaterial !== true)
       ctx.fail("INVALID_REQUEST", "조합 재료로 쓸 수 없는 아이템입니다.", {
         reason: "not_material",
       });
@@ -408,18 +407,14 @@ export async function combineInPost(
     .map((row) => row.data.item)
     .sort()
     .join("||");
-  const recipe = (await weightedRows(ctx, RECIPES)).find((row) => {
-    if (row.data.hidden || !Array.isArray(row.data.ingredients)) return false;
+  const recipe = (await openRecipes(ctx)).find((row) => {
     const needed = [];
     for (const ingredient of row.data.ingredients)
       for (let n = 0; n < (ingredient.count ?? 0) && needed.length < 4; n++)
         needed.push(ingredient.item);
     return needed.sort().join("||") === key;
   });
-  const prize =
-    typeof recipe?.data.item === "string"
-      ? await ctx.get(ITEMS, recipe.data.item)
-      : null;
+  const prize = recipe ? await itemById(ctx, recipe.data.item) : null;
   let balance = null;
   if (prize) {
     const cost = amount(recipe.data.cost ?? 0, "Crafting cost");
@@ -431,13 +426,10 @@ export async function combineInPost(
     if (cost) balance = await pay(ctx, current, cost);
     await give(ctx, prize, "craft", speaker.character);
   }
-  const catalogue = await ctx.getMany(
-    ITEMS,
-    owned.map((row) => row.data.item),
+  await spend(
+    ctx,
+    owned.filter((row) => catalogue.get(row.data.item)?.data.reusable !== true),
   );
-  for (const [index, row] of owned.entries())
-    if (catalogue[index]?.data.reusable !== true)
-      await ctx.delete(INVENTORY, row.id);
   await record(ctx, "craft", {
     character: speaker.character,
     item: prize?.id ?? null,

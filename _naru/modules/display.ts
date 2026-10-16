@@ -1,5 +1,5 @@
 // When a shop item is on display (shop/index.php's sh_date, sh_time and
-// sh_week), shared by the site functions and the shop page, which reads this
+// sh_week), shared by the queries and the shop page, which reads this
 // file as it is published.
 
 export const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];

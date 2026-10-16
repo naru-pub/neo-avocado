@@ -1,15 +1,7 @@
 // How a post or comment is shown: its text, dice and the character it speaks as.
 
 import { emoticonContent } from "../emoticons.js";
-import {
-  allDocuments,
-  collection,
-  COLLECTION,
-  nickOf,
-  ownCharacters,
-  run,
-  state,
-} from "./core.js";
+import { nickOf, ownCharacters, query, run, state } from "./core.js";
 import { openLogNumber, searchTag } from "./logs.js";
 
 // 댓글 주사위: 굴린 값을 페이지가 정하면 누구나 원하는 눈을 적을 수 있다.
@@ -189,16 +181,12 @@ export function wireSpeakerChoice(select) {
  */
 export async function postInventory() {
   state.speakers ??= await ownCharacters();
-  state.postItems ??= await allDocuments(COLLECTION.inventory, {
-    owner: state.member.id,
-  });
-  const ids = [...new Set(state.postItems.map((row) => row.data.item))].filter(
-    (id) => typeof id === "string" && !state.itemCatalog.has(id),
-  );
-  for (let start = 0; start < ids.length; start += 100) {
-    const chunk = ids.slice(start, start + 100);
-    const items = await collection(COLLECTION.items).getMany(chunk);
-    items.forEach((item, index) => state.itemCatalog.set(chunk[index], item));
+  if (!state.postItems) {
+    const { inventory, items } = await query("economy/inventory:inventory", {
+      all: true,
+    });
+    for (const item of items) state.itemCatalog.set(item.id, item);
+    state.postItems = inventory;
   }
   return state.postItems.map((row) => ({
     row,

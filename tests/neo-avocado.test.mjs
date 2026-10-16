@@ -5,20 +5,8 @@ import { readFile } from "node:fs/promises";
 import { SourceTextModule, SyntheticModule } from "node:vm";
 import { JSDOM } from "jsdom";
 import { matches } from "./where.mjs";
+import { memberSettings } from "../dist/_naru/modules/access.js";
 const root = new URL("../dist/", import.meta.url);
-/** What _naru/collections.json lets visitors read (the rules narrow it on Naru). */
-const WORLD = new Set(
-  Object.entries(
-    JSON.parse(await readFile(new URL("_naru/collections.json", root), "utf8"))
-      .collections,
-  )
-    .filter(([, entry]) => entry.read === "world")
-    .map(([name]) => name)
-    // Posts and comments only where a test opens them (visitorWorld).
-    .filter(
-      (name) => !["neo_avocado_logs", "neo_avocado_comments"].includes(name),
-    ),
-);
 
 /** How a fake Naru answers a call its test did not expect: ctx.fail. */
 function refuse(reason, message = reason) {
@@ -81,9 +69,11 @@ function fakeDatabase(rows = {}) {
       "neo_avocado_inventory",
       "neo_avocado_items",
       "neo_avocado_settings",
+      "neo_avocado_wallets",
       "neo_avocado_couples",
       "neo_avocado_sides",
       "neo_avocado_classes",
+      "neo_avocado_titles",
       "neo_avocado_board_groups",
     ].map((name) => [
       name,
@@ -116,10 +106,6 @@ function fakeDatabase(rows = {}) {
     },
     async list(options = {}) {
       calls.push({ method: "list", name, ...options });
-      if (database.unprepared)
-        throw Object.assign(new Error(`Collection ${name} does not exist.`), {
-          code: "NOT_FOUND",
-        });
       const keys = options.sort ?? [[{ metadata: "id" }, "asc"]];
       // Missing values sort lowest, then strings, numbers and booleans.
       const rank = (value) =>
@@ -211,22 +197,30 @@ function fakeDatabase(rows = {}) {
     async signOut() {
       calls.push({ method: "signOut" });
     },
-    // One live connection at a time; tests deliver messages and statuses.
-    live(options) {
-      calls.push({ method: "live", topics: options.topics });
-      const connection = {
-        options,
+    // Queries and mutations: the foundation's answer from the same store
+    // (profiles, settings, wallets), the rest as a function call.
+    query: (name, args = null) => member.call(name, args, "query"),
+    mutate: (name, args = null) => member.call(name, args, "mutate"),
+    // Each subscription is kept for the test to send newer answers.
+    subscribe(name, args, onResult) {
+      calls.push({ method: "subscribe", name, args });
+      const subscription = {
+        name,
+        args: JSON.parse(JSON.stringify(args)),
+        onResult,
         closed: false,
+      };
+      database.subscriptions.push(subscription);
+      member.call(name, args, "query").then(onResult, () => {});
+      return {
         close() {
-          connection.closed = true;
+          subscription.closed = true;
         },
       };
-      database.live = connection;
-      return connection;
     },
     // 서버 함수는 나루에서 돈다. 여기서는 무엇을 불렀는지만 남기고, 테스트가
     // 정한 결과를 돌려준다.
-    async call(name, args = null) {
+    async call(name, args = null, kind = "call") {
       // What Naru answers a member the site has not approved.
       if ((database.platformStatus ?? "approved") !== "approved")
         throw Object.assign(new Error("Membership is not approved."), {
@@ -235,11 +229,6 @@ function fakeDatabase(rows = {}) {
         });
       // The site frame is read on every load; tests that care set database.site.
       if (name === "content/site:site") {
-        if (database.unprepared)
-          throw Object.assign(
-            new Error("Collection neo_avocado_design does not exist."),
-            { code: "NOT_FOUND" },
-          );
         return {
           level: 2,
           member: true,
@@ -249,22 +238,308 @@ function fakeDatabase(rows = {}) {
           ...database.site,
         };
       }
-      if (name === "community/boards:commentCounts") {
-        const counts = {};
-        for (const id of args.ids)
-          counts[id] = store
+      const profileOf = (id) =>
+        store.get(PROFILES).find((row) => row.id === id) ?? null;
+      /**
+       * The characters' queries, answered from the same store: sheets as
+       * lists show them (no custom values) or whole, with the fields the
+       * reader may see; what a character's page shows beside them.
+       */
+      const characterQueries = () => {
+        const rows = (name) => store.get(`neo_avocado_${name}`);
+        const ownerOf = (row) => row.createdBy ?? row.data.owner;
+        const ordered = (list) =>
+          [...list].sort(
+            (a, b) =>
+              (a.data.order ?? 0) - (b.data.order ?? 0) ||
+              (a.id < b.id ? -1 : 1),
+          );
+        const listed = (row) => {
+          const { fields, ...data } = row.data;
+          return { ...row, data };
+        };
+        const definitions = () =>
+          ordered(rows("character_fields")).filter(
+            (row) => database.owner === true || row.data.visibility !== "admin",
+          );
+        const visible = (row) =>
+          Object.fromEntries(
+            definitions()
+              .filter(
+                (field) =>
+                  (field.data.visibility ?? "public") === "public" ||
+                  (field.data.visibility === "owner" &&
+                    database.signedIn &&
+                    ownerOf(row) === ME),
+              )
+              .filter((field) => row.data.fields?.[field.id] !== undefined)
+              .map((field) => [field.id, row.data.fields[field.id]]),
+          );
+        const find = (id) => rows("characters").find((row) => row.id === id);
+        const nicks = (list) =>
+          Object.fromEntries(
+            list
+              .map((row) => [ownerOf(row), profileOf(ownerOf(row))?.data.nick])
+              .filter(([, nick]) => nick !== undefined),
+          );
+        const name = (id) =>
+          find(id) ? { id, name: find(id).data.name } : null;
+        return {
+          "characters/sheet:choices": () => ({
+            fields: definitions(),
+            sides: ordered(rows("sides")),
+            classes: ordered(rows("classes")),
+          }),
+          "characters/sheet:list": () => {
+            const { filter = null, page = 1, size = 20 } = args ?? {};
+            const all = rows("characters")
+              .filter(
+                (row) =>
+                  !filter ||
+                  (filter === "approved"
+                    ? row.data.state === "approved"
+                    : ["editing", "submitted"].includes(row.data.state)),
+              )
+              .sort(
+                (a, b) =>
+                  (a.createdAt < b.createdAt ? -1 : 1) *
+                  (filter === "approved" ? 1 : -1),
+              );
+            const documents = size
+              ? all.slice((page - 1) * size, page * size)
+              : all;
+            return {
+              documents: documents.map(listed),
+              total: all.length,
+              nicks: nicks(documents),
+            };
+          },
+          "characters/sheet:mine": () => ({
+            documents: rows("characters")
+              .filter((row) => ownerOf(row) === ME)
+              .map(listed),
+          }),
+          "characters/sheet:sheet": () => {
+            const row = find(args.id);
+            if (!row) return { document: null };
+            const outfit = rows("wardrobe").find(
+              (entry) =>
+                entry.id === row.data.outfit && entry.data.character === row.id,
+            );
+            return {
+              document: {
+                ...listed(row),
+                data: { ...listed(row).data, fields: visible(row) },
+              },
+              nicks: nicks([row]),
+              outfitImage: outfit?.data.image ?? null,
+            };
+          },
+          "characters/sheet:named": () => ({
+            document:
+              rows("characters")
+                .filter(
+                  (row) =>
+                    row.data.name === args.name &&
+                    (!args.approved || row.data.state === "approved"),
+                )
+                .map(listed)[0] ?? null,
+          }),
+          "characters/sheet:details": async () => {
+            const row = find(args.character);
+            const status = await database.answer(
+              "characters/progression:characterStatus",
+              { character: args.character },
+            );
+            const held = status?.state?.titles ?? [];
+            return {
+              fields: row ? visible(row) : {},
+              status,
+              titles: rows("titles").filter((title) => held.includes(title.id)),
+              couples: ordered(
+                rows("couples").filter((couple) =>
+                  [couple.data.first, couple.data.second].includes(
+                    args.character,
+                  ),
+                ),
+              ).map((couple) => ({
+                ...couple,
+                partner: name(
+                  couple.data.first === args.character
+                    ? couple.data.second
+                    : couple.data.first,
+                ),
+              })),
+              relations: rows("relations")
+                .filter(
+                  (relation) => relation.data.character === args.character,
+                )
+                .sort(
+                  (a, b) =>
+                    (a.data.order ?? 0) - (b.data.order ?? 0) ||
+                    (a.createdAt < b.createdAt ? 1 : -1),
+                )
+                .map((relation) => ({
+                  ...relation,
+                  target: name(relation.data.target),
+                })),
+              wardrobe: rows("wardrobe").filter(
+                (outfit) => outfit.data.character === args.character,
+              ),
+            };
+          },
+          "characters/couples:list": () => ({
+            couples: ordered(rows("couples")).map((couple) => ({
+              ...couple,
+              first: find(couple.data.first) ?? null,
+              second: find(couple.data.second) ?? null,
+            })),
+          }),
+        };
+      };
+      /**
+       * The economy's queries, answered from the same store: the items the
+       * member may see (the shop's, their own, a recipe's), the recipes
+       * not hidden, and their inventory as asked.
+       */
+      const economyQueries = () => {
+        const inventory = () =>
+          store
+            .get("neo_avocado_inventory")
+            .filter(
+              (row) =>
+                row.data.owner === ME &&
+                (args?.all ||
+                  (args?.character
+                    ? row.data.character === args.character
+                    : !row.data.character)),
+            );
+        const recipes = () =>
+          store
+            .get("neo_avocado_recipes")
+            .filter((row) => row.data.hidden !== true);
+        const items = () => {
+          const known = new Set([
+            ...store
+              .get("neo_avocado_inventory")
+              .filter((row) => row.data.owner === ME)
+              .map((row) => row.data.item),
+            ...recipes().flatMap((row) => [
+              row.data.item,
+              ...(row.data.ingredients ?? []).map((entry) => entry.item),
+            ]),
+          ]);
+          return store
+            .get("neo_avocado_items")
+            .filter((row) => row.data.hidden !== true || known.has(row.id));
+        };
+        return {
+          "economy/shop:shop": () => ({
+            items: items(),
+            recipes: recipes(),
+            inventory: inventory(),
+          }),
+          "economy/inventory:inventory": () => {
+            const rows = inventory();
+            return {
+              inventory: rows,
+              items: store
+                .get("neo_avocado_items")
+                .filter((item) =>
+                  rows.some((row) => row.data.item === item.id),
+                ),
+            };
+          },
+        };
+      };
+      /**
+       * The boards' queries, answered from the same store: the boards with
+       * their groups and emoticons, a board's page (notices first, newest
+       * first, the board's rows a page, with comment counts), one post, a
+       * post's comments, a board's newest post and unread calls.
+       */
+      const boardQueries = () => {
+        const boards = () => store.get("neo_avocado_boards");
+        const boardOf = (id) => boards().find((row) => row.id === id);
+        const logs = () => store.get(LOGS);
+        const comments = (id) =>
+          store
             .get(COMMENTS)
-            .filter((row) => row.data.logId === id).length;
-        return { counts };
-      }
-      if (name === "community/membership:membership") {
-        const profile = await member
-          .collection(PROFILES)
-          .get(ME)
-          .catch((error) => {
-            if (error.code === "NOT_FOUND") return null;
-            throw error;
+            .filter((row) => row.data.logId === id)
+            .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
+        const notFound = () => {
+          throw Object.assign(new Error("자료를 찾을 수 없습니다."), {
+            code: "NOT_FOUND",
+            details: { reason: "document_not_found" },
           });
+        };
+        return {
+          "community/boards:boards": () => ({
+            boards: boards(),
+            groups: [...store.get("neo_avocado_board_groups")].sort(
+              (a, b) =>
+                (a.data.order ?? 0) - (b.data.order ?? 0) ||
+                (a.id < b.id ? -1 : 1),
+            ),
+            emoticons: store.get("neo_avocado_emoticons"),
+          }),
+          "community/posts:page": () => {
+            const board = boardOf(args.board);
+            const size = Math.min(
+              board.data.pageRows ?? 15,
+              board.data.kind === "qna" && !args.tag ? 10 : 100,
+            );
+            const all = logs()
+              .filter(
+                (row) =>
+                  row.data.board === args.board &&
+                  (!args.category || row.data.category === args.category) &&
+                  (!args.tag || (row.data.tags ?? []).includes(args.tag)),
+              )
+              .sort(
+                (a, b) =>
+                  (b.data.notice === true) - (a.data.notice === true) ||
+                  (a.createdAt < b.createdAt ? 1 : -1),
+              );
+            const page = args.page ?? 1;
+            const documents = all.slice((page - 1) * size, page * size);
+            return {
+              board,
+              documents,
+              total: all.length,
+              size,
+              counts: Object.fromEntries(
+                documents.map((row) => [row.id, comments(row.id).length]),
+              ),
+            };
+          },
+          "community/posts:post": () => ({
+            document:
+              (args.id !== undefined
+                ? logs().find((row) => row.id === args.id)
+                : logs().find(
+                    (row) =>
+                      row.data.board === args.board &&
+                      row.data.number === args.number,
+                  )) ?? notFound(),
+          }),
+          "community/comments:list": () => {
+            const all = comments(args.post);
+            const start = args.after
+              ? all.findIndex((row) => row.id === args.after) + 1
+              : 0;
+            const documents = all.slice(start, start + 50);
+            return {
+              documents,
+              nextCursor: start + 50 < all.length ? documents.at(-1).id : null,
+            };
+          },
+          "community/posts:latest": () => ({ id: null }),
+          "community/inbox:status": () => ({ messages: 0, calls: false }),
+        };
+      };
+      if (name === "community/membership:membership") {
+        const profile = profileOf(ME);
         return {
           status: "approved",
           role: database.role ?? "member",
@@ -275,12 +550,56 @@ function fakeDatabase(rows = {}) {
       }
       if (name === "community/membership:join") {
         database.joined = args;
+        calls.push({ method: kind, name, args });
         return {
           status: "approved",
           profile: await member
             .collection(PROFILES)
             .set(ME, { nick: args.nick }),
         };
+      }
+      const foundation = {
+        "community/profiles:nicks": () => ({
+          nicks: Object.fromEntries(
+            args.ids
+              .map((id) => [id, profileOf(id)?.data.nick])
+              .filter(([, nick]) => nick !== undefined),
+          ),
+        }),
+        "community/profiles:find": () => ({
+          profiles: store
+            .get(PROFILES)
+            .filter((row) => args.nicks.includes(row.data.nick))
+            .map((row) => ({
+              id: row.id,
+              nick: row.data.nick,
+              acceptMessages: row.data.acceptMessages !== false,
+            })),
+        }),
+        "community/profiles:own": () => ({ profile: profileOf(ME) }),
+        "community/profiles:update": async () => ({
+          profile: await member
+            .collection(PROFILES)
+            .set(ME, { ...profileOf(ME)?.data, ...args }),
+        }),
+        "content/site:settings": () =>
+          memberSettings(
+            store
+              .get("neo_avocado_settings")
+              .find((row) => row.id === "community")?.data ?? {},
+          ),
+        "economy/wallet:wallet": () => ({
+          balance:
+            store.get("neo_avocado_wallets").find((row) => row.id === ME)?.data
+              .balance ?? 0,
+        }),
+        ...economyQueries(),
+        ...characterQueries(),
+        ...boardQueries(),
+      };
+      if (Object.hasOwn(foundation, name)) {
+        calls.push({ method: kind, name, args });
+        return JSON.parse(JSON.stringify(await foundation[name]()));
       }
       // Writes: posts, comments and characters through their functions,
       // kept in the same store native reads come from.
@@ -317,28 +636,23 @@ function fakeDatabase(rows = {}) {
   // A visitor's client: function calls only, recorded apart from members'.
   const visitor = {
     calls: [],
-    async call(name, args = null) {
+    async call(name, args = null, kind = "call") {
       if (name !== "content/site:site")
         visitor.calls.push(JSON.parse(JSON.stringify({ name, args })));
-      return member.call(name, args);
+      return member.call(name, args, kind);
     },
-    live(options) {
-      visitor.calls.push({ name: "live", args: { topics: options.topics } });
-      const connection = { options, close() {} };
-      database.live = connection;
-      return connection;
-    },
+    query: (name, args = null) => visitor.call(name, args, "query"),
+    mutate: (name, args = null) => visitor.call(name, args, "mutate"),
+    subscribe: (...args) => member.subscribe(...args),
   };
   const database = {
     calls,
     store,
     member,
     visitor,
+    subscriptions: [],
     signedIn: true,
-    answer: (name) =>
-      name === "community/messages:messageStatus"
-        ? { unread: false }
-        : refuse("empty"),
+    answer: () => refuse("empty"),
   };
   return database;
 }
@@ -371,20 +685,9 @@ async function page(database) {
     ["createNaru"],
     function () {
       this.setExport("createNaru", () => ({
-        // Visitors read what the declaration makes world-readable; posts
-        // only where the test opens them (the board rule decides on Naru).
-        collection: (name) => {
-          if (database.visitorWorld || WORLD.has(name))
-            return database.member.collection(name);
-          const denied = async () => {
-            throw Object.assign(new Error("Members only"), {
-              code: "ACCESS_DENIED",
-            });
-          };
-          return { get: denied, list: denied };
-        },
-        call: database.visitor.call,
-        live: database.visitor.live,
+        query: database.visitor.query,
+        mutate: database.visitor.mutate,
+        subscribe: database.visitor.subscribe,
         members: {
           session: async () => (database.signedIn ? database.member : null),
           signIn: async () => database.calls.push({ method: "signIn" }),
@@ -502,7 +805,7 @@ test("editing keeps image and metadata and sends the revision, while a conflict 
   assert.match($("editorStatus").textContent, /다른 곳에서 수정/);
 });
 
-test("profile and character edits use their original revisions and preserve extra fields", async () => {
+test("profile edits go through profiles:update, character edits use their original revisions, and both keep extra fields", async () => {
   const database = fakeDatabase({
     [PROFILES]: [{ ...me, data: { nick: "나", mainCharacter: "character" } }],
     [CHARACTERS]: [
@@ -524,6 +827,13 @@ test("profile and character edits use their original revisions and preserve extr
   $("editorFields").querySelector('[name="nick"]').value = "새 이름";
   await submit($("editorForm"));
   assert.equal($("whoami").textContent, "새 이름 님");
+  // The member's own profile changes through profiles:update, which keeps
+  // the rest.
+  assert.deepEqual(
+    database.calls.find((call) => call.name === "community/profiles:update")
+      .args,
+    { nick: "새 이름", acceptMessages: true, commentAlerts: true },
+  );
   assert.equal(database.store.get(PROFILES)[0].data.mainCharacter, "character");
   $("tabCharacters").onclick();
   await settle();
@@ -608,27 +918,27 @@ test("the shop exposes later pages and crafts from the inventory's own copies th
   );
 });
 
-test("signed out, a visitor reads only the boards the board rule lists, and may sign in", async () => {
-  // The board rule gives this visitor no boards.
+test("signed out, a visitor reads only the boards the board query lists, and may sign in", async () => {
+  // The boards query gives this visitor no boards.
   const database = fakeDatabase({ neo_avocado_boards: [] });
   database.signedIn = false;
   const { $, settle, window } = await page(database);
   assert.equal($("welcome").hidden, false);
   assert.equal($("community").hidden, false);
   assert.ok(window.document.body.classList.contains("visitor"));
-  // No board is open to guests: nothing but the board list is read, natively.
+  // No board is open to guests: nothing but the board list is read.
   assert.equal($("noPublicBoards").hidden, false);
   assert.equal($("logForm").hidden, true);
-  // Their one call reports the visit (현재접속자, 접속자집계).
+  // Besides it, their one call reports the visit (현재접속자, 접속자집계).
   assert.deepEqual(
     database.visitor.calls.map((call) => call.name),
-    ["community/presence:seen"],
+    ["community/presence:seen", "community/boards:boards"],
   );
   assert.deepEqual(
     database.calls
       .filter((call) => call.method !== "call")
       .map((call) => [call.method, call.name]),
-    [["list", "neo_avocado_boards"]],
+    [["query", "community/boards:boards"]],
   );
   $("signIn").onclick();
   await settle();
@@ -669,12 +979,11 @@ test("a guest posts with a name and password, and must give the password to edit
     ],
   });
   database.signedIn = false;
-  database.visitorWorld = true;
   const { $, submit, settle } = await page(database);
   const post = $("logs").querySelector(".log");
-  // World-readable posts are read natively, through the board rule.
+  // A visitor reads the board's page as members do.
   assert.ok(
-    database.calls.some((call) => call.method === "list" && call.name === LOGS),
+    database.visitor.calls.some((call) => call.name === "community/posts:page"),
   );
   assert.equal(post.querySelector(".author").textContent, "길손 (손님)");
   assert.equal(post.querySelector(".edit").hidden, false);
@@ -713,31 +1022,29 @@ test("a first visit sets a nickname under the member's own id, then reads the lo
   const database = fakeDatabase();
   const { $, settle, submit } = await page(database);
   assert.equal($("profileSetup").hidden, false);
-  // The profile, and the settings for the rules to agree to (none here).
-  assert.deepEqual(
-    [database.calls.at(0), database.calls.at(1)],
-    [
-      { method: "get", name: PROFILES, id: ME },
-      { method: "get", name: "neo_avocado_settings", id: "community" },
-    ],
-  );
-  assert.equal(database.calls.length, 2);
+  // Membership brought no profile; then the settings for the rules to
+  // agree to (none here).
+  assert.deepEqual(database.calls.at(0), {
+    method: "query",
+    name: "content/site:settings",
+    args: null,
+  });
+  assert.equal(database.calls.length, 1);
   assert.equal($("stipulationBox").hidden, true);
   assert.equal($("characterNoticeBox").hidden, true);
   $("nick").value = " 아보 ";
   submit($("profileForm"));
   await settle();
   assert.equal(database.joined.agreed, false);
-  assert.deepEqual(database.calls.at(2), {
-    method: "set",
-    name: PROFILES,
-    id: ME,
-    data: { nick: "아보" },
+  assert.deepEqual(database.calls.at(1), {
+    method: "mutate",
+    name: "community/membership:join",
+    args: { nick: "아보", agreed: false },
   });
   assert.equal($("community").hidden, false);
   assert.equal($("whoami").textContent, "아보 님");
   assert.equal(
-    database.calls.some((call) => call.method === "list" && call.name === LOGS),
+    database.calls.some((call) => call.name === "community/posts:page"),
     true,
   );
 });
@@ -786,7 +1093,6 @@ test("site_main's placeholders become the slides, the member card and links, as 
           body: '<p>{{VISUAL_SLIDE}}</p><div id="x">{{OUTLOGIN}} {{MYPAGE}} {{LOGIN}} {{UNKNOWN}}{{TWITTER}}</div><img src="x.png" onerror="alert(1)"><p title="{{LOGIN}}">text</p>',
         },
       };
-    if (name === "community/messages:messageStatus") return { unread: false };
     return refuse("empty");
   };
   const { $, settle } = await page(database);
@@ -829,23 +1135,19 @@ test("the main page's card counts unread mail, offers 캐릭터 생성 and links
     neo_avocado_settings: [{ id: "community", data: {} }],
   });
   database.owner = true;
-  database.answer = (name) =>
-    name === "community/messages:messageStatus"
-      ? { unread: true, unreadCount: 3 }
-      : refuse("empty");
+  database.answer = () => refuse("empty");
   const { $, settle } = await page(database);
   await settle();
-  database.live.options.onStatus("open");
-  await settle();
+  const inbox = database.subscriptions.find(
+    (subscription) => subscription.name === "community/inbox:status",
+  );
+  inbox.onResult({ messages: 3, calls: false });
   assert.equal($("cardUnread").textContent, "3");
   assert.equal($("cardUnread").hidden, false);
-  // A notice without a count is one more message.
-  database.live.options.onMessage({ type: "notice", data: { unread: true } });
+  // Naru answers again as mail arrives or is read.
+  inbox.onResult({ messages: 4, calls: false });
   assert.equal($("cardUnread").textContent, "4");
-  database.live.options.onMessage({
-    type: "notice",
-    data: { unread: false, unreadCount: 0 },
-  });
+  inbox.onResult({ messages: 0, calls: false });
   assert.equal($("cardUnread").hidden, true);
   assert.equal($("cardAdmin").hidden, false);
   assert.equal($("cardDescript").textContent, "보유중인 캐릭터가 없습니다.");
@@ -860,10 +1162,7 @@ test("the intro shows one picture at a time on arriving home, then not for a day
   database.site = {
     banners: [slide("a", "intro"), slide("b", "intro"), slide("main")],
   };
-  database.answer = (name) =>
-    name === "community/messages:messageStatus"
-      ? { unread: false }
-      : refuse("empty");
+  database.answer = () => refuse("empty");
   const { $, settle, window } = await page(database);
   await settle();
   assert.equal($("intro").open, true);
@@ -896,27 +1195,17 @@ test("logs are read a page at a time, newest first, and comments only when opene
     ],
   });
   const { $, settle } = await page(database);
-  const listed = database.calls.filter((call) => call.method === "list");
+  // The boards (with their groups, for the board picker), then the board's
+  // first page in one read.
+  const listed = database.calls.filter((call) =>
+    ["community/boards:boards", "community/posts:page"].includes(call.name),
+  );
   assert.deepEqual(listed, [
-    { method: "list", name: "neo_avocado_boards", size: 100, after: null },
-    // The board groups, for the board picker.
+    { method: "query", name: "community/boards:boards", args: null },
     {
-      method: "list",
-      name: "neo_avocado_board_groups",
-      size: 100,
-      after: null,
-    },
-    {
-      method: "list",
-      name: LOGS,
-      filter: { board: "default" },
-      sort: [
-        ["notice", "desc"],
-        [{ metadata: "createdAt" }, "desc"],
-      ],
-      size: 15,
-      after: null,
-      includeTotal: true,
+      method: "query",
+      name: "community/posts:page",
+      args: { board: "default", page: 1 },
     },
   ]);
   const items = $("logs").querySelectorAll(".log");
@@ -927,18 +1216,18 @@ test("logs are read a page at a time, newest first, and comments only when opene
   assert.equal(items[1].querySelector(".delete").hidden, true);
   // 같은 회원의 닉네임은 한 번만 묻는다.
   const askedFor = database.calls
-    .filter((call) => call.name === PROFILES)
-    .flatMap((call) =>
-      call.method === "getMany"
-        ? call.ids
-        : call.method === "get"
-          ? [call.id]
-          : [],
-    );
-  assert.deepEqual(askedFor, [ME, "member-other"]);
+    .filter((call) => call.name === "community/profiles:nicks")
+    .flatMap((call) => call.args.ids);
+  // The member's own came with their membership.
+  assert.deepEqual(askedFor, ["member-other"]);
   assert.equal(
-    database.calls.some((call) => call.name === COMMENTS),
+    database.calls.some((call) => call.name === "community/comments:list"),
     false,
+  );
+  // The page brought each post's comment count.
+  assert.equal(
+    items[0].querySelector(".comments summary").textContent,
+    "댓글 (1)",
   );
   const comments = items[0].querySelector(".comments");
   comments.open = true;
@@ -947,15 +1236,12 @@ test("logs are read a page at a time, newest first, and comments only when opene
   await settle();
   assert.deepEqual(
     database.calls
-      .filter((call) => call.method === "list" && call.name === COMMENTS)
+      .filter((call) => call.name === "community/comments:list")
       .at(-1),
     {
-      method: "list",
-      name: COMMENTS,
-      filter: { logId: "log-16" },
-      sort: [[{ metadata: "createdAt" }, "asc"]],
-      size: 50,
-      after: null,
+      method: "query",
+      name: "community/comments:list",
+      args: { post: "log-16", after: null },
     },
   );
   assert.match(items[0].querySelector(".comment-list").textContent, /멋져요/);
@@ -1051,27 +1337,21 @@ test("characters are read when their tab is first opened, and registered by memb
     ],
   });
   const { $, settle, submit } = await page(database);
-  assert.equal(
-    database.calls.some((call) => call.name === CHARACTERS),
-    false,
-  );
+  const lists = () =>
+    database.calls.filter((call) => call.name === "characters/sheet:list");
+  assert.equal(lists().length, 0);
   $("tabCharacters").onclick();
   await settle();
   await settle();
   assert.equal($("charactersView").hidden, false);
-  assert.deepEqual(
-    database.calls.filter((call) => call.name === CHARACTERS),
-    [
-      {
-        method: "list",
-        name: CHARACTERS,
-        sort: [[{ metadata: "createdAt" }, "desc"]],
-        size: 20,
-        after: null,
-        includeTotal: true,
-      },
-    ],
-  );
+  // A page of them, newest first, with their owners' nicknames.
+  assert.deepEqual(lists(), [
+    {
+      method: "query",
+      name: "characters/sheet:list",
+      args: { filter: null, page: 1, size: 20 },
+    },
+  ]);
   assert.equal(
     $("characters").querySelector(".author").textContent,
     "오너: 나",
@@ -1116,8 +1396,7 @@ test("characters are read when their tab is first opened, and registered by memb
   assert.equal($("newCharacter").hidden, true);
   assert.equal($("characterForm").hidden, true);
   // The list reads the new character when next opened, and then not again.
-  const reads = () =>
-    database.calls.filter((call) => call.name === CHARACTERS).length;
+  const reads = () => lists().length;
   $("tabCharacters").onclick();
   await settle();
   await settle();
@@ -1132,11 +1411,9 @@ test("characters are read when their tab is first opened, and registered by memb
 test("an ended sign-in returns the page to the welcome screen", async () => {
   const database = fakeDatabase({ [PROFILES]: [me] });
   const { $, settle } = await page(database);
-  database.member.collection = () => ({
-    list: async () => {
-      throw Object.assign(new Error("expired"), { code: "AUTH_REQUIRED" });
-    },
-  });
+  database.member.query = async () => {
+    throw Object.assign(new Error("expired"), { code: "AUTH_REQUIRED" });
+  };
   $("messageDetail").textContent = "private message";
   $("messageBody").value = "private draft";
   $("board").onchange();
@@ -1270,9 +1547,10 @@ test("the shop reads the wallet, items and own inventory when opened, and spends
     "선물하기",
     "캐릭터 이동",
   ]);
+  // The member's own inventory, of no character until one is chosen.
   assert.deepEqual(
-    database.calls.filter((call) => call.name === INVENTORY).at(0).filter,
-    { owner: ME },
+    database.calls.find((call) => call.name === "economy/shop:shop").args,
+    { character: null },
   );
   // A character not yet approved buys nothing either. 종족 is the sheet's
   // (ch_class), not a value in the official record.
@@ -1427,50 +1705,35 @@ test("post details and comment lists use native reads while deletion stays trans
   assert.equal(deletion.id, "long");
 });
 
-test("unread notices and new posts arrive over the live connection instead of a poll", async () => {
+test("unread mail and calls, and new posts, arrive by subscription instead of a poll", async () => {
   const database = fakeDatabase({ [PROFILES]: [me] });
-  const unread = { value: false };
-  database.answer = (name) =>
-    name === "community/messages:messageStatus"
-      ? { unread: unread.value }
-      : refuse("empty");
+  database.answer = () => refuse("empty");
   const { $, settle } = await page(database);
   await settle();
-  const live = database.live;
-  assert.deepEqual([...live.options.topics], [LOGS]);
-  const statusReads = () =>
-    database.calls.filter(
-      (call) => call.name === "community/messages:messageStatus",
-    ).length;
-  assert.equal(statusReads(), 0);
-  // Nothing is replayed, so every (re)open reads the status once.
-  unread.value = true;
-  live.options.onStatus("open");
-  await settle();
-  assert.equal(statusReads(), 1);
+  const latest = database.subscriptions.find(
+    (subscription) => subscription.name === "community/posts:latest",
+  );
+  assert.deepEqual(latest.args, { board: "default" });
+  // One subscription says what is new for the member: mail and calls.
+  const inboxes = database.subscriptions.filter(
+    (subscription) => subscription.name === "community/inbox:status",
+  );
+  assert.equal(inboxes.length, 1);
+  const [inbox] = inboxes;
+  inbox.onResult({ messages: 1, calls: false });
   assert.equal($("tabMessages").textContent, "쪽지 · 새 쪽지");
-  live.options.onMessage({ type: "notice", data: { unread: false } });
+  assert.equal($("tabCalls").textContent, "알림");
+  inbox.onResult({ messages: 0, calls: true });
   assert.equal($("tabMessages").textContent, "쪽지");
-  live.options.onMessage({ type: "notice", data: { unread: true } });
-  assert.equal($("tabMessages").textContent, "쪽지 · 새 쪽지");
-  assert.equal(statusReads(), 1);
-  // Another board's post is ignored; this board's marks the tab until reloaded.
-  live.options.onMessage({
-    type: "topic",
-    topic: LOGS,
-    data: { board: "other", id: "x" },
-  });
+  assert.equal($("tabCalls").textContent, "알림 · 새 알림");
+  // A newer post than the page has seen marks the tab until reloaded.
+  latest.onResult({ id: null });
   assert.equal($("tabLogs").textContent, "로그");
-  live.options.onMessage({
-    type: "topic",
-    topic: LOGS,
-    data: { board: "default", id: "new" },
-  });
+  latest.onResult({ id: "new" });
   assert.equal($("tabLogs").textContent, "로그 · 새 글");
   const logReads = () =>
-    database.calls.filter(
-      (call) => call.method === "list" && call.name === LOGS,
-    ).length;
+    database.calls.filter((call) => call.name === "community/posts:page")
+      .length;
   const before = logReads();
   $("tabLogs").onclick();
   await settle();
@@ -1478,7 +1741,8 @@ test("unread notices and new posts arrive over the live connection instead of a 
   assert.equal($("tabLogs").textContent, "로그");
   $("signOut").onclick();
   await settle();
-  assert.equal(live.closed, true);
+  assert.equal(inbox.closed, true);
+  assert.equal(latest.closed, true);
 });
 
 test("a function's ctx.fail reason and a duplicate nickname are shown as the page's own text", async () => {
@@ -1488,7 +1752,6 @@ test("a function's ctx.fail reason and a duplicate nickname are shown as the pag
   database.answer = (name) => {
     if (name === "economy/shop:gacha")
       throw failure("CONFLICT", "아보가 모자랍니다.", { reason: "not_enough" });
-    if (name === "community/messages:messageStatus") return { unread: false };
     refuse("empty");
   };
   const { $, settle, submit } = await page(database);
@@ -1705,13 +1968,17 @@ test("custom fields render on the form, and the applicant filter queries by stat
   $("characterFilter").onchange();
   await settle();
   await settle();
+  // 신청자목록 reads them all at once (size 0), to count and search.
   assert.deepEqual(
-    database.calls.filter((call) => call.name === CHARACTERS).at(-1).where,
-    { in: ["state", ["editing", "submitted"]] },
+    database.calls
+      .filter((call) => call.name === "characters/sheet:list")
+      .at(-1).args,
+    { filter: "applicants", page: 1, size: 0 },
   );
+  assert.match($("characters").textContent, /카도/);
 });
 
-test("calls arrive as live notices and the history marks them seen", async () => {
+test("calls arrive by subscription and the history marks them seen", async () => {
   const database = fakeDatabase({
     [PROFILES]: [me],
     [LOGS]: [
@@ -1723,36 +1990,36 @@ test("calls arrive as live notices and the history marks them seen", async () =>
     ],
   });
   database.answer = (name) =>
-    name === "community/messages:messageStatus"
-      ? { unread: false, calls: true }
-      : name === "community/calls:callHistory"
-        ? {
-            unread: true,
-            nextCursor: null,
-            documents: [
-              {
-                id: "call-1",
-                data: {
-                  kind: "call",
-                  nick: "남",
-                  speaker: "남의 것",
-                  logId: "log-9",
-                  preview: "나",
-                  at: Date.parse("2030-01-01T00:00:00Z"),
-                  unread: true,
-                },
+    name === "community/calls:callHistory"
+      ? {
+          unread: true,
+          nextCursor: null,
+          documents: [
+            {
+              id: "call-1",
+              data: {
+                kind: "call",
+                nick: "남",
+                speaker: "남의 것",
+                logId: "log-9",
+                preview: "나",
+                at: Date.parse("2030-01-01T00:00:00Z"),
+                unread: true,
               },
-            ],
-          }
-        : null;
+            },
+          ],
+        }
+      : null;
   const { $, settle } = await page(database);
   await settle();
-  database.live.options.onStatus("open");
-  await settle();
+  const unread = database.subscriptions.find(
+    (subscription) => subscription.name === "community/inbox:status",
+  );
+  unread.onResult({ messages: 0, calls: true });
   assert.equal($("tabCalls").textContent, "알림 · 새 알림");
-  database.live.options.onMessage({ type: "notice", data: { calls: false } });
+  unread.onResult({ messages: 0, calls: false });
   assert.equal($("tabCalls").textContent, "알림");
-  database.live.options.onMessage({ type: "notice", data: { calls: true } });
+  unread.onResult({ messages: 0, calls: true });
   $("tabCalls").onclick();
   await settle();
   await settle();
@@ -1803,7 +2070,8 @@ test("log numbers, @N links, #tags, notices first and comment counts", async () 
   assert.equal($("logFocusPanel").hidden, false);
   assert.match($("logFocus").textContent, /첫 글/);
   assert.deepEqual(
-    database.calls.filter((call) => call.method === "list").at(-1).filter,
+    database.calls.filter((call) => call.name === "community/posts:post").at(-1)
+      .args,
     { board: "default", number: 1 },
   );
   items[2].querySelector(".hash-tag").onclick({ preventDefault() {} });
@@ -1837,17 +2105,6 @@ test("HTML posts render sanitized, without scripts or handlers", async () => {
   assert.equal(body.querySelector("b").textContent, "굵게");
   assert.equal(body.querySelector("script"), null);
   assert.equal(body.querySelector("img").hasAttribute("onerror"), false);
-});
-
-test("before the owner's first sign-in, the page says the site is being prepared", async () => {
-  const database = fakeDatabase();
-  database.signedIn = false;
-  database.unprepared = true;
-  // Collections are missing: every read the visitor makes fails NOT_FOUND.
-  const { $, settle } = await page(database);
-  await settle();
-  assert.equal($("welcome").hidden, false);
-  assert.match($("status").textContent, /사이트를 준비하고 있습니다/);
 });
 
 test("멤버목록 groups approved characters under each 소속 once there are two", async () => {
@@ -2021,9 +2278,7 @@ test("on a Q&A board the comment form is the staff's alone", async () => {
     database.answer = (name) =>
       name === "community/posts:questions"
         ? { documents: [question], nextCursor: null, totalCount: 1 }
-        : name === "community/messages:messageStatus"
-          ? { unread: false }
-          : refuse("empty");
+        : refuse("empty");
     const { $, settle } = await page(database);
     for (let n = 0; n < 6; n += 1) await settle();
     const log = $("logs").querySelector(".log");
@@ -2214,10 +2469,9 @@ test("a board lists by 분류, shows its HTML notice and new-post text, and mark
   links()[1].onclick({ preventDefault() {} });
   for (let n = 0; n < 4; n += 1) await settle();
   assert.deepEqual(
-    database.calls
-      .filter((call) => call.method === "list" && call.name === LOGS)
-      .at(-1).filter,
-    { board: "default", category: "잡담" },
+    database.calls.filter((call) => call.name === "community/posts:page").at(-1)
+      .args,
+    { board: "default", page: 1, category: "잡담" },
   );
   assert.deepEqual(
     [...$("logs").querySelectorAll(".log")].map((item) => item.dataset.id),

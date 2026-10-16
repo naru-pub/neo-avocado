@@ -3,9 +3,6 @@
 // messages and calls views, under the same menu.
 import {
   $,
-  caller,
-  collection,
-  COLLECTION,
   formatTime,
   ownCharacters,
   run,
@@ -16,6 +13,9 @@ import {
   STATE_NAMES,
   renderPages,
   show,
+  memberSettings,
+  mutate,
+  query,
 } from "./core.js";
 import { expText, moneyText } from "./names.js";
 import { configureBoard, openLogNumber } from "./logs.js";
@@ -72,7 +72,7 @@ async function loadMyPage() {
     event.preventDefault?.();
     run(async () => {
       if (!choice.value) return;
-      const result = await caller().call("characters/profile:mainCharacter", {
+      const result = await mutate("characters/profile:mainCharacter", {
         character: choice.value,
       });
       show(result.document);
@@ -89,11 +89,9 @@ async function loadMyPage() {
           characters.map(async (character): Promise<[string, any]> => [
             character.id,
             // A card without them still shows.
-            await caller()
-              .call("characters/progression:characterStatus", {
-                character: character.id,
-              })
-              .catch(() => null),
+            await query("characters/progression:characterStatus", {
+              character: character.id,
+            }).catch(() => null),
           ]),
         )
       : [],
@@ -146,11 +144,9 @@ async function loadMyPage() {
   // 신규 캐릭터 등록 shows while the owner allows creation and the member
   // has fewer than the limit (mypage/character/index.php); the server checks
   // the same.
-  const settings = await collection(COLLECTION.settings)
-    .get("community")
-    .catch(() => null);
-  const open = settings?.data.characterCreation !== false;
-  const limit = settings?.data.characterLimit ?? 1;
+  const settings = await memberSettings();
+  const open = settings.characterCreation !== false;
+  const limit = settings.characterLimit ?? 1;
   $("newCharacter").hidden = !open || (limit > 0 && characters.length >= limit);
   $("characterForm").hidden = true;
 }
@@ -158,13 +154,10 @@ $("newCharacter").onclick = () => run(() => openCharacterForm());
 
 /**
  * 로그내역 (mypage/log): the member's own posts on every board they can read,
- * newest first. Each board is asked for its own, as the board rule reads one
- * board at a time.
+ * newest first.
  */
 async function loadMyLogs() {
-  // Read by a function: readers may not ask for posts by author, which
-  // would find others' 익명 ones.
-  const { documents } = await caller().call("community/posts:mine");
+  const { documents } = await query("community/posts:mine");
   const posts = documents
     .map((log) => ({
       board: state.boards.find(
@@ -210,7 +203,7 @@ async function loadMyLogs() {
 let expCursor = null;
 async function loadMyExp({ more = false } = {}) {
   const [page, characters] = await Promise.all([
-    caller().call("economy/history:history", {
+    query("economy/history:history", {
       kind: "exp",
       after: more ? expCursor : null,
       size: 20,
@@ -240,7 +233,7 @@ async function loadMyExp({ more = false } = {}) {
 
 /** 관심로그 (mypage/log/log_favorite.php), 20 a page, in the order marked. */
 async function loadMyFavorites(page = 1) {
-  const result = await caller().call("community/posts:favorites", { page });
+  const result = await query("community/posts:favorites", { page });
   $("myFavorites").replaceChildren(
     ...result.documents.map((log) => {
       const board = state.boards.find(
@@ -276,7 +269,7 @@ async function loadMyFavorites(page = 1) {
 /** 화폐관리's ledger (mypage/money/index.php): 획득 and 사용, 20 a page. */
 let moneyCursor = null;
 async function loadMyMoney({ more = false } = {}) {
-  const page = await caller().call("economy/money:ledger", {
+  const page = await query("economy/money:ledger", {
     after: more ? moneyCursor : null,
   });
   const body = $("moneyLedger").querySelector("tbody");
@@ -322,13 +315,12 @@ $("moneyForm").onsubmit = (event) => {
   run(async () => {
     const name = $<HTMLInputElement>("moneyTo").value.trim();
     const amount = Number($<HTMLInputElement>("moneyAmount").value);
-    const { documents } = await collection(COLLECTION.characters).list({
-      where: { eq: ["name", name] },
-      size: 1,
-    });
-    if (!documents[0]) return say("상대를 확인할 수 없습니다.");
-    const result = await caller().call("economy/money:send", {
-      character: documents[0].id,
+    const { document: target } = name
+      ? await query("characters/sheet:named", { name })
+      : { document: null };
+    if (!target) return say("상대를 확인할 수 없습니다.");
+    const result = await mutate("economy/money:send", {
+      character: target.id,
       amount,
     });
     $<HTMLFormElement>("moneyForm").reset?.();
@@ -387,7 +379,7 @@ $("myLeave").onclick = () =>
       )
     )
       return;
-    await caller().call("community/membership:leave", { confirm: true });
+    await mutate("community/membership:leave", { confirm: true });
     say("탈퇴했습니다.");
     showAdmission("left");
   });

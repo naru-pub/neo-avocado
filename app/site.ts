@@ -1,6 +1,6 @@
 // The site's look and navigation: design, menus, banners and the intro.
 
-import { $, caller, run, say, showTab, state } from "./core.js";
+import { $, run, say, showTab, state, query } from "./core.js";
 import { configureBoard, loadLogs } from "./logs.js";
 import { loadContentBody, loadContentPages } from "./content.js";
 import { NAME_DEFAULTS } from "./names.js";
@@ -16,7 +16,7 @@ const SITE_COLORS = {
 };
 /** Applies the owner's design, menus and banners (adm/design_form.php, menu_list.php). */
 export async function loadSite() {
-  const site = await caller().call("content/site:site");
+  const site = await query("content/site:site");
   const { design } = site;
   state.siteOpen = site.open !== false;
   state.names = { ...NAME_DEFAULTS, ...site.names };
@@ -116,7 +116,7 @@ async function showMainPage(enabled, banners) {
   $("homeDefault").hidden = enabled;
   if (enabled) $("banners").hidden = true;
   if (!enabled) return;
-  const result = await caller().call("content/pages:contentPage", {
+  const result = await query("content/pages:contentPage", {
     id: "site_main",
     mobile: window.innerWidth <= 700,
   });

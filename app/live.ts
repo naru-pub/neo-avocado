@@ -1,26 +1,17 @@
 // Live updates: new posts, unread messages and notifications as they happen.
 
-import { $, caller, COLLECTION, run, state, stopLive } from "./core.js";
+import { $, caller, state, subscribe } from "./core.js";
 
-// The topic community/posts:write announces new, publicly listable posts on.
-const POSTS_TOPIC = COLLECTION.logs;
-/** How many messages are unread, as last told. */
-let unreadCount = 0;
 /**
  * The mail notice on the tab, and on the main page's card how many are
- * unread (outlogin.skin.2.php's $memo_not_read). A notice without a count
- * says one message came (messages:sendMessage, a gift's or money's notice).
+ * unread (outlogin.skin.2.php's $memo_not_read).
  */
-export function showUnread(unread, count?) {
+export function showUnread(count: number) {
+  const unread = count > 0;
   $("tabMessages").textContent = unread ? "쪽지 · 새 쪽지" : "쪽지";
-  unreadCount = !unread
-    ? 0
-    : typeof count === "number"
-      ? count
-      : unreadCount + 1;
-  $("cardUnread").textContent = unread ? String(unreadCount) : "";
+  $("cardUnread").textContent = unread ? String(count) : "";
   $("cardUnread").hidden = !unread;
-  $("cardMessages").classList.toggle("point", Boolean(unread));
+  $("cardMessages").classList.toggle("point", unread);
 }
 export function showCalls(unread) {
   $("tabCalls").textContent = unread ? "알림 · 새 알림" : "알림";
@@ -29,62 +20,60 @@ export function showNewPost(id) {
   state.newPost = id;
   $("tabLogs").textContent = id ? "로그 · 새 글" : "로그";
 }
-async function refreshUnread() {
-  const member = state.member;
-  const notice = await caller().call("community/messages:messageStatus");
-  if (state.member !== member) return;
-  showUnread(notice.unread, notice.unreadCount);
-  showCalls(notice.calls === true);
-}
 /**
- * Instead of polling, functions notify the member of new messages and
- * broadcast new posts. Nothing is replayed, so the status is read again
- * whenever the connection opens or reopens.
+ * Keeps the current board's newest post in view (community/posts:latest):
+ * a newer one than the page has seen, not the reader's own, shows the 새 글
+ * notice. Called whenever a board is shown; the subscription follows it.
+ */
+export function watchBoard() {
+  const board = state.board;
+  const reader = caller();
+  if (state.boardWatch?.board === board && state.boardWatch.reader === reader)
+    return;
+  state.boardWatch?.handle.close();
+  state.boardWatch = null;
+  if (!state.boards.some((row) => row.id === board)) return;
+  let seen: string | null | undefined;
+  const handle = subscribe(
+    "community/posts:latest",
+    { board },
+    ({ id }) => {
+      if (state.board !== board) return;
+      if (seen !== undefined && id && id !== seen && !state.ownPosts.has(id))
+        showNewPost(id);
+      seen = id;
+    },
+    () => {
+      /* A notice missed is no reason to bother anyone. */
+    },
+  );
+  state.boardWatch = { board, reader, handle };
+}
+
+/**
+ * Instead of polling, the page subscribes to the board's newest post and,
+ * for a member, to what is new for them (community/inbox:status): Naru
+ * answers again whenever a mutation writes mail, calls or the member's
+ * profile, so a 쪽지, a gift's or money's note, a call or a comment notice
+ * shows as it arrives, and reading them clears the notice on every tab.
  */
 export function listen() {
-  stopLive();
+  // The board's subscription stays while the reader does (watchBoard).
+  state.live?.close();
+  state.live = null;
+  watchBoard();
   const member = state.member;
-  if (!member) {
-    // Visitors hear new public posts too; they have no notices.
-    state.live = state.naru.live?.({
-      topics: [POSTS_TOPIC],
-      onMessage(message) {
-        if (
-          !state.member &&
-          message.type === "topic" &&
-          message.data?.board === state.board &&
-          typeof message.data.id === "string" &&
-          !state.ownPosts.has(message.data.id)
-        )
-          showNewPost(message.data.id);
-      },
-    });
-    return;
-  }
-  if (!member?.live) return run(refreshUnread);
-  state.live = member.live({
-    topics: [POSTS_TOPIC],
-    onMessage(message) {
+  if (!member) return;
+  state.live = subscribe(
+    "community/inbox:status",
+    null,
+    ({ messages, calls }) => {
       if (state.member !== member) return;
-      if (
-        message.type === "notice" &&
-        typeof message.data?.unread === "boolean"
-      )
-        showUnread(message.data.unread, message.data.unreadCount);
-      if (message.type === "notice" && typeof message.data?.calls === "boolean")
-        showCalls(message.data.calls);
-      if (
-        message.type === "topic" &&
-        message.topic === POSTS_TOPIC &&
-        message.data?.board === state.board &&
-        typeof message.data.id === "string" &&
-        !state.ownPosts.has(message.data.id)
-      )
-        showNewPost(message.data.id);
+      showUnread(messages);
+      showCalls(calls === true);
     },
-    onStatus(status) {
-      if (status === "open" && state.member === member && state.profile)
-        run(refreshUnread);
+    () => {
+      /* The tabs keep their last notice. */
     },
-  });
+  );
 }

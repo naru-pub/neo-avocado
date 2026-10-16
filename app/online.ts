@@ -1,9 +1,9 @@
 // 현재접속자 (bbs/current_connect.php): members seen in the last ten
 // minutes, and where they were.
-import { $, caller, formatTime, run, say, showTab, state } from "./core.js";
+import { $, formatTime, query, run, say, showTab, state } from "./core.js";
 
 async function loadOnline() {
-  const { members } = await caller().call("community/presence:online");
+  const { members } = await query("community/presence:online");
   $("onlineList").replaceChildren(
     ...members.map((member) => {
       const item = document.createElement("li");

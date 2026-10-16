@@ -1,23 +1,9 @@
-import { applyTitles, deleteTitle } from "./admin-titles.js";
-import { resumeCleanup } from "./admin-cleanup.js";
 import { config } from "./config.js";
-import {
-  VISIT_BREAKDOWNS,
-  activityReport,
-  koreanDay,
-  visitReport,
-} from "./admin-reports.js";
+import { VISIT_BREAKDOWNS, koreanDay } from "./admin-reports.js";
 import {
   models,
-  scopes,
-  buildRecord,
   fieldValue,
-  walletWrites,
-  characterStateWrites,
-  titleHoldings,
-  characterReview,
   REVIEW_STATES,
-  memberList,
   memberSummary,
   menu,
   sectionLabel,
@@ -42,7 +28,8 @@ let naru,
 let itemNames: Names = NAME_DEFAULTS;
 // 캐릭터 이미지 항목: the 두상, 흉상 and 전신, named as the owner set them.
 let imageSlots = imageSlotsOf();
-// Rows the forms pick from, by kind (buildRecord checks picks against them).
+// Rows the forms pick from, by kind (admin/references; the server checks
+// what is picked against its own).
 let references: Record<string, any[]> = {
   fields: [],
   characters: [],
@@ -51,13 +38,172 @@ let references: Record<string, any[]> = {
   items: [],
   profiles: [],
 };
+/**
+ * Each section's owner-only queries and mutations (_naru/queries/admin/,
+ * _naru/mutations/admin/): its list, one entry, saving one (checked on the
+ * server as its form is) and deleting one. A section without `remove`
+ * keeps its entries.
+ */
+const CALLS: Record<
+  string,
+  { list?: string; get?: string; save?: string; remove?: string }
+> = {
+  content: {
+    list: "admin/content:list",
+    get: "admin/content:get",
+    save: "admin/content:save",
+    remove: "admin/content:remove",
+  },
+  menus: {
+    list: "admin/menus:list",
+    get: "admin/menus:get",
+    save: "admin/menus:save",
+    remove: "admin/menus:remove",
+  },
+  banners: {
+    list: "admin/banners:list",
+    get: "admin/banners:get",
+    save: "admin/banners:save",
+    remove: "admin/banners:remove",
+  },
+  quests: {
+    list: "admin/quests:list",
+    get: "admin/quests:get",
+    save: "admin/quests:save",
+    remove: "admin/quests:remove",
+  },
+  emoticons: {
+    list: "admin/emoticons:list",
+    get: "admin/emoticons:get",
+    save: "admin/emoticons:save",
+    remove: "admin/emoticons:remove",
+  },
+  boards: {
+    list: "admin/boards:list",
+    get: "admin/boards:get",
+    save: "admin/boards:save",
+    remove: "admin/boards:remove",
+  },
+  board_groups: {
+    list: "admin/board_groups:list",
+    get: "admin/board_groups:get",
+    save: "admin/board_groups:save",
+    remove: "admin/board_groups:remove",
+  },
+  members: {
+    list: "admin/members:list",
+    get: "admin/members:get",
+    save: "admin/members:save",
+    remove: "admin/members:remove",
+  },
+  wallets: {
+    list: "admin/wallets:list",
+    get: "admin/wallets:get",
+    save: "admin/wallets:save",
+  },
+  inventory: {
+    list: "admin/inventory:list",
+    get: "admin/inventory:get",
+    save: "admin/inventory:save",
+    remove: "admin/inventory:remove",
+  },
+  history: { list: "admin/history:list" },
+  items: {
+    list: "admin/items:list",
+    get: "admin/items:get",
+    save: "admin/items:save",
+    remove: "admin/items:remove",
+  },
+  gacha: {
+    list: "admin/gacha:list",
+    get: "admin/gacha:get",
+    save: "admin/gacha:save",
+    remove: "admin/gacha:remove",
+  },
+  recipes: {
+    list: "admin/recipes:list",
+    get: "admin/recipes:get",
+    save: "admin/recipes:save",
+    remove: "admin/recipes:remove",
+  },
+  explore: {
+    list: "admin/explore:list",
+    get: "admin/explore:get",
+    save: "admin/explore:save",
+    remove: "admin/explore:remove",
+  },
+  sides: {
+    list: "admin/sides:list",
+    get: "admin/sides:get",
+    save: "admin/sides:save",
+    remove: "admin/sides:remove",
+  },
+  classes: {
+    list: "admin/classes:list",
+    get: "admin/classes:get",
+    save: "admin/classes:save",
+    remove: "admin/classes:remove",
+  },
+  couples: {
+    list: "admin/couples:list",
+    get: "admin/couples:get",
+    save: "admin/couples:save",
+    remove: "admin/couples:remove",
+  },
+  titles: {
+    list: "admin/titles:list",
+    get: "admin/titles:get",
+    save: "admin/titles:save",
+    remove: "admin/titles:remove",
+  },
+  character_fields: {
+    list: "admin/character_fields:list",
+    get: "admin/character_fields:get",
+    save: "admin/character_fields:save",
+    remove: "admin/character_fields:remove",
+  },
+  character_state: {
+    list: "admin/character_state:list",
+    get: "admin/character_state:get",
+    save: "admin/character_state:save",
+  },
+  stat_config: {
+    list: "admin/stat_config:list",
+    get: "admin/stat_config:get",
+    save: "admin/stat_config:save",
+    remove: "admin/stat_config:remove",
+  },
+  levels: {
+    list: "admin/levels:list",
+    get: "admin/levels:get",
+    save: "admin/levels:save",
+    remove: "admin/levels:remove",
+  },
+  // One form each, kept as the site's settings.
+  settings: { get: "admin/settings:get", save: "admin/settings:save" },
+  design: { get: "admin/settings:get", save: "admin/settings:save" },
+  character_images: {
+    get: "admin/settings:get",
+    save: "admin/settings:save",
+  },
+  character_review: {
+    list: "admin/character_review:list",
+    get: "admin/character_review:get",
+  },
+  title_holdings: { list: "admin/title_holdings:list" },
+};
+/** What the forms pick from, read again whenever one opens. */
+async function loadReferences() {
+  references = await owner.query("admin/references:references");
+  return references;
+}
 function message(error) {
   // A site function's own ctx.fail message comes with a reason.
   if (error?.details?.reason) return error.message;
   return error?.code === "CONFLICT"
     ? "다른 창에서 바뀌었습니다. 다시 불러온 뒤 수정하세요."
     : error?.code === "NOT_FOUND"
-      ? "컬렉션을 먼저 만들거나 삭제된 자료를 확인하세요."
+      ? "자료를 찾을 수 없습니다. 삭제되었는지 확인하세요."
       : error?.code === "ACCESS_DENIED"
         ? "사이트 소유자 권한이 필요합니다."
         : error?.code === "AUTH_REQUIRED"
@@ -121,16 +267,12 @@ async function openAddress() {
     const model = models[section];
     reportFilters = model.report && name === section ? [entry, ...filters] : [];
     await load();
-    if (model.report || name !== section || !entry) return;
+    // A settings form is opened by load(), whatever its address names.
+    if (model.report || model.fixedId || name !== section || !entry) return;
     const open = model.review ? openCharacterForm : openForm;
     if (entry === "new") return open();
-    const row = await owner
-      .collection(model.collection)
-      .get(entry)
-      .catch((error) => {
-        if (error?.code === "NOT_FOUND") return null;
-        throw error;
-      });
+    if (!CALLS[section]?.get) return;
+    const row = await owner.query(CALLS[section].get, { id: entry });
     if (!row) {
       $("adminStatus").textContent = "자료를 찾을 수 없습니다.";
       return;
@@ -144,18 +286,13 @@ addEventListener("hashchange", () => {
   if (owner) run(openAddress);
 });
 
-async function all(collection) {
-  const rows = [];
-  for await (const page of owner.collection(collection).pages({ size: 100 }))
-    rows.push(...page.documents);
-  return rows;
-}
 async function load({ more = false } = {}) {
   const requestedSection = section;
   const model = models[section];
   $("adminHelp").textContent = named(model.help);
   // The review registers characters too (adm/character_form.php, w='').
-  $("adminNew").hidden = Boolean(model.readOnly) && !model.review;
+  $("adminNew").hidden =
+    (Boolean(model.readOnly) && !model.review) || Boolean(model.noCreate);
   $("adminNew").textContent = model.review ? "새 캐릭터" : "새로 등록";
   $("adminReport").hidden = !model.report;
   $("adminRows").hidden = Boolean(model.report);
@@ -168,13 +305,7 @@ async function load({ more = false } = {}) {
     $("holdingsSearchLabel").hidden = true;
     $("reviewTools").hidden = true;
     $("memberSearchLabel").hidden = true;
-    const row = await owner
-      .collection(model.collection)
-      .get(model.fixedId)
-      .catch((error) => {
-        if (error.code === "NOT_FOUND") return null;
-        throw error;
-      });
+    const row = await owner.query(CALLS[section].get, { section });
     if (requestedSection === section) await openForm(row);
     return;
   }
@@ -192,65 +323,34 @@ async function load({ more = false } = {}) {
   $("holdingsSearchLabel").hidden = !model.holdings;
   $("reviewTools").hidden = !model.review;
   $("memberSearchLabel").hidden = section !== "members";
+  const after = more ? cursor : null;
   let page;
-  // 회원 관리 (adm/member_list.php): every member, found by nickname.
-  const memberEntries = new Map();
-  if (model.holdings) {
-    references.titles = await all("neo_avocado_titles");
-    references.characters = await all("neo_avocado_characters");
-    const rows = titleHoldings(
-      await all(model.collection),
-      references.characters,
-      references.titles,
-      $<HTMLInputElement>("holdingsSearch").value,
-    );
-    const start = more ? Number(cursor) : 0;
-    page = {
-      documents: rows.slice(start, start + 50),
-      nextCursor: start + 50 < rows.length ? String(start + 50) : null,
-    };
-  } else if (section === "members") {
-    references.profiles = await all("neo_avocado_profiles");
-    const rows = memberList(
-      await all(model.collection),
-      references.profiles,
-      await all("neo_avocado_presence"),
-      $<HTMLInputElement>("memberSearch").value,
-    );
-    const start = more ? Number(cursor) : 0;
-    for (const entry of rows.slice(start, start + 50))
-      memberEntries.set(entry.row.id, entry);
-    page = {
-      documents: rows.slice(start, start + 50).map((entry) => entry.row),
-      nextCursor: start + 50 < rows.length ? String(start + 50) : null,
-    };
-  } else if (model.review) {
-    references.fields = await all("neo_avocado_character_fields");
-    references.profiles = await all("neo_avocado_profiles");
-    // Every character is read once, then searched and counted here, as
-    // the original's list does in SQL (adm/character_list.php:107-140).
-    const characters = (await all(model.collection)).sort((a, b) =>
-      a.createdAt < b.createdAt ? 1 : -1,
-    );
-    const { rows, counts } = characterReview(characters, references.profiles, {
+  if (model.holdings)
+    // 타이틀 보유·착용 현황, found by character or title.
+    page = await owner.query(CALLS[section].list, {
+      search: $<HTMLInputElement>("holdingsSearch").value,
+      after,
+    });
+  else if (section === "members")
+    // 회원 관리 (adm/member_list.php): every member, found by nickname.
+    page = await owner.query(CALLS[section].list, {
+      search: $<HTMLInputElement>("memberSearch").value,
+      after,
+    });
+  else if (model.review) {
+    // Searched, filtered and counted by the server, as the original's list
+    // does in SQL (adm/character_list.php:107-140).
+    page = await owner.query(CALLS[section].list, {
       field: $<HTMLSelectElement>("reviewField").value,
       text: $<HTMLInputElement>("reviewSearch").value,
       state: review.state,
       side: $<HTMLSelectElement>("reviewSide").value,
       kind: $<HTMLSelectElement>("reviewClass").value,
+      after,
     });
-    reviewFilters(characters, counts);
-    const start = more ? Number(cursor) : 0;
-    page = {
-      documents: rows.slice(start, start + 50),
-      nextCursor: start + 50 < rows.length ? String(start + 50) : null,
-    };
-  } else
-    page = await owner.collection(model.collection).list({
-      size: 50,
-      after: more ? cursor : null,
-      ...(model.cleanup ? { filter: { deleted: true } } : {}),
-    });
+    references.fields = page.fields;
+    reviewFilters(page);
+  } else page = await owner.query(CALLS[section].list, { after });
   if (requestedSection !== section || !owner) return;
   if (!more) $("adminRows").replaceChildren();
   for (const row of page.documents) {
@@ -274,20 +374,11 @@ async function load({ more = false } = {}) {
         run(async () => {
           revoke.disabled = true;
           try {
-            const previous = row.state;
-            await owner.collection("neo_avocado_character_state").set(
-              previous.id,
-              {
-                ...previous.data,
-                titles: (previous.data.titles ?? []).filter(
-                  (id) => id !== row.titleId,
-                ),
-                ...(previous.data.activeTitle === row.titleId
-                  ? { activeTitle: null }
-                  : {}),
-              },
-              { condition: { revision: previous.revision } },
-            );
+            await owner.mutate("admin/titles:grant", {
+              title: row.titleId,
+              action: "revoke",
+              characters: [row.characterId],
+            });
             $("adminStatus").textContent = "타이틀을 회수했습니다.";
             await load();
           } finally {
@@ -303,49 +394,21 @@ async function load({ more = false } = {}) {
       $("adminRows").append(li);
       continue;
     }
-    if (model.cleanup) {
-      li.append(`${row.data.name ?? row.data.title ?? row.id} · 삭제 정리 중 `);
-      const resume = document.createElement("button");
-      resume.type = "button";
-      resume.textContent = "정리 계속";
-      resume.onclick = () =>
-        run(async () => {
-          resume.disabled = true;
-          try {
-            const result = await resumeCleanup(owner, model.cleanup, row.id);
-            $("adminStatus").textContent = result.done
-              ? "정리를 완료했습니다."
-              : "일부 자료를 정리했습니다. 정리 계속을 눌러 이어가세요.";
-            await load();
-          } finally {
-            resume.disabled = false;
-          }
-        });
-      li.append(resume);
-      $("adminRows").append(li);
-      continue;
-    }
     if (model.readOnly) {
       li.textContent = `${new Date(row.data.at).toLocaleString("ko-KR")} · ${row.data.owner} · ${row.data.kind}${row.data.delta !== undefined ? ` · ${moneyText(itemNames, row.data.delta)}` : ""}${row.data.memo ? ` · ${row.data.memo}` : ""}`;
       $("adminRows").append(li);
       continue;
     }
-    li.append(
-      row.data.name ??
-        references.characters.find((character) => character.id === row.id)?.data
-          .name ??
-        references.profiles.find((profile) => profile.id === row.id)?.data
-          .nick ??
-        row.id,
-      " ",
-    );
+    // A character's record and a member's balance are named by their
+    // character and member.
+    li.append(row.data.name ?? row.label ?? row.nick ?? row.id, " ");
     if (section === "members")
-      li.append(`· ${memberSummary(memberEntries.get(row.id))} `);
+      li.append(`· ${memberSummary({ row, lastSeen: row.lastSeen })} `);
     if (section === "wallets")
       li.append(`${moneyText(itemNames, row.data.balance)} `);
     if (section === "inventory")
       li.append(
-        `${references.profiles.find((profile) => profile.id === row.data.owner)?.data.nick ?? row.data.owner} · ${references.characters.find((character) => character.id === row.data.character)?.data.name ?? "회원 인벤토리"} `,
+        `${row.ownerNick ?? row.data.owner} · ${row.characterName ?? "회원 인벤토리"} `,
       );
     const edit = document.createElement("button");
     edit.type = "button";
@@ -353,23 +416,19 @@ async function load({ more = false } = {}) {
     edit.onclick = () => run(() => openForm(row));
     const remove = document.createElement("button");
     remove.type = "button";
-    remove.hidden = Boolean(model.noDelete);
+    remove.hidden = Boolean(model.noDelete) || !CALLS[section].remove;
     remove.textContent = "삭제";
     remove.onclick = () =>
       run(async () => {
         if (!confirm("이 자료를 삭제할까요?")) return;
-        if (section === "titles") {
-          await deleteTitle(owner, row.id, ({ completed }) => {
-            $("adminStatus").textContent =
-              `${completed}명의 타이틀을 회수했습니다.`;
-          });
-          await load();
-          return;
-        }
         // Its uploads stay; Naru's media library marks them 참조 없음.
-        await owner
-          .collection(model.collection)
-          .delete(row.id, { condition: { revision: row.revision } });
+        const removed = await owner.mutate(CALLS[section].remove, {
+          id: row.id,
+        });
+        // A title goes from the characters holding it too.
+        if (section === "titles")
+          $("adminStatus").textContent =
+            `${removed.completed}명의 타이틀을 회수했습니다.`;
         await load();
       });
     li.append(edit, " ", remove);
@@ -377,17 +436,13 @@ async function load({ more = false } = {}) {
       const grant = document.createElement("button");
       grant.type = "button";
       grant.textContent = "지급·회수";
-      grant.disabled = Boolean(row.data.deleted);
-      if (row.data.deleted)
-        li.append(" (삭제 정리 중: 삭제를 다시 눌러 재개) ");
       grant.onclick = () =>
         run(async () => {
           grantTitleId = row.id;
           $("titleGrantHeading").textContent = `${row.data.name} 지급·회수`;
           $("titleGrantStatus").textContent = "";
           $("titleGrantCharacters").replaceChildren();
-          for (const character of await all("neo_avocado_characters")) {
-            if (character.data.deleted) continue;
+          for (const character of (await loadReferences()).characters) {
             const option = document.createElement("option");
             option.value = character.id;
             option.textContent = `${character.data.name} (${character.id})`;
@@ -413,20 +468,13 @@ const review = { state: "" };
  * The review's 소속 and 종족 choices (the values characters have) and its
  * state buttons with their counts (character_list.php:285-288).
  */
-function reviewFilters(characters, counts) {
-  for (const [id, key, title] of [
-    ["reviewSide", "side", itemNames.sideTitle || "소속"],
-    ["reviewClass", "class", itemNames.classTitle || "종족"],
+function reviewFilters({ sides, classes, counts }) {
+  for (const [id, values, title] of [
+    ["reviewSide", sides, itemNames.sideTitle || "소속"],
+    ["reviewClass", classes, itemNames.classTitle || "종족"],
   ]) {
     const select = $<HTMLSelectElement>(id);
     const chosen = select.value;
-    const values = [
-      ...new Set<string>(
-        characters
-          .map((row) => row.data[key])
-          .filter((value) => typeof value === "string" && value),
-      ),
-    ].sort();
     select.replaceChildren(
       new Option(`${title} 전체`, ""),
       ...values.map((value) => new Option(value, value)),
@@ -471,7 +519,7 @@ $("reviewApprove").onclick = () =>
     let approved = 0;
     try {
       for (const box of chosen) {
-        await owner.call("characters/review:reviewCharacter", {
+        await owner.mutate("characters/review:reviewCharacter", {
           character: box.value,
           revision: box.dataset.revision,
           state: "approved",
@@ -493,10 +541,7 @@ const TYPES = [
 function reviewRow(row) {
   const form = document.createElement("form");
   form.className = "review";
-  const nick =
-    references.profiles.find(
-      (profile) => profile.id === (row.createdBy ?? row.data.owner),
-    )?.data.nick ?? "알 수 없는 회원";
+  const nick = row.nick;
   const heading = document.createElement("strong");
   heading.textContent = `${row.data.name} · ${nick} · ${STATES[row.data.state] ?? "상태 없음(이전 캐릭터)"}`;
   // Chosen for 선택 승인.
@@ -541,9 +586,8 @@ function reviewRow(row) {
   page.textContent = "사이트에서 캐릭터 보기 (회원 로그인 필요)";
   summary.append(basics, page);
   const sheet = document.createElement("dl");
-  const definitions = references.fields
-    .filter((field) => !field.data.deleted)
-    .sort((a, b) => (a.data.order ?? 0) - (b.data.order ?? 0));
+  // In their order already (admin/character_review).
+  const definitions = references.fields;
   const adminInputs = [];
   for (const field of definitions) {
     const term = document.createElement("dt");
@@ -577,7 +621,7 @@ function reviewRow(row) {
       >("button,input,select"))
         control.disabled = true;
       try {
-        await owner.call("characters/review:reviewCharacter", {
+        await owner.mutate("characters/review:reviewCharacter", {
           character: row.id,
           revision: row.revision,
           type: type.value,
@@ -657,17 +701,12 @@ function reviewRow(row) {
       >("button,input,select"))
         control.disabled = true;
       try {
-        // Outfits, relations and items follow in bounded steps.
-        let result = await owner.call("characters/sheet:move", {
+        // Outfits, relations and items go with it.
+        await owner.mutate("characters/sheet:move", {
           id: row.id,
           nick,
           revision: row.revision,
         });
-        while (!result.done)
-          result = await owner.call("characters/sheet:move", {
-            id: row.id,
-            nick,
-          });
         $("adminStatus").textContent =
           `${row.data.name}을(를) ${nick}님에게 옮겼습니다.`;
         await load();
@@ -686,17 +725,11 @@ function reviewRow(row) {
   return form;
 }
 /**
- * Deletes a character as adm/character_delete.php does, in the function's
- * bounded steps until it is done.
+ * Deletes a character as adm/character_delete.php does; the items it held
+ * go back to their owners' own inventory.
  */
 async function removeCharacter(row) {
-  for (let step = 1; ; step++) {
-    const { done } = await owner.call("characters/sheet:remove", {
-      id: row.id,
-    });
-    if (done) return;
-    $("adminStatus").textContent = `${row.data.name} 정리 중… (${step})`;
-  }
+  await owner.mutate("characters/sheet:remove", { id: row.id });
 }
 /**
  * The owner's full form for one character (adm/character_form.php:112-423):
@@ -705,12 +738,7 @@ async function removeCharacter(row) {
  * 능력치·타이틀. Image fields take a managed upload as the other forms do.
  */
 async function openCharacterForm(row = null) {
-  const [fields, sides, classes] = await Promise.all([
-    all("neo_avocado_character_fields"),
-    all("neo_avocado_sides"),
-    all("neo_avocado_classes"),
-  ]);
-  references.fields = fields;
+  const { fields, sides, classes } = await loadReferences();
   selected = row;
   adminRoute([section, row ? row.id : "new"]);
   $("adminForm").hidden = true;
@@ -755,10 +783,8 @@ async function openCharacterForm(row = null) {
   add("캐릭터 종류", choice("type", row?.data.type ?? "main", TYPES, null));
   // A pick from the owner's list; free text while it is empty.
   const listed = (name, label, rows, value) => {
-    const names = rows
-      .filter((entry) => !entry.data.deleted)
-      .sort((a, b) => (a.data.order ?? 0) - (b.data.order ?? 0))
-      .map((entry) => [entry.data.name, entry.data.name]);
+    // In their order already (admin/references).
+    const names = rows.map((entry) => [entry.data.name, entry.data.name]);
     add(
       label,
       names.length ? choice(name, value, names) : textInput(name, value, 40),
@@ -782,10 +808,7 @@ async function openCharacterForm(row = null) {
       image: true,
     });
   }
-  const definitions = fields
-    .filter((field) => !field.data.deleted)
-    .sort((a, b) => (a.data.order ?? 0) - (b.data.order ?? 0));
-  for (const field of definitions) {
+  for (const field of fields) {
     const value = row?.data.fields?.[field.id] ?? "";
     const label = `${field.data.label ?? field.id}${field.data.visibility === "admin" ? " (운영자만)" : field.data.visibility === "owner" ? " (오너+운영자)" : ""}`;
     const key = `field:${field.id}`;
@@ -837,7 +860,7 @@ $("characterForm").onsubmit = async (event) => {
     for (const [key, value] of Object.entries(values))
       if (key.startsWith("field:")) fields[key.slice(6)] = value;
     const row = selected;
-    await owner.call("characters/sheet:save", {
+    await owner.mutate("characters/sheet:save", {
       ...(row ? { id: row.id, revision: row.revision } : { nick: values.nick }),
       data: {
         name: values.name,
@@ -883,20 +906,7 @@ function suggestedId(section) {
 }
 async function openForm(row = null) {
   const requestedSection = section;
-  references = {
-    characters: await all("neo_avocado_characters"),
-    titles: (await all("neo_avocado_titles")).filter(
-      (row) => !row.data.deleted,
-    ),
-    stats: await all("neo_avocado_stat_config"),
-    items: await all("neo_avocado_items"),
-    profiles: await all("neo_avocado_profiles"),
-    sides: await all("neo_avocado_sides"),
-    classes: await all("neo_avocado_classes"),
-    groups: await all("neo_avocado_board_groups"),
-    // To refuse a combination another recipe already has.
-    recipes: section === "recipes" ? await all("neo_avocado_recipes") : [],
-  };
+  await loadReferences();
   if (requestedSection !== section || !owner) return;
   selected = row;
   const model = models[section];
@@ -1030,9 +1040,7 @@ async function openForm(row = null) {
     label.textContent = named(field.label);
     // A pick from an owner's list; free text while that list is empty.
     const pickRows =
-      field.type === "pick"
-        ? (references[field.from] ?? []).filter((row) => !row.data.deleted)
-        : null;
+      field.type === "pick" ? (references[field.from] ?? []) : null;
     const isSelect =
       [
         "character",
@@ -1205,39 +1213,20 @@ $("adminForm").onsubmit = async (event) => {
         : urls[0];
     }
     $("adminFormStatus").textContent = "";
-    const record = buildRecord(section, values, selected, references);
-    let saved;
-    if (section === "wallets") {
-      const results = await owner.batch(
-        walletWrites(
-          record,
-          selected,
-          values.note,
-          Date.now(),
-          crypto.randomUUID(),
-        ),
-      );
-      saved = { ...record, ...results[0] };
-    } else if (section === "character_state") {
-      const results = await owner.batch(
-        characterStateWrites(
-          record,
-          selected,
-          values.expNote,
-          Date.now(),
-          crypto.randomUUID(),
-        ),
-      );
-      saved = { ...record, ...results[0] };
-    } else
-      saved = await owner
-        .collection(models[section].collection)
-        .set(record.id, record.data, {
-          condition: selected
-            ? { revision: selected.revision }
-            : { absent: true },
+    // The server checks the form as buildRecord does, and refuses with its
+    // message. A balance's or record's change goes into the member's
+    // history in the same call; a record is saved at the version it was
+    // opened at.
+    selected = models[section].fixedId
+      ? await owner.mutate(CALLS[section].save, { section, values })
+      : await owner.mutate(CALLS[section].save, {
+          id: values.id,
+          values,
+          create: !selected,
+          ...(section === "character_state"
+            ? { revision: selected?.revision ?? null }
+            : {}),
         });
-    selected = saved;
     $("adminForm").hidden = true;
     adminRoute([section]);
     $("adminStatus").textContent = "저장했습니다.";
@@ -1260,21 +1249,13 @@ $("adminNew").onclick = () =>
 $("adminMore").onclick = () => run(() => load({ more: true }));
 /** The owner's names, read again after 커뮤니티 설정 is saved. */
 async function loadNames() {
-  const settings = await owner
-    .collection("neo_avocado_settings")
-    .get("community")
-    .catch((error) => {
-      if (error.code === "NOT_FOUND") return null;
-      throw error;
-    });
+  const settings = await owner.query(CALLS.settings.get, {
+    section: "settings",
+  });
   itemNames = namesOf(settings?.data);
-  const profile = await owner
-    .collection("neo_avocado_settings")
-    .get("profile")
-    .catch((error) => {
-      if (error.code === "NOT_FOUND") return null;
-      throw error;
-    });
+  const profile = await owner.query(CALLS.character_images.get, {
+    section: "character_images",
+  });
   imageSlots = imageSlotsOf(profile?.data);
   renderNav();
 }
@@ -1315,7 +1296,9 @@ function renderNav() {
   $("adminNav").replaceChildren(...groups);
 }
 $("adminSignIn").onclick = () =>
-  run(() => naru.auth.signIn({ collections: scopes }));
+  // The site has no collections: the owner manages it through admin/'s
+  // queries and mutations.
+  run(() => naru.auth.signIn());
 $("adminSignOut").onclick = () =>
   run(async () => {
     await owner.signOut();
@@ -1331,8 +1314,6 @@ await run(async () => {
   if (!owner) return;
   $("adminWelcome").hidden = true;
   $("adminWorkspace").hidden = false;
-  references.characters = await all("neo_avocado_characters");
-  references.profiles = await all("neo_avocado_profiles");
   await loadNames();
   await openAddress();
   adminRoute([section]);
@@ -1354,27 +1335,21 @@ $("titleGrantForm").onsubmit = async (event) => {
   });
   $("adminNav").inert = true;
   try {
-    const result = await applyTitles(
-      owner,
-      grantTitleId,
-      {
-        action: $<HTMLSelectElement>("titleGrantAction").value,
-        allApproved: $<HTMLInputElement>("titleGrantAll").checked,
-        characterIds: $<HTMLInputElement>("titleGrantAll").checked
-          ? []
-          : [
-              ...$<HTMLSelectElement>("titleGrantCharacters").selectedOptions,
-            ].map((option) => option.value),
-      },
-      ({ completed, total }) => {
-        $("titleGrantStatus").textContent =
-          `${completed}/${total}명 처리했습니다.`;
-      },
-    );
+    // One call for every character: all of it is done, or none.
+    const result = await owner.mutate("admin/titles:grant", {
+      title: grantTitleId,
+      action: $<HTMLSelectElement>("titleGrantAction").value,
+      allApproved: $<HTMLInputElement>("titleGrantAll").checked,
+      characters: $<HTMLInputElement>("titleGrantAll").checked
+        ? []
+        : [...$<HTMLSelectElement>("titleGrantCharacters").selectedOptions].map(
+            (option) => option.value,
+          ),
+    });
     $("titleGrantStatus").textContent =
       `${result.completed}명에게 적용했습니다.`;
   } catch (error) {
-    $("titleGrantStatus").textContent = error.message ?? message(error);
+    $("titleGrantStatus").textContent = message(error);
   } finally {
     controls.forEach((control) => {
       control.disabled = false;
@@ -1468,8 +1443,7 @@ function visitsView() {
     by.value = breakdown;
   const draw = async () => {
     adminRoute(["visits", from.value, to.value, by.value]);
-    const days = await all("neo_avocado_visits");
-    const report = visitReport(days, {
+    const report = await owner.query("admin/visits:report", {
       from: from.value,
       to: to.value,
       by: by.value,
@@ -1495,21 +1469,21 @@ function visitsView() {
   prune.onclick = () =>
     run(async () => {
       if (!from.value) return;
-      const old = (await all("neo_avocado_visits")).filter(
-        (row) => row.data.day < from.value,
-      );
-      if (!old.length) {
+      const { older } = await owner.query("admin/visits:report", {
+        from: from.value,
+        to: to.value,
+        by: by.value,
+      });
+      if (!older) {
         $("adminStatus").textContent = "지울 기록이 없습니다.";
         return;
       }
-      if (
-        !confirm(`${from.value} 이전 ${old.length}일의 접속 기록을 지울까요?`)
-      )
+      if (!confirm(`${from.value} 이전 ${older}일의 접속 기록을 지울까요?`))
         return;
-      for (const row of old)
-        await owner.collection("neo_avocado_visits").delete(row.id);
-      $("adminStatus").textContent =
-        `${old.length}일의 접속 기록을 지웠습니다.`;
+      const { deleted } = await owner.mutate("admin/visits:prune", {
+        before: from.value,
+      });
+      $("adminStatus").textContent = `${deleted}일의 접속 기록을 지웠습니다.`;
       await draw();
     });
   const bar = document.createElement("div");
@@ -1527,7 +1501,7 @@ function visitsView() {
 
 /** 활동량 관리 (adm/action_list.php): counts per member, warnings editable. */
 async function activityView() {
-  const boards = await all("neo_avocado_boards");
+  const { boards } = await loadReferences();
   const board = document.createElement("select");
   board.append(
     new Option("모든 게시판", ""),
@@ -1549,19 +1523,12 @@ async function activityView() {
   const draw = async () => {
     // "all" stands for every board, which has no ID of its own.
     adminRoute(["activity", board.value || "all", from.value, to.value]);
-    const [profiles, members, characters, logs, comments, presence] =
-      await Promise.all([
-        all("neo_avocado_profiles"),
-        all("neo_avocado_members"),
-        all("neo_avocado_characters"),
-        all("neo_avocado_logs"),
-        all("neo_avocado_comments"),
-        all("neo_avocado_presence"),
-      ]);
-    const rows = activityReport(
-      { profiles, members, characters, logs, comments, presence },
-      { board: board.value, from: from.value, to: to.value },
-    );
+    // Counted by the server's SQL.
+    const rows = await owner.query("admin/activity:report", {
+      board: board.value,
+      from: from.value,
+      to: to.value,
+    });
     output.replaceChildren(
       table(
         [
@@ -1590,18 +1557,12 @@ async function activityView() {
               const count = Number(warnings.value);
               if (!Number.isSafeInteger(count) || count < 0)
                 throw new Error("누적 경고는 0 이상의 정수입니다.");
-              await owner.collection("neo_avocado_members").set(
-                row.id,
-                {
-                  role: "member",
-                  ...row.member?.data,
-                  warnings: count,
-                  warningNote: note.value.trim(),
-                },
-                row.member
-                  ? { condition: { revision: row.member.revision } }
-                  : { condition: { absent: true } },
-              );
+              // The warnings alone: the member's other settings stay.
+              await owner.mutate(CALLS.members.save, {
+                id: row.id,
+                values: { warnings: count, warningNote: note.value.trim() },
+                create: !row.member,
+              });
               $("adminStatus").textContent =
                 `${row.nick}의 경고를 저장했습니다.`;
               await draw();
@@ -1637,8 +1598,8 @@ async function activityView() {
 
 /**
  * 아보·경험치·아이템 지급 (adm/point_list.php, exp_list.php,
- * inventory_list.php): the form, run to the end a part of the recipients a
- * call, and the last grants.
+ * inventory_list.php): the form, one call for all its recipients, and the
+ * last grants.
  */
 async function grantsView() {
   const report = $("adminReport");
@@ -1650,9 +1611,8 @@ async function grantsView() {
     new Option(itemNames.expName, "exp"),
     new Option("아이템", "item"),
   );
-  const items = (await all("neo_avocado_items")).filter(
-    (row) => !row.data.deleted,
-  );
+  // The items to give, and the names the log shows.
+  const { items } = await loadReferences();
   const item = document.createElement("select");
   item.append(
     ...items.map((row) => new Option(row.data.name ?? row.id, row.id)),
@@ -1700,9 +1660,8 @@ async function grantsView() {
   const log = document.createElement("ul");
   log.className = "grant-log";
   const showLog = async () => {
-    const page = await owner.collection("neo_avocado_history").list({
-      where: { eq: ["actor", "grant"] },
-      sort: [[{ metadata: "createdAt" }, "desc"]],
+    const page = await owner.query(CALLS.history.list, {
+      actor: "grant",
       size: 20,
     });
     log.replaceChildren(
@@ -1747,27 +1706,20 @@ async function grantsView() {
       )
         return;
       submit.disabled = true;
-      let after = null;
-      let granted = 0;
-      let skipped = 0;
       try {
-        for (;;) {
-          const result = await owner.call("economy/grants:grant", {
+        // One call gives to everyone it names.
+        const { granted, skipped } = await owner.mutate(
+          "economy/grants:grant",
+          {
             kind: kind.value,
             target: target.value,
             name: name.value.trim(),
             value: amount,
             memo: memo.value.trim(),
-            after,
             ...(kind.value === "item" ? { item: item.value } : {}),
-          });
-          granted += result.granted;
-          skipped += result.skipped;
-          status.textContent = `${granted}명 지급${skipped ? `, ${skipped}명은 가진 것보다 많이 깎을 수 없어 건너뜀` : ""}…`;
-          if (result.done) break;
-          after = result.after;
-        }
-        status.textContent = status.textContent.replace(/…$/, ". 끝났습니다.");
+          },
+        );
+        status.textContent = `${granted}명 지급${skipped ? `, ${skipped}명은 가진 것보다 많이 깎을 수 없어 건너뜀` : ""}. 끝났습니다.`;
         await showLog();
       } finally {
         submit.disabled = false;
