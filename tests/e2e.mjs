@@ -87,13 +87,6 @@ async function joinAs(page, nick) {
   await page.waitForFunction(() => navigator.serviceWorker.controller);
   await page.locator("#community").waitFor();
 }
-/**
- * Waits for the next minute: a member's queries are counted with read-only
- * calls, 120 a minute, in fixed minutes, and this script reads faster than
- * anyone (native reads, which boards were, allowed 600).
- */
-const nextMinute = () =>
-  new Promise((done) => setTimeout(done, 60_500 - (Date.now() % 60_000)));
 const PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGNk+M8ABIwMDP8ZGBgYAAAhCAMBaVPDaAAAAABJRU5ErkJggg==",
   "base64",
@@ -101,14 +94,14 @@ const PNG = Buffer.from(
 const picture = (name) => ({ name, mimeType: "image/png", buffer: PNG });
 
 try {
-  // _naru/collections.json made every collection as the site started, so
-  // the owner's sign-in only signs in.
-  assert.match(log, /_naru\/collections\.json: 1 created, 0 changed/);
+  // Every collection became a table: the site declares none, and the
+  // owner's sign-in asks for none.
+  assert.doesNotMatch(log, /collections\.json/);
   const owner = await person();
   await owner.goto(`${origin}/admin/`);
   await owner.locator("#adminSignIn").click();
   await owner.locator("#adminWorkspace").waitFor();
-  assert.match(log, /owner signed in: \d+ collections, 0 created/);
+  assert.match(log, /owner signed in: 0 collections, 0 created/);
   // Setup through the owner's own SDK handle: a public board and fields.
   await owner.evaluate(async (P) => {
     const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
@@ -295,7 +288,7 @@ try {
     .filter({ hasText: "비밀 일기" })
     .waitFor();
 
-  // Bob calls Alice in a comment; her live connection marks the call.
+  // Bob calls Alice in a comment; her subscription marks the call.
   await menu(bob, "로그");
   const thread = bob.locator("#logs .log").filter({ hasText: "첫 로그" });
   await thread.locator(".comments > summary").click();
@@ -367,8 +360,6 @@ try {
   await alice.locator("#items li", { hasText: "케이크" }).waitFor();
 
   // Every page has an address: a character's viewer, a post, a category.
-  // Each reload reads the site anew; give Alice a fresh minute for them.
-  await nextMinute();
   const greenId = await alice.evaluate(async (P) => {
     const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
     const member = await createNaru().members.session();
@@ -889,8 +880,6 @@ try {
     true,
   );
 
-  // Alice has read the site some 120 times this minute: her next minute.
-  await nextMinute();
   await alice.goto(`${origin}/#/logs/calc`);
   await alice.locator("#logCategory").selectOption("이벤트");
   await alice.locator("#logText").fill("이벤트 참여 정산 부탁드려요");
@@ -929,6 +918,13 @@ try {
   await alice.locator("#messageTo").fill("바뀐밥");
   await alice.locator('#messageForm [type="submit"]').click();
   await alice.locator("#status", { hasText: "쪽지를 보냈습니다." }).waitFor();
+  // Bob's page hears of it without reloading (community/inbox:status), the
+  // tab and the home card's count alike.
+  await bob.waitForFunction(
+    () =>
+      document.querySelector("#tabMessages").textContent.includes("새 쪽지") &&
+      document.querySelector("#cardUnread").textContent === "1",
+  );
   await bob.evaluate(() => document.querySelector("#tabMessages").click());
   await bob.locator("#messages li", { hasText: "안녕 밥" }).waitFor();
   // 쪽지함 as the original's: the conversation opens, and a reply goes
@@ -940,6 +936,15 @@ try {
   await bob.locator("#messageDetail .reply textarea").fill("고마워");
   await bob.locator("#messageDetail .reply button").click();
   await bob.locator("#messageDetail .mine", { hasText: "고마워" }).waitFor();
+  // Opening the conversation read Alice's: Bob's notice goes, and Alice's
+  // comes with his reply.
+  await bob.waitForFunction(
+    () =>
+      !document.querySelector("#tabMessages").textContent.includes("새 쪽지"),
+  );
+  await alice.waitForFunction(() =>
+    document.querySelector("#tabMessages").textContent.includes("새 쪽지"),
+  );
   await alice.evaluate(() => document.querySelector("#tabMessages").click());
   await alice
     .locator("#messages .conversation-entry", { hasText: "고마워" })
