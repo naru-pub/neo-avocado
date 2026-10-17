@@ -1,5 +1,5 @@
 // The staff's tools on a board: notices and moves (GnuBoard's bo_notice and
-// bbs/move.php).
+// bbs/move.php), for moderators and the board's own 게시판·그룹 관리자.
 import { one } from "../../modules/access.js";
 import {
   POST_SELECT,
@@ -20,8 +20,9 @@ const invalid = (ctx: MutationCtx) =>
 
 /**
  * Pins a post as a notice or moves it to another board, where it takes the
- * next number. Moderators may move only to boards they could post on; the
- * owner (admin.call) may do either.
+ * next number. Moderators may move only to boards they could post on, and a
+ * board's 게시판·그룹 관리자 only to boards they administer too (bbs/move.php
+ * lists those); the owner (admin.call) may do either.
  */
 export async function moderatePost(
   ctx: MutationCtx,
@@ -29,9 +30,9 @@ export async function moderatePost(
 ) {
   const { id, notice, board } = args ?? {};
   const access = await accessOf(ctx);
-  if (!isStaff(access))
-    ctx.fail("ACCESS_DENIED", "권한이 없습니다.", { reason: "access_denied" });
   const row = await postRow(ctx, id);
+  if (!isStaff(access, row ? await boardOf(ctx, row.board) : null))
+    ctx.fail("ACCESS_DENIED", "권한이 없습니다.", { reason: "access_denied" });
   if (!row)
     ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {
       reason: "document_not_found",
@@ -46,7 +47,11 @@ export async function moderatePost(
   let category = row.category;
   if (board !== undefined && board !== row.board) {
     const moved = typeof board === "string" ? await boardOf(ctx, board) : null;
-    if (!moved || (!ctx.owner && !boardAllowed(moved, access, "write")))
+    if (
+      !moved ||
+      (!ctx.owner &&
+        (!boardAllowed(moved, access, "write") || !isStaff(access, moved)))
+    )
       ctx.fail("ACCESS_DENIED", "권한이 없습니다.", {
         reason: "access_denied",
       });

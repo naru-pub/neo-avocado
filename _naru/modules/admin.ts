@@ -156,11 +156,13 @@ export const TABLES: Record<string, Table> = {
       ["editLock", "edit_lock", "int", 1],
       ["pageRows", "page_rows", "int", 15],
       ["foldHeight", "fold_height", "int", 600],
+      ["admin", "admin", "text", null],
     ],
     { extra: "options" },
   ),
   board_groups: table("board_groups", [
     ["name", "name", "text", ""],
+    ["admin", "admin", "text", null],
     ["membersOnly", "members_only", "bool", 0],
     ["order", "sort_order", "int", 0],
   ]),
@@ -529,7 +531,8 @@ const NEEDS: Record<string, string[]> = {
   explore: ["items"],
   inventory: ["items"],
   quests: ["sides"],
-  boards: ["groups"],
+  boards: ["groups", "profiles"],
+  board_groups: ["profiles"],
   members: ["groups"],
   character_state: ["stats", "titles"],
   stat_config: ["stats"],
@@ -550,7 +553,8 @@ async function named(
   ]
     .map(characterKey)
     .filter((key) => key !== null);
-  references.characters = [];
+  // Added to a catalogue the section read whole, if it did.
+  references.characters ??= [];
   for (const key of new Set(characters)) {
     const row = await one(
       ctx,
@@ -567,7 +571,7 @@ async function named(
     ...(section === "inventory" ? [values.owner] : []),
     ...(section === "wallets" ? [id] : []),
   ].filter((member) => typeof member === "string" && member);
-  references.profiles = [];
+  references.profiles ??= [];
   for (const member of new Set(members)) {
     const row = await one(
       ctx,

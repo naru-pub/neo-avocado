@@ -222,7 +222,7 @@ async function postPreview(
   if (!row || row.adult) return null;
   const on = board === undefined ? await boardOf(ctx, row.board) : board;
   if (!(await postReadable(ctx, row, access, null, on))) return null;
-  const { data } = presentPost(postOf(row), readerOf(ctx, access));
+  const { data } = presentPost(postOf(row), readerOf(ctx, access, on));
   return {
     title:
       String(data.title ?? "").trim() || `${on.data.name} No. ${data.number}`,

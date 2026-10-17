@@ -11,7 +11,7 @@ import type { QueryCtx } from "../../modules/naru-types.js";
  */
 export async function membership(ctx: QueryCtx) {
   const member = signedIn(ctx);
-  const access = await communityAccess(ctx);
+  const { member: _, ...access } = await communityAccess(ctx);
   const record = await one<{
     warnings: number;
     warning_note: string;

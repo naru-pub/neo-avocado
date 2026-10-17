@@ -173,6 +173,18 @@ export const formatTime = (value) =>
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
+/**
+ * Whether the member moderates a board: the staff (and the site's owner),
+ * or its 게시판 관리자 or its group's 그룹 관리자 (bo_admin, gr_admin).
+ */
+export function boardStaff(boardId: string | null | undefined = state.board) {
+  if (state.role === "moderator") return true;
+  const me = state.member?.id;
+  const board = state.boards.find((row) => row.id === (boardId ?? "default"));
+  return Boolean(
+    me && board && (board.data.admin === me || board.data.groupAdmin === me),
+  );
+}
 export const mine = (document) =>
   state.member !== null &&
   (document.createdBy ?? document.data.owner) === state.member.id;

@@ -43,9 +43,13 @@ async function readableBoard(ctx: QueryCtx, id: unknown) {
   return { access, board };
 }
 
-/** A post as this caller sees it: 멤버공개 and 익명 (presentPost). */
-const shown = (ctx: QueryCtx, access: Access, row: Written) =>
-  presentPost(row, readerOf(ctx, access));
+/** A post on `board` as this caller sees it: 멤버공개 and 익명 (presentPost). */
+const shown = (
+  ctx: QueryCtx,
+  access: Access,
+  row: Written,
+  board: Board | null | undefined,
+) => presentPost(row, readerOf(ctx, access, board));
 
 /** Questions on a Q&A board show at most this many a page, whole. */
 const QUESTION_PAGE = 10;
@@ -92,13 +96,13 @@ export async function page(
     values.push(category);
   }
   if (!questions) {
-    const secret = secretClause(access, viewer);
+    const secret = secretClause(access, viewer, "posts", board);
     clauses.push(secret.text);
     values.push(...secret.values);
   }
   // A visitor asking by #tag is not shown a 멤버공개 post's: its tags are
   // its hidden body's, and a match alone would tell them.
-  if (tag && !viewer && !isStaff(access))
+  if (tag && !viewer && !isStaff(access, board))
     clauses.push("posts.members_only = 0");
   const from = tag
     ? "post_tags JOIN posts ON posts.id = post_tags.post_id"
@@ -122,8 +126,8 @@ export async function page(
   );
   const counts: Record<string, number> = {};
   const documents = found.map((row) => {
-    if (!secretReadable(row, access, viewer)) return lockedPost(row);
-    const document = shown(ctx, access, postOf(row));
+    if (!secretReadable(row, access, viewer, board)) return lockedPost(row);
+    const document = shown(ctx, access, postOf(row), board);
     if (!document.data.locked) counts[document.id] = row.comment_count;
     return document;
   });
@@ -154,12 +158,12 @@ export async function post(
     !row ||
     !boardAllowed(board, access, "read") ||
     (id === undefined && !boardAllowed(board, access, "list")) ||
-    !secretReadable(row, access, ctx.member?.id)
+    !secretReadable(row, access, ctx.member?.id, board)
   )
     ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {
       reason: "document_not_found",
     });
-  return { document: shown(ctx, access, postOf(row)) };
+  return { document: shown(ctx, access, postOf(row), board) };
 }
 
 /** A search's results a page. */
@@ -199,7 +203,7 @@ export async function search(
   const viewer = ctx.member?.id ?? null;
   // An author's name finds only what shows it: not 익명 posts or comments.
   const named = (table: string) => ({
-    text: `(${isStaff(access) ? "1" : `${table}.anonymous = 0`} AND (
+    text: `(${isStaff(access, board) ? "1" : `${table}.anonymous = 0`} AND (
       ${table}.owner IN (SELECT member FROM profiles WHERE nick LIKE ? ESCAPE '\\' LIMIT 100)
       OR ${table}.character_id IN (SELECT id FROM characters WHERE name LIKE ? ESCAPE '\\' LIMIT 100)))`,
     values: [like, like],
@@ -221,7 +225,7 @@ export async function search(
     text: `(${said.text} OR ${own.text})`,
     values: [...said.values, ...own.values],
   };
-  const secret = secretClause(access, viewer);
+  const secret = secretClause(access, viewer, "posts", board);
   // 멤버공개: a visitor's search does not look inside them.
   const visible = {
     text: `posts.board = ? AND ${secret.text}${viewer ? "" : " AND posts.members_only = 0"}`,
@@ -268,7 +272,9 @@ export async function search(
     if (rows.length > room) nextCursor = `${COMMENT_PHASE}${from + room}`;
   }
   return {
-    documents: found.map((row) => shown(ctx, access, excerpt(postOf(row)))),
+    documents: found.map((row) =>
+      shown(ctx, access, excerpt(postOf(row)), board),
+    ),
     nextCursor,
   };
 }
@@ -331,7 +337,9 @@ export async function favorites(ctx: QueryCtx, args: { page?: number }) {
     if (
       await postReadable(ctx, row, access, ctx.member.id, boards.get(row.board))
     )
-      documents.push(shown(ctx, access, excerpt(postOf(row))));
+      documents.push(
+        shown(ctx, access, excerpt(postOf(row)), boards.get(row.board)),
+      );
   return { documents, total };
 }
 
@@ -368,7 +376,7 @@ export async function latest(ctx: QueryCtx, args: { board?: string }) {
     !boardAllowed(board, access, "read")
   )
     return { id: null };
-  const secret = secretClause(access, ctx.member?.id);
+  const secret = secretClause(access, ctx.member?.id, "posts", board);
   const row = await one<{ id: number }>(
     ctx,
     `SELECT id FROM posts WHERE board = ? AND owner IS NOT NULL AND ${secret.text}

@@ -55,6 +55,8 @@ export const communitySettings = (ctx: SqlCtx) => settingsOf(ctx, "community");
 export interface Access {
   level: number;
   role: "guest" | "member" | "moderator";
+  /** The member's ID, for the boards and groups they administer. */
+  member?: string;
   /** A visitor of a closed site. */
   closed?: boolean;
   /** A member who left. */
@@ -165,6 +167,7 @@ export async function communityAccess(
   if (row?.left_on) return { ...GUEST_ACCESS, role: "member", left: true };
   const { role, groups } = accessOfRoles(await rolesOf(ctx, id));
   return {
+    member: id,
     groups,
     level:
       Number.isInteger(row?.level) && row.level >= 1 && row.level <= 10

@@ -49,13 +49,19 @@ const WRITES =
 const bind = (value) =>
   typeof value === "boolean" ? (value ? 1 : 0) : (value ?? null);
 
-/** The site's migrations in dist/, in the order Naru applies them. */
-export async function migrations() {
-  const names = (await readdir(join(dist, "migrations")).catch(() => []))
+/** The site's migrations' file names in dist/, in the order Naru applies them. */
+async function migrationNames() {
+  return (await readdir(join(dist, "migrations")).catch(() => []))
     .filter((name) => name.endsWith(".sql"))
     .sort();
+}
+
+/** The site's migrations in dist/, in the order Naru applies them. */
+export async function migrations() {
   return await Promise.all(
-    names.map((name) => readFile(join(dist, "migrations", name), "utf8")),
+    (await migrationNames()).map((name) =>
+      readFile(join(dist, "migrations", name), "utf8"),
+    ),
   );
 }
 
@@ -175,14 +181,21 @@ export function matchRoute(names, pathname) {
 
 /**
  * A fresh site: an empty database with every migration in dist/ applied,
- * but the last `pending` of them, which `site.migrate()` applies (to test a
- * migration on rows written before it).
+ * but the last `pending` of them (a count, or the name a migration's file
+ * starts with: that one and those after), which `site.migrate()` applies
+ * (to test a migration on rows written before it).
  */
 export async function testSite({
   now = Date.parse("2026-10-16T03:00:00Z"),
   pending = 0,
 } = {}) {
   const sql = await migrations();
+  if (typeof pending === "string") {
+    const names = await migrationNames();
+    const first = names.findIndex((name) => name.startsWith(pending));
+    if (first < 0) throw new Error(`No migration ${pending}.`);
+    pending = names.length - first;
+  }
   const db = database(sql.slice(0, sql.length - pending));
   const roles = new Map();
   const site = {

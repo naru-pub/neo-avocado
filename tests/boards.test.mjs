@@ -2134,7 +2134,7 @@ test("a board search shows the same posts by any length of term: secret, 멤버�
 });
 
 test("the search migration fills its full-text tables from the posts and comments before it", async () => {
-  const site = await testSite({ pending: 1 });
+  const site = await testSite({ pending: "0006" });
   board(site, "free", PUBLIC_BOARD);
   const old = insert(site, "posts", {
     board: "free",
@@ -2233,4 +2233,153 @@ test("[[name]] removed and put back does not call them again", async () => {
       data: { ...current.data, text },
     }));
   assert.equal(callsTo(site, "m-3").length, 1);
+});
+
+test("a board's 게시판 관리자 and its group's 그룹 관리자 moderate it, and only it", async () => {
+  const site = await boardSite();
+  profile(site, "m-1", "하나");
+  profile(site, "m-2", "둘");
+  profile(site, "m-3", "셋");
+  insert(site, "board_groups", { id: "club", name: "동아리", admin: "m-3" });
+  board(site, "free", { ...PUBLIC_BOARD, name: "자유" });
+  board(site, "club", { ...PUBLIC_BOARD, name: "동아리방", group: "club" });
+  board(site, "calc", { kind: "settlement", categories: ["정산"] });
+  site.run("UPDATE boards SET admin = 'm-2' WHERE id IN ('free', 'calc')");
+  const secret = post(site, {
+    board: "free",
+    owner: "m-1",
+    title: "비밀",
+    body: "몰래",
+    secret: 1,
+  });
+  const other = post(site, {
+    board: "default",
+    owner: "m-1",
+    image: "https://x.example/a.png",
+  });
+  const clubbed = post(site, {
+    board: "club",
+    owner: "m-1",
+    body: "모임",
+    secret: 1,
+  });
+  const commented = comment(site, {
+    post_id: Number(secret),
+    owner: "m-1",
+    body: "댓글",
+  });
+  // The board's 게시판 관리자 reads its secrets and changes what others wrote.
+  assert.equal(
+    (await read(site, { id: secret }, M2)).document.data.text,
+    "몰래",
+  );
+  assert.equal(
+    await reasonOf(read(site, { id: clubbed }, M2)),
+    "document_not_found",
+  );
+  assert.equal(
+    (await listPage(site, { board: "free" }, M2)).documents[0].data.locked,
+    undefined,
+  );
+  assert.equal(
+    await reasonOf(write(site, { id: secret, data: { text: "고침" } }, M2)),
+    "ok",
+  );
+  assert.equal(
+    await reasonOf(
+      reply(site, { id: commented, data: { text: "댓글 고침" } }, M2),
+    ),
+    "ok",
+  );
+  assert.equal(
+    await reasonOf(write(site, { id: other, data: { text: "남의 글" } }, M2)),
+    "not_owned",
+  );
+  // Notices and moves on their boards, and moves only to boards they administer.
+  const moderate = (args, who = M2) =>
+    site.mutate("community/boards:moderatePost", args, who);
+  assert.equal(
+    (await moderate({ id: secret, notice: true })).document.data.notice,
+    true,
+  );
+  assert.equal(
+    await reasonOf(moderate({ id: other, notice: true })),
+    "access_denied",
+  );
+  assert.equal(
+    await reasonOf(moderate({ id: secret, board: "default" })),
+    "access_denied",
+  );
+  // The group's 그룹 관리자 moderates the group's boards.
+  assert.equal(
+    (await read(site, { id: clubbed }, M3)).document.data.text,
+    "모임",
+  );
+  assert.equal(
+    await reasonOf(moderate({ id: clubbed, notice: true }, M3)),
+    "ok",
+  );
+  assert.equal(
+    await reasonOf(read(site, { id: secret }, M3)),
+    "document_not_found",
+  );
+  // A settlement board's 게시판 관리자 settles its requests.
+  const request = post(site, {
+    board: "calc",
+    owner: "m-1",
+    body: "정산해 주세요",
+    category: "정산",
+  });
+  assert.equal(
+    await reasonOf(
+      site.mutate("community/posts:settle", { id: request, state: "반려" }, M3),
+    ),
+    "access_denied",
+  );
+  assert.equal(
+    await reasonOf(
+      site.mutate("community/posts:settle", { id: request, state: "반려" }, M2),
+    ),
+    "ok",
+  );
+  // A board admin who left the community is no one's moderator.
+  site.run(
+    "INSERT INTO members (member, left_on) VALUES ('m-2', '2026-10-16')",
+  );
+  assert.equal(
+    await reasonOf(moderate({ id: secret, notice: false })),
+    "access_denied",
+  );
+  // The admin's boards say who their 관리자 are, for the page's buttons.
+  const { boards } = await site.query("community/boards:boards", null, M1);
+  const free = boards.find((row) => row.id === "free");
+  assert.equal(free.data.admin, "m-2");
+  assert.equal(boards.find((row) => row.id === "club").data.groupAdmin, "m-3");
+  // The owner picks them from the members on the board and group forms.
+  const saved = await site.mutate(
+    "admin/boards:save",
+    { id: "free", values: { admin: "m-3" } },
+    OWNER,
+  );
+  assert.equal(saved.data.admin, "m-3");
+  assert.equal(
+    await reasonOf(
+      site.mutate(
+        "admin/boards:save",
+        { id: "free", values: { admin: "nobody" } },
+        OWNER,
+      ),
+    ),
+    "invalid_input",
+  );
+  assert.equal(
+    (
+      await site.mutate(
+        "admin/board_groups:save",
+        { id: "club", values: { admin: "" } },
+        OWNER,
+      )
+    ).data.admin,
+    undefined,
+  );
 });

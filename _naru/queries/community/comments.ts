@@ -32,22 +32,14 @@ export async function list(
     });
   const access = await accessOf(ctx);
   const post = await postRow(ctx, id);
-  if (
-    !post ||
-    !(await postReadable(
-      ctx,
-      post,
-      access,
-      ctx.member?.id,
-      await boardOf(ctx, post.board),
-    ))
-  )
+  const board = post ? await boardOf(ctx, post.board) : null;
+  if (!post || !(await postReadable(ctx, post, access, ctx.member?.id, board)))
     return { documents: [], nextCursor: null };
   const { rows } = await ctx.sql<CommentRow>`SELECT * FROM comments
     WHERE post_id = ${post.id} AND id > ${cursor} ORDER BY id LIMIT ${COMMENT_PAGE + 1}`;
   const documents = rows
     .slice(0, COMMENT_PAGE)
-    .map((row) => presentPost(commentOf(row), readerOf(ctx, access)));
+    .map((row) => presentPost(commentOf(row), readerOf(ctx, access, board)));
   return {
     documents,
     nextCursor: rows.length > COMMENT_PAGE ? documents.at(-1).id : null,

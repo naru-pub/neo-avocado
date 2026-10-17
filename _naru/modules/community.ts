@@ -3,7 +3,7 @@
 // changing, and whether they may. The community/posts and
 // community/comments mutations start from here.
 import type { Access } from "./access.js";
-import { accessOf, commentRow, postRow } from "./boards.js";
+import { accessOf, boardOf, commentRow, isStaff, postRow } from "./boards.js";
 import type { CommentRow, PostRow } from "./boards.js";
 import type { GuestCredentials, MutationCtx } from "./naru-types.js";
 
@@ -26,11 +26,22 @@ const guestPassword = (ctx: MutationCtx) =>
     reason: "guest_password",
   });
 
+/** The board a post or comment is on. */
+async function boardIdOf(
+  ctx: MutationCtx,
+  kind: "post" | "comment",
+  row: PostRow | CommentRow,
+): Promise<string | null> {
+  if (kind === "post") return (row as PostRow).board;
+  return (await postRow(ctx, (row as CommentRow).post_id))?.board ?? null;
+}
+
 /**
  * Checks a write to a post or comment and returns the writer's access, the
  * row as it is now (null for a new one) and, for a guest, their name. A
  * member changes their own, and a moderator anyone's; the site's owner
- * changes any without a password. A guest proves a post is theirs with its
+ * changes any without a password. A board's 게시판 관리자 and its group's
+ * 그룹 관리자 are its moderators. A guest proves a post is theirs with its
  * password (bbs/password_check.php), checked against the hash its row keeps
  * (ten wrong tries an hour for each, by `post:<id>` or `comment:<id>`).
  */
@@ -92,7 +103,7 @@ export async function startWrite<T extends "post" | "comment">(
   } else if (
     previous &&
     previous.owner !== ctx.member.id &&
-    access.role !== "moderator"
+    !isStaff(access, await boardOf(ctx, await boardIdOf(ctx, kind, previous)))
   )
     ctx.fail("ACCESS_DENIED", "직접 쓴 것만 고치거나 지울 수 있습니다.", {
       reason: "not_owned",

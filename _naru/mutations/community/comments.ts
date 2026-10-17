@@ -84,7 +84,7 @@ export async function write(
   requireBoard(ctx, board, access, "comment");
   // On a Q&A board only the staff answer (skin/board/qna/list.skin.php:85-87
   // shows the reply link to $is_admin alone).
-  if (board.data.kind === "qna" && !isStaff(access))
+  if (board.data.kind === "qna" && !isStaff(access, board))
     ctx.fail(
       "ACCESS_DENIED",
       "질문 답변 게시판은 운영진만 답변할 수 있습니다.",
@@ -114,7 +114,7 @@ export async function write(
       ctx,
       body,
       { min: board.data.commentMin, max: board.data.commentMax },
-      isStaff(access),
+      isStaff(access, board),
     );
   await checkBannedWords(ctx, body);
   const calls = guest

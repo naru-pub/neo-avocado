@@ -4,6 +4,7 @@ import { emoticonContent } from "../emoticons.js";
 import { sanitizedFragment } from "../content-renderer.js";
 import {
   $,
+  boardStaff,
   edit,
   formatTime,
   guestCredentials,
@@ -434,7 +435,7 @@ export async function logItem(log) {
     );
   const pin = item.querySelector<HTMLButtonElement>(".pin");
   const move = item.querySelector<HTMLButtonElement>(".move");
-  pin.hidden = move.hidden = state.role !== "moderator" || log.data.locked;
+  pin.hidden = move.hidden = !boardStaff(log.data.board) || log.data.locked;
   pin.textContent = log.data.notice ? "공지 해제" : "공지로";
   pin.onclick = () =>
     run(async () => {
@@ -456,7 +457,10 @@ export async function logItem(log) {
           name: "board",
           label: "게시판",
           value: log.data.board ?? "default",
-          options: state.boards.map((row) => [row.id, row.data.name]),
+          // bbs/move.php: a 게시판·그룹 관리자 moves to boards they administer.
+          options: state.boards
+            .filter((row) => boardStaff(row.id))
+            .map((row) => [row.id, row.data.name]),
         },
       ],
       async ({ board }) => {
@@ -540,17 +544,16 @@ export async function logItem(log) {
   item.querySelector("time").textContent = formatTime(log.createdAt);
   const remove = item.querySelector<HTMLButtonElement>(".delete");
   const guestPost = !state.member && Boolean(log.data.guest);
-  remove.hidden = !mine(log) && state.role !== "moderator" && !guestPost;
+  const moderating = boardStaff(log.data.board);
+  remove.hidden = !mine(log) && !moderating && !guestPost;
   const change = item.querySelector<HTMLButtonElement>(".edit");
   change.hidden =
-    Boolean(log.data.locked) ||
-    (!mine(log) && state.role !== "moderator" && !guestPost);
+    Boolean(log.data.locked) || (!mine(log) && !moderating && !guestPost);
   // A settled request stays as it was settled (caculate's wr_10).
-  if (log.data.settlement && state.role !== "moderator")
-    remove.hidden = change.hidden = true;
+  if (log.data.settlement && !moderating) remove.hidden = change.hidden = true;
   if (
     kindOf(log.data.board) === "settlement" &&
-    state.role === "moderator" &&
+    moderating &&
     !log.data.locked
   ) {
     const settle = document.createElement("button");
@@ -811,13 +814,12 @@ export async function logItem(log) {
     !state.member || board?.data.anonymous !== true;
   form.querySelector<HTMLElement>(".comment-actions").hidden =
     !state.member || !board?.data.actions;
-  const staff = state.role === "moderator" || state.owner;
+  const staff = boardStaff(log.data.board) || state.owner;
   form.hidden =
     board?.data.enabled === false ||
     // Only the staff answer a Q&A board's questions (qna/list.skin.php:85).
     (board?.data.kind === "qna" && !staff) ||
-    (state.role !== "moderator" &&
-      state.level < (board?.data.commentLevel ?? 2));
+    (!staff && state.level < (board?.data.commentLevel ?? 2));
   form.onsubmit = (event) => {
     event.preventDefault?.();
     run(async () => {
@@ -918,7 +920,7 @@ async function commentItem(comment, log) {
     }),
   );
   const guestComment = !state.member && Boolean(comment.data.guest);
-  if (mine(comment) || state.role === "moderator" || guestComment) {
+  if (mine(comment) || boardStaff(log.data.board) || guestComment) {
     const change = document.createElement("button");
     change.type = "button";
     change.className = "edit";
@@ -1120,7 +1122,7 @@ export function configureBoard() {
   const most = Number(board?.data.writeMax) || 0;
   area.maxLength = board?.data.html
     ? 12000
-    : most > 0 && state.role !== "moderator"
+    : most > 0 && !boardStaff()
       ? Math.min(most, 2000)
       : 2000;
   // bo_insert_content: a new post starts from the board's text.
@@ -1145,7 +1147,7 @@ export function configureBoard() {
   $("logSecretLabel").classList.toggle("member-only", kind !== "qna");
   $("logForm").hidden =
     board?.data.enabled === false ||
-    (state.role !== "moderator" && state.level < (board?.data.writeLevel ?? 2));
+    (!boardStaff() && state.level < (board?.data.writeLevel ?? 2));
   $("logCategory").replaceChildren();
   for (const name of ["", ...(board?.data.categories ?? [])]) {
     const option = document.createElement("option");

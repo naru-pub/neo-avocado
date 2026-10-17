@@ -36,8 +36,11 @@ export interface BoardRow {
   page_rows: number;
   fold_height: number;
   options: string;
-  /** The group's members_only, from boardsOf/boardOf's join. */
+  /** 게시판 관리자 (bo_admin): a member's ID, or null. */
+  admin: string | null;
+  /** The group's members_only and 그룹 관리자, from boardsOf/boardOf's join. */
   group_members_only?: number | null;
+  group_admin?: string | null;
 }
 
 /** A board as pages read it: the admin's fields by their names. */
@@ -50,6 +53,9 @@ export interface Board {
     secret: string;
     /** A members-only group's ID (gr_use_access), for boardAllowed. */
     membersOnly?: string;
+    /** 게시판 관리자 and its group's 그룹 관리자: members' IDs. */
+    admin?: string;
+    groupAdmin?: string;
     categories?: string[];
   };
 }
@@ -75,6 +81,7 @@ export const BOARD_COLUMNS = {
   editLock: "edit_lock",
   pageRows: "page_rows",
   foldHeight: "fold_height",
+  admin: "admin",
 } as const;
 const BOARD_FLAGS = new Set(["enabled", "anonymous"]);
 
@@ -87,10 +94,12 @@ export function boardOfRow(row: BoardRow): Board {
   }
   // A board in a members-only group (gr_use_access) carries the group's ID.
   if (row.group_id && row.group_members_only) data.membersOnly = row.group_id;
+  if (row.group_id && row.group_admin) data.groupAdmin = row.group_admin;
   return { id: row.id, data: data as Board["data"] };
 }
 
-const BOARD_SELECT = `SELECT boards.*, board_groups.members_only AS group_members_only
+const BOARD_SELECT = `SELECT boards.*, board_groups.members_only AS group_members_only,
+    board_groups.admin AS group_admin
   FROM boards LEFT JOIN board_groups ON board_groups.id = boards.group_id`;
 
 /** Every board the owner made, in ID order. */
@@ -121,14 +130,14 @@ export function boardAllowed(
   action: BoardAction,
 ): boolean {
   if (!board) return false;
-  // A members-only group's boards are its members' (and moderators').
+  // A members-only group's boards are its members' (and the staff's).
   if (
     board.data.membersOnly &&
-    access.role !== "moderator" &&
+    !isStaff(access, board) &&
     !(access.groups ?? []).includes(board.data.membersOnly)
   )
     return false;
-  if (access.role === "moderator")
+  if (isStaff(access, board))
     return (
       action === "read" || action === "list" || board.data.enabled !== false
     );
@@ -332,8 +341,19 @@ export const OWNER_ACCESS: Access = Object.freeze({
 export const accessOf = async (ctx: SqlCtx): Promise<Access> =>
   ctx.owner ? OWNER_ACCESS : await communityAccess(ctx);
 
-/** Whether a member is the staff here: a moderator (the role staff). */
-export const isStaff = (access: Access) => access.role === "moderator";
+/**
+ * Whether a member is the staff here: a moderator (the role staff)
+ * anywhere, and on `board` its 게시판 관리자 or its group's 그룹 관리자, as
+ * GnuBoard's is_admin is 'board' or 'group' there (lib/common.lib.php:794).
+ */
+export function isStaff(access: Access, board?: Board | null): boolean {
+  if (access.role === "moderator") return true;
+  if (!board || !access.member || access.left) return false;
+  return (
+    board.data.admin === access.member ||
+    board.data.groupAdmin === access.member
+  );
+}
 
 /**
  * A post or comment as its reader sees it (skin/board/mmb/list.log.skin.php).
@@ -370,10 +390,14 @@ export function presentPost(
   return { ...row, data };
 }
 
-/** What presentPost needs of the caller. */
-export const readerOf = (ctx: SqlCtx, access: Access) => ({
+/** What presentPost needs of the caller, on `board`. */
+export const readerOf = (
+  ctx: SqlCtx,
+  access: Access,
+  board?: Board | null,
+) => ({
   member: ctx.member?.id ?? null,
-  staff: isStaff(access),
+  staff: isStaff(access, board),
 });
 
 /**
@@ -398,20 +422,25 @@ export function lockedPost(row: PostRow): Written {
   };
 }
 
-/** Whether a secret post is the reader's to read: their own, or the staff's. */
+/** Whether a secret post is the reader's to read: their own, or the staff's of its board. */
 export const secretReadable = (
   row: { secret: number; owner: string | null },
   access: Access,
   viewer: string | null | undefined,
-) => !row.secret || isStaff(access) || Boolean(viewer && row.owner === viewer);
+  board?: Board | null,
+) =>
+  !row.secret ||
+  isStaff(access, board) ||
+  Boolean(viewer && row.owner === viewer);
 
-/** The SQL condition secretReadable makes of a list: its text and value. */
+/** The SQL condition secretReadable makes of a board's list: its text and value. */
 export function secretClause(
   access: Access,
   viewer: string | null | undefined,
   table = "posts",
+  board?: Board | null,
 ): { text: string; values: SqlValue[] } {
-  if (isStaff(access)) return { text: "1", values: [] };
+  if (isStaff(access, board)) return { text: "1", values: [] };
   if (viewer)
     return {
       text: `(${table}.secret = 0 OR ${table}.owner = ?)`,
@@ -437,11 +466,11 @@ export async function postReadable(
     row &&
     (!row.members_only || Boolean(viewer)) &&
     boardAllowed(
-      board === undefined ? await boardOf(ctx, row.board) : board,
+      (board = board === undefined ? await boardOf(ctx, row.board) : board),
       access,
       "read",
     ) &&
-    secretReadable(row, access, viewer),
+    secretReadable(row, access, viewer, board),
   );
 }
 

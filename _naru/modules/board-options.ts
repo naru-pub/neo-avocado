@@ -2,6 +2,7 @@
 // lengths, the site's banned words, and when a post may no longer be edited.
 import { communitySettings, one } from "./access.js";
 import type { Access, SqlCtx } from "./access.js";
+import { isStaff } from "./boards.js";
 import type { Board, PostRow } from "./boards.js";
 import type { QueryCtx } from "./naru-types.js";
 
@@ -97,7 +98,7 @@ export async function checkEditable(
   access: Access,
 ) {
   const lock = boardNumber(board, "editLock");
-  if (!lock || access.role === "moderator") return;
+  if (!lock || isStaff(access, board)) return;
   const me = ctx.member?.id ?? null;
   const { count } = await one<{ count: number }>(
     ctx,

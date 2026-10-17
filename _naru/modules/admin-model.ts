@@ -195,6 +195,13 @@ export const models: Record<string, Model> = {
         from: "groups",
         optional: true,
       },
+      // bo_admin: a member who moderates this board as the staff do.
+      {
+        key: "admin",
+        label: "게시판 관리자 (이 게시판의 글·댓글을 운영진처럼 관리)",
+        type: "profile",
+        optional: true,
+      },
       { key: "listLevel", label: "목록 보기 등급", type: "number", default: 2 },
       { key: "readLevel", label: "본문 읽기 등급", type: "number", default: 2 },
       { key: "writeLevel", label: "글쓰기 등급", type: "number", default: 2 },
@@ -628,9 +635,16 @@ export const models: Record<string, Model> = {
   },
   board_groups: {
     label: "게시판 그룹",
-    help: "게시판을 묶어 게시판 고르기에서 함께 보여 줍니다. ‘그룹 회원만’을 켜면 그 그룹의 게시판은 회원 등급의 그룹 회원과 게시물 운영자만 이용합니다.",
+    help: "게시판을 묶어 게시판 고르기에서 함께 보여 줍니다. ‘그룹 회원만’을 켜면 그 그룹의 게시판은 회원 등급의 그룹 회원과 게시물 운영자(그룹 관리자 포함)만 이용합니다.",
     fields: [
       { key: "name", label: "그룹 이름", required: true, max: 60 },
+      // gr_admin: a member who moderates every board of the group.
+      {
+        key: "admin",
+        label: "그룹 관리자 (그룹의 모든 게시판을 운영진처럼 관리)",
+        type: "profile",
+        optional: true,
+      },
       { key: "membersOnly", label: "그룹 회원만", type: "checkbox" },
       { key: "order", label: "정렬 순서", type: "number", default: 0 },
     ],

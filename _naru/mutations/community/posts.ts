@@ -124,18 +124,18 @@ export async function write(
     guest: credentials,
     revision,
   });
-  const staff = isStaff(access);
   const before = previous ? postOf(previous).data : null;
-  // A processed settlement (skin/board/caculate) stays as it was settled.
-  if (before?.settlement?.state && !staff)
-    ctx.fail("CONFLICT", "이미 처리된 정산글은 고칠 수 없습니다.", {
-      reason: "settled",
-    });
   if (!given || typeof given !== "object") invalid(ctx);
   // Guests post as themselves, never as a character.
   const data: PostInput = guest ? { ...given, character: undefined } : given;
   const boardId = previous?.board ?? data.board ?? "default";
   const board = await boardOf(ctx, boardId);
+  const staff = isStaff(access, board);
+  // A processed settlement (skin/board/caculate) stays as it was settled.
+  if (before?.settlement?.state && !staff)
+    ctx.fail("CONFLICT", "이미 처리된 정산글은 고칠 수 없습니다.", {
+      reason: "settled",
+    });
   requireBoard(ctx, board, access, "write");
   if (previous) await checkEditable(ctx, previous, board, access);
   // Posting as a character, dice and calls (skin/board/mmb). The speaker and
@@ -339,7 +339,8 @@ export async function remove(
     id: id ?? "",
     guest,
   });
-  const staff = isStaff(access);
+  const board = await boardOf(ctx, previous.board);
+  const staff = isStaff(access, board);
   // A settled request stays (caculate/list.skin.php:109: 삭제 while wr_10 is empty).
   if (parsed<any>(previous.settlement, {})?.state && !staff)
     ctx.fail("CONFLICT", "이미 처리된 정산글은 지울 수 없습니다.", {
@@ -356,7 +357,6 @@ export async function remove(
     ctx.fail("CONFLICT", "탐색·조합을 기록한 글은 지울 수 없습니다.", {
       reason: "acted",
     });
-  const board = await boardOf(ctx, previous.board);
   // 글쓰기 포인트 goes back (bbs/delete.php:78), then each commenter's
   // 댓글쓰기 포인트, theirs together, down to nothing.
   await takeBackReward(ctx, previous, memoOf(board, previous.number, "글삭제"));
@@ -431,14 +431,15 @@ export async function settle(
 ) {
   const { id, state, exp = 0, money = 0, memo = "" } = args ?? {};
   const access = await accessOf(ctx);
-  if (!isStaff(access))
-    ctx.fail("ACCESS_DENIED", "권한이 없습니다.", { reason: "access_denied" });
   const row = await postRow(ctx, id);
+  const board = row ? await boardOf(ctx, row.board) : null;
+  // The staff, and the board's own 게시판·그룹 관리자 (caculate's $is_admin).
+  if (!isStaff(access, board))
+    ctx.fail("ACCESS_DENIED", "권한이 없습니다.", { reason: "access_denied" });
   if (!row)
     ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {
       reason: "document_not_found",
     });
-  const board = await boardOf(ctx, row.board);
   if (board?.data.kind !== "settlement")
     ctx.fail("INVALID_REQUEST", "정산 게시판이 아닙니다.", {
       reason: "invalid_input",
