@@ -107,8 +107,9 @@ export function say(message) {
   $("status").textContent = message;
 }
 /**
- * Uploads a file as the member. Naru records which documents name its
- * address and marks it in the media library once none does.
+ * Uploads a file as the member. Its address is kept in the site's tables;
+ * Naru's media library does not see those, and lists every upload as
+ * unreferenced.
  */
 export async function uploadMedia(file) {
   return await state.member.media.upload(file);

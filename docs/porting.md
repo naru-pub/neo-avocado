@@ -88,8 +88,10 @@ workflows to the port, and says what was left out and why.
   (1–10), warnings and leaving day are the `members` table; moderators are
   the Naru role `staff` and members-only board groups the roles
   `group-<id>`.
-- **Uploads** are managed media (`media.upload`); rows keep their URLs, and
-  Naru's media library marks those no row names. Nothing is deleted unasked.
+- **Uploads** go to Naru Media (`media.upload`); rows keep their URLs. Naru
+  tracks references from collection documents only, so its media library
+  lists every one of this site's uploads as unreferenced. Nothing is deleted
+  unasked.
 
 ## Verifying
 

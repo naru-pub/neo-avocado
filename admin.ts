@@ -852,7 +852,7 @@ $("characterForm").onsubmit = async (event) => {
       if (!file.files?.length) continue;
       $("characterFormStatus").textContent = "이미지를 올리는 중…";
       values[file.dataset.uploadFor] = (
-        await owner.media.upload(file.files[0], { managed: true })
+        await owner.media.upload(file.files[0])
       ).url;
     }
     $("characterFormStatus").textContent = "";
@@ -1139,9 +1139,10 @@ async function openForm(row = null) {
 
 /**
  * A file picker beside an image field: saving uploads the file to Naru Media
- * and its address takes the field's place (quest images: joins the list). The
- * upload is managed: Naru's media library marks it 참조 없음 once no document
- * names it, for the owner to delete if it is not linked elsewhere.
+ * and its address takes the field's place (quest images: joins the list).
+ * Naru tracks only collection documents' references to uploads, and this site
+ * keeps its data in tables, so the media library shows every upload as
+ * unreferenced (참조 없음): check before deleting one.
  */
 function imageUpload(field, value) {
   const upload = document.createElement("label");
@@ -1206,7 +1207,7 @@ $("adminForm").onsubmit = async (event) => {
       $("adminFormStatus").textContent = "이미지를 올리는 중…";
       const urls = [];
       for (const chosen of file.files)
-        urls.push((await owner.media.upload(chosen, { managed: true })).url);
+        urls.push((await owner.media.upload(chosen)).url);
       const key = file.dataset.uploadFor;
       values[key] = file.multiple
         ? [values[key], ...urls].filter(Boolean).join("\n")
