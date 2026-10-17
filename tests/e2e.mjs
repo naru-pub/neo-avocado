@@ -556,7 +556,8 @@ try {
   );
   assert.equal(
     await reader.locator('link[rel="canonical"]').getAttribute("href"),
-    guestPath,
+    // Naru tells routes the address the page was asked on.
+    `${origin}${guestPath}`,
   );
   // Paths no page has stay 404.
   assert.equal((await fetch(`${origin}/logs/free/abc`)).status, 404);
