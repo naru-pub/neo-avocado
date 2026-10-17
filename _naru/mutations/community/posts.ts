@@ -34,6 +34,7 @@ import type { PostRow } from "../../modules/boards.js";
 import {
   boardNumber,
   checkBannedWords,
+  checkDelay,
   checkEditable,
   checkLength,
 } from "../../modules/board-options.js";
@@ -247,6 +248,7 @@ export async function write(
       staff,
     );
   await checkBannedWords(ctx, title, body);
+  if (!previous) await checkDelay(ctx, staff);
   // The mmb skin's options (write.skin.php:327-349): 멤버공개 and 19금 for
   // members, 리플창 아래로 and 로그접기 for anyone, and 익명 for members
   // where the board allows it (bo_use_noname).

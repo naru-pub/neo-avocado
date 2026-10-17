@@ -830,3 +830,29 @@ test("members read the community settings their pages need, and nothing else", a
   });
   assert.equal(await refusal(site.query("content/site:settings")), "sign_in");
 });
+
+test("게시판 기본 설정: rows a list reads, page links and where links open, for the pages", async () => {
+  const site = await testSite();
+  assert.deepEqual((await site.query("content/site:site")).paging, {
+    rows: 20,
+    pages: 10,
+    mobilePages: 5,
+    linkTarget: "_blank",
+  });
+  setSettings(site, "community", {
+    pageRows: 15,
+    writePages: 7,
+    mobilePages: 99,
+    linkTarget: "javascript:",
+  });
+  assert.deepEqual((await site.query("content/site:site")).paging, {
+    rows: 15,
+    pages: 7,
+    mobilePages: 20,
+    linkTarget: "_blank",
+  });
+  setSettings(site, "community", { linkTarget: "_self", pageRows: 100 });
+  const { paging } = await site.query("content/site:site");
+  assert.equal(paging.linkTarget, "_self");
+  assert.equal(paging.rows, 20);
+});

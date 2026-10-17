@@ -34,6 +34,7 @@ export async function loadSite() {
   await showMainPage(site.main === true, site.banners);
   setMusic(site.bgm);
   state.alarmSound = site.alarmSound === true;
+  if (site.paging) state.paging = { ...state.paging, ...site.paging };
   state.counter = design.enabled ? (design.counter ?? "") : "";
   document.body.classList.toggle(
     "no-header",

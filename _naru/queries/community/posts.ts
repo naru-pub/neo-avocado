@@ -327,9 +327,20 @@ const readableBoards = async (ctx: QueryCtx, access: Access) =>
   );
 
 /** The member's 관심 posts they may still read, in the order marked, 20 a page. */
-export async function favorites(ctx: QueryCtx, args: { page?: number }) {
-  const { page = 1 } = args ?? {};
-  if (!Number.isInteger(page) || page < 1 || page > 10) invalid(ctx);
+export async function favorites(
+  ctx: QueryCtx,
+  args: { page?: number; size?: number },
+) {
+  const { page = 1, size = 20 } = args ?? {};
+  if (
+    !Number.isInteger(size) ||
+    size < 1 ||
+    size > 20 ||
+    !Number.isInteger(page) ||
+    page < 1 ||
+    page > Math.ceil(200 / size)
+  )
+    invalid(ctx);
   if (!ctx.member) return { documents: [], total: 0 };
   const access = await accessOf(ctx);
   const { total } = await one<{ total: number }>(
@@ -339,8 +350,8 @@ export async function favorites(ctx: QueryCtx, args: { page?: number }) {
   );
   const { rows } = await ctx.sql<PostRow>(
     `SELECT posts.*, ${TAGS} FROM favorites JOIN posts ON posts.id = favorites.post
-     WHERE favorites.member = ? ORDER BY favorites.id DESC LIMIT 20 OFFSET ?`,
-    [ctx.member.id, (page - 1) * 20],
+     WHERE favorites.member = ? ORDER BY favorites.id DESC LIMIT ? OFFSET ?`,
+    [ctx.member.id, size, (page - 1) * size],
   );
   const boards = await readableBoards(ctx, access);
   const documents = [];

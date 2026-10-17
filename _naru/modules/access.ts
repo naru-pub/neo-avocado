@@ -319,6 +319,29 @@ export function memberSettings(settings: Record<string, any>) {
   };
 }
 
+/**
+ * 게시판 기본 설정 (adm/config_form.php): 한페이지당 라인수 (cf_page_rows,
+ * here at most 20, the lists' own limit; 20 for a site that never set it,
+ * as they read before), 페이지 표시 수 (cf_write_pages 10, cf_mobile_pages
+ * 5) and 새창 링크 (cf_link_target, _blank).
+ */
+export function pagingOf(settings: Record<string, any>) {
+  const within = (value: unknown, fallback: number, most: number) =>
+    Number.isSafeInteger(value) && (value as number) >= 1
+      ? Math.min(value as number, most)
+      : fallback;
+  return {
+    rows: within(settings.pageRows, 20, 20),
+    pages: within(settings.writePages, 10, 20),
+    mobilePages: within(settings.mobilePages, 5, 20),
+    linkTarget: ["_blank", "_self", "_top", "_new"].includes(
+      settings.linkTarget,
+    )
+      ? (settings.linkTarget as string)
+      : "_blank",
+  };
+}
+
 /** A Korean day, "YYYY-MM-DD". */
 export const kstDay = (now: number): string =>
   new Date(now + 9 * 3600 * 1000).toISOString().slice(0, 10);

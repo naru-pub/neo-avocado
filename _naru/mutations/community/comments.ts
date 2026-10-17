@@ -15,7 +15,11 @@ import {
   takeBackReward,
 } from "../../modules/boards.js";
 import type { CommentRow } from "../../modules/boards.js";
-import { checkBannedWords, checkLength } from "../../modules/board-options.js";
+import {
+  checkBannedWords,
+  checkDelay,
+  checkLength,
+} from "../../modules/board-options.js";
 import { startWrite } from "../../modules/community.js";
 import {
   deliverCalls,
@@ -117,6 +121,7 @@ export async function write(
       isStaff(access, board),
     );
   await checkBannedWords(ctx, body);
+  if (!previous) await checkDelay(ctx, isStaff(access, board));
   const calls = guest
     ? { text: body, recipients: [], called: [] }
     : await resolveCalls(

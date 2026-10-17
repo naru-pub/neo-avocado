@@ -2537,3 +2537,69 @@ test("a board lists by its 정렬 필드 after its notices, with its text only w
     "그림 설명",
   );
 });
+
+test("글쓰기 간격 keeps a member's next post or comment that many seconds after their last", async () => {
+  const site = await boardSite();
+  profile(site, "m-1", "하나");
+  profile(site, "m-2", "둘");
+  board(site, "free", PUBLIC_BOARD);
+  const first = await write(site, { data: { board: "free", text: "첫 글" } });
+  // A site that never set it has none.
+  assert.equal(
+    await reasonOf(write(site, { data: { board: "free", text: "곧바로" } })),
+    "ok",
+  );
+  setSettings(site, "community", { writeDelay: 30 });
+  site.now += 10 * 1000;
+  assert.equal(
+    await reasonOf(write(site, { data: { board: "free", text: "또" } })),
+    "too_fast",
+  );
+  assert.equal(
+    await reasonOf(
+      reply(site, { data: { logId: first.document.id, text: "댓글" } }),
+    ),
+    "too_fast",
+  );
+  // Editing is not writing; others, the staff and guests are not held.
+  assert.equal(
+    await reasonOf(
+      write(site, { id: first.document.id, data: { text: "고침" } }),
+    ),
+    "ok",
+  );
+  assert.equal(
+    await reasonOf(write(site, { data: { board: "free", text: "남" } }, M2)),
+    "ok",
+  );
+  moderator(site, "m-2");
+  assert.equal(
+    await reasonOf(write(site, { data: { board: "free", text: "남2" } }, M2)),
+    "ok",
+  );
+  assert.equal(
+    await reasonOf(
+      write(
+        site,
+        {
+          data: { board: "free", text: "손님" },
+          guest: { name: "손", password: "1234" },
+        },
+        VISITOR,
+      ),
+    ),
+    "ok",
+  );
+  site.now += 21 * 1000;
+  assert.equal(
+    await reasonOf(
+      reply(site, { data: { logId: first.document.id, text: "이제" } }),
+    ),
+    "ok",
+  );
+  // A comment counts as the last as well.
+  assert.equal(
+    await reasonOf(write(site, { data: { board: "free", text: "다음" } })),
+    "too_fast",
+  );
+});

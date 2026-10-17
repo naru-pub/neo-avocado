@@ -568,7 +568,12 @@ export async function logItem(log) {
     item
       .querySelector(".log-text")
       .append(sanitizedFragment(document, log.data.text));
-  } else item.querySelector(".log-text").append(postText(log.data.text));
+  } else
+    item.querySelector(".log-text").append(
+      postText(log.data.text, [], {
+        pictureBoard: kindOf(log.data.board) === "image",
+      }),
+    );
   if (log.data.dice && !log.data.locked) {
     item.querySelector<HTMLElement>(".log-dice").hidden = false;
     item.querySelector<HTMLElement>(".log-dice").textContent = diceText(log);
@@ -969,7 +974,11 @@ async function commentItem(comment, log) {
     dice.textContent = diceText(comment);
     item.append(dice, " ");
   }
-  item.append(postText(comment.data.text ?? "", await loadEmoticons()));
+  item.append(
+    postText(comment.data.text ?? "", await loadEmoticons(), {
+      pictureBoard: kindOf(log.data.board) === "image",
+    }),
+  );
   // The comment's own address (/post/<id>/comment/<id>).
   const link = document.createElement("a");
   link.className = "permalink";

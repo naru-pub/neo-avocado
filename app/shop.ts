@@ -527,7 +527,7 @@ const HISTORY_NAMES = {
 async function loadHistory({ more = false } = {}) {
   const page = await query("economy/history:history", {
     after: more ? state.historyCursor : null,
-    size: 20,
+    size: state.paging.rows,
   });
   if (!more) $("history").replaceChildren();
   for (const row of page.documents) {

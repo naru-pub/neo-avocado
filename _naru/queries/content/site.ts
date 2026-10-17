@@ -7,6 +7,7 @@ import {
   levelAllows,
   memberSettings,
   namesOf,
+  pagingOf,
   scheduled,
   settingsOf,
   signedIn,
@@ -156,6 +157,8 @@ export async function site(ctx: QueryCtx) {
     bgm: backgroundMusic(settings.bgm),
     // 쪽지·호출 알림음: the arrival popups' chime, off unless the owner wants it.
     alarmSound: settings.alarmSound === true,
+    // 한페이지당 라인수, 페이지 표시 수 and 새창 링크.
+    paging: pagingOf(settings),
     // 기타 항목명 설정: the owner's names for money, experience, rank, 소속, 종족.
     names: namesOf(settings),
     // 프로필 양식 관리's 두상·흉상·전신: which the sheet asks for and shows.

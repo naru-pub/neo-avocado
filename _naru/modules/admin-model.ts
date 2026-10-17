@@ -1025,6 +1025,49 @@ export const models: Record<string, Model> = {
         type: "number",
         default: 0,
       },
+      // adm/config_form.php's 게시판 기본 설정: cf_delay_sec, cf_page_rows,
+      // cf_write_pages, cf_mobile_pages, cf_link_target. A first save
+      // writes the original's 30 seconds; a site saved before keeps none.
+      { type: "heading", label: "게시판 기본 설정" },
+      {
+        key: "writeDelay",
+        label:
+          "글쓰기 간격 (초, 글·댓글을 쓴 뒤 이만큼 지나야 다시 씀, 0이면 제한 없음, 운영진 제외)",
+        type: "number",
+        default: 0,
+        newDefault: 30,
+      },
+      {
+        key: "pageRows",
+        label:
+          "한페이지당 라인수 (새 게시판의 한 페이지 글 수, 관심로그·화폐·경험치 내역 한 번에 읽는 수, 최대 20)",
+        type: "number",
+        default: 15,
+      },
+      {
+        key: "writePages",
+        label: "페이지 표시 수 (번호로 넘기는 목록의 페이지 링크 수)",
+        type: "number",
+        default: 10,
+      },
+      {
+        key: "mobilePages",
+        label: "모바일 페이지 표시 수",
+        type: "number",
+        default: 5,
+      },
+      {
+        key: "linkTarget",
+        label:
+          "새창 링크 (글·댓글 속 주소를 여는 곳, 그림 로그는 원본처럼 늘 새 창)",
+        type: "choice",
+        options: [
+          ["_blank", "_blank"],
+          ["_self", "_self"],
+          ["_top", "_top"],
+          ["_new", "_new"],
+        ],
+      },
       // cf_filter (adm/config_form.php:315), checked on posts and comments.
       {
         key: "bannedWords",

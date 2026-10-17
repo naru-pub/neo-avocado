@@ -26,6 +26,8 @@ let naru,
   selected = null;
 // 기타 항목명 설정, from 커뮤니티 설정: the menu and labels use them.
 let itemNames: Names = NAME_DEFAULTS;
+// 커뮤니티 설정's 한페이지당 라인수: a new board's rows a page.
+let newBoardRows = 15;
 // 캐릭터 이미지 항목: the 두상, 흉상 and 전신, named as the owner set them.
 let imageSlots = imageSlotsOf();
 // Rows the forms pick from, by kind (admin/references; the server checks
@@ -1225,8 +1227,10 @@ async function openForm(row = null) {
         ? (row?.id ?? model.fixedId ?? field.default)
         : section === "quests" && field.key === "images"
           ? (row?.data.images?.join("\n") ?? "")
-          : (fieldValue(row?.data, field.key) ??
-            (row ? field.default : (field.newDefault ?? field.default)));
+          : section === "boards" && field.key === "pageRows" && !row
+            ? newBoardRows
+            : (fieldValue(row?.data, field.key) ??
+              (row ? field.default : (field.newDefault ?? field.default)));
     if (field.type === "ingredients") {
       const group = document.createElement("fieldset");
       group.dataset.ingredients = field.key;
@@ -1510,6 +1514,10 @@ async function loadNames() {
     section: "settings",
   });
   itemNames = namesOf(settings?.data);
+  // cf_page_rows: a new board's 한 페이지 글 수 (bo_page_rows' default).
+  const rows = settings?.data?.pageRows;
+  newBoardRows =
+    Number.isSafeInteger(rows) && rows >= 1 ? Math.min(rows, 100) : 15;
   const profile = await owner.query(CALLS.character_images.get, {
     section: "character_images",
   });

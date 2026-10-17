@@ -27,16 +27,26 @@ export function diceText(row) {
   return `🎲 ${first} + ${second} = ${first + second}`;
 }
 const POST_PART =
-  /(\[\[[^[\]\r\n]{1,20}\]\]|@[0-9]{1,9}|#[0-9a-zA-Z가-힣_]{1,30})/;
+  /(https?:\/\/[^\s<>"']+|\[\[[^[\]\r\n]{1,20}\]\]|@[0-9]{1,9}|#[0-9a-zA-Z가-힣_]{1,30})/;
 /**
- * Text with autolink()'s marks: [[nick]] calls, @N links to a log on the same
- * board and #tag searches. The rest stays text (and emoticons).
+ * Text with autolink()'s marks: web addresses as links (url_auto_link, in
+ * 새창 링크's window; the mmb skin's picture boards say Link URL and open a
+ * new one, extend/mmb.lib.php:15), [[nick]] calls, @N links to a log on
+ * the same board and #tag searches. The rest stays text (and emoticons).
  */
-export function postText(text, emoticons = []) {
+export function postText(text, emoticons = [], { pictureBoard = false } = {}) {
   const fragment = document.createDocumentFragment();
   for (const part of String(text ?? "").split(POST_PART)) {
     if (!part) continue;
-    if (part.startsWith("[[") && POST_PART.test(part)) {
+    if (/^https?:\/\//.test(part)) {
+      const link = document.createElement("a");
+      link.className = "other-site-link";
+      link.href = part;
+      link.target = pictureBoard ? "_blank" : state.paging.linkTarget;
+      link.rel = "noopener noreferrer nofollow";
+      link.textContent = pictureBoard ? "Link URL" : part;
+      fragment.append(link);
+    } else if (part.startsWith("[[") && POST_PART.test(part)) {
       const call = document.createElement("span");
       call.className = "member-call";
       call.textContent = part.slice(2, -2);

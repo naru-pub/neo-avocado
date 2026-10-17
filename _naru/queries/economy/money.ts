@@ -9,17 +9,18 @@ import type { QueryCtx } from "../../modules/naru-types.js";
  */
 export async function ledger(
   ctx: QueryCtx,
-  args: { after?: string | null } | null,
+  args: { after?: string | null; size?: number } | null,
 ) {
   const me = signedIn(ctx);
-  const { after = null } = args ?? {};
-  if (after !== null && typeof after !== "string")
+  const { after = null, size = 20 } = args ?? {};
+  if (
+    (after !== null && typeof after !== "string") ||
+    !Number.isInteger(size) ||
+    size < 1 ||
+    size > 20
+  )
     ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
       reason: "invalid_input",
     });
-  return await historyPage(
-    ctx,
-    { owner: me },
-    { size: 20, after, money: true },
-  );
+  return await historyPage(ctx, { owner: me }, { size, after, money: true });
 }

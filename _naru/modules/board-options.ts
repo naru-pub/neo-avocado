@@ -1,6 +1,6 @@
 // A board's own settings for what is written on it (adm/board_form.php):
 // lengths, the site's banned words, and when a post may no longer be edited.
-import { communitySettings, one } from "./access.js";
+import { amountOf, communitySettings, one } from "./access.js";
 import type { Access, SqlCtx } from "./access.js";
 import { isStaff } from "./boards.js";
 import type { Board, PostRow } from "./boards.js";
@@ -120,6 +120,35 @@ export async function checkBannedWords(ctx: FailCtx, ...texts: string[]) {
         { reason: "banned_word", word: found },
       );
   }
+}
+
+/**
+ * 글쓰기 간격 (cf_delay_sec, adm/config_form.php:285): a member's new post
+ * or comment comes at least so many seconds after their last one of
+ * either (bbs/write_update_file.php:194, write_comment_update.php:43, by
+ * the session's ss_datetime there, by their rows here). The staff are not
+ * held to it; guests, who have no rows of their own, are not either.
+ */
+export async function checkDelay(
+  ctx: FailCtx & { readonly now: number },
+  staff: boolean,
+) {
+  if (staff || !ctx.member) return;
+  const delay = amountOf(await communitySettings(ctx), "writeDelay");
+  if (!delay) return;
+  const me = ctx.member.id;
+  const { last } = await one<{ last: number }>(
+    ctx,
+    `SELECT max(coalesce((SELECT max(created_at) FROM posts WHERE owner = ?), 0),
+       coalesce((SELECT max(created_at) FROM comments WHERE owner = ?), 0)) AS last`,
+    [me, me],
+  );
+  if (last && ctx.now - last < delay * 1000)
+    ctx.fail(
+      "RATE_LIMITED",
+      "너무 빠른 시간내에 게시물을 연속해서 올릴 수 없습니다.",
+      { reason: "too_fast", seconds: delay },
+    );
 }
 
 /**

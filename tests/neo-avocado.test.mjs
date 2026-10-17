@@ -895,15 +895,20 @@ test("the shop exposes later pages and crafts from the inventory's own copies th
   const pages = [...$("itemPages").querySelectorAll("button.page")].map(
     (button) => button.textContent,
   );
-  assert.deepEqual(pages, ["‹", "1", "2", "3", "4", "5", "›"]);
-  $("itemPages").querySelector("button:last-child").onclick();
+  // get_paging: 페이지 표시 수 (10) links, then 맨끝.
+  assert.deepEqual(pages, ["1", "2", "3", "4", "5", "6", "맨끝"]);
+  const pageButton = (label) =>
+    [...$("itemPages").querySelectorAll("button.page")].find(
+      (button) => button.textContent === label,
+    );
+  pageButton("2").onclick();
   await settle();
   assert.equal(
     $("itemPages").querySelector('[aria-current="page"]').textContent,
     "2",
   );
-  for (let n = 0; n < 4; n += 1)
-    $("itemPages").querySelector("button:last-child").onclick();
+  assert.equal(pageButton("처음").textContent, "처음");
+  pageButton("맨끝").onclick();
   await settle();
   assert.equal($("items").children.length, 1);
   // The recipe's materials are taken from the inventory, as the original's.
@@ -2780,4 +2785,53 @@ test("a new 쪽지 or call pops up with a way there, and stays closed once close
     call: null,
   });
   assert.equal($("memoAlarm").hidden, false);
+});
+
+test("addresses in a post become links: in 새창 링크's window, and Link URL in a new one on picture boards", async () => {
+  const database = fakeDatabase({
+    [PROFILES]: [me],
+    neo_avocado_boards: [
+      { id: "default", data: { ...DEFAULT_BOARD.data } },
+      { id: "free", data: { ...DEFAULT_BOARD.data, kind: "text" } },
+    ],
+    [LOGS]: [
+      {
+        id: "pic",
+        data: {
+          image: "https://media.naru.pub/a.png",
+          text: "보세요 https://a.example/x?y=1 끝",
+        },
+        createdBy: ME,
+      },
+      {
+        id: "plain",
+        data: {
+          board: "free",
+          text: "링크 https://b.example/ 와 javascript:alert(1)",
+        },
+        createdBy: ME,
+      },
+    ],
+  });
+  database.site = {
+    paging: { rows: 15, pages: 10, mobilePages: 5, linkTarget: "_self" },
+  };
+  const { $, settle } = await page(database);
+  const picture = $("logs").querySelector(
+    '.log[data-id="pic"] .other-site-link',
+  );
+  assert.deepEqual(
+    [picture.href, picture.target, picture.textContent],
+    ["https://a.example/x?y=1", "_blank", "Link URL"],
+  );
+  $("board").value = "free";
+  $("board").onchange();
+  for (let n = 0; n < 4; n += 1) await settle();
+  const links = [
+    ...$("logs").querySelectorAll('.log[data-id="plain"] .other-site-link'),
+  ];
+  assert.deepEqual(
+    links.map((link) => [link.href, link.target, link.textContent]),
+    [["https://b.example/", "_self", "https://b.example/"]],
+  );
 });

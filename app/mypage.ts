@@ -206,7 +206,7 @@ async function loadMyExp({ more = false } = {}) {
     query("economy/history:history", {
       kind: "exp",
       after: more ? expCursor : null,
-      size: 20,
+      size: state.paging.rows,
     }),
     ownCharacters(),
   ]);
@@ -231,9 +231,12 @@ async function loadMyExp({ more = false } = {}) {
   $("moreExp").hidden = !page.nextCursor;
 }
 
-/** 관심로그 (mypage/log/log_favorite.php), 20 a page, in the order marked. */
+/** 관심로그 (mypage/log/log_favorite.php), 한페이지당 라인수 a page, in the order marked. */
 async function loadMyFavorites(page = 1) {
-  const result = await query("community/posts:favorites", { page });
+  const result = await query("community/posts:favorites", {
+    page,
+    size: state.paging.rows,
+  });
   $("myFavorites").replaceChildren(
     ...result.documents.map((log) => {
       const board = state.boards.find(
@@ -262,7 +265,7 @@ async function loadMyFavorites(page = 1) {
   renderPages(
     $("myFavoritePages"),
     page,
-    Math.ceil(result.total / 20),
+    Math.ceil(Math.min(result.total, 200) / state.paging.rows),
     (next) => run(() => loadMyFavorites(next)),
   );
 }
@@ -271,6 +274,7 @@ let moneyCursor = null;
 async function loadMyMoney({ more = false } = {}) {
   const page = await query("economy/money:ledger", {
     after: more ? moneyCursor : null,
+    size: state.paging.rows,
   });
   const body = $("moneyLedger").querySelector("tbody");
   if (!more) body.replaceChildren();

@@ -46,6 +46,8 @@ const initialState = {
   counter: "",
   // 커뮤니티 설정's 쪽지·호출 알림음: the arrival popups may chime.
   alarmSound: false,
+  // 게시판 기본 설정: rows a list reads, page links shown, where links open.
+  paging: { rows: 20, pages: 10, mobilePages: 5, linkTarget: "_blank" },
   // The site owner, signed in here, is staff as moderators are.
   owner: false,
   role: "member",
@@ -631,12 +633,22 @@ export function showTab(name) {
  * The page numbers under a list: ‹ 1 2 3 4 5 › around the current page, as
  * the original shows five at a time.
  */
+/**
+ * get_paging (lib/common.lib.php:20): the page links in blocks of
+ * 페이지 표시 수 (cf_write_pages, cf_mobile_pages on a phone), with 처음,
+ * 이전 and 다음 blocks, and 맨끝.
+ */
 export function renderPages(nav, current, pages, pick) {
   nav.replaceChildren();
   nav.hidden = pages <= 1;
   if (pages <= 1) return;
-  const first = Math.max(1, Math.min(current - 2, pages - 4));
-  const last = Math.min(pages, first + 4);
+  const phone = globalThis.matchMedia?.("(max-width: 1024px)").matches;
+  const size = Math.max(
+    1,
+    (phone ? state.paging.mobilePages : state.paging.pages) || 10,
+  );
+  const first = Math.floor((current - 1) / size) * size + 1;
+  const last = Math.min(pages, first + size - 1);
   const button = (label, number, extra = {}) => {
     const element = document.createElement("button");
     element.type = "button";
@@ -648,17 +660,15 @@ export function renderPages(nav, current, pages, pick) {
     element.onclick = () => run(() => pick(number));
     return element;
   };
+  const control = (label, number, ariaLabel) =>
+    button(label, number, { ariaLabel, className: "page control" });
   nav.append(
-    button("‹", current - 1, {
-      ariaLabel: "이전 페이지",
-      className: "page control",
-    }),
+    ...(current > 1 ? [control("처음", 1, "첫 페이지")] : []),
+    ...(first > 1 ? [control("이전", first - 1, "이전 페이지들")] : []),
     ...Array.from({ length: last - first + 1 }, (_, i) =>
       button(String(first + i), first + i),
     ),
-    button("›", current + 1, {
-      ariaLabel: "다음 페이지",
-      className: "page control",
-    }),
+    ...(pages > last ? [control("다음", last + 1, "다음 페이지들")] : []),
+    ...(current < pages ? [control("맨끝", pages, "마지막 페이지")] : []),
   );
 }
