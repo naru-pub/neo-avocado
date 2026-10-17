@@ -6,17 +6,16 @@ import {
   TABLES,
   getRecord,
   offsetOf,
-  ownerOnly,
   pageOf,
   recordOf,
 } from "../../modules/admin.js";
+import { ownerOnly } from "../../modules/access.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
 
-export async function list(
+export const list = ownerOnly(async function list(
   ctx: QueryCtx,
   { after = null }: { after?: string | null } = {},
 ) {
-  ownerOnly(ctx);
   const offset = offsetOf(ctx, after);
   const { rows } = await ctx.sql(
     `SELECT inventory.*, profiles.nick AS owner_nick, characters.name AS character_name
@@ -34,7 +33,8 @@ export async function list(
     })),
     offset,
   );
-}
+});
 
-export const get = (ctx: QueryCtx, args: { id?: string } = {}) =>
-  getRecord(ctx, "inventory", args ?? {});
+export const get = ownerOnly((ctx: QueryCtx, args: { id?: string }) =>
+  getRecord(ctx, "inventory", args),
+);

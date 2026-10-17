@@ -5,17 +5,16 @@ import {
   TABLES,
   getRecord,
   offsetOf,
-  ownerOnly,
   pageOf,
   recordOf,
 } from "../../modules/admin.js";
+import { ownerOnly } from "../../modules/access.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
 
-export async function list(
+export const list = ownerOnly(async function list(
   ctx: QueryCtx,
   { after = null }: { after?: string | null } = {},
 ) {
-  ownerOnly(ctx);
   const offset = offsetOf(ctx, after);
   const { rows } = await ctx.sql(
     `SELECT wallets.*, profiles.nick FROM wallets
@@ -27,7 +26,8 @@ export async function list(
     rows.map((row) => ({ ...recordOf(TABLES.wallets, row), label: row.nick })),
     offset,
   );
-}
+});
 
-export const get = (ctx: QueryCtx, args: { id?: string } = {}) =>
-  getRecord(ctx, "wallets", args ?? {});
+export const get = ownerOnly((ctx: QueryCtx, args: { id?: string }) =>
+  getRecord(ctx, "wallets", args),
+);

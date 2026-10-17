@@ -733,7 +733,7 @@ test("the owner moves a character to another member, with what it keeps", async 
     site.mutate("characters/sheet:move", args, who);
   assert.equal(
     await refusal(move({ id: hero, nick: "카도" }, M1)),
-    "access_denied",
+    "owner_only",
   );
   assert.equal(
     await refusal(move({ id: hero, nick: "없는사람" })),

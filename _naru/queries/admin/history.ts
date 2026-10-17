@@ -1,11 +1,12 @@
 // 전체 활동·구매 기록: every member's history, newest first, a page at a
 // time; with `actor`, the entries one kind of actor made (the grants'
 // log, adm/point_list.php).
-import { invalid, ownerOnly } from "../../modules/admin.js";
+import { invalid } from "../../modules/admin.js";
 import { historyPage } from "../../modules/members.js";
+import { ownerOnly } from "../../modules/access.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
 
-export async function list(
+export const list = ownerOnly(async function list(
   ctx: QueryCtx,
   {
     actor = null,
@@ -13,7 +14,6 @@ export async function list(
     after = null,
   }: { actor?: string | null; size?: number; after?: string | null } = {},
 ) {
-  ownerOnly(ctx);
   if (
     (actor !== null && typeof actor !== "string") ||
     !Number.isSafeInteger(size) ||
@@ -25,4 +25,4 @@ export async function list(
     size,
     after,
   });
-}
+});

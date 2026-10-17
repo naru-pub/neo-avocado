@@ -9,6 +9,7 @@ import {
   presentCharacter,
 } from "../../modules/characters.js";
 import type { CharacterRow } from "../../modules/characters.js";
+import { ownerOnly } from "../../modules/access.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
 /**
@@ -17,7 +18,7 @@ import type { MutationCtx } from "../../modules/naru-types.js";
  * Approval is the sheet's state, so shop and item conditions agree with the
  * applicant list.
  */
-export async function reviewCharacter(
+export const reviewCharacter = ownerOnly(async function reviewCharacter(
   ctx: MutationCtx,
   {
     character,
@@ -34,10 +35,6 @@ export async function reviewCharacter(
     revision?: string;
   } = {},
 ) {
-  if (!ctx.owner)
-    ctx.fail("ACCESS_DENIED", "사이트 운영자만 할 수 있습니다.", {
-      reason: "owner_only",
-    });
   const row = await characterRow(ctx, character);
   if (!row)
     ctx.fail("INVALID_REQUEST", "캐릭터를 확인해 주세요.", {
@@ -92,4 +89,4 @@ export async function reviewCharacter(
       WHERE id = ${row.id} RETURNING *`
   ).rows[0];
   return { document: await presentCharacter(ctx, saved) };
-}
+});

@@ -2,19 +2,18 @@
 // ({ id, data }), and saves checked with the section's model
 // (admin-model.ts's buildRecord, as the page used to check them) before they
 // are written to the section's table. The queries and mutations in admin/
-// are the owner's alone: each starts with `ownerOnly`.
+// are the owner's alone: each is made by `ownerOnly` (access.ts).
 import { buildRecord, formValues, models } from "./admin-model.js";
-import { GROUP_ROLE, STAFF, accessOfRoles, one, parsed } from "./access.js";
+import {
+  GROUP_ROLE,
+  STAFF,
+  accessOfRoles,
+  one,
+  parsed,
+  requireOwner,
+} from "./access.js";
 import { characterKey } from "./characters.js";
 import type { MutationCtx, QueryCtx, SqlValue } from "./naru-types.js";
-
-/** Refuses anyone but the site's owner. */
-export function ownerOnly(ctx: QueryCtx) {
-  if (!ctx.owner)
-    ctx.fail("ACCESS_DENIED", "사이트 운영자만 할 수 있습니다.", {
-      reason: "owner_only",
-    });
-}
 
 /** Refuses input no form sends. */
 export function invalid(ctx: QueryCtx): never {
@@ -290,7 +289,7 @@ export const SETTINGS: Record<string, string> = {
 
 /** The table of a section kept in one, for the owner only. */
 export function tableOf(ctx: QueryCtx, section: string): Table {
-  ownerOnly(ctx);
+  requireOwner(ctx);
   if (!Object.hasOwn(TABLES, section)) invalid(ctx);
   return TABLES[section];
 }
@@ -750,7 +749,7 @@ export async function removeRecord(
 
 /** A settings section's row key, for the owner only. */
 export function settingsKeyOf(ctx: QueryCtx, section: unknown): string {
-  ownerOnly(ctx);
+  requireOwner(ctx);
   if (typeof section !== "string" || !Object.hasOwn(SETTINGS, section))
     invalid(ctx);
   return SETTINGS[section];

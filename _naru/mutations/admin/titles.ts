@@ -1,18 +1,20 @@
 // 타이틀 (adm/title_list.php): the owner saves and deletes titles, and gives
 // one to characters or takes it back (title_has_list.php), each in one call.
-import { invalid, ownerOnly, saveRecord } from "../../modules/admin.js";
-import { one } from "../../modules/access.js";
+import { invalid, saveRecord } from "../../modules/admin.js";
+import { one, ownerOnly } from "../../modules/access.js";
 import { characterKey } from "../../modules/characters.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
-export const save = (
-  ctx: MutationCtx,
-  args: {
-    id?: string;
-    values?: Record<string, unknown>;
-    create?: boolean;
-  } = {},
-) => saveRecord(ctx, "titles", args ?? {});
+export const save = ownerOnly(
+  (
+    ctx: MutationCtx,
+    args: {
+      id?: string;
+      values?: Record<string, unknown>;
+      create?: boolean;
+    },
+  ) => saveRecord(ctx, "titles", args),
+);
 
 /** The characters holding or showing a title. */
 const HOLDERS = `SELECT id FROM characters WHERE active_title = ?
@@ -22,8 +24,10 @@ const HOLDERS = `SELECT id FROM characters WHERE active_title = ?
  * Deletes a title: the characters holding or showing it lose it with it.
  * Answers how many did.
  */
-export async function remove(ctx: MutationCtx, { id }: { id?: string } = {}) {
-  ownerOnly(ctx);
+export const remove = ownerOnly(async function remove(
+  ctx: MutationCtx,
+  { id }: { id?: string } = {},
+) {
   if (typeof id !== "string" || !id) invalid(ctx);
   const { count } = await one<{ count: number }>(
     ctx,
@@ -35,7 +39,7 @@ export async function remove(ctx: MutationCtx, { id }: { id?: string } = {}) {
   await ctx.sql`UPDATE characters SET active_title = NULL, version = version + 1 WHERE active_title = ${id}`;
   await ctx.sql`DELETE FROM titles WHERE id = ${id}`;
   return { completed: count };
-}
+});
 
 /** At most this many characters named at once. */
 const MAX_TARGETS = 1000;
@@ -49,7 +53,7 @@ const NAMED = "SELECT value FROM json_each(?)";
  * character showed is no longer shown. Answers how many characters it was
  * for.
  */
-export async function grant(
+export const grant = ownerOnly(async function grant(
   ctx: MutationCtx,
   {
     title,
@@ -63,7 +67,6 @@ export async function grant(
     allApproved?: boolean;
   } = {},
 ) {
-  ownerOnly(ctx);
   if (!["grant", "revoke"].includes(action))
     ctx.fail("INVALID_REQUEST", "지급 또는 회수를 선택하세요.", {
       reason: "invalid_input",
@@ -143,4 +146,4 @@ export async function grant(
     );
   }
   return { completed: keys.length };
-}
+});

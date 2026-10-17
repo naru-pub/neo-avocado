@@ -104,7 +104,12 @@ name(ctx, args)`. Pages call them as `query("<area>/<module>:<name>", args)`
   names a collection.
 - The owner's admin (`admin/`) is `_naru/queries/admin/<section>` and
   `_naru/mutations/admin/<section>`: `list`, `get`, `save` and `remove`
-  where the section has them, each calling `ownerOnly` first. `save` takes
+  where the section has them, each made by `ownerOnly(fn)`
+  (`modules/access.ts`), which refuses anyone but the owner before `fn`
+  runs; so are the owner's calls outside admin/ (`economy/grants:grant`,
+  `characters/review:reviewCharacter`, `characters/sheet:move`).
+  `tests/admin.test.mjs` checks every export's mark and calls each as a
+  member, a moderator and a visitor. `save` takes
   the form's values and checks them with `buildRecord`
   (`_naru/modules/admin-model.ts`), the forms' own rules; values left out
   keep the record's. Writes that go together are one mutation.

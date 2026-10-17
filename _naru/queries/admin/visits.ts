@@ -4,8 +4,8 @@
 // visits, guests' visits and how many members visited. All of it is summed
 // by SQL: the hours and the rest are JSON maps a day keeps, opened with
 // json_each(visits.<column>) row by row.
-import { invalid, ownerOnly } from "../../modules/admin.js";
-import { one } from "../../modules/access.js";
+import { invalid } from "../../modules/admin.js";
+import { one, ownerOnly } from "../../modules/access.js";
 import type { QueryCtx, SqlValue } from "../../modules/naru-types.js";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -24,7 +24,7 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/;
  * devices or domains: rows of { label, count } and the totals, and how many
  * days are kept from before `from` (what pruning would delete).
  */
-export async function report(
+export const report = ownerOnly(async function report(
   ctx: QueryCtx,
   {
     from = "",
@@ -32,7 +32,6 @@ export async function report(
     by = "day",
   }: { from?: string; to?: string; by?: string } = {},
 ) {
-  ownerOnly(ctx);
   if (
     ![from, to].every((day) => day === "" || DAY.test(day)) ||
     !["day", "week", "month", "year", ...Object.keys(MAPS)].includes(by)
@@ -108,4 +107,4 @@ export async function report(
     rows,
     older,
   };
-}
+});

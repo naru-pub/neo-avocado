@@ -1,23 +1,17 @@
 // 타이틀 보유·착용 현황 (adm/title_has_list.php): every title a character
 // holds, and whether it shows it, found by character or title name or ID, a
 // page at a time; a deleted title's or character's ID stands for its name.
-import {
-  PAGE,
-  invalid,
-  offsetOf,
-  ownerOnly,
-  pageOf,
-} from "../../modules/admin.js";
+import { PAGE, invalid, offsetOf, pageOf } from "../../modules/admin.js";
+import { ownerOnly } from "../../modules/access.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
 
-export async function list(
+export const list = ownerOnly(async function list(
   ctx: QueryCtx,
   {
     search = "",
     after = null,
   }: { search?: string; after?: string | null } = {},
 ) {
-  ownerOnly(ctx);
   if (typeof search !== "string" || search.length > 100) invalid(ctx);
   const offset = offsetOf(ctx, after);
   const needle = search.trim().toLocaleLowerCase();
@@ -45,4 +39,4 @@ export async function list(
     })),
     offset,
   );
-}
+});

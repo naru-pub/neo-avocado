@@ -13,6 +13,7 @@ import {
 } from "../../modules/characters.js";
 import type { SheetInput } from "../../modules/characters.js";
 import { profileTicket, record, spend } from "../../modules/economy.js";
+import { ownerOnly } from "../../modules/access.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
 /**
@@ -98,7 +99,7 @@ export async function remove(ctx: MutationCtx, { id }: { id?: string } = {}) {
  * admin form changes its mb_id (adm/character_form.php:135), whatever that
  * member's limit, with its outfits, relations and items.
  */
-export async function move(
+export const move = ownerOnly(async function move(
   ctx: MutationCtx,
   {
     id,
@@ -106,8 +107,6 @@ export async function move(
     revision = null,
   }: { id?: string; nick?: string; revision?: string | null } = {},
 ) {
-  if (!ctx.owner)
-    ctx.fail("ACCESS_DENIED", "권한이 없습니다.", { reason: "access_denied" });
   const row = await characterRow(ctx, id);
   if (!row)
     ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {
@@ -117,4 +116,4 @@ export async function move(
   const member = await memberByNick(ctx, nick);
   const moved = await moveCharacter(ctx, row, member);
   return { document: await presentCharacter(ctx, moved), done: true };
-}
+});

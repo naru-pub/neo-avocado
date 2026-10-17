@@ -6,15 +6,14 @@ import {
   checked,
   conflict,
   invalid,
-  ownerOnly,
   recordOf,
   writeRow,
 } from "../../modules/admin.js";
-import { one } from "../../modules/access.js";
+import { one, ownerOnly } from "../../modules/access.js";
 import { addHistory } from "../../modules/members.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
-export async function save(
+export const save = ownerOnly(async function save(
   ctx: MutationCtx,
   {
     id,
@@ -22,7 +21,6 @@ export async function save(
     create = false,
   }: { id?: string; values?: Record<string, unknown>; create?: boolean } = {},
 ) {
-  ownerOnly(ctx);
   if (typeof id !== "string" || !id) invalid(ctx);
   const row = await one(ctx, "SELECT * FROM wallets WHERE member = ?", [id]);
   if (create ? row : !row) conflict(ctx);
@@ -43,4 +41,4 @@ export async function save(
     actor: "site-owner",
   });
   return recordOf(TABLES.wallets, saved);
-}
+});

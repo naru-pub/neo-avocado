@@ -56,39 +56,63 @@ function character(site, data = {}) {
 }
 const history = (site) => site.rows("SELECT * FROM history ORDER BY id");
 
-/** Every admin query and mutation, by "<module>:<export>". */
+/**
+ * Every admin query and mutation, by "admin/<module>:<export>", with its
+ * function; and the owner's own calls outside admin/.
+ */
 async function adminCalls(folder) {
   const root = new URL(`../dist/_naru/${folder}/admin/`, import.meta.url);
   const calls = [];
   for (const file of await readdir(root)) {
     const module = await import(new URL(file, root).href);
-    for (const name of Object.keys(module))
-      calls.push(`${file.replace(/\.js$/, "")}:${name}`);
+    for (const [name, fn] of Object.entries(module))
+      calls.push([`admin/${file.replace(/\.js$/, "")}:${name}`, fn]);
+  }
+  const others = {
+    queries: [],
+    mutations: [
+      "economy/grants:grant",
+      "characters/review:reviewCharacter",
+      "characters/sheet:move",
+    ],
+  }[folder];
+  for (const call of others) {
+    const [module, name] = call.split(":");
+    const exports = await import(
+      new URL(`../dist/_naru/${folder}/${module}.js`, import.meta.url).href
+    );
+    calls.push([call, exports[name]]);
   }
   return calls;
 }
 
-test("every admin query and mutation refuses a member and a visitor", async () => {
+test("every admin query and mutation is ownerOnly's, and refuses members, moderators and visitors", async () => {
   const site = await testSite();
   profile(site, "m-1", "하나");
-  site.setRoles("m-1", ["staff"]);
+  profile(site, "m-2", "둘");
+  site.setRoles("m-2", ["staff"]);
   const queries = await adminCalls("queries");
   const mutations = await adminCalls("mutations");
   assert.ok(queries.length > 20 && mutations.length > 20);
-  for (const who of [M1, {}]) {
-    for (const call of queries)
+  // Made by ownerOnly (modules/access.ts), so the check comes first.
+  for (const [call, fn] of [...queries, ...mutations])
+    assert.equal(fn.ownerOnly, true, call);
+  for (const who of [M1, { member: "m-2" }, {}]) {
+    for (const [call] of queries)
       assert.equal(
-        await refusal(site.query(`admin/${call}`, {}, who)),
+        await refusal(site.query(call, {}, who)),
         "owner_only",
         call,
       );
-    for (const call of mutations)
+    for (const [call] of mutations)
       assert.equal(
-        await refusal(site.mutate(`admin/${call}`, {}, who)),
+        await refusal(site.mutate(call, {}, who)),
         "owner_only",
         call,
       );
   }
+  // Nothing was written by the refused calls.
+  assert.deepEqual(site.rows("SELECT * FROM settings"), []);
 });
 
 test("settings are one form each, checked as the form is, and a save may change only some", async () => {

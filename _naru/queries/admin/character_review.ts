@@ -4,13 +4,7 @@
 // (character_list.php:285-288), the 소속 and 종족 characters have to filter
 // by, and the profile fields every sheet is shown with. A character's sheet
 // with all its fields, for the owner's form.
-import {
-  PAGE,
-  invalid,
-  offsetOf,
-  ownerOnly,
-  pageOf,
-} from "../../modules/admin.js";
+import { PAGE, invalid, offsetOf, pageOf } from "../../modules/admin.js";
 import { REVIEW_STATES } from "../../modules/admin-model.js";
 import {
   characterRow,
@@ -20,9 +14,10 @@ import {
   sheetOf,
 } from "../../modules/characters.js";
 import type { CharacterRow } from "../../modules/characters.js";
+import { ownerOnly } from "../../modules/access.js";
 import type { QueryCtx, SqlValue } from "../../modules/naru-types.js";
 
-export async function list(
+export const list = ownerOnly(async function list(
   ctx: QueryCtx,
   {
     field = "name",
@@ -40,7 +35,6 @@ export async function list(
     after?: string | null;
   } = {},
 ) {
-  ownerOnly(ctx);
   if (
     !["name", "nick"].includes(field) ||
     ![text, side, kind].every(
@@ -90,10 +84,12 @@ export async function list(
     classes: await distinct("class"),
     fields: (await fieldCatalogue(ctx)).map(definitionDocument),
   };
-}
+});
 
-export async function get(ctx: QueryCtx, { id }: { id?: string } = {}) {
-  ownerOnly(ctx);
+export const get = ownerOnly(async function get(
+  ctx: QueryCtx,
+  { id }: { id?: string } = {},
+) {
   const row = await characterRow(ctx, id);
   return row ? sheetOf(row, fieldsOf(row)) : null;
-}
+});

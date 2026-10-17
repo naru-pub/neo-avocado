@@ -50,9 +50,9 @@ admin's checks shared with the page copy with `JSON.parse(JSON.stringify())`.
 
 ## 5. Owner-only code is the code's job
 
-Anyone may call any query or mutation, so every admin module starts with the
-same owner check, and a test calls each export as a member and a visitor to
-prove it refuses.
+Anyone may call any query or mutation, so every admin export is wrapped in
+the site's own `ownerOnly(fn)`, and a test checks each export's mark and
+calls it as a member, a moderator and a visitor to prove it refuses.
 
 **Suggestion:** an `owner/` folder (or an exported `ownerOnly` flag) whose
 exports Naru refuses to anyone but the owner, as it once did for collections

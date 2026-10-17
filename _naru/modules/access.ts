@@ -70,6 +70,33 @@ export function signedIn(ctx: SqlCtx & Pick<QueryCtx, "fail">): string {
   return ctx.member.id;
 }
 
+/** Refuses anyone but the site's owner. */
+export function requireOwner(ctx: Pick<QueryCtx, "owner" | "fail">) {
+  if (!ctx.owner)
+    ctx.fail("ACCESS_DENIED", "사이트 운영자만 할 수 있습니다.", {
+      reason: "owner_only",
+    });
+}
+
+/**
+ * A query or mutation only the site's owner may call (the original's
+ * adm/, `$is_admin == 'super'`): it refuses anyone else before `fn` runs,
+ * and hands `fn` {} when no arguments came. Every export of admin/ is made
+ * by it, so none can forget the check; tests/admin.test.mjs checks each
+ * one's mark and calls each as a member, a moderator and a visitor.
+ */
+export function ownerOnly<C extends Pick<QueryCtx, "owner" | "fail">, A, R>(
+  fn: (ctx: C, args: A) => R | Promise<R>,
+) {
+  return Object.assign(
+    async (ctx: C, args: A): Promise<R> => {
+      requireOwner(ctx);
+      return await fn(ctx, (args ?? {}) as A);
+    },
+    { ownerOnly: true as const },
+  );
+}
+
 /** A visitor's access: level 1, as GnuBoard gives a guest. */
 export const GUEST_ACCESS: Access = Object.freeze({ level: 1, role: "guest" });
 

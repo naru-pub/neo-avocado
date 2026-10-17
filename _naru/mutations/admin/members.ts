@@ -8,15 +8,14 @@ import {
   conflict,
   invalid,
   memberData,
-  ownerOnly,
   rolesOfData,
   setRolesOf,
   writeRow,
 } from "../../modules/admin.js";
-import { one } from "../../modules/access.js";
+import { one, ownerOnly } from "../../modules/access.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
-export async function save(
+export const save = ownerOnly(async function save(
   ctx: MutationCtx,
   {
     id,
@@ -24,7 +23,6 @@ export async function save(
     create = false,
   }: { id?: string; values?: Record<string, unknown>; create?: boolean } = {},
 ) {
-  ownerOnly(ctx);
   if (typeof id !== "string" || !id) invalid(ctx);
   const row = await one(ctx, "SELECT * FROM members WHERE member = ?", [id]);
   if (create ? row : !row) conflict(ctx);
@@ -38,13 +36,15 @@ export async function save(
   await writeRow(ctx, TABLES.members, id, record.data);
   await setRolesOf(ctx, id, rolesOfData(record.data, roles));
   return { id, data: record.data };
-}
+});
 
-export async function remove(ctx: MutationCtx, { id }: { id?: string } = {}) {
-  ownerOnly(ctx);
+export const remove = ownerOnly(async function remove(
+  ctx: MutationCtx,
+  { id }: { id?: string } = {},
+) {
   if (typeof id !== "string" || !id) invalid(ctx);
   await ctx.sql`DELETE FROM members WHERE member = ${id}`;
   const roles = (await ctx.rolesOf([id]))[id] ?? [];
   await setRolesOf(ctx, id, rolesOfData({}, roles));
   return null;
-}
+});

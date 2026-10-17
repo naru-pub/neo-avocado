@@ -2,12 +2,13 @@
 // board (every board when none) between two Korean days, inclusive, counted
 // by SQL, with their main character, their last visit and the owner's
 // warnings; most active first.
-import { invalid, kstStart, ownerOnly } from "../../modules/admin.js";
+import { invalid, kstStart } from "../../modules/admin.js";
+import { ownerOnly } from "../../modules/access.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
 
 const DAY = 24 * 3600 * 1000;
 
-export async function report(
+export const report = ownerOnly(async function report(
   ctx: QueryCtx,
   {
     board = "",
@@ -15,7 +16,6 @@ export async function report(
     to = "",
   }: { board?: string; from?: string; to?: string } = {},
 ) {
-  ownerOnly(ctx);
   const start = from === "" ? 0 : kstStart(from);
   const end = to === "" ? Number.MAX_SAFE_INTEGER : kstStart(to);
   if (typeof board !== "string" || start === null || end === null) invalid(ctx);
@@ -48,4 +48,4 @@ export async function report(
     warningNote: String(row.warning_note),
     member: row.has_member === 1,
   }));
-}
+});

@@ -2,9 +2,10 @@
 // 항목, checked as their forms check them (modules/admin-model.ts). A save
 // that sends only some fields keeps the others.
 import { checked, settingsKeyOf, settingsRecord } from "../../modules/admin.js";
+import { ownerOnly } from "../../modules/access.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
-export async function save(
+export const save = ownerOnly(async function save(
   ctx: MutationCtx,
   {
     section,
@@ -21,4 +22,4 @@ export async function save(
   await ctx.sql`INSERT INTO settings (key, value) VALUES (${key}, ${JSON.stringify(data)})
     ON CONFLICT (key) DO UPDATE SET value = excluded.value`;
   return { id, data };
-}
+});

@@ -10,10 +10,9 @@ import {
   checked,
   conflict,
   invalid,
-  ownerOnly,
   stateOf,
 } from "../../modules/admin.js";
-import { one } from "../../modules/access.js";
+import { one, ownerOnly } from "../../modules/access.js";
 import {
   characterKey,
   checkRevision,
@@ -22,7 +21,7 @@ import {
 import { addHistory } from "../../modules/members.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
-export async function save(
+export const save = ownerOnly(async function save(
   ctx: MutationCtx,
   {
     id,
@@ -36,7 +35,6 @@ export async function save(
     create?: boolean;
   } = {},
 ) {
-  ownerOnly(ctx);
   const key = characterKey(id);
   if (key === null) invalid(ctx);
   const row = await one(ctx, `${STATE_SELECT} WHERE characters.id = ?`, [key]);
@@ -65,4 +63,4 @@ export async function save(
   return stateOf(
     await one(ctx, `${STATE_SELECT} WHERE characters.id = ?`, [key]),
   );
-}
+});

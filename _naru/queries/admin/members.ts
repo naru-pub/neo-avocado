@@ -7,20 +7,18 @@ import {
   invalid,
   memberData,
   offsetOf,
-  ownerOnly,
   pageOf,
 } from "../../modules/admin.js";
-import { one } from "../../modules/access.js";
+import { one, ownerOnly } from "../../modules/access.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
 
-export async function list(
+export const list = ownerOnly(async function list(
   ctx: QueryCtx,
   {
     search = "",
     after = null,
   }: { search?: string; after?: string | null } = {},
 ) {
-  ownerOnly(ctx);
   if (typeof search !== "string" || search.length > 100) invalid(ctx);
   const offset = offsetOf(ctx, after);
   const needle = search.trim().toLocaleLowerCase();
@@ -44,10 +42,12 @@ export async function list(
     })),
     offset,
   );
-}
+});
 
-export async function get(ctx: QueryCtx, { id }: { id?: string } = {}) {
-  ownerOnly(ctx);
+export const get = ownerOnly(async function get(
+  ctx: QueryCtx,
+  { id }: { id?: string } = {},
+) {
   if (typeof id !== "string") return null;
   const row = await one(
     ctx,
@@ -56,4 +56,4 @@ export async function get(ctx: QueryCtx, { id }: { id?: string } = {}) {
   );
   if (!row) return null;
   return { id, data: memberData(row, (await ctx.rolesOf([id]))[id] ?? []) };
-}
+});

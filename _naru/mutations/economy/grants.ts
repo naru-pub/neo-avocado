@@ -1,5 +1,10 @@
 // The owner's grants: money, experience and items, to one or to everyone.
-import { communitySettings, amount, text } from "../../modules/access.js";
+import {
+  amount,
+  communitySettings,
+  ownerOnly,
+  text,
+} from "../../modules/access.js";
 import { itemById } from "../../modules/economy.js";
 import type { Item } from "../../modules/economy.js";
 import {
@@ -42,7 +47,7 @@ const PAID_MEMBERS = `FROM profiles
  * keeps; or 1 to 100 of an item to one character by name or to every
  * approved character. One call does it all.
  */
-export async function grant(
+export const grant = ownerOnly(async function grant(
   ctx: MutationCtx,
   args: {
     kind?: "money" | "exp" | "item";
@@ -56,10 +61,6 @@ export async function grant(
     memo?: string;
   },
 ) {
-  if (!ctx.owner)
-    ctx.fail("ACCESS_DENIED", "사이트 운영자만 지급할 수 있습니다.", {
-      reason: "owner_only",
-    });
   const { kind, target, name = "", value, memo = "", item } = args ?? {};
   if (
     !["money", "exp", "item"].includes(kind) ||
@@ -186,7 +187,7 @@ export async function grant(
     granted: counts.granted,
     skipped: counts.total - counts.granted,
   };
-}
+});
 
 /**
  * 아이템 지급 (adm/inventory_update.php): `count` of an item, each its own
