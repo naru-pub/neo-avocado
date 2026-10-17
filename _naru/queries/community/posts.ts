@@ -6,6 +6,7 @@
 import { containing, one } from "../../modules/access.js";
 import type { Access } from "../../modules/access.js";
 import {
+  FULL_TEXT_MIN,
   POST_SELECT,
   TAGS,
   accessOf,
@@ -15,6 +16,7 @@ import {
   excerpt,
   isStaff,
   lockedPost,
+  phrase,
   postOf,
   postReadable,
   postRow,
@@ -174,6 +176,11 @@ const COMMENT_PHASE = "comments:";
  * or were written by those so named, newest comment first. `after` is the
  * last page's nextCursor. Each shows 300 characters, as the original's
  * search (bbs/search.php).
+ *
+ * A term of 3 characters or more is found in the full-text tables
+ * (posts_search, comments_search: trigram) as one phrase; a shorter one,
+ * which trigram cannot find, by LIKE on the board's posts and on comments,
+ * as before them. Either finds the term anywhere, case aside.
  */
 export async function search(
   ctx: QueryCtx,
@@ -186,7 +193,9 @@ export async function search(
       reason: "invalid_input",
     });
   const { access, board } = await readableBoard(ctx, id);
-  const like = containing(wanted.trim());
+  const term = wanted.trim();
+  const full = [...term].length >= FULL_TEXT_MIN;
+  const like = containing(term);
   const viewer = ctx.member?.id ?? null;
   // An author's name finds only what shows it: not 익명 posts or comments.
   const named = (table: string) => ({
@@ -195,10 +204,22 @@ export async function search(
       OR ${table}.character_id IN (SELECT id FROM characters WHERE name LIKE ? ESCAPE '\\' LIMIT 100)))`,
     values: [like, like],
   });
+  // Its text: the full-text table's rows holding the phrase, or LIKE.
+  const holding = (table: "posts" | "comments", columns: string[]) =>
+    full
+      ? {
+          text: `${table}.id IN (SELECT rowid FROM ${table}_search WHERE ${table}_search MATCH ?)`,
+          values: [phrase(term)],
+        }
+      : {
+          text: `(${columns.map((column) => `${table}.${column} LIKE ? ESCAPE '\\'`).join(" OR ")})`,
+          values: columns.map(() => like),
+        };
   const own = named("posts");
+  const said = holding("posts", ["title", "body"]);
   const matches = {
-    text: `(posts.title LIKE ? ESCAPE '\\' OR posts.body LIKE ? ESCAPE '\\' OR ${own.text})`,
-    values: [like, like, ...own.values],
+    text: `(${said.text} OR ${own.text})`,
+    values: [...said.values, ...own.values],
   };
   const secret = secretClause(access, viewer);
   // 멤버공개: a visitor's search does not look inside them.
@@ -227,16 +248,17 @@ export async function search(
     const from = inComments ? offset : 0;
     const room = SEARCH_PAGE - found.length;
     const writer = named("comments");
+    const commented = holding("comments", ["body"]);
     const { rows } = await ctx.sql<PostRow>(
       `SELECT posts.*, ${TAGS}, max(comments.id) AS found
        FROM comments JOIN posts ON posts.id = comments.post_id
        WHERE ${visible.text} AND NOT ${matches.text}
-         AND (comments.body LIKE ? ESCAPE '\\' OR ${writer.text})
+         AND (${commented.text} OR ${writer.text})
        GROUP BY posts.id ORDER BY found DESC LIMIT ? OFFSET ?`,
       [
         ...visible.values,
         ...matches.values,
-        like,
+        ...commented.values,
         ...writer.values,
         room + 1,
         from,

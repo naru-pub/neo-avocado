@@ -66,8 +66,10 @@ name(ctx, args)`. Pages call them as `query("<area>/<module>:<name>", args)`
 ## Tables
 
 - Migrations are `_naru/migrations/NNNN_<area>.sql`, applied in name order:
-  0001 foundation, 0002 boards, 0003 characters, 0004 economy, 0005 mail.
-  Starting fresh, each area writes its tables once; no data is moved.
+  0001 foundation, 0002 boards, 0003 characters, 0004 economy, 0005 mail,
+  0006 search. Applied migrations are never edited; a change is a new one.
+  0001–0005 started fresh, writing each area's tables once; 0006 fills its
+  tables from the rows already there.
 - Names: snake_case, no prefix, never one of Naru's names above.
 - Keys: `id INTEGER PRIMARY KEY` for rows the site makes; a member's id is
   TEXT; a row kept per member uses `member TEXT PRIMARY KEY`.
@@ -78,6 +80,15 @@ name(ctx, args)`. Pages call them as `query("<area>/<module>:<name>", args)`
   joined, sorted or counted is a column with an index.
 - Arrays people search or join become their own table (post tags,
   favorites, character titles, recipe ingredients).
+- Text search uses full-text tables, keyed by the row's id as rowid:
+  `posts_search` and `comments_search`, each
+  `USING fts5(…, tokenize = 'trigram')`. Naru has no triggers, so every
+  mutation writing a post's title or text, or a comment's, keeps its row in
+  step in the same call (`savePostSearch`, `saveCommentSearch`, and the
+  deletes). trigram finds terms of 3 characters or more (MATCH with the
+  term as one quoted phrase); shorter ones use LIKE on the base table,
+  bounded by the board. A full-text table is read whole only as a
+  statement's first table; elsewhere by MATCH, LIKE or rowid.
 - Counters and aggregates are computed with SQL (`count(*)`, `GROUP BY`,
   `max(number) + 1`), not kept by hand.
 

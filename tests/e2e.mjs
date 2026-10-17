@@ -884,11 +884,22 @@ try {
     .waitFor();
   await owner.locator(".grant-log li", { hasText: "수고 보상" }).waitFor();
 
-  // Board search finds Alice's post by its text.
+  // Board search finds Alice's post by its text: a Korean word of 3
+  // characters through the full-text table, one of 2 by LIKE; her deleted
+  // post is no longer found.
   await menu(alice, "로그");
-  await alice.locator("#searchText").fill("봄");
-  await alice.locator("#boardSearch button").click();
-  await alice.locator("#tagName", { hasText: "검색 결과" }).waitFor();
+  const searchFor = async (text, found) => {
+    await alice.locator("#searchText").fill(text);
+    await alice.locator("#boardSearch button").click();
+    await alice
+      .locator("#tagName", { hasText: `‘${text}’ 검색 결과 ${found}건` })
+      .waitFor();
+  };
+  await searchFor("멤버만", 1);
+  await alice.locator("#logs .log", { hasText: "멤버만 보는 로그" }).waitFor();
+  await searchFor("로그", 1);
+  await alice.locator("#logs .log", { hasText: "멤버만 보는 로그" }).waitFor();
+  await searchFor("첫 로그", 0);
   await alice.locator("#clearTag").click();
 
   // A Q&A board: a guest asks in secret and opens it with the password;

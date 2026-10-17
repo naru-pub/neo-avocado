@@ -136,9 +136,12 @@ const PUBLIC_BOARD = {
   categories: [],
   actions: true,
 };
-/** A post made directly; answers its ID. */
-const post = (site, data = {}) =>
-  insert(site, "posts", {
+/**
+ * A post made directly, with its full-text row as the mutations keep it;
+ * answers its ID.
+ */
+function post(site, data = {}) {
+  const id = insert(site, "posts", {
     board: "default",
     number: site.rows(
       "SELECT coalesce(max(number), 0) + 1 AS n FROM posts WHERE board = ?",
@@ -148,13 +151,28 @@ const post = (site, data = {}) =>
     updated_at: site.now,
     ...data,
   });
-/** A comment made directly; answers its ID. */
-const comment = (site, data = {}) =>
-  insert(site, "comments", {
+  site.run(
+    "INSERT INTO posts_search (rowid, title, body) VALUES (?, ?, ?)",
+    Number(id),
+    data.title ?? "",
+    data.body ?? "",
+  );
+  return id;
+}
+/** A comment made directly, the same way; answers its ID. */
+function comment(site, data = {}) {
+  const id = insert(site, "comments", {
     created_at: site.now,
     updated_at: site.now,
     ...data,
   });
+  site.run(
+    "INSERT INTO comments_search (rowid, body) VALUES (?, ?)",
+    Number(id),
+    data.body ?? "",
+  );
+  return id;
+}
 const write = (site, args, who = M1) =>
   site.mutate("community/posts:write", args, who);
 const reply = (site, args, who = M1) =>
@@ -167,6 +185,20 @@ const commentsOf = async (site, id, who = M1) =>
   (await site.query("community/comments:list", { post: id }, who)).documents;
 const search = (site, args, who = M1) =>
   site.query("community/posts:search", args, who);
+/** The posts a board search finds, by ID, sorted. */
+const searched = async (site, board, text, who = M1) =>
+  (await search(site, { board, text }, who)).documents
+    .map((row) => row.id)
+    .sort();
+/** The rows of a full-text table holding `text`, by the id they key. */
+const indexed = (site, table, text) =>
+  site
+    .rows(
+      `SELECT rowid AS id FROM ${table} WHERE ${table} MATCH ?`,
+      `"${text}"`,
+    )
+    .map((row) => String(row.id))
+    .sort();
 const count = (site, table) =>
   site.rows(`SELECT count(*) AS n FROM ${table}`)[0].n;
 const callsTo = (site, id) =>
@@ -375,7 +407,15 @@ test("deleting a post takes its comments, tags, calls and 관심 in one call", a
     await site.mutate("community/posts:remove", { id: log.id }, M1),
     null,
   );
-  for (const table of ["posts", "comments", "post_tags", "calls", "favorites"])
+  for (const table of [
+    "posts",
+    "comments",
+    "posts_search",
+    "comments_search",
+    "post_tags",
+    "calls",
+    "favorites",
+  ])
     assert.equal(count(site, table), 0, table);
   // A deleted post's number is not given to another.
   const { document: next } = await write(site, {
@@ -1424,6 +1464,10 @@ test("a settlement is settled by a moderator, granting experience and money, the
     /\[정산완료\] 경험치 \+5 \+30 아보 수고하셨습니다/,
   );
   assert.equal(answer.data.settlement, true);
+  // Its search finds the post by it.
+  assert.deepEqual(indexed(site, "comments_search", "수고하셨습니다"), [
+    answer.id,
+  ]);
   // The author can no longer change or delete it.
   assert.equal(
     await refusal(
@@ -1936,6 +1980,189 @@ test("a board search also finds posts by their comments' text and writers", asyn
   assert.equal(second.documents.length, 6);
   assert.equal(second.nextCursor, null);
   assert.equal(second.documents.at(-1).id, b);
+});
+
+test("a board search finds 3-character terms by the full-text tables, shorter ones too, and follows every write", async () => {
+  const { site } = await roleplayWorld();
+  board(site, "free", PUBLIC_BOARD);
+  board(site, "other", PUBLIC_BOARD);
+  board(site, "rich", { ...PUBLIC_BOARD, html: true });
+  const add = (data, who = M1) =>
+    write(site, { data: { board: "free", image: null, ...data } }, who);
+  const { document: spring } = await add({
+    title: "봄날의 소풍",
+    text: "벚꽃이 피었다",
+  });
+  const { document: summer } = await add({ text: "여름 바다 여행 Hello" });
+  // Korean pieces of 3 or more, through the index; across words, any case.
+  assert.deepEqual(indexed(site, "posts_search", "벚꽃이"), [spring.id]);
+  assert.deepEqual(await searched(site, "free", "벚꽃이 피"), [spring.id]);
+  assert.deepEqual(await searched(site, "free", "날의 소"), [spring.id]);
+  assert.deepEqual(await searched(site, "free", "바다 여행"), [summer.id]);
+  assert.deepEqual(await searched(site, "free", "hello"), [summer.id]);
+  // Shorter terms still find, by LIKE.
+  assert.deepEqual(await searched(site, "free", "소풍"), [spring.id]);
+  assert.deepEqual(await searched(site, "free", "봄"), [spring.id]);
+  assert.deepEqual(await searched(site, "free", "바다"), [summer.id]);
+  // MATCH's own syntax is only text.
+  for (const text of ['"벚꽃', "벚꽃이 OR 여름", "NEAR(벚꽃 여름)", "벚* 피"])
+    assert.deepEqual(await searched(site, "free", text), [], text);
+  // An edit's new text is found, its old text no longer.
+  await write(site, {
+    id: spring.id,
+    revision: spring.revision,
+    data: { ...spring.data, title: "가을", text: "단풍이 들었다" },
+  });
+  assert.deepEqual(await searched(site, "free", "벚꽃이"), []);
+  assert.deepEqual(await searched(site, "free", "벚꽃"), []);
+  assert.deepEqual(await searched(site, "free", "단풍이"), [spring.id]);
+  assert.deepEqual(await searched(site, "free", "날의 소"), []);
+  // A post moved to another board is searched there.
+  await site.mutate(
+    "community/boards:moderatePost",
+    { id: spring.id, board: "other" },
+    OWNER,
+  );
+  assert.deepEqual(await searched(site, "free", "단풍이"), []);
+  assert.deepEqual(await searched(site, "other", "단풍이"), [spring.id]);
+  // An HTML post is searched by its text, not its markup.
+  const { document: rich } = await add({
+    board: "rich",
+    text: '<p class="note">무지개 다리</p>',
+  });
+  assert.deepEqual(await searched(site, "rich", "무지개 다"), [rich.id]);
+  assert.deepEqual(await searched(site, "rich", "class"), []);
+  // Comments: written, edited and deleted.
+  const { document: said } = await reply(
+    site,
+    { data: { logId: summer.id, text: "조개껍데기 줍기" } },
+    M2,
+  );
+  assert.deepEqual(await searched(site, "free", "조개껍데기"), [summer.id]);
+  await reply(
+    site,
+    { id: said.id, revision: said.revision, data: { text: "모래성 쌓기" } },
+    M2,
+  );
+  assert.deepEqual(await searched(site, "free", "조개껍"), []);
+  assert.deepEqual(await searched(site, "free", "모래성"), [summer.id]);
+  assert.deepEqual(await searched(site, "free", "모래"), [summer.id]);
+  await site.mutate("community/comments:remove", { id: said.id }, M2);
+  assert.deepEqual(await searched(site, "free", "모래성"), []);
+  assert.deepEqual(indexed(site, "comments_search", "모래성"), []);
+  // A deleted post takes its full-text rows and its comments'.
+  await reply(site, { data: { logId: summer.id, text: "파도 소리" } }, M2);
+  await site.mutate("community/posts:remove", { id: summer.id }, M1);
+  assert.deepEqual(await searched(site, "free", "바다 여행"), []);
+  assert.deepEqual(await searched(site, "free", "파도 소"), []);
+  assert.deepEqual(indexed(site, "comments_search", "파도 소"), []);
+  // Every post and comment has its row, and nothing else does.
+  assert.deepEqual(
+    site.rows("SELECT rowid AS id FROM posts_search ORDER BY rowid"),
+    site.rows("SELECT id FROM posts ORDER BY id"),
+  );
+  assert.deepEqual(
+    site.rows("SELECT rowid AS id FROM comments_search ORDER BY rowid"),
+    site.rows("SELECT id FROM comments ORDER BY id"),
+  );
+});
+
+test("a board search shows the same posts by any length of term: secret, 멤버공개, 19금, 익명 and members-only boards", async () => {
+  const site = await boardSite();
+  board(site, "free", PUBLIC_BOARD);
+  profile(site, "m-2", "보라돌이");
+  const at = (data) =>
+    post(site, { board: "free", owner: "m-2", title: "비밀스러운", ...data });
+  const open = at({ body: "공개" });
+  const secret = at({ body: "비밀", secret: 1 });
+  const members = at({ body: "회원", members_only: 1 });
+  const adult = at({ body: "성인", adult: 1 });
+  const masked = at({ title: "", body: "고백", anonymous: 1 });
+  moderator(site, "m-3");
+  // A long term and a short one find the same posts for each reader.
+  for (const text of ["비밀스러운", "비밀"]) {
+    assert.deepEqual(
+      await searched(site, "free", text, VISITOR),
+      [open, adult].sort(),
+      text,
+    );
+    assert.deepEqual(
+      await searched(site, "free", text, M1),
+      [open, members, adult].sort(),
+      text,
+    );
+    assert.deepEqual(
+      await searched(site, "free", text, M2),
+      [open, secret, members, adult].sort(),
+      text,
+    );
+    assert.deepEqual(
+      await searched(site, "free", text, M3),
+      [open, secret, members, adult].sort(),
+      text,
+    );
+  }
+  // An author's name finds no 익명 post, but for the staff.
+  assert.deepEqual(
+    (await searched(site, "free", "보라돌", M1)).includes(masked),
+    false,
+  );
+  assert.equal(
+    (await searched(site, "free", "보라돌", M3)).includes(masked),
+    true,
+  );
+  // A secret post is not found by its comments either.
+  comment(site, { post_id: Number(secret), owner: "m-2", body: "속삭이는 말" });
+  assert.deepEqual(await searched(site, "free", "속삭이는", M1), []);
+  assert.deepEqual(await searched(site, "free", "속삭이는", M2), [secret]);
+  assert.deepEqual(await searched(site, "free", "속삭", M2), [secret]);
+  // A members-only group's board is searched by its members alone.
+  insert(site, "board_groups", { id: "staff", name: "운영", members_only: 1 });
+  board(site, "plans", { name: "계획", kind: "text", group: "staff" });
+  const plan = post(site, {
+    board: "plans",
+    owner: "m-2",
+    body: "다음 행사 계획",
+  });
+  assert.equal(
+    await refusal(search(site, { board: "plans", text: "행사 계획" })),
+    "access_denied",
+  );
+  site.setRoles("m-1", ["group-staff"]);
+  assert.deepEqual(await searched(site, "plans", "행사 계획"), [plan]);
+  assert.deepEqual(await searched(site, "plans", "행사"), [plan]);
+});
+
+test("the search migration fills its full-text tables from the posts and comments before it", async () => {
+  const site = await testSite({ pending: 1 });
+  board(site, "free", PUBLIC_BOARD);
+  const old = insert(site, "posts", {
+    board: "free",
+    number: 1,
+    title: "오래된 이야기",
+    body: "첫 번째 로그",
+    created_at: site.now,
+    updated_at: site.now,
+  });
+  const other = insert(site, "posts", {
+    board: "free",
+    number: 2,
+    body: "두 번째",
+    created_at: site.now,
+    updated_at: site.now,
+  });
+  insert(site, "comments", {
+    post_id: Number(other),
+    body: "예전에 단 댓글",
+    created_at: site.now,
+    updated_at: site.now,
+  });
+  site.migrate();
+  assert.deepEqual(await searched(site, "free", "오래된 이"), [old]);
+  assert.deepEqual(await searched(site, "free", "번째 로그"), [old]);
+  assert.deepEqual(await searched(site, "free", "예전에 단"), [other]);
+  assert.equal(count(site, "posts_search"), 2);
+  assert.equal(count(site, "comments_search"), 1);
 });
 
 test("boards bound post and comment lengths, and the site's banned words are refused", async () => {
