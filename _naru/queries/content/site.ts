@@ -157,6 +157,8 @@ export async function site(ctx: QueryCtx) {
     bgm: backgroundMusic(settings.bgm),
     // 쪽지·호출 알림음: the arrival popups' chime, off unless the owner wants it.
     alarmSound: settings.alarmSound === true,
+    // 조합(레시피)사용 (cf_5): whether a post offers 조합.
+    recipes: settings.recipes !== false,
     // 한페이지당 라인수, 페이지 표시 수 and 새창 링크.
     paging: pagingOf(settings),
     // 기타 항목명 설정: the owner's names for money, experience, rank, 소속, 종족.

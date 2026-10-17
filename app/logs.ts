@@ -381,7 +381,7 @@ function actionEdits(current) {
       options: [
         ["", "일반 행동"],
         ["explore", "탐색"],
-        ["combine", "조합"],
+        ...(state.combining ? [["combine", "조합"]] : []),
       ],
     });
     for (const n of [1, 2, 3])
@@ -1270,6 +1270,12 @@ export function configureBoard() {
     ? `(${foldHeight}px 이상은 자동으로 접힙니다.)`
     : "";
   $("logActions").hidden = !state.member || board?.data.actions !== true;
+  // 조합(레시피)사용 (cf_5) off: 조합 is not offered.
+  const combine = $("logAction").querySelector<HTMLOptionElement>(
+    'option[value="combine"]',
+  );
+  combine.hidden = combine.disabled = !state.combining;
+  $("logMaterials").closest("label").hidden = !state.combining;
 }
 wireItemChoice($("logItem"));
 // 조합 takes the inventory's craft materials (it_use_recepi), up to three.

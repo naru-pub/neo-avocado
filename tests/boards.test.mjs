@@ -1174,6 +1174,10 @@ test("a post's 조합 matches recipes by item, charges cost and consumes even on
         character,
       },
     });
+  // 조합(레시피)사용 (cf_5) off: no 조합 at all; nothing is spent.
+  setSettings(site, "community", { recipes: false });
+  assert.equal(await refusal(combine(["108"])), "recipes_off");
+  setSettings(site, "community", {});
   assert.equal(await refusal(combine(["108"], null)), "no_character");
   assert.equal(await refusal(combine(["111"])), "not_owned");
   assert.equal(await refusal(combine(["105"])), "not_owned");

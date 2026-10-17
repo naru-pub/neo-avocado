@@ -3,6 +3,7 @@
 // with a name and password.
 import {
   amount,
+  communitySettings,
   imageUrl,
   names,
   one,
@@ -302,8 +303,14 @@ export async function write(
   const rolls =
     data.dice === true && !before?.dice ? rollDice() : (before?.rolls ?? null);
   const actions = [...done];
-  if (data.action === "combine")
+  if (data.action === "combine") {
+    // 조합(레시피)사용 (cf_5) off: no 조합 in posts.
+    if ((await communitySettings(ctx)).recipes === false)
+      ctx.fail("ACCESS_DENIED", "조합을 사용하지 않는 커뮤니티입니다.", {
+        reason: "recipes_off",
+      });
     actions.push(await combineInPost(ctx, data.materials, speaker));
+  }
   if (data.action === "explore") actions.push(await explore(ctx, speaker));
   if (data.item !== undefined)
     actions.push(await useInPost(ctx, data.item, speaker));

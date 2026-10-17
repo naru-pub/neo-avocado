@@ -1012,6 +1012,15 @@ export const models: Record<string, Model> = {
         type: "number",
         default: 1,
       },
+      // cf_5 조합(레시피)사용: a post's 조합 (write.skin.php:208). The
+      // original installs it off; a site saved before it keeps 조합 on.
+      {
+        key: "recipes",
+        label: "조합(레시피) 사용 (글에서 조합 행동을 쓸 수 있음)",
+        type: "checkbox",
+        default: true,
+        newDefault: false,
+      },
       {
         key: "exploreLimit",
         label: "캐릭터별 하루 탐색 횟수 (0: 탐색 끄기, 한국 시간 기준)",

@@ -46,6 +46,8 @@ const initialState = {
   counter: "",
   // 커뮤니티 설정's 쪽지·호출 알림음: the arrival popups may chime.
   alarmSound: false,
+  // 조합(레시피)사용: whether a post offers 조합.
+  combining: true,
   // 게시판 기본 설정: rows a list reads, page links shown, where links open.
   paging: { rows: 20, pages: 10, mobilePages: 5, linkTarget: "_blank" },
   // The site owner, signed in here, is staff as moderators are.
