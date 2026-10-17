@@ -1634,3 +1634,18 @@ body.admin-page {
 .conversation .reply textarea {
   width: 100%;
 }
+/* 새글 아이콘 (bo_new), a plain board's further pictures (bo_upload_count)
+   and a post's links (wr_link1, wr_link2). */
+.new-mark {
+  color: var(--avocado);
+  font-weight: bold;
+}
+.log-files img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 6px 0;
+}
+.log-links .link {
+  font-weight: bold;
+}

@@ -27,7 +27,11 @@ import {
   secretReadable,
 } from "../../modules/boards.js";
 import type { Board, PostRow, Written } from "../../modules/boards.js";
-import { boardNumber } from "../../modules/board-options.js";
+import {
+  boardNumber,
+  listsContent,
+  sortOf,
+} from "../../modules/board-options.js";
 import type { QueryCtx, SqlValue } from "../../modules/naru-types.js";
 
 const invalid = (ctx: QueryCtx) =>
@@ -121,14 +125,21 @@ export async function page(
     `SELECT posts.*, ${TAGS},
        (SELECT count(*) FROM comments WHERE comments.post_id = posts.id) AS comment_count
      FROM ${from} WHERE ${where}
-     ORDER BY posts.notice DESC, posts.id DESC LIMIT ? OFFSET ?`,
+     ORDER BY ${sortOf(board)} LIMIT ? OFFSET ?`,
     [...values, rows, (page - 1) * rows],
   );
   const counts: Record<string, number> = {};
+  // 목록에서 내용 사용 off: titles only; 본문 보기 reads the post.
+  const content = listsContent(board);
   const documents = found.map((row) => {
     if (!secretReadable(row, access, viewer, board)) return lockedPost(row);
-    const document = shown(ctx, access, postOf(row), board);
+    let document = shown(ctx, access, postOf(row), board);
     if (!document.data.locked) counts[document.id] = row.comment_count;
+    if (!content && !document.data.locked && document.data.text)
+      document = {
+        ...document,
+        data: { ...document.data, text: "", truncated: true },
+      };
     return document;
   });
   return { board, documents, total, size: rows, counts };

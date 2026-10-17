@@ -233,6 +233,51 @@ export const models: Record<string, Model> = {
         type: "number",
         default: 15,
       },
+      // bo_sort_field (board_form.php:697); 조회수 and 추천수 have no counts here.
+      {
+        key: "sortField",
+        label: "리스트 정렬 필드 (공지 다음)",
+        type: "choice",
+        options: [
+          ["", "기본 (최근 글부터)"],
+          ["datetime asc", "날짜 이전것 부터"],
+          ["datetime desc", "날짜 최근것 부터"],
+          ["last asc", "최근글 이전것 부터 (글·댓글 시각)"],
+          ["last desc", "최근글 최근것 부터 (글·댓글 시각)"],
+          ["comment asc", "댓글수 낮은것 부터"],
+          ["comment desc", "댓글수 높은것 부터"],
+        ],
+      },
+      // bo_new: hours a new post shows its N mark (board_form.php:668).
+      {
+        key: "newHours",
+        label: "새글 아이콘 (글을 쓴 뒤 N을 표시할 시간, 0이면 표시 안 함)",
+        type: "number",
+        default: 24,
+      },
+      // bo_use_list_content: a plain board's list with its posts' text.
+      {
+        key: "listContent",
+        label:
+          "목록에서 내용 사용 (일반 글 게시판, 끄면 목록에 제목만 보이고 본문 보기로 읽음)",
+        type: "checkbox",
+        default: true,
+        newDefault: false,
+      },
+      // bo_upload_count and bo_image_width: a plain board's pictures.
+      {
+        key: "uploadCount",
+        label:
+          "파일 업로드 개수 (일반 글 게시판 한 글의 그림 수, 0이면 그림 없음)",
+        type: "number",
+        default: 1,
+      },
+      {
+        key: "imageWidth",
+        label: "이미지 폭 크기 (px, 일반 글 게시판에서 보이는 그림의 최대 폭)",
+        type: "number",
+        default: 600,
+      },
       // bo_count_modify (board_form.php:89).
       {
         key: "editLock",
@@ -1860,6 +1905,12 @@ export function buildRecord(section, values, previous, references) {
       throw new Error("분류는 20개 이하, 각 40자 이하입니다.");
     if (data.pageRows < 1 || data.pageRows > 100)
       throw new Error("한 페이지 글 수는 1~100입니다.");
+    if (data.uploadCount > 10)
+      throw new Error("파일 업로드 개수는 0~10입니다.");
+    if (data.imageWidth > 2000)
+      throw new Error("이미지 폭 크기는 2000px 이하입니다.");
+    if (data.newHours > 8760)
+      throw new Error("새글 아이콘 시간은 8760시간(1년) 이하입니다.");
     if (
       (data.writeMax && data.writeMin > data.writeMax) ||
       (data.commentMax && data.commentMin > data.commentMax)

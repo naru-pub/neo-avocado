@@ -225,6 +225,12 @@ test("boards and groups are saved as their forms check them, and members see the
       anonymous: false,
       foldHeight: 600,
       pageRows: 15,
+      // A new board lists titles only, as the original's starts.
+      sortField: "",
+      newHours: 24,
+      listContent: false,
+      uploadCount: 1,
+      imageWidth: 600,
       editLock: 1,
       writeReward: 5,
       commentReward: 0,

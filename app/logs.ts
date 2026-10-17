@@ -32,6 +32,22 @@ import {
 } from "./posts.js";
 import { showNewPost, watchBoard } from "./live.js";
 
+/** A board's own number setting, else the original's default. */
+function boardSetting(id, key, fallback) {
+  const value = state.boards.find((row) => row.id === (id ?? "default"))?.data[
+    key
+  ];
+  return Number.isSafeInteger(value) && value >= 0 ? value : fallback;
+}
+/** bo_upload_count (1), bo_image_width (600), bo_new (24 hours). */
+const uploadCountOf = (id = state.board) => boardSetting(id, "uploadCount", 1);
+const imageWidthOf = (id = state.board) => boardSetting(id, "imageWidth", 600);
+const isNew = (log) => {
+  const hours = boardSetting(log.data.board, "newHours", 24);
+  const at = Date.parse(log.createdAt ?? "");
+  const age = Date.now() - at;
+  return hours > 0 && age >= 0 && age < hours * 3600000;
+};
 /**
  * What a board is (bo_skin): image logs (mmb), plain posts, questions and
  * answers (qna), or settlement requests (caculate).
@@ -424,6 +440,15 @@ export async function logItem(log) {
   item
     .querySelector(".log-number")
     .replaceChildren(log.data.notice ? "공지 · " : "", number);
+  // 새글 아이콘 (bo_new): a post newer than the board's hours.
+  if (isNew(log))
+    item.querySelector(".log-number").append(
+      Object.assign(document.createElement("span"), {
+        className: "new-mark",
+        title: "새 글",
+        textContent: " N",
+      }),
+    );
   // 19금's mark (list.log.skin.php:114).
   if (log.data.adult)
     item.querySelector(".log-number").append(
@@ -474,6 +499,42 @@ export async function logItem(log) {
   const image = item.querySelector<HTMLImageElement>(".log-image");
   if (log.data.image && !log.data.locked) image.src = log.data.image;
   else image.remove();
+  // A plain board's further pictures, and its pictures' width (bo_image_width).
+  const files = item.querySelector<HTMLElement>(".log-files");
+  if (!log.data.locked && Array.isArray(log.data.files))
+    for (const url of log.data.files)
+      if (typeof url === "string" && url.startsWith("https://"))
+        files.append(
+          Object.assign(document.createElement("img"), {
+            src: url,
+            alt: "",
+            className: "log-file",
+            loading: "lazy",
+          }),
+        );
+  files.hidden = !files.children.length;
+  if (kindOf(log.data.board) === "text") {
+    const width = imageWidthOf(log.data.board);
+    for (const picture of item.querySelectorAll<HTMLImageElement>(
+      ".log-image, .log-file",
+    ))
+      if (width) picture.style.maxWidth = `min(100%, ${width}px)`;
+  }
+  // wr_link1, wr_link2: the mmb skin's LINK, in a new window.
+  const links = item.querySelector<HTMLElement>(".log-links");
+  if (!log.data.locked && Array.isArray(log.data.links))
+    for (const url of log.data.links)
+      if (typeof url === "string" && /^https?:\/\//.test(url)) {
+        const link = Object.assign(document.createElement("a"), {
+          href: url,
+          target: "_blank",
+          rel: "noopener noreferrer nofollow",
+          className: "link",
+          textContent: "LINK",
+        });
+        links.append(link, " ");
+      }
+  links.hidden = !links.children.length;
   if (log.data.locked && log.data.guest) {
     // A guest's secret question opens with its password (qna/password.php).
     const form = document.createElement("form");
@@ -646,6 +707,12 @@ export async function logItem(log) {
           multiline: true,
           max: current.data.format === "html" ? 12000 : 2000,
         },
+        ...[0, 1].map((n) => ({
+          name: `link${n + 1}`,
+          label: `링크 #${n + 1}`,
+          value: current.data.links?.[n] ?? "",
+          max: 2000,
+        })),
         ...optionEdits(current),
         ...actionEdits(current),
       ],
@@ -661,8 +728,11 @@ export async function logItem(log) {
         material2 = "",
         material3 = "",
         item: used = "",
+        link1 = "",
+        link2 = "",
         ...options
       }) => {
+        const links = [link1, link2].map((link) => link.trim()).filter(Boolean);
         const materials = [material1, material2, material3].filter(Boolean);
         if (action === "combine" && !materials.length)
           throw new Error("조합 재료를 골라 주세요.");
@@ -674,6 +744,7 @@ export async function logItem(log) {
             title,
             category,
             secret,
+            ...(links.length || current.data.links?.length ? { links } : {}),
             ...options,
             ...(dice ? { dice: true } : {}),
             ...(action === "combine" ? { action, materials } : {}),
@@ -994,7 +1065,18 @@ $("logForm").onsubmit = (event) => {
   run(async () => {
     // Visitors cannot upload; they may link an HTTPS picture instead.
     const guest = state.member ? null : guestCredentials();
-    const file = guest ? null : $<HTMLInputElement>("logImage").files?.[0];
+    // bo_upload_count: a plain board's post takes that many pictures.
+    const chosen = guest
+      ? []
+      : [...($<HTMLInputElement>("logImage").files ?? [])];
+    const most = kindOf() === "text" ? uploadCountOf() : 1;
+    if (chosen.length > most)
+      return say(
+        most
+          ? `그림은 ${most}개까지 올릴 수 있습니다.`
+          : "이 게시판은 그림을 올릴 수 없습니다.",
+      );
+    const file = chosen[0] ?? null;
     const address = guest
       ? $<HTMLInputElement>("logImageUrl").value.trim()
       : "";
@@ -1002,6 +1084,13 @@ $("logForm").onsubmit = (event) => {
       return say("그림을 골라 주세요.");
     say("올리는 중…");
     const image = file ? await uploadMedia(file) : null;
+    const files = [];
+    for (const more of chosen.slice(1))
+      files.push((await uploadMedia(more)).url);
+    const links = [
+      $<HTMLInputElement>("logLink1").value.trim(),
+      $<HTMLInputElement>("logLink2").value.trim(),
+    ].filter(Boolean);
     const character = guest ? "" : $<HTMLSelectElement>("logCharacter").value;
     const action = guest ? "" : $<HTMLSelectElement>("logAction").value;
     const materials =
@@ -1042,6 +1131,8 @@ $("logForm").onsubmit = (event) => {
             : $<HTMLInputElement>("logSecret").checked,
         ...(character ? { character } : {}),
         ...($<HTMLInputElement>("logDice").checked ? { dice: true } : {}),
+        ...(links.length ? { links } : {}),
+        ...(files.length ? { files } : {}),
         ...options,
         ...(action === "combine" ? { action, materials } : {}),
         ...(action === "explore" ? { action } : {}),
@@ -1139,8 +1230,11 @@ export function configureBoard() {
     Boolean(state.member) && kind === "image";
   $<HTMLInputElement>("logImageUrl").required =
     !state.member && kind === "image";
-  $("logImageLabel").hidden = !pictures;
-  $("logImageUrlLabel").hidden = !pictures;
+  // bo_upload_count: several pictures on a plain board, none at 0.
+  const uploads = kind === "text" ? uploadCountOf() : 1;
+  $<HTMLInputElement>("logImage").multiple = uploads > 1;
+  $("logImageLabel").hidden = !pictures || uploads === 0;
+  $("logImageUrlLabel").hidden = !pictures || uploads === 0;
   $("logTitleLabel").hidden = !pictures;
   // A settlement names its category (정산 분류); a guest may ask in secret.
   $<HTMLSelectElement>("logCategory").required = kind === "settlement";

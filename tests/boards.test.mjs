@@ -2383,3 +2383,154 @@ test("a board's 게시판 관리자 and its group's 그룹 관리자 moderate it
     undefined,
   );
 });
+
+test("a post keeps two links, a plain board's posts as many pictures as it allows", async () => {
+  const site = await boardSite();
+  profile(site, "m-1", "하나");
+  board(site, "free", { ...PUBLIC_BOARD, uploadCount: 3 });
+  const { document } = await write(site, {
+    data: {
+      board: "free",
+      text: "링크와 그림",
+      image: "https://media.example/1.png",
+      files: ["https://media.example/2.png", "https://media.example/3.png"],
+      links: ["https://a.example/x", "", "http://b.example/y"].slice(0, 2),
+    },
+  });
+  assert.deepEqual(document.data.links, ["https://a.example/x"]);
+  assert.deepEqual(document.data.files, [
+    "https://media.example/2.png",
+    "https://media.example/3.png",
+  ]);
+  // An edit that does not send them keeps them; one that does changes them.
+  const { document: kept } = await write(site, {
+    id: document.id,
+    data: { text: "고침" },
+  });
+  assert.deepEqual(kept.data.links, ["https://a.example/x"]);
+  assert.equal(kept.data.files.length, 2);
+  const { document: changed } = await write(site, {
+    id: document.id,
+    data: { text: "고침", links: ["http://b.example/y", "https://c.example/"] },
+  });
+  assert.deepEqual(changed.data.links, [
+    "http://b.example/y",
+    "https://c.example/",
+  ]);
+  for (const [data, reason] of [
+    [{ links: ["javascript:alert(1)"] }, "invalid_link"],
+    [
+      {
+        links: [
+          "https://a.example/",
+          "https://b.example/",
+          "https://c.example/",
+        ],
+      },
+      "invalid_input",
+    ],
+    [
+      {
+        image: "https://media.example/1.png",
+        files: [
+          "https://media.example/2.png",
+          "https://media.example/3.png",
+          "https://media.example/4.png",
+        ],
+      },
+      "upload_count",
+    ],
+    [
+      {
+        image: "https://media.example/1.png",
+        files: ["http://media.example/2.png"],
+      },
+      "invalid_input",
+    ],
+  ])
+    assert.equal(
+      await reasonOf(
+        write(site, { data: { board: "free", text: "x", ...data } }),
+      ),
+      reason,
+      JSON.stringify(data),
+    );
+  // A picture log takes its one picture; a board at 0 takes none.
+  assert.equal(
+    await reasonOf(
+      write(site, {
+        data: {
+          image: "https://media.example/1.png",
+          files: ["https://media.example/2.png"],
+        },
+      }),
+    ),
+    "invalid_input",
+  );
+  board(site, "plain", { ...PUBLIC_BOARD, uploadCount: 0 });
+  assert.equal(
+    await reasonOf(
+      write(site, {
+        data: {
+          board: "plain",
+          text: "x",
+          image: "https://media.example/1.png",
+        },
+      }),
+    ),
+    "upload_count",
+  );
+  assert.equal(
+    await reasonOf(write(site, { data: { board: "plain", text: "글만" } })),
+    "ok",
+  );
+});
+
+test("a board lists by its 정렬 필드 after its notices, with its text only when 목록에서 내용 사용", async () => {
+  const site = await boardSite();
+  board(site, "free", { ...PUBLIC_BOARD, sortField: "comment desc" });
+  const first = post(site, { board: "free", body: "하나", created_at: 1000 });
+  const second = post(site, { board: "free", body: "둘", created_at: 2000 });
+  const third = post(site, {
+    board: "free",
+    body: "셋",
+    created_at: 3000,
+    notice: 1,
+  });
+  for (let n = 0; n < 2; n += 1)
+    comment(site, { post_id: Number(first), body: "c", created_at: 5000 + n });
+  const order = async () =>
+    (await listPage(site, { board: "free" })).documents.map((row) => row.id);
+  assert.deepEqual(await order(), [third, first, second]);
+  board(site, "free", { ...PUBLIC_BOARD, sortField: "datetime asc" });
+  assert.deepEqual(await order(), [third, first, second]);
+  comment(site, { post_id: Number(second), body: "c", created_at: 9000 });
+  board(site, "free", { ...PUBLIC_BOARD, sortField: "last desc" });
+  assert.deepEqual(await order(), [third, second, first]);
+  board(site, "free", { ...PUBLIC_BOARD, sortField: "nonsense" });
+  assert.deepEqual(await order(), [third, second, first]);
+  // Without 목록에서 내용 사용, a plain board lists titles; the post reads whole.
+  board(site, "free", { ...PUBLIC_BOARD, listContent: false });
+  const listed = (await listPage(site, { board: "free" })).documents;
+  assert.deepEqual(
+    listed.map((row) => [row.data.text, row.data.truncated]),
+    [
+      ["", true],
+      ["", true],
+      ["", true],
+    ],
+  );
+  assert.equal((await read(site, { id: first })).document.data.text, "하나");
+  // A picture board's list always carries its text.
+  board(site, "default", { ...LOG_BOARD, listContent: false });
+  const log = post(site, {
+    body: "그림 설명",
+    image: "https://media.example/1.png",
+  });
+  assert.equal(
+    (await listPage(site, { board: "default" })).documents.find(
+      (row) => row.id === log,
+    ).data.text,
+    "그림 설명",
+  );
+});

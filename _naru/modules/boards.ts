@@ -189,6 +189,9 @@ export interface PostRow {
   created_at: number;
   updated_at: number;
   version: number;
+  /** wr_link1 and wr_link2, and a plain board's further pictures: JSON lists. */
+  links: string;
+  files: string;
   tags?: string | null;
   comment_count?: number;
 }
@@ -224,6 +227,8 @@ export const POST_COPY_COLUMNS = [
   "created_at",
   "updated_at",
   "version",
+  "links",
+  "files",
 ] as const;
 /** A comment's columns a copy keeps: all but its id, its post and its reward. */
 export const COMMENT_COPY_COLUMNS = [
@@ -332,6 +337,8 @@ export function postOf(row: PostRow): Written {
     wide: row.wide !== 0,
     fold: row.fold !== 0,
     notice: row.notice !== 0,
+    ...(list(row.links).length ? { links: list(row.links) } : {}),
+    ...(list(row.files).length ? { files: list(row.files) } : {}),
     ...(row.settlement !== null
       ? { settlement: parsed(row.settlement, null) }
       : {}),

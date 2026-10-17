@@ -19,7 +19,43 @@ export const BOARD_DEFAULTS = Object.freeze({
   pageRows: 15,
   foldHeight: 600,
   editLock: 1,
+  // bo_upload_count 1, bo_new 24, bo_image_width 600 (board_form.php:102-105).
+  uploadCount: 1,
+  newHours: 24,
+  imageWidth: 600,
 });
+
+/**
+ * 리스트 정렬 필드 (bo_sort_field, board_form.php:697): the list's order
+ * after its notices, by the SQL each sorts by. 조회수 and 추천수 have no
+ * counts here.
+ */
+export const SORTS: Record<string, string> = {
+  "": "posts.id DESC",
+  "datetime asc": "posts.id ASC",
+  "datetime desc": "posts.created_at DESC, posts.id DESC",
+  // wr_last: the post's or its newest comment's time.
+  "last asc":
+    "max(posts.created_at, coalesce((SELECT max(created_at) FROM comments WHERE comments.post_id = posts.id), 0)) ASC, posts.id ASC",
+  "last desc":
+    "max(posts.created_at, coalesce((SELECT max(created_at) FROM comments WHERE comments.post_id = posts.id), 0)) DESC, posts.id DESC",
+  "comment asc":
+    "(SELECT count(*) FROM comments WHERE comments.post_id = posts.id) ASC, posts.id DESC",
+  "comment desc":
+    "(SELECT count(*) FROM comments WHERE comments.post_id = posts.id) DESC, posts.id DESC",
+};
+/** A board's list order, its notices first. */
+export const sortOf = (board: Board | null) =>
+  `posts.notice DESC, ${SORTS[board?.data.sortField] ?? SORTS[""]}`;
+
+/**
+ * 목록에서 내용 사용 (bo_use_list_content): whether a plain board's list
+ * carries its posts' text. The mmb skin's always does (lib/common.lib.php:357),
+ * and the qna and caculate skins' lists show it whole; a board saved before
+ * the setting carries it, as it did.
+ */
+export const listsContent = (board: Board | null) =>
+  board?.data.kind !== "text" || board?.data.listContent !== false;
 
 /** A board's number setting, or its default when unset or malformed. */
 export function boardNumber(

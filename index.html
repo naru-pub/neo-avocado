@@ -428,6 +428,13 @@
             설명
             <textarea id="logText" maxlength="2000" rows="3"></textarea>
           </label>
+          <!-- mmb/write.skin.php's Link #1 and #2 (wr_link1, wr_link2). -->
+          <label
+            >링크 #1 <input id="logLink1" type="url" maxlength="2000"
+          /></label>
+          <label
+            >링크 #2 <input id="logLink2" type="url" maxlength="2000"
+          /></label>
           <label id="logInlineImage" class="member-only" hidden
             >본문에 그림 넣기
             <input id="logInlineFile" type="file" accept="image/*"
@@ -663,7 +670,9 @@
           <p class="log-number"></p>
           <h3 class="log-title"></h3>
           <img class="log-image" alt="" />
+          <div class="log-files" hidden></div>
           <p class="log-text"></p>
+          <p class="log-links" hidden></p>
           <p class="log-dice" hidden></p>
         </div>
         <div class="log-discussion">

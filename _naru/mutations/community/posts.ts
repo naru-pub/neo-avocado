@@ -32,6 +32,7 @@ import {
 } from "../../modules/boards.js";
 import type { PostRow } from "../../modules/boards.js";
 import {
+  boardNumber,
   checkBannedWords,
   checkEditable,
   checkLength,
@@ -86,12 +87,57 @@ export interface PostInput {
   materials?: string[];
   /** An owned inventory row to use. */
   item?: string;
+  /** 링크 #1 and #2 (wr_link1, wr_link2): http(s) addresses. */
+  links?: string[];
+  /** A plain board's pictures after the first (bo_upload_count). */
+  files?: string[];
 }
+
+/** G5_LINK_COUNT: a post's links. */
+const LINK_COUNT = 2;
+/** The most pictures a board may let a post take. */
+const UPLOAD_LIMIT = 10;
 
 const invalid = (ctx: MutationCtx) =>
   ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
     reason: "invalid_input",
   });
+
+/** A post's links as sent: at most two http(s) addresses, blanks dropped. */
+function linksOf(ctx: MutationCtx, value: unknown): string[] {
+  if (!Array.isArray(value) || value.length > LINK_COUNT) invalid(ctx);
+  const links = [];
+  for (const entry of value as unknown[]) {
+    if (entry === null || entry === "") continue;
+    if (
+      typeof entry !== "string" ||
+      entry.length > 2000 ||
+      !/^https?:\/\/[^\s/@?#:]+(?::\d{1,5})?(?:[/?#][^\s]*)?$/.test(
+        entry.trim(),
+      )
+    )
+      ctx.fail(
+        "INVALID_REQUEST",
+        "링크는 http:// 또는 https:// 주소로 적어 주세요.",
+        {
+          reason: "invalid_link",
+        },
+      );
+    links.push(entry.trim());
+  }
+  return links;
+}
+
+/** A plain board's further pictures: HTTPS addresses, at most UPLOAD_LIMIT. */
+function filesOf(ctx: MutationCtx, value: unknown): string[] {
+  if (value === null || value === undefined) return [];
+  if (!Array.isArray(value) || value.length >= UPLOAD_LIMIT) invalid(ctx);
+  try {
+    return (value as unknown[]).map((entry) => imageUrl(entry));
+  } catch {
+    return invalid(ctx);
+  }
+}
 
 /** A post's actions, as its row keeps them. */
 const actionsOf = (row: PostRow | null): any[] => {
@@ -167,6 +213,30 @@ export async function write(
         ? imageUrl(data.image)
         : null;
   if (board.data.kind === "image" && !image) invalid(ctx);
+  // wr_link1 and wr_link2: up to two web addresses, shown as LINK.
+  const links = Object.hasOwn(data, "links")
+    ? linksOf(ctx, data.links)
+    : parsed<string[]>(previous?.links, []);
+  // bo_upload_count: a plain board's post takes that many pictures, the
+  // first its image (0: none); a picture log takes its one picture.
+  const files =
+    Object.hasOwn(data, "files") &&
+    JSON.stringify(data.files ?? []) !== (previous?.files ?? "[]")
+      ? filesOf(ctx, data.files)
+      : parsed<string[]>(previous?.files, []);
+  if (board.data.kind !== "text" && files.length) invalid(ctx);
+  if (
+    board.data.kind === "text" &&
+    (image !== (before?.image ?? null) || files.length) &&
+    (image ? 1 : 0) + files.length > boardNumber(board, "uploadCount")
+  )
+    ctx.fail(
+      "INVALID_REQUEST",
+      boardNumber(board, "uploadCount")
+        ? `이 게시판은 그림을 ${boardNumber(board, "uploadCount")}개까지 올릴 수 있습니다.`
+        : "이 게시판은 그림을 올릴 수 없습니다.",
+      { reason: "upload_count" },
+    );
   if (!image && !body) invalid(ctx);
   // An HTML board has no length limits, as the original's editor (write.php:207).
   if (format !== "html")
@@ -261,6 +331,8 @@ export async function write(
     rolls: rolls ? JSON.stringify(rolls) : null,
     actions: JSON.stringify(actions),
     called: JSON.stringify(calls.called),
+    links: JSON.stringify(links),
+    files: JSON.stringify(files),
     updated_at: ctx.now,
   };
   let row: PostRow;

@@ -2643,3 +2643,60 @@ test("a board lists by 분류, shows its HTML notice and new-post text, and mark
   assert.equal(staff.classList.contains("owner"), false);
   assert.equal(staff.querySelector(".admin-mark").textContent, "관리자");
 });
+
+test("a plain board's post shows its pictures at the board's width, its LINKs, and N while new", async () => {
+  const database = fakeDatabase({
+    [PROFILES]: [me],
+    neo_avocado_boards: [
+      {
+        id: "default",
+        data: {
+          ...DEFAULT_BOARD.data,
+          kind: "text",
+          uploadCount: 3,
+          imageWidth: 400,
+          newHours: 24,
+        },
+      },
+    ],
+    [LOGS]: [
+      {
+        id: "new",
+        createdAt: new Date(Date.now() - 3600 * 1000).toISOString(),
+        data: {
+          text: "새 글",
+          image: "https://media.naru.pub/1.png",
+          files: ["https://media.naru.pub/2.png", "javascript:alert(1)"],
+          links: ["https://a.example/", "javascript:alert(1)"],
+        },
+        createdBy: ME,
+      },
+      {
+        id: "old",
+        createdAt: new Date(Date.now() - 48 * 3600 * 1000).toISOString(),
+        data: { text: "지난 글" },
+        createdBy: ME,
+      },
+    ],
+  });
+  const { $ } = await page(database);
+  const fresh = $("logs").querySelector('.log[data-id="new"]');
+  const old = $("logs").querySelector('.log[data-id="old"]');
+  assert.equal(fresh.querySelector(".new-mark").textContent, " N");
+  assert.equal(old.querySelector(".new-mark"), null);
+  const pictures = [...fresh.querySelectorAll(".log-image, .log-file")];
+  assert.deepEqual(
+    pictures.map((image) => [image.src, image.style.maxWidth]),
+    [
+      ["https://media.naru.pub/1.png", "min(100%, 400px)"],
+      ["https://media.naru.pub/2.png", "min(100%, 400px)"],
+    ],
+  );
+  const links = [...fresh.querySelectorAll(".log-links a")];
+  assert.deepEqual(
+    links.map((link) => [link.href, link.target, link.textContent]),
+    [["https://a.example/", "_blank", "LINK"]],
+  );
+  // Up to three pictures at once on this board.
+  assert.equal($("logImage").multiple, true);
+});
