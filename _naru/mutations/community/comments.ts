@@ -11,6 +11,7 @@ import {
   postReadable,
   postRow,
   requireBoard,
+  saveCommentSearch,
   takeBackReward,
 } from "../../modules/boards.js";
 import type { CommentRow } from "../../modules/boards.js";
@@ -158,6 +159,7 @@ export async function write(
         RETURNING *`
     ).rows[0];
   }
+  await saveCommentSearch(ctx, row, !previous);
   await deliverCalls(ctx, {
     post,
     comment: row.id,
@@ -191,6 +193,7 @@ export async function remove(
       memoOf(board, post?.number, "댓글삭제"),
     );
   }
+  await ctx.sql`DELETE FROM comments_search WHERE rowid = ${previous.id}`;
   await ctx.sql`DELETE FROM comments WHERE id = ${previous.id}`;
   return null;
 }

@@ -495,6 +495,44 @@ export async function saveTags(ctx: SqlCtx, post: number, tags: string[]) {
     );
 }
 
+/**
+ * Keeps a post's full-text row (posts_search, by its id) its title and text
+ * as plain text: a new post's (`made`) is added, an edited one's replaced.
+ * Naru has no triggers, so every write of a post's title or text calls this.
+ */
+export async function savePostSearch(
+  ctx: SqlCtx,
+  row: Pick<PostRow, "id" | "title" | "body" | "format">,
+  made: boolean,
+) {
+  const body = row.format === "html" ? plainText(row.body) : row.body;
+  if (made)
+    await ctx.sql`INSERT INTO posts_search (rowid, title, body) VALUES (${row.id}, ${row.title}, ${body})`;
+  else
+    await ctx.sql`UPDATE posts_search SET title = ${row.title}, body = ${body} WHERE rowid = ${row.id}`;
+}
+
+/** The same for a comment's text (comments_search). */
+export async function saveCommentSearch(
+  ctx: SqlCtx,
+  row: Pick<CommentRow, "id" | "body">,
+  made: boolean,
+) {
+  if (made)
+    await ctx.sql`INSERT INTO comments_search (rowid, body) VALUES (${row.id}, ${row.body})`;
+  else
+    await ctx.sql`UPDATE comments_search SET body = ${row.body} WHERE rowid = ${row.id}`;
+}
+
+/** Terms this long or longer are found by the full-text tables (trigram). */
+export const FULL_TEXT_MIN = 3;
+
+/**
+ * A full-text query finding `text` anywhere, as LIKE '%text%' would: one
+ * phrase, its quotes doubled, so nothing in it is MATCH's syntax.
+ */
+export const phrase = (text: string) => `"${text.replace(/"/g, '""')}"`;
+
 /** A post with its text cut to 300 plain characters; 더 보기 reads the rest. */
 export function excerpt(row: Written): Written {
   const raw = row.data.text ?? "";

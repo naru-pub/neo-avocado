@@ -24,6 +24,8 @@ import {
   postRow,
   readablePost,
   requireBoard,
+  saveCommentSearch,
+  savePostSearch,
   saveTags,
   tagsOf,
   takeBackReward,
@@ -309,6 +311,7 @@ export async function write(
     ).rows[0];
   }
   await saveTags(ctx, row.id, tags);
+  await savePostSearch(ctx, row, !previous);
   await deliverCalls(ctx, {
     post: row,
     text: body,
@@ -378,7 +381,10 @@ export async function remove(
      WHERE member IN (SELECT owner FROM comments WHERE post_id = ? AND reward > 0)`,
     [previous.id, previous.id],
   );
+  // Their full-text rows go with them (posts_search, comments_search).
+  await ctx.sql`DELETE FROM comments_search WHERE rowid IN (SELECT id FROM comments WHERE post_id = ${previous.id})`;
   await ctx.sql`DELETE FROM comments WHERE post_id = ${previous.id}`;
+  await ctx.sql`DELETE FROM posts_search WHERE rowid = ${previous.id}`;
   await ctx.sql`DELETE FROM post_tags WHERE post_id = ${previous.id}`;
   await ctx.sql`DELETE FROM calls WHERE post_id = ${previous.id}`;
   await ctx.sql`DELETE FROM favorites WHERE post = ${previous.id}`;
@@ -514,8 +520,13 @@ export async function settle(
   ]
     .filter(Boolean)
     .join(" ");
-  await ctx.sql`INSERT INTO comments (post_id, owner, body, settlement, created_at, updated_at)
-    VALUES (${row.id}, ${ctx.member?.id ?? null}, ${reply}, 1, ${ctx.now}, ${ctx.now})`;
+  const answer = (
+    await ctx.sql<{
+      id: number;
+    }>`INSERT INTO comments (post_id, owner, body, settlement, created_at, updated_at)
+    VALUES (${row.id}, ${ctx.member?.id ?? null}, ${reply}, 1, ${ctx.now}, ${ctx.now}) RETURNING id`
+  ).rows[0];
+  await saveCommentSearch(ctx, { id: answer.id, body: reply }, true);
   return {
     document: postOf(
       (await ctx.sql<PostRow>(`${POST_SELECT} WHERE id = ?`, [saved.id]))
