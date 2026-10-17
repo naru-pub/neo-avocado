@@ -11,10 +11,12 @@
 // (text, values) forms, booleans bound as 1 and 0, { rows, changes };
 // queries only read; a mutation is one transaction, kept only if it
 // returns; ctx.fail's coded error; roles; guest passwords (hashed here as a
-// plain marker, not a real hash); Naru's plan rule (`checkPlan`, copied) and
-// a statement's limits (100 bound values, 1,000 rows). What it does not:
+// plain marker, not a real hash); Naru's plan rule (`checkPlan`, synced into
+// tests/naru-plan.mjs by scripts/sync-naru-plan.mjs) and a statement's limits
+// (100 bound values, 1,000 rows). What it does not:
 // Naru's checks on names, and a call's limits.
 import { DatabaseSync } from "node:sqlite";
+import { checkPlan } from "./naru-plan.mjs";
 import { readdir, readFile } from "node:fs/promises";
 import { join, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -112,62 +114,6 @@ export function sqlOf(db, kind = "mutation") {
       return Promise.reject(error);
     }
   };
-}
-
-/**
- * Naru's plan rule (naru-pub edge/src/sql.ts, checkPlan), copied: within
- * each step's children only the first table access may scan, a later one
- * finds its rows by key, and a correlated subquery may not scan. A scan of a
- * co-routine's or materialization's own result among the same steps is not a
- * table's inside a correlated subquery. Keep it in step with Naru's.
- */
-export function checkPlan(plan) {
-  const invalid = (message) => new Error(`Invalid SQL: ${message}`);
-  const children = new Map();
-  for (const step of plan) {
-    const list = children.get(step.parent) ?? [];
-    list.push(step);
-    children.set(step.parent, list);
-  }
-  const access = (step) => /^(SCAN|SEARCH) /.test(step.detail);
-  const scans = (step) =>
-    /^SCAN /.test(step.detail) &&
-    step.detail !== "SCAN CONSTANT ROW" &&
-    (!/^SCAN \S+ VIRTUAL TABLE\b/.test(step.detail) ||
-      /VIRTUAL TABLE INDEX 0:$/.test(step.detail));
-  const produced = (step) =>
-    (children.get(step.parent) ?? []).some(
-      (sibling) =>
-        sibling.detail === `CO-ROUTINE ${step.detail.slice(5)}` ||
-        sibling.detail === `MATERIALIZE ${step.detail.slice(5)}`,
-    );
-  const table = (step) => step.detail.split(" ")[1];
-  const within = (id) =>
-    (children.get(id) ?? []).flatMap((child) => [child, ...within(child.id)]);
-  for (const [, steps] of children)
-    steps
-      .filter(access)
-      .slice(1)
-      .forEach((step) => {
-        if (scans(step))
-          throw invalid(
-            `it would read all of ${table(step)} for every row before it; give ${table(step)} an index on the column it joins on.`,
-          );
-        if (!/=/.test(step.detail) && !/ VIRTUAL TABLE\b/.test(step.detail))
-          throw invalid(
-            `it would search ${table(step)} by a range for every row before it; join it on equal values.`,
-          );
-      });
-  for (const step of plan)
-    if (/^CORRELATED /.test(step.detail)) {
-      const scan = within(step.id).find(
-        (inner) => scans(inner) && !produced(inner),
-      );
-      if (scan)
-        throw invalid(
-          `a subquery would read all of ${table(scan)} for every row; give ${table(scan)} an index on the column it compares.`,
-        );
-    }
 }
 
 /** The site's routes in dist/: routes/posts/_id.js is "posts/_id". */
@@ -347,3 +293,5 @@ export async function testSite({
   }
   return site;
 }
+
+export { checkPlan };
