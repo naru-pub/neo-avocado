@@ -1216,3 +1216,108 @@ test("pick lists page past a statement's 1,000 rows, in their order", async () =
     ["t0001", "t2499", "t0000", "t2498"],
   );
 });
+
+test("게시판 복사 makes a board with the same settings, and with 구조와 데이터 its posts", async () => {
+  const site = await testSite();
+  profile(site, "m-1", "하나");
+  await create(site, "boards", "free", {
+    name: "자유",
+    kind: "text",
+    categories: "잡담",
+    writeReward: 5,
+    admin: "m-1",
+  });
+  for (const number of [1, 2]) {
+    const { lastInsertRowid } = site.run(
+      "INSERT INTO posts (board, number, owner, title, body, notice, reward, created_at, updated_at) VALUES ('free', ?, 'm-1', ?, '본문', ?, 5, 0, 0)",
+      number,
+      `글 ${number}`,
+      number === 2 ? 1 : 0,
+    );
+    site.run(
+      "INSERT INTO posts_search (rowid, title, body) VALUES (?, ?, '본문')",
+      lastInsertRowid,
+      `글 ${number}`,
+    );
+    site.run(
+      "INSERT INTO post_tags (post_id, tag) VALUES (?, '봄')",
+      lastInsertRowid,
+    );
+    site.run(
+      "INSERT INTO comments (post_id, owner, body, reward, created_at, updated_at) VALUES (?, 'm-1', '댓글', 3, 0, 0)",
+      lastInsertRowid,
+    );
+  }
+  const copy = (args) => mutate(site, "boards:copy", { id: "free", ...args });
+  assert.deepEqual(await copy({ target: "plain", name: "[복사본] 자유" }), {
+    id: "plain",
+    posts: 0,
+  });
+  const plain = await query(site, "boards:get", { id: "plain" });
+  assert.equal(plain.data.name, "[복사본] 자유");
+  assert.deepEqual(plain.data.categories, ["잡담"]);
+  assert.equal(plain.data.writeReward, 5);
+  assert.equal(plain.data.admin, "m-1");
+  assert.equal(
+    site.rows("SELECT count(*) AS n FROM posts WHERE board = 'plain'")[0].n,
+    0,
+  );
+  assert.equal(
+    (await copy({ target: "full", name: "전체", data: true })).posts,
+    2,
+  );
+  const posts = site.rows(
+    "SELECT * FROM posts WHERE board = 'full' ORDER BY number",
+  );
+  assert.deepEqual(
+    posts.map((row) => [row.number, row.title, row.notice, row.reward]),
+    [
+      [1, "글 1", 0, 0],
+      [2, "글 2", 1, 0],
+    ],
+  );
+  // Their comments, tags and full-text rows come with them; no rewards.
+  for (const row of posts) {
+    assert.deepEqual(
+      site.rows("SELECT body, reward FROM comments WHERE post_id = ?", row.id),
+      [{ body: "댓글", reward: 0 }],
+    );
+    assert.deepEqual(
+      site.rows("SELECT tag FROM post_tags WHERE post_id = ?", row.id),
+      [{ tag: "봄" }],
+    );
+  }
+  assert.equal(
+    (
+      await site.query(
+        "community/posts:search",
+        { board: "full", text: "댓글" },
+        OWNER,
+      )
+    ).documents.length,
+    2,
+  );
+  assert.equal(
+    (
+      await site.query(
+        "community/posts:search",
+        { board: "full", text: "글 2" },
+        OWNER,
+      )
+    ).documents.length,
+    1,
+  );
+  // The originals keep theirs.
+  assert.equal(
+    site.rows("SELECT count(*) AS n FROM posts WHERE board = 'free'")[0].n,
+    2,
+  );
+  for (const [args, reason] of [
+    [{ target: "full", name: "다시" }, "conflict"],
+    [{ target: "free", name: "같은" }, "invalid_input"],
+    [{ target: "bad id", name: "띄어쓰기" }, "invalid_input"],
+    [{ target: "nameless", name: "" }, "invalid_input"],
+    [{ id: "none", target: "x", name: "없는" }, "document_not_found"],
+  ])
+    assert.equal(await refusal(copy(args)), reason, JSON.stringify(args));
+});

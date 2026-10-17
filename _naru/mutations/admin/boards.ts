@@ -1,7 +1,20 @@
 // 게시판 (adm/board_list.php, board_form.php): the owner saves an entry, checked as its form checks it
-// (modules/admin-model.ts), and deletes one.
-import { removeRecord, saveRecord } from "../../modules/admin.js";
-import { ownerOnly } from "../../modules/access.js";
+// (modules/admin-model.ts), deletes one, and copies one (board_copy.php).
+import {
+  TABLES,
+  conflict,
+  dataOf,
+  invalid,
+  removeRecord,
+  rowById,
+  saveRecord,
+  writeRow,
+} from "../../modules/admin.js";
+import { ownerOnly, text } from "../../modules/access.js";
+import {
+  COMMENT_COPY_COLUMNS,
+  POST_COPY_COLUMNS,
+} from "../../modules/boards.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
 export const save = ownerOnly(
@@ -18,3 +31,79 @@ export const save = ownerOnly(
 export const remove = ownerOnly((ctx: MutationCtx, args: { id?: string }) =>
   removeRecord(ctx, "boards", args),
 );
+
+/**
+ * 게시판 복사 (adm/board_copy_update.php): a new board `target` named `name`
+ * with every setting of `id`, and with `data` (구조와 데이터) its posts,
+ * their comments and tags too, numbered as they were. The copies pay and
+ * take back nothing: their rewards are 0. Calls and 관심 stay with the
+ * originals, as the original copies only the board's own table.
+ */
+export const copy = ownerOnly(async function copy(
+  ctx: MutationCtx,
+  {
+    id,
+    target,
+    name,
+    data = false,
+  }: { id?: string; target?: string; name?: string; data?: boolean } = {},
+) {
+  const t = TABLES.boards;
+  const source = await rowById(ctx, t, id);
+  if (!source)
+    ctx.fail("NOT_FOUND", "복사할 게시판이 없습니다.", {
+      reason: "document_not_found",
+    });
+  // 영문자, 숫자, _ 만 가능 (board_copy.php), 20자 이내.
+  if (typeof target !== "string" || !/^[A-Za-z0-9_]{1,20}$/.test(target))
+    ctx.fail(
+      "INVALID_REQUEST",
+      "복사할 게시판 ID는 공백 없이 영문자, 숫자, _ 20자 이내로 적어 주세요.",
+      { reason: "invalid_input" },
+    );
+  if (target === source.id)
+    ctx.fail(
+      "INVALID_REQUEST",
+      "원본 게시판 ID와 복사할 게시판 ID가 달라야 합니다.",
+      { reason: "invalid_input" },
+    );
+  if (await rowById(ctx, t, target)) conflict(ctx);
+  if (typeof data !== "boolean") invalid(ctx);
+  let title = "";
+  try {
+    title = text(name, 120, true);
+  } catch {
+    invalid(ctx);
+  }
+  await writeRow(ctx, t, target, { ...dataOf(t, source), name: title });
+  if (!data) return { id: target, posts: 0 };
+  const { changes } = await ctx.sql(
+    `INSERT INTO posts (board, ${POST_COPY_COLUMNS.join(", ")}, reward)
+     SELECT ?, ${POST_COPY_COLUMNS.join(", ")}, 0 FROM posts WHERE board = ?`,
+    [target, source.id],
+  );
+  // Each copy is its original's number on the new board.
+  const pairs = `FROM posts AS old JOIN posts AS copied
+    ON copied.board = ? AND copied.number = old.number WHERE old.board = ?`;
+  await ctx.sql(
+    `INSERT INTO post_tags (post_id, tag)
+     SELECT copied.id, post_tags.tag ${pairs.replace("WHERE", "JOIN post_tags ON post_tags.post_id = old.id WHERE")}`,
+    [target, source.id],
+  );
+  await ctx.sql(
+    `INSERT INTO posts_search (rowid, title, body)
+     SELECT copied.id, posts_search.title, posts_search.body ${pairs.replace("WHERE", "JOIN posts_search ON posts_search.rowid = old.id WHERE")}`,
+    [target, source.id],
+  );
+  await ctx.sql(
+    `INSERT INTO comments (post_id, ${COMMENT_COPY_COLUMNS.join(", ")}, reward)
+     SELECT copied.id, ${COMMENT_COPY_COLUMNS.map((column) => `comments.${column}`).join(", ")}, 0
+     ${pairs.replace("WHERE", "JOIN comments ON comments.post_id = old.id WHERE")}
+     ORDER BY comments.id`,
+    [target, source.id],
+  );
+  await ctx.sql`INSERT INTO comments_search (rowid, body)
+    SELECT comments.id, comments.body FROM posts JOIN comments ON comments.post_id = posts.id
+    WHERE posts.board = ${target}`;
+  return { id: target, posts: changes };
+});

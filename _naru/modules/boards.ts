@@ -193,6 +193,58 @@ export interface PostRow {
   comment_count?: number;
 }
 
+/**
+ * A post's columns a copy keeps (adm/board_copy.php): all but its id, its
+ * board and its reward, which a copy does not pay.
+ */
+export const POST_COPY_COLUMNS = [
+  "number",
+  "owner",
+  "character_id",
+  "title",
+  "category",
+  "format",
+  "body",
+  "image",
+  "secret",
+  "members_only",
+  "adult",
+  "wide",
+  "fold",
+  "anonymous",
+  "notice",
+  "speaker",
+  "dice",
+  "rolls",
+  "actions",
+  "called",
+  "settlement",
+  "guest_name",
+  "guest_hash",
+  "created_at",
+  "updated_at",
+  "version",
+] as const;
+/** A comment's columns a copy keeps: all but its id, its post and its reward. */
+export const COMMENT_COPY_COLUMNS = [
+  "owner",
+  "body",
+  "dice",
+  "rolls",
+  "anonymous",
+  "character_id",
+  "speaker",
+  "actions",
+  "called",
+  "admin",
+  "settlement",
+  "guest_name",
+  "guest_hash",
+  "created_at",
+  "updated_at",
+  "version",
+] as const;
+
 /** A comments row. */
 export interface CommentRow {
   id: number;
