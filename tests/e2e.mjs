@@ -387,7 +387,7 @@ try {
     });
     return document.id;
   });
-  await alice.goto(`${origin}/#/character/${greenId}`);
+  await alice.goto(`${origin}/character/${greenId}`);
   await alice
     .locator("#characterSheet .character-name", { hasText: "초록" })
     .waitFor();
@@ -405,8 +405,11 @@ try {
   await alice
     .locator("#characterSheet .character-name", { hasText: "초록" })
     .waitFor();
+  // An address of the old form (a bookmark, a link in an old post) opens,
+  // as its path.
   await alice.goto(`${origin}/#/logs/default/1`);
   await alice.locator("#logFocus .log", { hasText: "첫 로그" }).waitFor();
+  assert.equal(alice.url(), `${origin}/logs/default/1`);
   await alice.goBack();
   await alice
     .locator("#characterSheet .character-name", { hasText: "초록" })
@@ -414,12 +417,12 @@ try {
   // The board list names its board; a post links to its own address and a
   // comment to its own, and both survive a reload; so does a tag.
   await menu(alice, "로그");
-  await alice.waitForURL(/#\/logs\/default$/);
+  await alice.waitForURL(`${origin}/logs/default`);
   await alice
     .locator("#logs .log", { hasText: "첫 로그" })
     .locator(".log-number a")
     .click();
-  await alice.waitForURL(/#\/post\/[^/]+$/);
+  await alice.waitForURL(/\/post\/[^/]+$/);
   await alice.reload();
   await alice.locator("#logFocus .log", { hasText: "첫 로그" }).waitFor();
   await alice.locator("#logFocus .comments > summary").click();
@@ -427,16 +430,16 @@ try {
     .locator("#logFocus .comment", { hasText: "멋져요" })
     .locator(".permalink")
     .getAttribute("href");
-  assert.match(commentLink, /^#\/post\/[^/]+\/comment\/[^/]+$/);
-  await alice.goto(`${origin}/${commentLink}`);
+  assert.match(commentLink, /^\/post\/[^/]+\/comment\/[^/]+$/);
+  await alice.goto(`${origin}${commentLink}`);
   await alice.reload();
   await alice
     .locator("#logFocus .comment.linked", { hasText: "멋져요" })
     .waitFor();
-  await alice.goto(`${origin}/#/logs/default/tag/${encodeURIComponent("봄")}`);
+  await alice.goto(`${origin}/logs/default/tag/${encodeURIComponent("봄")}`);
   await alice.reload();
   await alice.locator("#tagName", { hasText: "봄" }).waitFor();
-  await alice.goto(`${origin}/#/shop/${encodeURIComponent("이벤트")}`);
+  await alice.goto(`${origin}/shop/${encodeURIComponent("이벤트")}`);
   await alice.locator("#items li", { hasText: "케이크" }).waitFor();
 
   // Buying takes an approved character (shop/_ajax.shop_update.php:4):
@@ -528,6 +531,37 @@ try {
     .locator("#logs .log")
     .filter({ hasText: "고친 손님 글" })
     .waitFor();
+  // The post's own path, visited directly: Naru's route serves the page
+  // with the post's link preview, which a crawler reads without the script.
+  const guestPath = await guest
+    .locator("#logs .log", { hasText: "고친 손님 글" })
+    .locator(".log-number a")
+    .getAttribute("href");
+  assert.match(guestPath, /^\/post\/\d+$/);
+  const preview = await (await fetch(`${origin}${guestPath}`)).text();
+  assert.match(
+    preview,
+    /<meta property="og:description" content="고친 손님 글" \/>/,
+  );
+  assert.match(
+    preview,
+    /<meta property="og:title" content="[^"]+ No\. \d+" \/>/,
+  );
+  const reader = await person();
+  await reader.goto(`${origin}${guestPath}`);
+  await reader.locator("#logFocus .log", { hasText: "고친 손님 글" }).waitFor();
+  assert.match(
+    await reader.locator('meta[property="og:title"]').getAttribute("content"),
+    /No\. \d+$/,
+  );
+  assert.equal(
+    await reader.locator('link[rel="canonical"]').getAttribute("href"),
+    guestPath,
+  );
+  // Paths no page has stay 404.
+  assert.equal((await fetch(`${origin}/logs/free/abc`)).status, 404);
+  assert.equal((await fetch(`${origin}/nowhere`)).status, 404);
+  await reader.context().close();
 
   // The mmb options, on the real runtime: 멤버공개 shows a visitor the log
   // locked, its body never sent; 19금 covers it until a member clicks.
@@ -539,7 +573,7 @@ try {
   await alice.locator("#logAdult").check();
   await alice.locator('#logForm [type="submit"]').click();
   await alice.locator("#logs .log", { hasText: "멤버만 보는 로그" }).waitFor();
-  await guest.goto(`${origin}/#/logs/default`);
+  await guest.goto(`${origin}/logs/default`);
   await guest
     .locator("#logs .log", { hasText: "멤버 공개용 로그입니다." })
     .waitFor();
@@ -547,7 +581,7 @@ try {
     await guest.locator("#logs").textContent(),
     /멤버만 보는 로그/,
   );
-  await bob.goto(`${origin}/#/logs/default`);
+  await bob.goto(`${origin}/logs/default`);
   // The same address again would not reload: read the board afresh.
   await bob.reload();
   const covered = bob.locator("#logs .log", { hasText: "멤버만 보는 로그" });
@@ -562,7 +596,7 @@ try {
     .locator("#characters .character")
     .filter({ hasText: "초록" })
     .waitFor();
-  await guest.goto(`${origin}/#/character/${greenId}`);
+  await guest.goto(`${origin}/character/${greenId}`);
   await guest
     .locator("#characterSheet .character-fields", { hasText: "17" })
     .waitFor();
@@ -879,7 +913,7 @@ try {
       });
   });
   const asker = await person();
-  await asker.goto(`${origin}/#/logs/ask`);
+  await asker.goto(`${origin}/logs/ask`);
   await asker.locator("#logText").waitFor();
   await asker.locator("#guestName").fill("문의자");
   await asker.locator("#guestPassword").fill("pass1234");
@@ -900,7 +934,7 @@ try {
     true,
   );
 
-  await alice.goto(`${origin}/#/logs/calc`);
+  await alice.goto(`${origin}/logs/calc`);
   await alice.locator("#logCategory").selectOption("이벤트");
   await alice.locator("#logText").fill("이벤트 참여 정산 부탁드려요");
   await alice.locator('#logForm [type="submit"]').click();
