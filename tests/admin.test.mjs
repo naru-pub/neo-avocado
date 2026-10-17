@@ -1512,3 +1512,47 @@ test("추천인: a new member names one who joined before, who is paid, and repa
     "셋셋님의 회원자료 삭제로 인한 추천인 포인트 반환",
   );
 });
+
+test("아이템 분류 files items as 일반, 개인 or 출석, the list by one, and 상세이미지 shows in their detail", async () => {
+  const site = await testSite({ pending: "0011" });
+  // Personal items made before the migration are filed as 개인 by it.
+  site.run(
+    "INSERT INTO items (id, name, personal) VALUES ('old-personal', '옛 개인', 1), ('old', '옛', 0)",
+  );
+  site.migrate();
+  await create(site, "items", "daily", {
+    name: "출석 보상",
+    category: "attendance",
+    detailImage: "https://media.example/big.png",
+  });
+  const ids = async (category) =>
+    (await query(site, "items:list", { category })).documents.map(
+      (row) => row.id,
+    );
+  assert.deepEqual(await ids(""), ["daily", "old", "old-personal"]);
+  assert.deepEqual(await ids("personal"), ["old-personal"]);
+  assert.deepEqual(await ids("attendance"), ["daily"]);
+  assert.deepEqual(await ids("general"), ["old"]);
+  assert.equal(
+    await refusal(query(site, "items:list", { category: "other" })),
+    "invalid_input",
+  );
+  const saved = await query(site, "items:get", { id: "daily" });
+  assert.equal(saved.data.category, "attendance");
+  assert.equal(saved.data.detailImage, "https://media.example/big.png");
+  assert.equal(
+    await refusal(
+      update(site, "items", "daily", {
+        detailImage: "http://media.example/x.png",
+      }),
+    ),
+    "invalid_input",
+  );
+  // The shop shows members the detail picture of what it sells.
+  profile(site, "m-1", "하나");
+  await update(site, "items", "daily", { hidden: false });
+  const shop = await site.query("economy/shop:shop", null, M1);
+  const item = shop.items.find((row) => row.id === "daily");
+  assert.equal(item.data.detailImage, "https://media.example/big.png");
+  assert.equal(item.data.category, "attendance");
+});

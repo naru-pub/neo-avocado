@@ -1135,6 +1135,7 @@ test("the shop and inventory read what the member may see, in one call", async (
       effectDescription: "",
       shopTalk: "",
       shopCategory: "",
+      category: "general",
       price: 0,
       order: 0,
       hidden: false,

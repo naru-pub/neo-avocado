@@ -242,6 +242,8 @@ export const TABLES: Record<string, Table> = {
     ["requirements", "requirements", "json", "{}"],
     ["useRequirements", "use_requirements", "json", "{}"],
     ["personal", "personal", "bool", 0],
+    ["category", "category", "text", "general"],
+    ["detailImage", "detail_image", "text", null],
   ]),
   // A grant's 지급 사유 (memo), and a gift's sender and memo, are its gift JSON.
   inventory: table(

@@ -1673,3 +1673,10 @@ body.admin-page {
 .alarm-sound {
   font-size: 12px;
 }
+/* 상세이미지 (it_1) in an item's detail. */
+.item-detail-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 8px auto;
+}

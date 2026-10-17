@@ -309,6 +309,7 @@ async function load({ more = false } = {}) {
     $("reviewTools").hidden = true;
     $("memberSearchLabel").hidden = true;
     $("memberCounts").hidden = true;
+    $("itemCategoryLabel").hidden = true;
     const row = await owner.query(CALLS[section].get, { section });
     if (requestedSection === section) await openForm(row);
     return;
@@ -320,6 +321,7 @@ async function load({ more = false } = {}) {
     $("reviewTools").hidden = true;
     $("memberSearchLabel").hidden = true;
     $("memberCounts").hidden = true;
+    $("itemCategoryLabel").hidden = true;
     return model.report === "visits"
       ? visitsView()
       : model.report === "grants"
@@ -331,6 +333,7 @@ async function load({ more = false } = {}) {
   $("boardTools").hidden = section !== "boards";
   $("memberSearchLabel").hidden = section !== "members";
   $("memberCounts").hidden = section !== "members";
+  $("itemCategoryLabel").hidden = section !== "items";
   const after = more ? cursor : null;
   let page;
   if (model.holdings)
@@ -358,7 +361,12 @@ async function load({ more = false } = {}) {
     });
     references.fields = page.fields;
     reviewFilters(page);
-  } else page = await owner.query(CALLS[section].list, { after });
+  } else if (section === "items")
+    page = await owner.query(CALLS[section].list, {
+      after,
+      category: $<HTMLSelectElement>("itemCategory").value,
+    });
+  else page = await owner.query(CALLS[section].list, { after });
   if (requestedSection !== section || !owner) return;
   if (!more) $("adminRows").replaceChildren();
   if (section === "members" && page.counts)
@@ -545,6 +553,7 @@ $("reviewTools").onsubmit = (event) => {
   run(() => load());
 };
 $("reviewSide").onchange = $("reviewClass").onchange = () => run(() => load());
+$("itemCategory").onchange = () => run(() => load());
 /**
  * 선택승인, 선택삭제 and 선택제거 (character_list_update.php): each chosen
  * character through the review, in turn. 선택삭제 sets 삭제, which another

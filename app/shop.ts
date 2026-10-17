@@ -190,6 +190,16 @@ function itemPortrait(data) {
   }
   return portrait;
 }
+/** 상세이미지 (it_1): the item's larger picture, in its detail, when set. */
+function detailPicture(data) {
+  if (!data?.detailImage?.startsWith("https://")) return [];
+  const image = document.createElement("img");
+  image.src = data.detailImage;
+  image.alt = "";
+  image.loading = "lazy";
+  image.className = "item-detail-image";
+  return [image];
+}
 /** An item's name from the catalog, for requirements and recipes. */
 const itemName = (id) => state.itemCatalog.get(id)?.data.name ?? id;
 /**
@@ -266,7 +276,7 @@ function showShopDetail(item) {
     item.data.shopTalk ||
     `${item.data.name}${item.data.description ? ` — ${item.data.description}` : ""}`;
   const detail = $("shopDetail");
-  detail.replaceChildren(itemPortrait(item.data));
+  detail.replaceChildren(itemPortrait(item.data), ...detailPicture(item.data));
   const title = document.createElement("h3");
   title.append(item.data.name, " ");
   const price = document.createElement("sup");
@@ -384,7 +394,10 @@ function showInventory(rows) {
 function showInventoryDetail(owned) {
   const item = state.itemCatalog.get(owned.data.item)?.data;
   const detail = $("inventoryDetail");
-  detail.replaceChildren(itemPortrait(item ?? owned.data));
+  detail.replaceChildren(
+    itemPortrait(item ?? owned.data),
+    ...detailPicture(item),
+  );
   const title = document.createElement("h3");
   title.append(owned.data.name ?? item?.name ?? "");
   const sellable =

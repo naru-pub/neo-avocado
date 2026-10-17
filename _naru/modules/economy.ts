@@ -60,6 +60,10 @@ export interface ItemRow {
   requirements: string;
   use_requirements: string;
   personal: number;
+  /** 아이템 분류 (it_category): general, personal or attendance. */
+  category: string;
+  /** 상세이미지 (it_1). */
+  detail_image: string | null;
 }
 
 /** An item as pages and old code read it. */
@@ -89,6 +93,8 @@ export function itemOf(row: ItemRow): Item {
     useRequirements: parsed(row.use_requirements, {}),
   };
   if (row.image !== null) data.image = row.image;
+  if (row.detail_image) data.detailImage = row.detail_image;
+  data.category = row.category ?? "general";
   if (row.display !== null) data.display = parsed(row.display, {});
   if (row.stock !== null) data.stock = row.stock;
   if (row.sell_price !== null) data.sellPrice = row.sell_price;
@@ -527,7 +533,7 @@ export async function makePersonalItem(
     });
   const id = `personal-${ctx.now.toString(36)}-${ticket.id}`;
   const { rows } = await ctx.sql<ItemRow>(
-    "INSERT INTO items (id, name, description, image, hidden, sellable, personal) VALUES (?, ?, ?, ?, 1, 0, 1) RETURNING *",
+    "INSERT INTO items (id, name, description, image, hidden, sellable, personal, category) VALUES (?, ?, ?, ?, 1, 0, 1, 'personal') RETURNING *",
     [
       id,
       text(data.name, 80, true),

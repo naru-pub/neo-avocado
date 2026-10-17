@@ -432,6 +432,17 @@ export const models: Record<string, Model> = {
     help: "상점 가격·재고와 사용 효과, 구매 조건을 설정합니다. 빈 재고는 무제한입니다. 개인 제작 아이템도 여기에서 관리합니다.",
     fields: [
       { key: "name", label: "이름", required: true, max: 80 },
+      // it_category (adm/item_form.php:81): what the item list files it under.
+      {
+        key: "category",
+        label: "아이템 분류",
+        type: "choice",
+        options: [
+          ["general", "일반 아이템"],
+          ["personal", "개인 아이템"],
+          ["attendance", "출석 아이템"],
+        ],
+      },
       { key: "description", label: "설명", type: "textarea", max: 2000 },
       // it_content2: what it does, under the description in the item's detail.
       {
@@ -443,6 +454,14 @@ export const models: Record<string, Model> = {
       // sh_content: what the shop's NPC says of it when picked.
       { key: "shopTalk", label: "상점 NPC 대사", type: "textarea", max: 500 },
       { key: "image", label: "이미지", type: "url", image: true, max: 2000 },
+      // it_1: a larger picture for the item's detail.
+      {
+        key: "detailImage",
+        label: "상세이미지 (상점·인벤토리의 아이템 상세에 보임)",
+        type: "url",
+        image: true,
+        max: 2000,
+      },
       {
         key: "shopCategory",
         label: "상점 분류 (기본 설정의 분류 중 하나, 빈칸: 첫 분류)",

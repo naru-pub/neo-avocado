@@ -76,7 +76,7 @@ test("catalog forms produce nested rules and cannot save invalid prices or incom
   const data = buildRecord(
     "items",
     values,
-    { data: { category: "existing" } },
+    { data: { legacy: "existing" } },
     references,
   ).data;
   assert.deepEqual(data.effect, { type: "restore", stat: "hp", amount: 2 });
@@ -85,7 +85,9 @@ test("catalog forms produce nested rules and cannot save invalid prices or incom
     { item: "seed", count: 2, consume: true },
   ]);
   assert.equal(data.stock, undefined);
-  assert.equal(data.category, "existing");
+  // What the form does not show is kept.
+  assert.equal(data.legacy, "existing");
+  assert.equal(data.category, "general");
   for (const change of [
     { price: "-1" },
     { "effect.amount": "0" },
