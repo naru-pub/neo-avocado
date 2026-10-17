@@ -175,6 +175,8 @@ async function openConversation(partner, focus = null) {
   older.type = "button";
   older.className = "older-messages";
   older.textContent = "이전 쪽지 더 보기";
+  // ui-btn etc, as the original's 이전대화보기.
+  older.classList.add("etc");
   older.hidden = !result.more;
   const readOlder = async () => {
     older.disabled = true;

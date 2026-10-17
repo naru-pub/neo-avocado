@@ -1,3 +1,11 @@
+import {
+  BACKGROUNDS,
+  BOXES,
+  BUTTONS,
+  PANELS,
+  TEXTS,
+  colorOf,
+} from "./design.js";
 // The admin's sections (admin/): each one's form, and `buildRecord`, which
 // checks what a form sends and makes the record its table keeps. The page
 // draws its forms from these; the owner's mutations in admin/ check every
@@ -1044,12 +1052,178 @@ const schedule = [
     max: 19,
   },
 ];
+/** design_form.php's 배경반복, 배경위치, 배경크기 and 고정, blank first. */
+const REPEAT_CHOICES = [
+  ["", "반복"],
+  ["no-repeat", "반복없음"],
+  ["repeat-x", "가로반복"],
+  ["repeat-y", "세로반복"],
+];
+const POSITION_CHOICES = [
+  ["", "왼쪽 상단"],
+  ["left center", "왼쪽 중단"],
+  ["left bottom", "왼쪽 하단"],
+  ["center top", "중간 상단"],
+  ["center center", "중간 중단"],
+  ["center bottom", "중간 하단"],
+  ["right top", "오른쪽 상단"],
+  ["right center", "오른쪽 중단"],
+  ["right bottom", "오른쪽 하단"],
+];
+const SIZE_CHOICES = [
+  ["", "원본크기"],
+  ["contain", "맞춤"],
+  ["cover", "꽉참"],
+  ["100% 100%", "늘이기"],
+];
+const color = (key: string, label: string): ModelField => ({
+  key,
+  label,
+  type: "css-color",
+  max: 40,
+});
+const px = (key: string, label: string): ModelField => ({
+  key,
+  label: `${label} (px)`,
+  type: "optional-number",
+});
+/** A background's fields (cs_value, cs_etc_1–5): 이미지, 색상코드, 반복, 위치, 크기, 고정. */
+function backgroundFields(name: keyof typeof BACKGROUNDS): ModelField[] {
+  const { label, image, fixed } = BACKGROUNDS[name];
+  const key = `styles.${name}`;
+  return [
+    { type: "group", label },
+    ...(image
+      ? [
+          {
+            key: `${key}.image`,
+            label: "이미지",
+            type: "url",
+            image: true,
+            max: 2000,
+          },
+        ]
+      : []),
+    color(`${key}.color`, "색상코드"),
+    {
+      key: `${key}.repeat`,
+      label: "배경반복",
+      type: "choice",
+      options: REPEAT_CHOICES,
+    },
+    {
+      key: `${key}.position`,
+      label: "배경위치",
+      type: "choice",
+      options: POSITION_CHOICES,
+    },
+    {
+      key: `${key}.size`,
+      label: "배경크기",
+      type: "choice",
+      options: SIZE_CHOICES,
+    },
+    ...(fixed
+      ? [
+          {
+            key: `${key}.fixed`,
+            label: "고정",
+            type: "choice",
+            options: [
+              ["", "스크롤"],
+              ["fixed", "고정"],
+            ],
+          },
+        ]
+      : []),
+  ];
+}
+/** A box's fields: 배경색상, 폰트색상, 라인색상·타입·굵기와 상·하·좌·우. */
+function boxFields(name: keyof typeof BOXES): ModelField[] {
+  const box = BOXES[name];
+  const key = `styles.${name}`;
+  return [
+    { type: "group", label: box.label },
+    color(`${key}.background`, "배경색상"),
+    color(`${key}.color`, "폰트색상"),
+    ...("hover" in box ? [color(`${key}.hover`, "오버색상")] : []),
+    ...("margin" in box ? [px(`${key}.margin`, "하단여백")] : []),
+    color(`${key}.borderColor`, "라인색상"),
+    {
+      key: `${key}.borderStyle`,
+      label: "라인타입",
+      type: "choice",
+      options: [
+        ["", "라인없음"],
+        ["solid", "실선"],
+        ["dotted", "점선"],
+        ["dashed", "대쉬선"],
+        ["double", "이중선"],
+      ],
+    },
+    px(`${key}.borderWidth`, "라인굵기"),
+    {
+      key: `${key}.borderSides`,
+      label: "라인 방향 (여럿 선택)",
+      type: "choice",
+      multiple: true,
+      options: [
+        ["top", "상"],
+        ["bottom", "하"],
+        ["left", "좌"],
+        ["right", "우"],
+      ],
+    },
+  ];
+}
+function buttonFields(name: keyof typeof BUTTONS): ModelField[] {
+  const key = `styles.${name}`;
+  return [
+    { type: "group", label: BUTTONS[name] },
+    color(`${key}.color`, "텍스트색상"),
+    color(`${key}.background`, "배경색상"),
+    color(`${key}.borderColor`, "라인색상"),
+    color(`${key}.hoverColor`, "마우스 오버 텍스트색상"),
+    color(`${key}.hoverBackground`, "마우스 오버 배경색상"),
+    color(`${key}.hoverBorderColor`, "마우스 오버 라인색상"),
+  ];
+}
+function panelFields(name: keyof typeof PANELS): ModelField[] {
+  const key = `styles.${name}`;
+  return [
+    { type: "group", label: PANELS[name] },
+    color(`${key}.background`, "배경색상"),
+    color(`${key}.color`, "폰트색상"),
+    color(`${key}.borderColor`, "라인색상"),
+    px(`${key}.topLeft`, "좌측상단 둥글기"),
+    px(`${key}.topRight`, "우측상단 둥글기"),
+    px(`${key}.bottomRight`, "우측하단 둥글기"),
+    px(`${key}.bottomLeft`, "좌측하단 둥글기"),
+  ];
+}
+function textFields(name: keyof typeof TEXTS): ModelField[] {
+  const { label, size } = TEXTS[name];
+  const key = `styles.${name}`;
+  return [
+    { type: "group", label },
+    color(`${key}.color`, "색상코드"),
+    ...(size ? [px(`${key}.size`, "폰트크기")] : []),
+  ];
+}
 models.design = {
   label: "디자인",
-  help: "사이트 이름, 로고, 배경(색상·반복·위치, 모바일 배경)과 색을 정합니다. 디자인 사용을 끄면 원본처럼 꾸미지 않은 기본 화면이고, 켜면 아래 배경·글꼴·색이 적용됩니다. 이미지는 파일로 올리거나 HTTPS 주소로 입력합니다. 회원과 손님 모두에게 적용됩니다.",
+  help: "원본의 디자인 설정처럼 화면·메뉴·버튼·테이블·로드비·기타 디자인을 정합니다. 디자인 사용을 끄면 원본처럼 꾸미지 않은 기본 화면이고, 켜면 아래 설정이 적용됩니다(빈칸은 기본 디자인 그대로). 색상코드는 #000000, #000, rgba(0, 0, 0, .5), transparent 꼴로 적습니다. 이미지는 파일로 올리거나 HTTPS 주소로 입력합니다. 회원과 손님 모두에게 적용됩니다.",
   fixedId: "site",
   fields: [
     { key: "enabled", label: "디자인 사용", type: "checkbox" },
+    { type: "heading", label: "화면 디자인 설정" },
+    // use_header: off, the page is its content alone (no logo, menu or footer).
+    {
+      key: "useHeader",
+      label: "헤더 사용 (끄면 로고·메뉴·하단 없이 내용만 보입니다)",
+      type: "checkbox",
+      default: true,
+    },
     { key: "title", label: "사이트 이름", max: 60 },
     // cf_site_descript, cf_site_img, cf_favicon (head.sub.php). Link
     // previews (_naru/routes/) use the name, description and image, and
@@ -1133,12 +1307,85 @@ models.design = {
       ],
     },
     {
+      key: "backgroundSize",
+      label: "배경 크기",
+      type: "choice",
+      options: SIZE_CHOICES,
+    },
+    ...backgroundFields("mobileBackground"),
+    { type: "group", label: "헤더배경" },
+    {
       key: "headerBackground",
-      label: "상단 배경 이미지",
+      label: "이미지",
       type: "url",
       image: true,
       max: 2000,
     },
+    ...backgroundFields("header").slice(1),
+    ...backgroundFields("mobileHeader"),
+    // menu_pos, menu_width, menu_height, menu_background, menu_text.
+    { type: "heading", label: "메뉴 디자인 설정" },
+    {
+      key: "menuPosition",
+      label: "메뉴 위치",
+      type: "choice",
+      options: [
+        ["left", "좌측"],
+        ["top", "상단"],
+      ],
+    },
+    {
+      key: "menuWidth",
+      label: "가로 사이즈 (px, 메뉴 위치 좌측일 때)",
+      type: "number",
+      default: 200,
+    },
+    {
+      key: "menuHeight",
+      label: "세로 사이즈 (px, 메뉴 위치 상단일 때)",
+      type: "number",
+      default: 50,
+    },
+    ...backgroundFields("menu"),
+    ...backgroundFields("mobileMenu"),
+    { type: "group", label: "폰트색상" },
+    color("styles.menuText.color", "폰트색상"),
+    px("styles.menuText.size", "폰트크기"),
+    color("styles.menuText.hoverColor", "마우스 오버 폰트색상"),
+    px("styles.menuText.hoverSize", "마우스 오버 폰트크기"),
+    { type: "heading", label: "버튼 디자인 설정" },
+    ...buttonFields("button"),
+    ...buttonFields("pointButton"),
+    ...buttonFields("etcButton"),
+    { type: "heading", label: "테이블(게시판) 디자인 설정" },
+    ...boxFields("table"),
+    ...boxFields("listHeader"),
+    ...boxFields("listBody"),
+    ...boxFields("formHeader"),
+    ...boxFields("formBody"),
+    // The mmb skin's parts (로드비 디자인).
+    { type: "heading", label: "로드비 디자인 설정" },
+    ...backgroundFields("board"),
+    ...boxFields("notice"),
+    // mmb_counter: shown above a picture board's logs, sanitized as posts are.
+    {
+      key: "counter",
+      label:
+        "접속자 카운터 (HTML. 이미지·링크만 보이고 스크립트·스타일은 표시하지 않습니다)",
+      type: "textarea",
+      max: 2000,
+    },
+    ...boxFields("logList"),
+    ...boxFields("logImage"),
+    ...boxFields("comments"),
+    ...boxFields("comment"),
+    ...textFields("author"),
+    ...textFields("date"),
+    ...textFields("link"),
+    ...textFields("call"),
+    ...textFields("logLink"),
+    ...textFields("hashTag"),
+    { type: "heading", label: "기타 디자인 설정" },
     {
       key: "font",
       label: "글꼴",
@@ -1165,6 +1412,12 @@ models.design = {
       type: "color",
       default: "#1a1a1a",
     },
+    ...panelFields("input"),
+    ...panelFields("box"),
+    { type: "group", label: "이퀄라이저" },
+    color("styles.equalizer.color", "막대색상"),
+    color("styles.equalizer.glow", "외부광선"),
+    ...boxFields("subMenu"),
   ],
 };
 models.menus = {
@@ -1331,7 +1584,7 @@ export function buildRecord(section, values, previous, references) {
   const data = JSON.parse(JSON.stringify(previous?.data ?? {}));
   for (const field of model.fields) {
     // A section title on the form, as the original's settings page has.
-    if (field.type === "heading") continue;
+    if (field.type === "heading" || field.type === "group") continue;
     const value = values[field.key];
     if (field.transient) {
       if (value === undefined && !field.required) continue;
@@ -1392,6 +1645,23 @@ export function buildRecord(section, values, previous, references) {
         throw new Error(`재료는 1~${field.maxCount}개로 설정하세요.`);
     } else if (field.type === "pick") {
       result = picked(field, value, references);
+    } else if (field.type === "choice" && field.multiple) {
+      // Several of a choice's options (design_form.php's 상·하·좌·우).
+      const choices = field.options.map(([id]) => id);
+      const list = Array.isArray(value) ? value : [];
+      if (list.some((entry) => !choices.includes(entry)))
+        throw new Error(`${field.label}을(를) 확인하세요.`);
+      result = choices.filter((choice) => list.includes(choice));
+    } else if (field.type === "css-color") {
+      // A colour design_form.php's text fields take, or nothing.
+      if (
+        typeof value !== "string" ||
+        (value.trim() !== "" && colorOf(value) === null)
+      )
+        throw new Error(
+          `${field.label}은(는) #000000, rgba(0, 0, 0, .5) 꼴로 입력하세요.`,
+        );
+      result = value.trim();
     } else if (
       ["item", "stat", "title", "choice", "profile"].includes(field.type)
     ) {
@@ -1687,7 +1957,7 @@ export function formValues(
   const model = models[section];
   const values: Record<string, unknown> = {};
   for (const field of model?.fields ?? []) {
-    if (field.type === "heading" || field.transient) continue;
+    if (["heading", "group"].includes(field.type) || field.transient) continue;
     const value =
       section === "quests" && field.key === "images"
         ? Array.isArray(data?.images)
@@ -1703,7 +1973,7 @@ export function formValues(
             ? value.join(", ")
             : (value ?? "")
           : ["ingredients", "titles"].includes(field.type) ||
-              (field.type === "pick" && field.multiple)
+              (["pick", "choice"].includes(field.type) && field.multiple)
             ? Array.isArray(value)
               ? value
               : []

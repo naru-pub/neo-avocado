@@ -958,11 +958,25 @@ async function openForm(row = null) {
                 definition.data.initial),
         },
       );
+  // A heading starts a part of the form; a group, a row of its fields
+  // (디자인's 배경, 버튼, 테이블…), set in a fieldset of its own.
+  let container = $("adminFields");
   for (const field of fields) {
     if (field.type === "heading") {
       const title = document.createElement("h3");
       title.textContent = named(field.label);
       $("adminFields").append(title);
+      container = $("adminFields");
+      continue;
+    }
+    if (field.type === "group") {
+      const group = document.createElement("fieldset");
+      group.className = "field-group";
+      const legend = document.createElement("legend");
+      legend.textContent = named(field.label);
+      group.append(legend);
+      $("adminFields").append(group);
+      container = group;
       continue;
     }
     const value =
@@ -1034,7 +1048,7 @@ async function openForm(row = null) {
       add.onclick = () => addRow();
       group.append(add);
       for (const entry of value ?? []) addRow(entry);
-      $("adminFields").append(group);
+      container.append(group);
       continue;
     }
     const label = document.createElement("label");
@@ -1063,9 +1077,10 @@ async function openForm(row = null) {
     if (!isSelect && field.type !== "textarea")
       input.type = ["optional-number", "decimal"].includes(field.type)
         ? "number"
-        : ["tokens", "pick"].includes(field.type)
+        : ["tokens", "pick", "css-color"].includes(field.type)
           ? "text"
           : (field.type ?? "text");
+    if (field.type === "css-color") input.placeholder = "#000000";
     if (["number", "optional-number", "decimal"].includes(field.type)) {
       input.min = "0";
       input.step = field.type === "decimal" ? "any" : "1";
@@ -1131,9 +1146,9 @@ async function openForm(row = null) {
     }
     if (field.image) input.placeholder = "https://";
     label.append(input);
-    $("adminFields").append(label);
+    container.append(label);
     if (field.image || field.images)
-      $("adminFields").append(imageUpload(field, value));
+      container.append(imageUpload(field, value));
   }
   $("adminForm").hidden = false;
 }

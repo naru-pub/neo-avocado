@@ -16,6 +16,7 @@ import {
   backgroundMusic,
   readablePage,
 } from "../../modules/content.js";
+import { designCss, designLayout } from "../../modules/design.js";
 import { imageSlotsOf, viewerOf } from "../../modules/images.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
 
@@ -104,6 +105,13 @@ export async function site(ctx: QueryCtx) {
     headerBackground: https(saved.headerBackground),
     font: ["sans", "serif", "mono"].includes(saved.font) ? saved.font : "sans",
     colors,
+    // 헤더사용 and 메뉴위치 (use_header, menu_pos), and the rest of 디자인
+    // 설정 as CSS (design_form_css.php), every value checked (design.ts).
+    useHeader: designLayout(saved).useHeader,
+    menuPosition: designLayout(saved).menuPosition,
+    css: designCss(saved),
+    // mmb_counter: the owner's HTML, which the page sanitizes as posts.
+    counter: short(saved.counter, 2000),
   };
   const readable = (row: { enabled: number; level: number }) =>
     row.enabled !== 0 && levelAllows(access, row.level);

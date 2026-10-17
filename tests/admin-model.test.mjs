@@ -326,16 +326,13 @@ test("content pages are everyone's by default, as the original's have no read le
 
 test("the design's background colour is a #rrggbb code or blank, its repeat and position listed", () => {
   const values = {
+    ...formValues("design", null),
     enabled: true,
     font: "sans",
     backgroundRepeat: "no-repeat",
     backgroundPosition: "center top",
     backgroundColor: "#102030",
   };
-  for (const field of models.design.fields)
-    if (field.type === "color") values[field.key] = field.default;
-    else if (!(field.key in values) && field.type !== "checkbox")
-      values[field.key] = "";
   const row = buildRecord("design", values, null, references);
   assert.equal(row.data.backgroundColor, "#102030");
   assert.equal(row.data.backgroundPosition, "center top");
@@ -351,6 +348,55 @@ test("the design's background colour is a #rrggbb code or blank, its repeat and 
   ])
     assert.throws(() =>
       buildRecord("design", { ...values, ...change }, null, references),
+    );
+});
+
+test("디자인 설정's styles take colours, pixels and listed choices, kept by part", () => {
+  const values = {
+    ...formValues("design", null),
+    useHeader: false,
+    menuPosition: "top",
+    menuHeight: "70",
+    "styles.notice.background": "rgba(0, 0, 0, .5)",
+    "styles.notice.borderStyle": "dashed",
+    "styles.notice.borderWidth": "1",
+    "styles.notice.borderSides": ["bottom", "top"],
+    "styles.button.hoverBackground": "#222",
+    "styles.input.topLeft": "4",
+    "styles.menu.image": "https://cdn.example/menu.png",
+  };
+  const { data } = buildRecord("design", values, null, references);
+  assert.equal(data.useHeader, false);
+  assert.equal(data.menuPosition, "top");
+  assert.equal(data.menuHeight, 70);
+  assert.deepEqual(data.styles.notice, {
+    background: "rgba(0, 0, 0, .5)",
+    color: "",
+    borderColor: "",
+    borderStyle: "dashed",
+    borderWidth: 1,
+    // In the original's order, 상·하·좌·우.
+    borderSides: ["top", "bottom"],
+  });
+  assert.equal(data.styles.button.hoverBackground, "#222");
+  assert.equal(data.styles.input.topLeft, 4);
+  assert.equal(data.styles.menu.image, "https://cdn.example/menu.png");
+  // A form saved again keeps the same record.
+  assert.deepEqual(
+    buildRecord("design", formValues("design", data), { data }, references)
+      .data,
+    data,
+  );
+  for (const change of [
+    { "styles.notice.background": "red; } body { display: none" },
+    { "styles.notice.borderStyle": "groove" },
+    { "styles.notice.borderSides": ["middle"] },
+    { "styles.menu.image": "http://cdn.example/menu.png" },
+    { menuPosition: "right" },
+  ])
+    assert.throws(
+      () => buildRecord("design", { ...values, ...change }, null, references),
+      JSON.stringify(change),
     );
 });
 

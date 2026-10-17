@@ -331,6 +331,84 @@ test("the owner is not 현재접속자, and a member before joining is nowhere",
   );
 });
 
+test("디자인 설정's styles become the design CSS, and nothing else does", async () => {
+  const site = await testSite();
+  setSettings(site, "design", {
+    enabled: true,
+    useHeader: false,
+    menuPosition: "top",
+    menuWidth: 240,
+    menuHeight: "x",
+    counter:
+      '<a href="https://whos.amung.us/"><img src="https://c.example/c.png"></a>',
+    styles: {
+      notice: {
+        background: "rgba(0, 0, 0, .5)",
+        color: "#eee",
+        borderColor: "#555555",
+        borderStyle: "dashed",
+        borderWidth: 1,
+        borderSides: ["top", "bottom", "middle"],
+      },
+      comment: { margin: 10, background: "red;} body{display:none" },
+      button: { color: "#fff", hoverBackground: "#222222" },
+      menu: { image: 'https://c.example/m.png");}', color: "#000" },
+      mobileMenu: { image: "https://c.example/m.png", fixed: "fixed" },
+      input: { topLeft: 4, bottomRight: "8" },
+      menuText: { color: "#ffffff", size: 14, hoverColor: "#29c7c9" },
+      hashTag: { color: "#29c7c9", size: 30 },
+      equalizer: { color: "#29c7c9", glow: "#000000" },
+      unknown: { color: "#123456" },
+    },
+  });
+  const { design } = await site.query("content/site:site");
+  assert.equal(design.useHeader, false);
+  assert.equal(design.menuPosition, "top");
+  assert.equal(
+    design.counter,
+    '<a href="https://whos.amung.us/"><img src="https://c.example/c.png"></a>',
+  );
+  const { css } = design;
+  // menu_width as set; menu_height malformed, the original's 50.
+  assert.match(css, /--menu-width: 240px;\n  --menu-height: 50px;/);
+  assert.match(
+    css,
+    /body\.site\.designed #boardDescription \{\n  background-color: rgba\(0, 0, 0, \.5\);\n  color: #eee;\n  border-top-color: #555555;\n  border-top-style: dashed;\n  border-top-width: 1px;\n  border-bottom-color: #555555;/,
+  );
+  assert.doesNotMatch(css, /border-middle/);
+  // A colour that is not one is left out; the margin stays.
+  assert.match(
+    css,
+    /body\.site\.designed \.comment \{\n  margin-bottom: 10px !important;\n\}/,
+  );
+  assert.match(
+    css,
+    /button:hover:not\(:disabled\)[^{]*\{\n  background: #222222;/,
+  );
+  // A picture's address must be plain HTTPS: the broken one is dropped.
+  assert.doesNotMatch(css, /m\.png"\);\}/);
+  assert.match(
+    css,
+    /@media \(max-width: 1024px\) \{\nbody\.site\.designed \.site-menu \{\n  background-image: url\("https:\/\/c\.example\/m\.png"\);\n  background-attachment: fixed;/,
+  );
+  assert.match(
+    css,
+    /border-top-left-radius: 4px;\n  border-bottom-right-radius: 8px;/,
+  );
+  assert.match(css, /\.site-menu a \{\n  color: #ffffff;\n  font-size: 14px;/);
+  // 해시태그 has a colour only.
+  assert.match(css, /\.hash-tag \{\n  color: #29c7c9;\n\}/);
+  assert.match(css, /box-shadow: 0 0 3px 0 #000000/);
+  assert.doesNotMatch(css, /#123456|display:none|\}\s*body\{/);
+  // Nothing outside a rule's body: every line is a selector, a declaration or a brace.
+  for (const line of css.split("\n").filter(Boolean))
+    assert.match(
+      line,
+      /^(?:@media \([a-z-]+: \d+px\) \{|[^{};]+[,{]|  [a-z-]+: [^;{}]+;|\})$/,
+      line,
+    );
+});
+
 test("the site frame shows only safe design values and menus/banners a reader may see", async () => {
   const site = await testSite({ now: Date.parse("2030-01-01T03:00:00Z") });
   setSettings(site, "design", {
@@ -402,6 +480,10 @@ test("the site frame shows only safe design values and menus/banners a reader ma
     headerBackground: null,
     font: "sans",
     colors: { accent: "#123456" },
+    useHeader: true,
+    menuPosition: "left",
+    css: ":root:has(body.site.designed) {\n  --menu-width: 200px;\n  --menu-height: 50px;\n}\n",
+    counter: "",
   });
   assert.deepEqual(
     frame.menus.map((entry) => entry.id),

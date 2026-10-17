@@ -33,6 +33,23 @@ export async function loadSite() {
   renderBanners(site.banners);
   await showMainPage(site.main === true, site.banners);
   setMusic(site.bgm);
+  state.counter = design.enabled ? (design.counter ?? "") : "";
+  document.body.classList.toggle(
+    "no-header",
+    design.enabled && design.useHeader === false,
+  );
+  document.body.classList.toggle(
+    "menu-top",
+    design.enabled && design.menuPosition === "top",
+  );
+  // The rest of 디자인 설정, as the server made it from checked values.
+  let styles = document.getElementById("designStyles");
+  if (!styles) {
+    styles = document.createElement("style");
+    styles.id = "designStyles";
+    document.head.append(styles);
+  }
+  styles.textContent = design.enabled ? (design.css ?? "") : "";
   if (!design.enabled) return;
   for (const [key, variable] of Object.entries(SITE_COLORS))
     if (design.colors[key]) root.setProperty(variable, design.colors[key]);

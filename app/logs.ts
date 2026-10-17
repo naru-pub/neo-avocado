@@ -1108,6 +1108,12 @@ export function configureBoard() {
   $("boardDescription").replaceChildren(
     sanitizedFragment(document, board?.data.description ?? ""),
   );
+  // mmb_counter, above a picture board's logs.
+  $("boardCounter").replaceChildren(
+    kindOf() === "image"
+      ? sanitizedFragment(document, state.counter ?? "")
+      : "",
+  );
   showCategories();
   const area = $<HTMLTextAreaElement>("logText");
   // bo_write_max, under the text's own limit; HTML boards have none.

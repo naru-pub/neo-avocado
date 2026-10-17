@@ -1181,6 +1181,39 @@ test("the intro shows one picture at a time on arriving home, then not for a day
   assert.equal($("banners").querySelector(".slide-nav"), null);
 });
 
+test("디자인 설정 adds its CSS, hides the header or tops the menu, and shows the counter sanitized", async () => {
+  const database = fakeDatabase({ [PROFILES]: [me] });
+  database.site = {
+    design: {
+      enabled: true,
+      title: "",
+      font: "sans",
+      colors: {},
+      useHeader: false,
+      menuPosition: "top",
+      css: "body.site.designed .comment {\n  color: #eee;\n}\n",
+      counter:
+        '<a href="https://whos.amung.us/"><img src="https://c.example/c.png"></a><script>alert(1)</script>',
+    },
+  };
+  const { $, window, settle } = await page(database, {
+    url: "https://neo-avocado.naru.pub/logs/default",
+  });
+  await settle();
+  const { body } = window.document;
+  assert.equal(
+    window.document.getElementById("designStyles").textContent,
+    "body.site.designed .comment {\n  color: #eee;\n}\n",
+  );
+  assert.ok(body.classList.contains("no-header"));
+  assert.ok(body.classList.contains("menu-top"));
+  // A picture board shows the counter, its links and pictures only.
+  assert.ok(
+    $("boardCounter").querySelector('img[src="https://c.example/c.png"]'),
+  );
+  assert.equal($("boardCounter").querySelector("script"), null);
+});
+
 test("logs are read a page at a time, newest first, and comments only when opened", async () => {
   const logs = Array.from({ length: 17 }, (_, n) => ({
     id: `log-${n}`,

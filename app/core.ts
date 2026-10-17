@@ -41,6 +41,8 @@ const initialState = {
   images: imageSlotsOf(),
   // What a character's page shows (ad_use_exp, _rank, _status, _title…).
   viewer: viewerOf(),
+  // 디자인's 접속자 카운터 (mmb_counter): HTML shown above picture boards.
+  counter: "",
   // The site owner, signed in here, is staff as moderators are.
   owner: false,
   role: "member",

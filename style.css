@@ -1350,6 +1350,27 @@ body.admin-page {
     max-height: none;
   }
 }
+/* A row of one part's fields (디자인's 배경, 버튼, 테이블…), side by side. */
+#adminFields .field-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 8px 0;
+  padding: 6px 10px 10px;
+  border: 1px solid var(--line);
+}
+#adminFields .field-group legend {
+  font-weight: bold;
+}
+#adminFields .field-group > label {
+  flex: 1 1 160px;
+  margin: 0;
+}
+#adminFields .field-group > label input,
+#adminFields .field-group > label select {
+  width: 100%;
+  box-sizing: border-box;
+}
 /* The 흉상 and 전신 on a character's page (member/viewer.skin.php). */
 .viewer-figures {
   display: flex;

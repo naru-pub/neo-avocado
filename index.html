@@ -301,7 +301,9 @@
           >
           <button type="submit">등록</button>
         </form>
-        <p class="actions"><button id="myLeave" type="button">탈퇴</button></p>
+        <p class="actions">
+          <button id="myLeave" class="etc" type="button">탈퇴</button>
+        </p>
       </section>
       <section id="myLogsView" hidden>
         <h2>로그내역 <small>My Logs</small></h2>
@@ -369,6 +371,8 @@
           <select id="board"></select
         ></label>
         <div id="boardDescription" class="rich-text"></div>
+        <!-- mmb_counter (skin/board/mmb/list.skin.php's connect-wiget). -->
+        <div id="boardCounter" class="rich-text"></div>
         <!-- 분류 (bbs/list.mmb.php:4-25): 전체 and the board's categories. -->
         <nav
           id="boardCategories"

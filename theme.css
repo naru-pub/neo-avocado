@@ -443,3 +443,91 @@ body.site.designed .sub-tabs:not(#shopCategories) button {
 body.site.designed .sub-tabs:not(#shopCategories) button[aria-pressed="true"] {
   color: var(--avocado);
 }
+
+/* 헤더사용 off (use_header N): the content alone, no header or footer. */
+body.site.designed.no-header > .top,
+body.site.designed.no-header .copyright {
+  display: none !important;
+}
+body.site.designed.no-header
+  > :not(.top):not(dialog):not(template):not(script) {
+  margin-left: auto;
+}
+body.site.designed.no-header > main,
+body.site.designed.no-header > #welcome {
+  padding-top: 20px;
+}
+/* 메뉴위치 상단 (menu_pos top): a bar of menu_height across the top, the
+   logo at its left and the menu beside it, over the content column. */
+@media (min-width: 1025px) {
+  body.site.designed.menu-top > .top {
+    position: relative;
+    bottom: auto;
+    right: 0;
+    width: auto;
+    height: var(--menu-height);
+    min-height: var(--menu-height);
+    overflow: visible;
+    flex-direction: row;
+    align-items: center;
+    padding: 0 20px;
+  }
+  body.site.designed.menu-top > .top h1 {
+    padding: 0;
+  }
+  body.site.designed.menu-top #siteLogo {
+    max-height: var(--menu-height);
+  }
+  body.site.designed.menu-top .site-menu {
+    order: 0;
+    margin-left: auto;
+  }
+  body.site.designed.menu-top .site-menu > ul {
+    display: flex;
+    gap: 20px;
+    padding: 0;
+  }
+  body.site.designed.menu-top .site-menu li {
+    position: relative;
+    margin: 0;
+  }
+  body.site.designed.menu-top .site-menu li ul {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 55;
+    min-width: 120px;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.85);
+    text-align: left;
+  }
+  body.site.designed.menu-top .site-menu li:hover > ul,
+  body.site.designed.menu-top .site-menu li:focus-within > ul {
+    display: block;
+  }
+  body.site.designed.menu-top .account {
+    order: 1;
+    flex-direction: row;
+    padding: 0;
+  }
+  body.site.designed.menu-top .account button {
+    width: auto;
+  }
+  body.site.designed.menu-top
+    > :not(.top):not(dialog):not(template):not(script) {
+    margin-left: auto;
+  }
+  body.site.designed.menu-top > main,
+  body.site.designed.menu-top > #welcome {
+    padding-top: 20px;
+  }
+}
+/* mmb_counter: the owner's visitor counter above a picture board's logs. */
+#boardCounter:empty {
+  display: none;
+}
+#boardCounter {
+  margin: 8px 0;
+  text-align: center;
+}
