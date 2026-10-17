@@ -159,15 +159,26 @@ export function matchRoute(names, pathname) {
   return best && { route: best.route, params: best.params };
 }
 
-/** A fresh site: an empty database with every migration in dist/ applied. */
+/**
+ * A fresh site: an empty database with every migration in dist/ applied,
+ * but the last `pending` of them, which `site.migrate()` applies (to test a
+ * migration on rows written before it).
+ */
 export async function testSite({
   now = Date.parse("2026-10-16T03:00:00Z"),
+  pending = 0,
 } = {}) {
-  const db = database(await migrations());
+  const sql = await migrations();
+  const db = database(sql.slice(0, sql.length - pending));
   const roles = new Map();
   const site = {
     db,
     now,
+    /** Applies the migrations held back, in order. */
+    migrate() {
+      for (const text of sql.slice(sql.length - pending)) db.exec(text);
+      pending = 0;
+    },
     /** Rows of `text` with `values`, straight from the database (for asserts). */
     rows: (text, ...values) =>
       db
