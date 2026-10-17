@@ -222,6 +222,7 @@ test("boards and groups are saved as their forms check them, and members see the
       categories: ["잡담", "질문"],
       html: true,
       actions: false,
+      rss: false,
       anonymous: false,
       foldHeight: 600,
       pageRows: 15,

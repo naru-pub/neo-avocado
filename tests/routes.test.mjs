@@ -413,3 +413,67 @@ test("a content page's preview: its title, at a visitor's level", async () => {
   setSettings(site, "community", { siteOpen: false });
   assert.deepEqual(await site.route("/content/rules"), CLOSED);
 });
+
+test("a board's RSS feed lists what a visitor reads, while it is on and the board is public", async () => {
+  const site = await testSite();
+  insert(site, "profiles", { member: "m-1", nick: "하나" });
+  insert(site, "board_groups", { id: "g", name: "모임" });
+  board(site, "free", {
+    name: "자유 & 잡담",
+    group_id: "g",
+    options: { rss: true },
+  });
+  post(site, {
+    title: "첫 <글>",
+    body: "본문\n둘째 줄",
+    image: "https://media.example/a.png",
+    created_at: Date.parse("2026-10-16T03:00:00Z"),
+  });
+  post(site, { title: "비밀", body: "x", secret: 1 });
+  post(site, { title: "멤버", body: "x", members_only: 1 });
+  post(site, { title: "익명", body: "x", anonymous: 1 });
+  post(site, {
+    title: "",
+    body: "<b>HTML</b> 글",
+    format: "html",
+    owner: null,
+    guest_name: "손",
+  });
+  const answer = await site.route("/rss/free", {}, "https://alice.naru.pub");
+  assert.equal(answer.type, "application/rss+xml");
+  assert.equal(answer.cache, 300);
+  const xml = answer.body;
+  assert.match(
+    xml,
+    /^<\?xml version="1.0" encoding="utf-8" \?>\n<rss version="2.0"/,
+  );
+  assert.match(
+    xml,
+    /<title>네오 아보카도 &gt; 모임 &gt; 자유 &amp; 잡담<\/title>/,
+  );
+  assert.match(xml, /<link>https:\/\/alice\.naru\.pub\/logs\/free<\/link>/);
+  const items = xml.split("<item>").slice(1);
+  // Newest first; not the secret or 멤버공개 posts.
+  assert.deepEqual(
+    items.map((item) => item.match(/<title>(.*)<\/title>/)[1]),
+    ["자유 &amp; 잡담 No. 5", "익명", "첫 &lt;글&gt;"],
+  );
+  assert.match(items[0], /<dc:creator>손 \(손님\)<\/dc:creator>/);
+  assert.match(items[0], /&lt;p&gt;HTML 글&lt;\/p&gt;/);
+  assert.match(items[1], /<dc:creator>익명의 누군가<\/dc:creator>/);
+  assert.match(items[2], /<dc:creator>하나<\/dc:creator>/);
+  assert.match(items[2], /<link>https:\/\/alice\.naru\.pub\/post\/1<\/link>/);
+  assert.match(
+    items[2],
+    /&lt;img src=&quot;https:\/\/media\.example\/a\.png&quot;/,
+  );
+  assert.match(items[2], /본문&lt;br&gt;둘째 줄/);
+  assert.match(items[2], /<dc:date>Fri, 16 Oct 2026 03:00:00 GMT<\/dc:date>/);
+  // Off, a members' board, a missing one, or a closed site: none.
+  board(site, "off", {});
+  board(site, "members", { read_level: 2, options: { rss: true } });
+  for (const path of ["/rss/off", "/rss/members", "/rss/none"])
+    assert.equal((await site.route(path)).status, 404, path);
+  setSettings(site, "community", { siteOpen: false });
+  assert.equal((await site.route("/rss/free")).status, 404);
+});

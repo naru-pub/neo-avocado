@@ -217,6 +217,13 @@ export const models: Record<string, Model> = {
         label: "행동 허용 (글: 탐색·조합·아이템 사용, 댓글: 탐색·아이템 사용)",
         type: "checkbox",
       },
+      // bo_use_rss_view (bbs/rss.php): /rss/<게시판ID>, for boards visitors read.
+      {
+        key: "rss",
+        label:
+          "RSS 보이기 사용 (손님이 목록·본문을 읽는 게시판만, 주소 /rss/게시판ID)",
+        type: "checkbox",
+      },
       // bo_use_noname: members may post and comment as 익명.
       { key: "anonymous", label: "익명 사용", type: "checkbox" },
       // bo_gallery_height: an image log at least this tall folds (로그접기).
