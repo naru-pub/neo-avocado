@@ -10,6 +10,7 @@ export const STATE_NAMES = {
   editing: "수정 중",
   submitted: "신청",
   approved: "승인",
+  deleted: "삭제",
 };
 export const TYPE_NAMES = { main: "메인", sub: "서브", npc: "NPC" };
 export const CHARACTER_PAGE = 20;

@@ -83,6 +83,11 @@ export async function remove(ctx: MutationCtx, { id }: { id?: string } = {}) {
     ctx.fail("ACCESS_DENIED", "직접 쓴 것만 고치거나 지울 수 있습니다.", {
       reason: "not_owned",
     });
+  // A deleted (삭제) character is the site owner's to remove (선택제거).
+  if (!ctx.owner && row.state === "deleted")
+    ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {
+      reason: "document_not_found",
+    });
   // The original offers 캐릭터 정보 삭제 only before approval (viewer.php:203).
   if (!ctx.owner && row.state === "approved")
     ctx.fail(

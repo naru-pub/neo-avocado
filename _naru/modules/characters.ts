@@ -30,7 +30,14 @@ export type CharacterCtx = SqlCtx &
 
 export const CHARACTER_TYPES = ["main", "sub", "npc"];
 
-export const CHARACTER_STATES = ["editing", "submitted", "approved"];
+/**
+ * 수정중, 대기, 승인 and 삭제 (adm/character_form.php:114-118). 삭제 is the
+ * site owner's 선택삭제 (character_list_update.php): kept, out of every list
+ * and use, and recoverable by giving it another state; 선택제거 deletes it.
+ */
+export const CHARACTER_STATES = ["editing", "submitted", "approved", "deleted"];
+/** 삭제: a character the owner put away. */
+export const DELETED = "deleted";
 
 export const FIELD_TYPES = ["text", "textarea", "select", "url", "image"];
 
@@ -309,7 +316,8 @@ export async function ownCharacter(
 ): Promise<CharacterRow | null> {
   if (!ctx.member) return null;
   const row = await characterRow(ctx, id);
-  return row?.owner === ctx.member.id ? row : null;
+  // A deleted character is no longer its member's to use.
+  return row?.owner === ctx.member.id && row.state !== DELETED ? row : null;
 }
 
 /** A row of the owner's 소속 or 종족 list. */
@@ -508,7 +516,7 @@ export async function characterCount(ctx: SqlCtx, member: string) {
     (
       await one<{ n: number }>(
         ctx,
-        "SELECT count(*) AS n FROM characters WHERE owner = ?",
+        "SELECT count(*) AS n FROM characters WHERE owner = ? AND state != 'deleted'",
         [member],
       )
     )?.n ?? 0
@@ -600,10 +608,28 @@ export async function replaceMain(
 ) {
   const next = await one<{ id: number }>(
     ctx,
-    "SELECT id FROM characters WHERE owner = ? AND id != ? ORDER BY id LIMIT 1",
+    "SELECT id FROM characters WHERE owner = ? AND id != ? AND state != 'deleted' ORDER BY id LIMIT 1",
     [member, removed],
   );
   await setMainCharacter(ctx, member, next ? String(next.id) : null);
+}
+
+/**
+ * Keeps a member's 대표 on a character still in use as one's state changes:
+ * 선택삭제 takes it away from the deleted one (character_list_update.php
+ * clears ch_id), and one recovered is the 대표 of a member who has none.
+ */
+export async function stateChanged(
+  ctx: SqlCtx,
+  before: Pick<CharacterRow, "state">,
+  after: CharacterRow,
+) {
+  if ((before.state === DELETED) === (after.state === DELETED)) return;
+  const profile = await profileOf(ctx, after.owner);
+  if (!profile) return;
+  if (after.state !== DELETED) await claimMain(ctx, profile, after.id);
+  else if (profile.data.mainCharacter === String(after.id))
+    await replaceMain(ctx, after.owner, after.id);
 }
 
 /** Refuses a write made from a page that read an older version. */
@@ -662,6 +688,11 @@ export async function saveSheet(
     ctx.fail("ACCESS_DENIED", "직접 쓴 것만 고치거나 지울 수 있습니다.", {
       reason: "not_owned",
     });
+  // A deleted character is the owner's alone until recovered.
+  if (previous?.state === DELETED && !ctx.owner)
+    ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {
+      reason: "document_not_found",
+    });
   if (previous) checkRevision(ctx, previous, revision);
   await checkPeriod(ctx, previous, opened);
   if (!data || typeof data !== "object")
@@ -718,6 +749,7 @@ export async function saveSheet(
       )
     ).rows[0];
   }
+  if (previous) await stateChanged(ctx, previous, row);
   if (member) await claimMain(ctx, member, row.id);
   else if (!previous && !ctx.owner) {
     // A member's first character is their 대표 (character_form_update.php:120).

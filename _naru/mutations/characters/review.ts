@@ -7,6 +7,7 @@ import {
   fieldCatalogue,
   fieldsOf,
   presentCharacter,
+  stateChanged,
 } from "../../modules/characters.js";
 import type { CharacterRow } from "../../modules/characters.js";
 import { ownerOnly } from "../../modules/access.js";
@@ -14,7 +15,8 @@ import type { MutationCtx } from "../../modules/naru-types.js";
 
 /**
  * The site owner's review of a character application (adm/character_form):
- * state editing/submitted/approved, main/sub/NPC type and admin-only fields.
+ * state editing/submitted/approved, or deleted (선택삭제) and back, main/sub/NPC
+ * type and admin-only fields.
  * Approval is the sheet's state, so shop and item conditions agree with the
  * applicant list.
  */
@@ -88,5 +90,6 @@ export const reviewCharacter = ownerOnly(async function reviewCharacter(
         version = version + 1
       WHERE id = ${row.id} RETURNING *`
   ).rows[0];
+  await stateChanged(ctx, row, saved);
   return { document: await presentCharacter(ctx, saved) };
 });

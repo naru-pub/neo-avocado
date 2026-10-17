@@ -23,7 +23,9 @@ export async function send(
     ctx.fail("INVALID_REQUEST", "보낼 금액을 1 이상으로 입력해 주세요.", {
       reason: "invalid_input",
     });
-  const recipient = (await characterRow(ctx, character))?.owner ?? null;
+  const target = await characterRow(ctx, character);
+  // A deleted (삭제) character names no one.
+  const recipient = target && target.state !== "deleted" ? target.owner : null;
   const from = await profileOf(ctx, me);
   const to = recipient ? await profileOf(ctx, recipient) : null;
   if (!to || recipient === me)

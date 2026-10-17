@@ -471,6 +471,8 @@ const STATES = {
   editing: "수정 중",
   submitted: "신청(수정 완료)",
   approved: "승인",
+  // 선택삭제: kept, out of every list, recovered by another state.
+  deleted: "삭제",
 };
 /** The review list's state filter. */
 const review = { state: "" };
@@ -514,34 +516,66 @@ $("reviewTools").onsubmit = (event) => {
   run(() => load());
 };
 $("reviewSide").onchange = $("reviewClass").onchange = () => run(() => load());
-// 선택승인 (character_list_update.php): each through the review, in turn.
-$("reviewApprove").onclick = () =>
-  run(async () => {
-    const chosen = [
-      ...$("adminRows").querySelectorAll<HTMLInputElement>(
-        ".review-select:checked",
-      ),
-    ];
-    if (!chosen.length)
-      throw new Error("승인할 캐릭터를 하나 이상 선택해 주세요.");
-    if (!confirm(`선택한 ${chosen.length}명을 승인할까요?`)) return;
-    $<HTMLButtonElement>("reviewApprove").disabled = true;
-    let approved = 0;
-    try {
-      for (const box of chosen) {
-        await owner.mutate("characters/review:reviewCharacter", {
-          character: box.value,
-          revision: box.dataset.revision,
-          state: "approved",
-        });
-        approved++;
+/**
+ * 선택승인, 선택삭제 and 선택제거 (character_list_update.php): each chosen
+ * character through the review, in turn. 선택삭제 sets 삭제, which another
+ * state recovers; 선택제거 deletes it with what hangs off it, for good.
+ */
+function reviewChosen(
+  button: string,
+  verb: string,
+  act: (box) => Promise<void>,
+) {
+  return () =>
+    run(async () => {
+      const chosen = [
+        ...$("adminRows").querySelectorAll<HTMLInputElement>(
+          ".review-select:checked",
+        ),
+      ];
+      if (!chosen.length)
+        throw new Error(`${verb} 캐릭터를 하나 이상 선택해 주세요.`);
+      if (
+        !confirm(
+          `선택한 ${chosen.length}명을 ${verb.replace(/할$/, "할까요?")}`,
+        )
+      )
+        return;
+      $<HTMLButtonElement>(button).disabled = true;
+      let done = 0;
+      try {
+        for (const box of chosen) {
+          await act(box);
+          done++;
+        }
+      } finally {
+        $<HTMLButtonElement>(button).disabled = false;
+        $("adminStatus").textContent = `${done}명을 처리했습니다.`;
+        await load();
       }
-    } finally {
-      $<HTMLButtonElement>("reviewApprove").disabled = false;
-      $("adminStatus").textContent = `${approved}명을 승인했습니다.`;
-      await load();
-    }
+    });
+}
+const reviewState = (state) => (box) =>
+  owner.mutate("characters/review:reviewCharacter", {
+    character: box.value,
+    revision: box.dataset.revision,
+    state,
   });
+$("reviewApprove").onclick = reviewChosen(
+  "reviewApprove",
+  "승인할",
+  reviewState("approved"),
+);
+$("reviewDelete").onclick = reviewChosen(
+  "reviewDelete",
+  "삭제할",
+  reviewState("deleted"),
+);
+$("reviewRemove").onclick = reviewChosen(
+  "reviewRemove",
+  "영구히 삭제할",
+  (box) => owner.mutate("characters/sheet:remove", { id: box.value }),
+);
 const TYPES = [
   ["main", "메인"],
   ["sub", "서브"],
@@ -653,8 +687,12 @@ function reviewRow(row) {
     });
   const buttons = [
     ["approved", "승인"],
-    ["editing", "수정 요청"],
+    [
+      "editing",
+      row.data.state === "deleted" ? "복구 (수정 중으로)" : "수정 요청",
+    ],
     ["submitted", "신청 상태로"],
+    ...(row.data.state === "deleted" ? [] : [["deleted", "삭제 (복구 가능)"]]),
     [null, "종류·운영자 항목 저장"],
   ].map(([state, label]) => {
     const button = document.createElement("button");
@@ -670,12 +708,12 @@ function reviewRow(row) {
   edit.onclick = () => run(() => openCharacterForm(row));
   const remove = document.createElement("button");
   remove.type = "button";
-  remove.textContent = "삭제";
+  remove.textContent = "영구 삭제";
   remove.onclick = () =>
     run(async () => {
       if (
         !confirm(
-          `${row.data.name}을(를) 삭제할까요? 관계·옷장·커플·공식 기록도 함께 지웁니다.`,
+          `${row.data.name}을(를) 영구히 삭제할까요? 관계·옷장·커플·공식 기록도 함께 지우며 되돌릴 수 없습니다.`,
         )
       )
         return;

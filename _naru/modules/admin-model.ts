@@ -2006,7 +2006,7 @@ export function buildRecord(section, values, previous, references) {
 }
 
 /** The review's states, as the original's 수정중, 신청, 승인. */
-export const REVIEW_STATES = ["editing", "submitted", "approved"];
+export const REVIEW_STATES = ["editing", "submitted", "approved", "deleted"];
 
 /**
  * A record's data as its form shows it (what `buildRecord` reads back): a

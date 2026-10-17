@@ -32,8 +32,14 @@ const FILTERS = {
   applicants: "state IN ('editing', 'submitted')",
   approved: "state = 'approved'",
 };
+/** What every list leaves out: the characters the owner deleted (삭제). */
+const LIVE = "state != 'deleted'";
 /** The most a list answers at once (a statement's rows). */
 const MOST = 1000;
+
+/** A character as a reader may see it: a deleted one is the site owner's alone. */
+const shownRow = (ctx: QueryCtx, row: CharacterRow | null) =>
+  row && (row.state !== "deleted" || ctx.owner) ? row : null;
 
 /** The nicknames of the members owning `rows`, by member ID. */
 async function nicksOf(ctx: QueryCtx, rows: CharacterRow[]) {
@@ -85,7 +91,7 @@ export async function list(
     ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
       reason: "invalid_input",
     });
-  const where = filter ? ` WHERE ${FILTERS[filter]}` : "";
+  const where = ` WHERE ${filter ? FILTERS[filter] : LIVE}`;
   const order = filter === "approved" ? "id" : "id DESC";
   const values: SqlValue[] = size ? [size, (page - 1) * size] : [MOST, 0];
   const { rows } = await ctx.sql<CharacterRow>(
@@ -110,7 +116,7 @@ export async function list(
 export async function mine(ctx: QueryCtx) {
   const member = signedIn(ctx);
   const { rows } = await ctx.sql<CharacterRow>`
-    SELECT * FROM characters WHERE owner = ${member} ORDER BY id`;
+    SELECT * FROM characters WHERE owner = ${member} AND state != 'deleted' ORDER BY id`;
   return { documents: rows.map((row) => sheetOf(row)) };
 }
 
@@ -120,7 +126,7 @@ export async function mine(ctx: QueryCtx) {
  */
 export async function sheet(ctx: QueryCtx, { id }: { id?: string } = {}) {
   await viewable(ctx);
-  const row = await characterRow(ctx, id);
+  const row = shownRow(ctx, await characterRow(ctx, id));
   if (!row) return { document: null };
   const worn =
     row.outfit === null
@@ -152,7 +158,7 @@ export async function named(
     });
   const row = await one<CharacterRow>(
     ctx,
-    `SELECT * FROM characters WHERE name = ?${approved ? " AND state = 'approved'" : ""} ORDER BY id LIMIT 1`,
+    `SELECT * FROM characters WHERE name = ? AND ${approved ? "state = 'approved'" : LIVE} ORDER BY id LIMIT 1`,
     [name.trim()],
   );
   return { document: row ? sheetOf(row) : null };
@@ -169,7 +175,7 @@ export async function details(
   { character }: { character?: string } = {},
 ) {
   await viewable(ctx);
-  const row = await characterRow(ctx, character);
+  const row = shownRow(ctx, await characterRow(ctx, character));
   if (!row)
     ctx.fail("NOT_FOUND", "캐릭터를 확인해 주세요.", {
       reason: "no_character",

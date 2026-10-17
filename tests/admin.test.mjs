@@ -922,6 +922,7 @@ test("the review searches by name or owner, filters 소속·종족 and state, an
     editing: 1,
     submitted: 1,
     approved: 1,
+    deleted: 0,
   });
   assert.deepEqual(all.sides, ["city", "forest"]);
   assert.deepEqual(all.classes, ["elf"]);
@@ -941,7 +942,8 @@ test("the review searches by name or owner, filters 소속·종족 and state, an
   assert.deepEqual(ids(forest), [hero]);
   assert.equal(forest.counts.all, 2);
   assert.deepEqual(ids(await review({ kind: "elf" })), [hero]);
-  assert.equal(await refusal(review({ state: "deleted" })), "invalid_input");
+  assert.deepEqual(ids(await review({ state: "deleted" })), []);
+  assert.equal(await refusal(review({ state: "removed" })), "invalid_input");
   assert.equal(
     (await query(site, "character_review:get", { id: mage })).data.fields.memo,
     "운영자",

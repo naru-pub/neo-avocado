@@ -101,7 +101,11 @@ export async function gift(
       reason: "not_giftable",
     });
   const target = character ? await characterRow(ctx, character) : null;
-  if (character && (!target || target.owner !== recipient))
+  // A deleted (삭제) character takes no gifts.
+  if (
+    character &&
+    (!target || target.owner !== recipient || target.state === "deleted")
+  )
     ctx.fail("INVALID_REQUEST", "캐릭터를 확인해 주세요.", {
       reason: "no_character",
     });

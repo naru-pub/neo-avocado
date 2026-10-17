@@ -591,7 +591,7 @@ test("the owner edits any character fully, outside the member's periods and limi
   for (const data of [
     { name: "x", fields: { age: "30" } },
     { name: "x", fields: { missing: "1" } },
-    { name: "x", state: "deleted" },
+    { name: "x", state: "removed" },
     { name: "x", type: "test" },
     { name: "x", side: "서쪽" },
   ])
@@ -1267,4 +1267,91 @@ test("사이트공개: visitors read characters while the site is open, members 
   for (const read of reads()) assert.equal(await refusal(read), "site_closed");
   for (const who of [M2, OWNER])
     for (const read of reads(who)) assert.equal(await refusal(read), null);
+});
+
+test("선택삭제 puts a character away, out of every list and use, until the owner recovers or removes it", async () => {
+  const site = await testSite();
+  setSettings(site, "community", { characterLimit: 2 });
+  profile(site, "m-1", "하나");
+  profile(site, "m-2", "둘");
+  const hero = character(site, { name: "Hero", state: "approved" });
+  const other = character(site, { name: "Other", state: "approved" });
+  site.run("UPDATE profiles SET main_character = ? WHERE member = 'm-1'", hero);
+  const review = (state, id = hero) =>
+    site.mutate(
+      "characters/review:reviewCharacter",
+      { character: id, state, revision: row(site, id).version.toString() },
+      OWNER,
+    );
+  await review("deleted");
+  assert.equal(row(site, hero).state, "deleted");
+  // The member's 대표 moves to what they still have (ch_id cleared).
+  assert.equal(
+    site.rows("SELECT main_character FROM profiles WHERE member = 'm-1'")[0]
+      .main_character,
+    other,
+  );
+  const ids = (result) => result.documents.map((entry) => entry.id);
+  assert.deepEqual(ids(await site.query("characters/sheet:list", {}, M2)), [
+    other,
+  ]);
+  assert.deepEqual(
+    ids(await site.query("characters/sheet:list", { filter: "approved" }, M2)),
+    [other],
+  );
+  assert.deepEqual(ids(await site.query("characters/sheet:mine", {}, M1)), [
+    other,
+  ]);
+  assert.equal(
+    (await site.query("characters/sheet:sheet", { id: hero }, M1)).document,
+    null,
+  );
+  assert.equal(
+    (await site.query("characters/sheet:named", { name: "Hero" }, M2)).document,
+    null,
+  );
+  assert.notEqual(
+    (await site.query("characters/sheet:sheet", { id: hero }, OWNER)).document,
+    null,
+  );
+  // Its member neither speaks as it nor changes or removes it.
+  site.run(
+    "INSERT INTO boards (id, name, kind) VALUES ('default', '로그', 'text')",
+  );
+  assert.equal(
+    await refusal(
+      site.mutate(
+        "community/posts:write",
+        { data: { text: "x", character: hero } },
+        M1,
+      ),
+    ),
+    "not_owned",
+  );
+  assert.equal(
+    await refusal(save(site, { id: hero, data: { name: "Hero" } })),
+    "document_not_found",
+  );
+  assert.equal(
+    await refusal(site.mutate("characters/sheet:remove", { id: hero }, M1)),
+    "document_not_found",
+  );
+  // Nor counts it toward the limit: a new one fits beside Other.
+  assert.equal(
+    await refusal(save(site, { data: { name: "New", state: "editing" } })),
+    null,
+  );
+  // Another state recovers it, as the member's 대표 if they had none.
+  site.run("UPDATE profiles SET main_character = NULL WHERE member = 'm-1'");
+  await review("approved");
+  assert.equal(row(site, hero).state, "approved");
+  assert.equal(
+    site.rows("SELECT main_character FROM profiles WHERE member = 'm-1'")[0]
+      .main_character,
+    hero,
+  );
+  // 선택제거 deletes it for good.
+  await review("deleted");
+  await site.mutate("characters/sheet:remove", { id: hero }, OWNER);
+  assert.equal(row(site, hero), undefined);
 });

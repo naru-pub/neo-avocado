@@ -49,19 +49,22 @@ export const list = ownerOnly(async function list(
     WHERE (? = '' OR instr(lower(${field === "nick" ? "coalesce(profiles.nick, '')" : "characters.name"}), ?) > 0)
       AND (? = '' OR characters.side = ?) AND (? = '' OR characters.class = ?)`;
   const values: SqlValue[] = [needle, needle, side, side, kind, kind];
-  const counts = { all: 0, editing: 0, submitted: 0, approved: 0 };
+  // 전체 leaves out the deleted (삭제), which have a count of their own
+  // (character_list.php:20-21, 58-59).
+  const counts = { all: 0, editing: 0, submitted: 0, approved: 0, deleted: 0 };
   for (const row of (
     await ctx.sql(
       `SELECT characters.state, count(*) AS count ${searched} GROUP BY characters.state`,
       values,
     )
   ).rows) {
-    counts.all += Number(row.count);
+    if (row.state !== "deleted") counts.all += Number(row.count);
     if (Object.hasOwn(counts, String(row.state)) && row.state !== "all")
       counts[String(row.state)] = Number(row.count);
   }
   const { rows } = await ctx.sql<CharacterRow & { nick: string | null }>(
-    `SELECT characters.*, profiles.nick ${searched} AND (? = '' OR characters.state = ?)
+    `SELECT characters.*, profiles.nick ${searched}
+       AND (? = '' AND characters.state != 'deleted' OR characters.state = ?)
      ORDER BY characters.created_at DESC, characters.id DESC LIMIT ? OFFSET ?`,
     [...values, state, state, PAGE + 1, offset],
   );
