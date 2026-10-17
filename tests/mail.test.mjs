@@ -45,7 +45,15 @@ const balanceOf = (site, member) =>
 const messages = (site) => site.rows("SELECT * FROM messages ORDER BY id");
 const send = (site, recipients, body, who = M1) =>
   site.mutate("community/messages:sendMessage", { recipients, body }, who);
-const status = (site, who) => site.query("community/inbox:status", null, who);
+/** What the tabs say: how many unread 쪽지, and whether a call is new. */
+const status = async (site, who) => {
+  const { messages, calls } = await site.query(
+    "community/inbox:status",
+    null,
+    who,
+  );
+  return { messages, calls };
+};
 const boxes = (site, who, page = 1) =>
   site.query("community/messages:conversations", { page }, who);
 
@@ -374,4 +382,40 @@ test("a conversation shows both sides oldest first, pages back by fifty, and ope
     "invalid_input",
   );
   assert.equal(await refusal(talk({}, { partner: "m-2" })), "sign_in");
+});
+
+test("the newest unread 쪽지 and the newest new call come with the tabs, for their popups", async () => {
+  const site = await people("m-1", "m-2", "m-3");
+  const inbox = (who) => site.query("community/inbox:status", null, who);
+  assert.deepEqual(await inbox(M2), {
+    messages: 0,
+    calls: false,
+    memo: null,
+    call: null,
+  });
+  await send(site, ["m-2"], "첫 쪽지");
+  site.now += 1000;
+  const { ids } = await send(site, ["m-2"], "둘째 쪽지", M3);
+  // mb_memo_call: who sent the newest one, and which it is.
+  assert.deepEqual((await inbox(M2)).memo, { id: ids[0], nick: "m-3" });
+  await site.mutate("community/messages:readMessage", { id: ids[0] }, M2);
+  assert.equal((await inbox(M2)).memo.nick, "m-1");
+  site.run(
+    "INSERT INTO calls (recipient, sender, nick, kind, board, post_id, comment_id, at) VALUES ('m-2', 'm-1', '아보', 'call', 'free', 7, 9, ?), ('m-2', 'm-1', '아보', 'comment', 'free', 8, NULL, ?)",
+    site.now - 10,
+    site.now,
+  );
+  const { call } = await inbox(M2);
+  assert.deepEqual(call, {
+    id: call.id,
+    kind: "comment",
+    nick: "아보",
+    post: "8",
+    comment: null,
+    count: 2,
+  });
+  // Seen calls are no longer new.
+  await site.mutate("community/calls:seeCalls", null, M2);
+  assert.equal((await inbox(M2)).call, null);
+  assert.equal((await inbox(M1)).memo, null);
 });

@@ -44,6 +44,8 @@ const initialState = {
   viewer: viewerOf(),
   // 디자인's 접속자 카운터 (mmb_counter): HTML shown above picture boards.
   counter: "",
+  // 커뮤니티 설정's 쪽지·호출 알림음: the arrival popups may chime.
+  alarmSound: false,
   // The site owner, signed in here, is staff as moderators are.
   owner: false,
   role: "member",

@@ -9,6 +9,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { testSite } from "./sql-ctx.mjs";
 
+/** What the tabs say of community/inbox:status. */
+const tabs = ({ messages, calls }) => ({ messages, calls });
+
 const M1 = { member: "m-1" };
 const M2 = { member: "m-2" };
 const M3 = { member: "m-3" };
@@ -716,11 +719,11 @@ test("[[nick]] calls and comment notices reach members who can read the post", a
   assert.equal(rows[0].preview, "세번째 ??? 아보 안녕");
   assert.equal(rows[0].comment_id, Number(said.id));
   // What the called see: a new call on their 알림 tab.
-  assert.deepEqual(await site.query("community/inbox:status", null, M3), {
+  assert.deepEqual(tabs(await site.query("community/inbox:status", null, M3)), {
     messages: 0,
     calls: true,
   });
-  assert.deepEqual(await site.query("community/inbox:status", null, M1), {
+  assert.deepEqual(tabs(await site.query("community/inbox:status", null, M1)), {
     messages: 0,
     calls: false,
   });

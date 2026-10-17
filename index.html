@@ -59,6 +59,23 @@
       </div>
     </header>
     <p id="status" role="status"></p>
+    <!-- ajax/load_memo_call.php and load_board_call.php: what arrived. -->
+    <div class="alarms">
+      <section id="memoAlarm" class="alarm-box card" aria-live="polite" hidden>
+        <p id="memoAlarmText"></p>
+        <a id="memoAlarmOpen" href="/messages">쪽지함 바로가기</a>
+        <button id="memoAlarmClose" type="button">닫기</button>
+      </section>
+      <section id="callAlarm" class="alarm-box card" aria-live="polite" hidden>
+        <p id="callAlarmText"></p>
+        <a id="callAlarmList" href="/calls">호출내역확인</a>
+        <a id="callAlarmOpen" href="/calls">바로가기</a>
+        <button id="callAlarmClose" type="button">닫기</button>
+      </section>
+      <label id="alarmSoundChoice" class="alarm-sound" hidden
+        ><input id="alarmSoundOn" type="checkbox" checked /> 알림음</label
+      >
+    </div>
     <dialog id="intro" class="intro">
       <div id="introImages"></div>
       <button id="enterSite" type="button">입장하기</button>

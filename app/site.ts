@@ -33,6 +33,7 @@ export async function loadSite() {
   renderBanners(site.banners);
   await showMainPage(site.main === true, site.banners);
   setMusic(site.bgm);
+  state.alarmSound = site.alarmSound === true;
   state.counter = design.enabled ? (design.counter ?? "") : "";
   document.body.classList.toggle(
     "no-header",

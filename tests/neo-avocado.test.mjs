@@ -2720,3 +2720,64 @@ test("a member the owner blocked or deleted sees why, and nothing of the communi
     );
   }
 });
+
+test("a new 쪽지 or call pops up with a way there, and stays closed once closed", async () => {
+  const database = fakeDatabase({ [PROFILES]: [me] });
+  database.answer = () => refuse("empty");
+  database.site = { alarmSound: true };
+  const { $, settle, window } = await page(database);
+  await settle();
+  const inbox = database.subscriptions.find(
+    (subscription) => subscription.name === "community/inbox:status",
+  );
+  inbox.onResult({ messages: 0, calls: false, memo: null, call: null });
+  assert.equal($("memoAlarm").hidden, true);
+  assert.equal($("alarmSoundChoice").hidden, true);
+  inbox.onResult({
+    messages: 1,
+    calls: true,
+    memo: { id: "5", nick: "카도" },
+    call: {
+      id: "9",
+      kind: "call",
+      nick: "아보",
+      post: "3",
+      comment: "4",
+      count: 2,
+    },
+  });
+  assert.equal($("memoAlarm").hidden, false);
+  assert.equal(
+    $("memoAlarmText").textContent,
+    "카도님으로부터 쪽지가 도착하였습니다.",
+  );
+  assert.equal($("memoAlarmOpen").getAttribute("href"), "/messages/5");
+  assert.equal(
+    $("callAlarmText").textContent,
+    "아보님이 호출하셨습니다. [ 확인하지 않은 알림 2건 ]",
+  );
+  assert.equal($("callAlarmOpen").getAttribute("href"), "/post/3/comment/4");
+  // The owner's 알림음 is on: the member may turn it off here.
+  assert.equal($("alarmSoundChoice").hidden, false);
+  $("alarmSoundOn").checked = false;
+  $("alarmSoundOn").onchange();
+  assert.equal(window.localStorage.getItem("neo-avocado-alarm-quiet"), "1");
+  $("memoAlarmClose").onclick();
+  assert.equal($("memoAlarm").hidden, true);
+  // The same answer again keeps it closed; a newer 쪽지 opens it.
+  inbox.onResult({
+    messages: 1,
+    calls: true,
+    memo: { id: "5", nick: "카도" },
+    call: null,
+  });
+  assert.equal($("memoAlarm").hidden, true);
+  assert.equal($("callAlarm").hidden, true);
+  inbox.onResult({
+    messages: 2,
+    calls: false,
+    memo: { id: "6", nick: "카도" },
+    call: null,
+  });
+  assert.equal($("memoAlarm").hidden, false);
+});

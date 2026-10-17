@@ -10,6 +10,9 @@ import { testSite } from "./sql-ctx.mjs";
 import { onDisplay } from "../dist/_naru/modules/display.js";
 import { GACHA_COST } from "../dist/_naru/modules/economy.js";
 
+/** What the tabs say of community/inbox:status. */
+const tabs = ({ messages, calls }) => ({ messages, calls });
+
 const M1 = { member: "m-1" };
 const M2 = { member: "m-2" };
 const OWNER = { owner: true };
@@ -564,7 +567,7 @@ test("gifts go to a character, another member's or one's own, keep who sent them
   );
   assert.deepEqual(JSON.parse(note.gift), { kind: "item", inventory: mine });
   assert.match(note.body, /나님이 보내신 《씨앗》 아이템이 도착/);
-  assert.deepEqual(await site.query("community/inbox:status", null, M2), {
+  assert.deepEqual(tabs(await site.query("community/inbox:status", null, M2)), {
     messages: 1,
     calls: false,
   });

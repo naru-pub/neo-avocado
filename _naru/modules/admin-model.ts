@@ -1045,6 +1045,13 @@ export const models: Record<string, Model> = {
         type: "number",
         default: 100,
       },
+      // ajax/load_memo_call.php's memo_call.MP3, left commented out there.
+      {
+        key: "alarmSound",
+        label:
+          "쪽지·호출 알림음 (새 쪽지·호출 창이 뜰 때 짧은 소리. 회원이 화면을 누른 뒤부터 나며, 회원은 알림 창에서 끌 수 있음)",
+        type: "checkbox",
+      },
       { type: "heading", label: "상점" },
       {
         key: "shopCategories",
