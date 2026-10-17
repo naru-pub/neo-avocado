@@ -40,6 +40,12 @@ workflows to the port, and says what was left out and why.
 - Visitors' IP addresses (`visit_search` by IP): Naru does not give them to
   queries and mutations. Visits are counted by day, hour, browser, OS, device and
   referring site instead, and 현재접속자 lists members, not guests.
+- 데이터 백업지점 설정 and 데이터 복원하기 (`adm/data_backup.php`,
+  `data_restore.php`, commented out of the original's `admin.menu900.php`):
+  Naru's restore points (데이터베이스 → 복원 지점: one before every release's
+  migrations, one on request, downloadable, kept seven days) keep and bring
+  back the whole site database, members' roles included; README's 백업과
+  복원 says how. A restore of some tables alone is not offered.
 - Session, cache and thumbnail file cleanup (`adm/*_file_delete.php`): Naru
   keeps none of these files.
 - Guest secret posts outside Q&A boards, guest uploads and guest calls: a
