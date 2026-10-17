@@ -40,6 +40,12 @@ const PAID_MEMBERS = `FROM profiles
   WHERE profiles.deleted_at IS NULL AND coalesce(members.level, 2) != 1`;
 
 /**
+ * The ranks 전체지급 of experience steps through, one statement each, within
+ * a call's 100 statements.
+ */
+const MAX_RANK_STEPS = 80;
+
+/**
  * The owner's grants (adm/point_list.php's 화폐 관리, exp_list.php's 경험치
  * 관리, inventory_list.php's 아이템 지급): money to one member by nickname
  * or to every member, experience to one character by name or to every
@@ -172,15 +178,37 @@ export const grant = ownerOnly(async function grant(
      FROM characters WHERE state = 'approved' AND exp + ? >= 0 ORDER BY id`,
     [ctx.now, value, value, note, value],
   );
+  // Each rank's bonus is added, or taken back, for every character whose
+  // exp crosses it, one rank at a time; the floor at none comes once, last,
+  // as max(0, points + every rank's change) would. (A rank's search per
+  // character, by a range, is what Naru's plan rule refuses.)
+  const approved = "state = 'approved' AND exp + ? >= 0";
   await ctx.sql(
-    `UPDATE characters SET
-       exp = exp + ?,
-       points = max(0, coalesce(points, ?)
-         + coalesce((SELECT sum(bonus_points) FROM levels WHERE exp <= characters.exp + ?), 0)
-         - coalesce((SELECT sum(bonus_points) FROM levels WHERE exp <= characters.exp), 0)),
+    `UPDATE characters SET points = ? WHERE ${approved} AND points IS NULL`,
+    [initial, value],
+  );
+  const ranks = (
+    await ctx.sql<{ exp: number; bonus: number }>(
+      "SELECT exp, sum(bonus_points) AS bonus FROM levels GROUP BY exp HAVING sum(bonus_points) <> 0 ORDER BY exp",
+    )
+  ).rows;
+  if (ranks.length > MAX_RANK_STEPS)
+    ctx.fail(
+      "CONFLICT",
+      `랭킹 보너스가 ${MAX_RANK_STEPS}단계를 넘어 한 번에 지급할 수 없습니다.`,
+      { reason: "too_many_ranks" },
+    );
+  for (const rank of ranks)
+    await ctx.sql(
+      `UPDATE characters SET points = points + ? * ((? <= exp + ?) - (? <= exp))
+       WHERE ${approved} AND (? <= exp + ?) <> (? <= exp)`,
+      [rank.bonus, rank.exp, value, rank.exp, value, rank.exp, value, rank.exp],
+    );
+  await ctx.sql(
+    `UPDATE characters SET exp = exp + ?, points = max(0, points),
        version = version + 1
-     WHERE state = 'approved' AND exp + ? >= 0`,
-    [value, initial, value, value],
+     WHERE ${approved}`,
+    [value, value],
   );
   return {
     done: true,

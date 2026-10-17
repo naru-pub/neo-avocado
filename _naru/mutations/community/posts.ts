@@ -441,26 +441,26 @@ export async function remove(
   // 글쓰기 포인트 goes back (bbs/delete.php:78), then each commenter's
   // 댓글쓰기 포인트, theirs together, down to nothing.
   await takeBackReward(ctx, previous, memoOf(board, previous.number, "글삭제"));
-  const taken = `min(wallets.balance, (SELECT sum(reward) FROM comments
-    WHERE comments.post_id = ? AND comments.owner = wallets.member AND comments.reward > 0))`;
+  // The rewards are summed per commenter first, then each commenter's wallet
+  // found once by its key: Naru's plan rule refuses reading the post's
+  // comments again for every wallet.
+  const rewards = `WITH rewards AS MATERIALIZED (
+    SELECT owner, sum(reward) AS reward FROM comments
+    WHERE post_id = ? AND reward > 0 GROUP BY owner)`;
+  const taken = "min(wallets.balance, rewards.reward)";
   await ctx.sql(
-    `INSERT INTO history (owner, kind, at, delta, balance, memo)
-     SELECT member, 'board', ?, -${taken}, balance - ${taken}, ?
-     FROM wallets WHERE member IN (SELECT owner FROM comments WHERE post_id = ? AND reward > 0)
-       AND ${taken} > 0`,
-    [
-      ctx.now,
-      previous.id,
-      previous.id,
-      memoOf(board, previous.number, "댓글삭제"),
-      previous.id,
-      previous.id,
-    ],
+    `${rewards}
+     INSERT INTO history (owner, kind, at, delta, balance, memo)
+     SELECT wallets.member, 'board', ?, -${taken}, wallets.balance - ${taken}, ?
+     FROM rewards JOIN wallets ON wallets.member = rewards.owner
+     WHERE ${taken} > 0 ORDER BY wallets.member`,
+    [previous.id, ctx.now, memoOf(board, previous.number, "댓글삭제")],
   );
   await ctx.sql(
-    `UPDATE wallets SET balance = balance - ${taken}
-     WHERE member IN (SELECT owner FROM comments WHERE post_id = ? AND reward > 0)`,
-    [previous.id, previous.id],
+    `${rewards}
+     UPDATE wallets SET balance = balance - min(balance, rewards.reward)
+     FROM rewards WHERE wallets.member = rewards.owner`,
+    [previous.id],
   );
   // Their full-text rows go with them (posts_search, comments_search).
   await ctx.sql`DELETE FROM comments_search WHERE rowid IN (SELECT id FROM comments WHERE post_id = ${previous.id})`;
