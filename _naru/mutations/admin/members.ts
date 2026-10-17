@@ -13,7 +13,14 @@ import {
   setRolesOf,
   writeRow,
 } from "../../modules/admin.js";
-import { kstDay, one, ownerOnly } from "../../modules/access.js";
+import {
+  amountOf,
+  communitySettings,
+  kstDay,
+  one,
+  ownerOnly,
+} from "../../modules/access.js";
+import { addHistory, saveWallet, walletOf } from "../../modules/members.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
 export const save = ownerOnly(async function save(
@@ -77,6 +84,34 @@ export const deleteMember = ownerOnly(async function deleteMember(
     });
   // 이미 삭제된 회원은 제외.
   if (profile?.deleted_at) return { id, deleted: false };
+  // The 추천인 포인트 their recommender got goes back, down to nothing.
+  const recommended = await one<{
+    recommender: string | null;
+    nick: string | null;
+  }>(
+    ctx,
+    `SELECT recommender, (SELECT nick FROM profiles WHERE profiles.member = members.member) AS nick
+     FROM members WHERE member = ? AND recommender IS NOT NULL`,
+    [id],
+  );
+  const points = recommended
+    ? amountOf(await communitySettings(ctx), "recommendReward")
+    : 0;
+  if (points) {
+    const before = (await walletOf(ctx, recommended.recommender)).balance;
+    const taken = Math.min(points, before);
+    if (taken) {
+      await saveWallet(ctx, recommended.recommender, before - taken);
+      await addHistory(ctx, {
+        owner: recommended.recommender,
+        kind: "recommend",
+        at: ctx.now,
+        delta: -taken,
+        balance: before - taken,
+        memo: `${recommended.nick ?? id}님의 회원자료 삭제로 인한 추천인 포인트 반환`,
+      });
+    }
+  }
   const day = kstDay(ctx.now).replace(/-/g, "");
   await ctx.sql`INSERT INTO members (member, level, note) VALUES (${id}, 1, ${`${day} 삭제함`})
     ON CONFLICT (member) DO UPDATE SET level = 1,

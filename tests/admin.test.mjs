@@ -1450,3 +1450,65 @@ test("회원관리 counts the blocked and the left, blocks from a day, and delet
     "document_not_found",
   );
 });
+
+test("추천인: a new member names one who joined before, who is paid, and repaid when the member is deleted", async () => {
+  const site = await testSite();
+  const join = (member, args) =>
+    site.mutate("community/membership:join", args, { member });
+  await join("m-1", { nick: "하나" });
+  // Off, a recommender is not asked for, and not kept.
+  await join("m-2", { nick: "둘", recommender: "하나" });
+  assert.equal(
+    site.rows("SELECT recommender FROM members WHERE member = 'm-2'")[0]
+      .recommender,
+    null,
+  );
+  await mutate(site, "settings:save", {
+    section: "settings",
+    values: { useRecommend: true, recommendReward: 30 },
+  });
+  for (const [args, reason] of [
+    [{ nick: "셋", recommender: "없는사람" }, "no_recommender"],
+    [{ nick: "셋", recommender: "셋" }, "no_recommender"],
+  ])
+    assert.equal(await refusal(join("m-3", args)), reason);
+  await join("m-3", { nick: "셋", recommender: "하나" });
+  assert.equal(
+    site.rows("SELECT recommender FROM members WHERE member = 'm-3'")[0]
+      .recommender,
+    "m-1",
+  );
+  assert.deepEqual(
+    site.rows("SELECT balance FROM wallets WHERE member = 'm-1'"),
+    [{ balance: 30 }],
+  );
+  assert.equal(
+    site.rows("SELECT memo FROM history WHERE owner = 'm-1'")[0].memo,
+    "셋의 추천인",
+  );
+  // Joining again (a new nickname) names no one again.
+  await join("m-3", { nick: "셋셋", recommender: "둘" });
+  assert.equal(
+    site.rows("SELECT recommender FROM members WHERE member = 'm-3'")[0]
+      .recommender,
+    "m-1",
+  );
+  assert.equal(
+    (await query(site, "members:list")).documents.find(
+      (row) => row.id === "m-3",
+    ).recommender,
+    "하나",
+  );
+  // Deleting the member takes the points back, as member_delete does.
+  await mutate(site, "members:deleteMember", { id: "m-3" });
+  assert.deepEqual(
+    site.rows("SELECT balance FROM wallets WHERE member = 'm-1'"),
+    [{ balance: 0 }],
+  );
+  assert.equal(
+    site.rows(
+      "SELECT memo FROM history WHERE owner = 'm-1' ORDER BY id DESC",
+    )[0].memo,
+    "셋셋님의 회원자료 삭제로 인한 추천인 포인트 반환",
+  );
+});

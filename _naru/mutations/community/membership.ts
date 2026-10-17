@@ -2,6 +2,7 @@
 // bbs/member_leave.php). Being a member of the Naru site is Naru's; this is
 // the community's own record of them.
 import {
+  amountOf,
   communityAccess,
   communityAmount,
   communitySettings,
@@ -14,6 +15,7 @@ import {
 import {
   addHistory,
   nickTaken,
+  profileByNick,
   profileOf,
   saveWallet,
   walletOf,
@@ -34,11 +36,14 @@ export async function join(
     acceptMessages = true,
     commentAlerts = true,
     agreed = false,
+    recommender: recommended = "",
   }: {
     nick?: string;
     acceptMessages?: boolean;
     commentAlerts?: boolean;
     agreed?: boolean;
+    /** 추천인: a member's nickname, while 추천인제도 사용 is on. */
+    recommender?: string;
   } = {},
 ) {
   const member = signedIn(ctx);
@@ -72,6 +77,24 @@ export async function join(
   const joined = !(await one(ctx, "SELECT 1 FROM profiles WHERE member = ?", [
     member,
   ]));
+  // 추천인 (register_form_update.php:129-135): a member who exists, not
+  // oneself; named once, on joining.
+  let recommender: string | null = null;
+  if (joined && settings.useRecommend === true && recommended) {
+    const named =
+      typeof recommended === "string" && recommended.length <= 20
+        ? await profileByNick(ctx, recommended.trim())
+        : null;
+    if (!named || named.data.deleted)
+      ctx.fail("INVALID_REQUEST", "추천인으로 입력하신 회원이 없습니다.", {
+        reason: "no_recommender",
+      });
+    if (named.id === member)
+      ctx.fail("INVALID_REQUEST", "본인을 추천할 수 없습니다.", {
+        reason: "self_recommend",
+      });
+    recommender = named.id;
+  }
   await ctx.sql`
     INSERT INTO profiles (member, nick, accept_messages, comment_alerts)
     VALUES (${member}, ${name}, ${acceptMessages !== false}, ${commentAlerts !== false})
@@ -79,7 +102,9 @@ export async function join(
       accept_messages = excluded.accept_messages,
       comment_alerts = excluded.comment_alerts`;
   if (!(await one(ctx, "SELECT 1 FROM members WHERE member = ?", [member])))
-    await ctx.sql`INSERT INTO members (member, requested_at, agreed_at) VALUES (${member}, ${ctx.now}, ${rules ? ctx.now : null})`;
+    await ctx.sql`INSERT INTO members (member, requested_at, agreed_at, recommender) VALUES (${member}, ${ctx.now}, ${rules ? ctx.now : null}, ${recommender})`;
+  else if (recommender)
+    await ctx.sql`UPDATE members SET recommender = ${recommender} WHERE member = ${member}`;
   else if (rules)
     await ctx.sql`UPDATE members SET agreed_at = ${ctx.now} WHERE member = ${member}`;
   // 회원가입 포인트 (bbs/register_form_update.php:245, cf_register_point):
@@ -96,6 +121,20 @@ export async function join(
         delta: reward,
         balance,
         memo: "회원가입 축하",
+      });
+    }
+    // The recommender's 추천인 포인트 (register_form_update.php:248).
+    const points = recommender ? amountOf(settings, "recommendReward") : 0;
+    if (points) {
+      const balance = (await walletOf(ctx, recommender)).balance + points;
+      await saveWallet(ctx, recommender, balance);
+      await addHistory(ctx, {
+        owner: recommender,
+        kind: "recommend",
+        at: ctx.now,
+        delta: points,
+        balance,
+        memo: `${name}의 추천인`,
       });
     }
   }

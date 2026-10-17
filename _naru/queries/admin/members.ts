@@ -24,7 +24,8 @@ export const list = ownerOnly(async function list(
   const offset = offsetOf(ctx, after);
   const needle = search.trim().toLocaleLowerCase();
   const { rows } = await ctx.sql(
-    `SELECT members.*, profiles.nick, profiles.deleted_at, presence.at AS last_seen
+    `SELECT members.*, profiles.nick, profiles.deleted_at, presence.at AS last_seen,
+       (SELECT nick FROM profiles AS named WHERE named.member = members.recommender) AS recommender_nick
      FROM members
      LEFT JOIN profiles ON profiles.member = members.member
      LEFT JOIN presence ON presence.member = members.member
@@ -47,6 +48,7 @@ export const list = ownerOnly(async function list(
         nick: row.nick ?? null,
         lastSeen: row.last_seen ?? null,
         ...(row.deleted_at !== null ? { deleted: true } : {}),
+        ...(row.recommender_nick ? { recommender: row.recommender_nick } : {}),
       })),
       offset,
     ),

@@ -979,6 +979,20 @@ export const models: Record<string, Model> = {
           "admin,administrator,관리자,운영자,어드민,주인장,webmaster,웹마스터,sysop,시삽,시샵,manager,매니저,메니저,root,루트,su,guest,방문객",
         max: 2000,
       },
+      // cf_use_recommend and cf_recommend_point (adm/config_form.php:360,
+      // a hidden field there, installed at 0).
+      {
+        key: "useRecommend",
+        label: "추천인제도 사용 (가입할 때 추천인 닉네임을 받음)",
+        type: "checkbox",
+      },
+      {
+        key: "recommendReward",
+        label:
+          "추천인 포인트 (가입한 회원을 추천한 회원이 받는 화폐, 그 회원을 삭제하면 회수)",
+        type: "number",
+        default: 0,
+      },
       { type: "heading", label: "기능 설정" },
       {
         key: "characterCreation",

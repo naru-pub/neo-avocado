@@ -80,6 +80,7 @@ export function memberSummary({ row, lastSeen }) {
     data.left ? `탈퇴 ${data.left}` : "",
     data.blocked ? `차단 ${data.blocked}` : "",
     row.deleted ? "삭제된 회원" : "",
+    row.recommender ? `추천인 ${row.recommender}` : "",
     `최종 접속 ${lastSeen ? new Date(lastSeen).toLocaleString("ko-KR") : "기록 없음"}`,
   ]
     .filter(Boolean)

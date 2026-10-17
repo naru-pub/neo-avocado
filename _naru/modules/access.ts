@@ -316,6 +316,8 @@ export function memberSettings(settings: Record<string, any>) {
         ? settings.characterNotice
         : "",
     reservedNicks: reservedNicksOf(settings),
+    // 추천인제도 사용 (cf_use_recommend): joining asks for a recommender.
+    useRecommend: settings.useRecommend === true,
   };
 }
 

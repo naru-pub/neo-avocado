@@ -118,6 +118,7 @@ async function showAgreements() {
     $(`${key}Box`).hidden = !text.trim();
     $<HTMLInputElement>(`${key}Agree`).required = Boolean(text.trim());
   }
+  $("recommenderLabel").hidden = community.useRecommend !== true;
 }
 async function start() {
   await connect();
@@ -257,6 +258,10 @@ $("profileForm").onsubmit = (event) => {
       nick,
       // The boxes shown are required, so the form is sent only once ticked.
       agreed: !$("stipulationBox").hidden || !$("characterNoticeBox").hidden,
+      ...(!$("recommenderLabel").hidden &&
+      $<HTMLInputElement>("recommender").value.trim()
+        ? { recommender: $<HTMLInputElement>("recommender").value.trim() }
+        : {}),
     });
     const profile = joined.profile;
     state.nicks.set(state.member.id, Promise.resolve(nick));

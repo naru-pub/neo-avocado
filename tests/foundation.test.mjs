@@ -827,6 +827,7 @@ test("members read the community settings their pages need, and nothing else", a
     characterNotice: "",
     reservedNicks:
       "admin,administrator,관리자,운영자,어드민,주인장,webmaster,웹마스터,sysop,시삽,시샵,manager,매니저,메니저,root,루트,su,guest,방문객",
+    useRecommend: false,
   });
   assert.equal(await refusal(site.query("content/site:settings")), "sign_in");
 });
