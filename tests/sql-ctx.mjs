@@ -5,6 +5,7 @@
 //   const site = await testSite();
 //   await site.mutate("community/posts:write", args, { member: "m-1" });
 //   await site.query("community/posts:page", args); // a visitor
+//   await site.route("/logs/free/12"); // what Naru answers that path with
 //
 // What it shares with Naru: SQLite and its dialect; ctx.sql's tag and
 // (text, values) forms, booleans bound as 1 and 0, { rows, changes };
@@ -14,7 +15,7 @@
 // and query plans, and its limits.
 import { DatabaseSync } from "node:sqlite";
 import { readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const dist = fileURLToPath(new URL("../dist/_naru/", import.meta.url));
@@ -101,6 +102,63 @@ export function sqlOf(db, kind = "mutation") {
   };
 }
 
+/** The site's routes in dist/: routes/posts/_id.js is "posts/_id". */
+export async function routes() {
+  const root = join(dist, "routes");
+  const entries = await readdir(root, { recursive: true }).catch(() => []);
+  return entries
+    .filter((name) => name.endsWith(".js"))
+    .map((name) => name.split(sep).join("/").replace(/\.js$/, ""))
+    .sort();
+}
+
+/**
+ * The route answering `pathname`, as Naru matches them (control-plane's
+ * site-functions/routes.ts): segments that start with _ take any one
+ * segment, fixed segments win, and a directory's index answers it.
+ */
+export function matchRoute(names, pathname) {
+  let segments;
+  try {
+    segments = pathname
+      .split("/")
+      .filter(Boolean)
+      .map((segment) => decodeURIComponent(segment));
+  } catch {
+    return null;
+  }
+  const candidates = pathname.endsWith("/")
+    ? [[...segments, "index"]]
+    : [segments, [...segments, "index"]];
+  let best = null;
+  for (const wanted of candidates)
+    for (const route of names) {
+      const pattern = route.split("/");
+      if (pattern.length !== wanted.length) continue;
+      const params = {};
+      let score = "";
+      const matches = pattern.every((part, index) => {
+        if (part === wanted[index]) {
+          score += "1";
+          return true;
+        }
+        if (
+          part.startsWith("_") &&
+          part.length > 1 &&
+          wanted[index] !== "index"
+        ) {
+          params[part.slice(1)] = wanted[index];
+          score += "0";
+          return true;
+        }
+        return false;
+      });
+      if (matches && (!best || score > best.score))
+        best = { route, params, score };
+    }
+  return best && { route: best.route, params: best.params };
+}
+
 /** A fresh site: an empty database with every migration in dist/ applied. */
 export async function testSite({
   now = Date.parse("2026-10-16T03:00:00Z"),
@@ -125,6 +183,22 @@ export async function testSite({
     roles: (member) => [...(roles.get(member) ?? [])],
     query: (name, args = null, who = {}) => call("query", name, args, who),
     mutate: (name, args = null, who = {}) => call("mutation", name, args, who),
+    /**
+     * What Naru answers `path` with: the route matching it run as a
+     * visitor's query (null when none does, and the path is a file's).
+     */
+    async route(path, query = {}) {
+      const match = matchRoute(await routes(), path);
+      if (!match) return null;
+      const url = pathToFileURL(join(dist, "routes", `${match.route}.js`)).href;
+      const render = (await import(url)).default;
+      const input = JSON.parse(
+        JSON.stringify({ path, params: match.params, query }),
+      );
+      return JSON.parse(
+        JSON.stringify((await render(context("query", {}), input)) ?? null),
+      );
+    },
   };
 
   /** `ctx` for one call; `who` is { member } or { owner: true }, else a visitor. */

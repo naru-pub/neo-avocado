@@ -1051,12 +1051,23 @@ models.design = {
   fields: [
     { key: "enabled", label: "디자인 사용", type: "checkbox" },
     { key: "title", label: "사이트 이름", max: 60 },
-    // cf_site_descript, cf_favicon (head.sub.php).
-    // Link previews read index.html's own tags (README, 링크 미리보기).
+    // cf_site_descript, cf_site_img, cf_favicon (head.sub.php). Link
+    // previews (_naru/routes/) use the name, description and image, and
+    // the site's address for their links.
+    { key: "description", label: "사이트 설명 (링크 미리보기)", max: 300 },
     {
-      key: "description",
-      label: "사이트 설명 (링크 미리보기는 index.html에서 고칩니다)",
-      max: 300,
+      key: "shareImage",
+      label: "대표 이미지 (링크 미리보기, 빈칸: 로고 이미지)",
+      type: "url",
+      image: true,
+      max: 2000,
+    },
+    {
+      key: "address",
+      label:
+        "사이트 주소 (링크 미리보기의 주소, 예: https://neo-avocado.naru.pub)",
+      type: "url",
+      max: 200,
     },
     {
       key: "favicon",

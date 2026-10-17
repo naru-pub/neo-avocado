@@ -3,25 +3,19 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>네오 아보카도</title>
-    <!-- head.sub.php's description and share tags (cf_site_descript,
-         cf_site_img). Link previews read these as written here: edit them
-         for your site. The 디자인 settings change only the open tab. -->
-    <meta name="description" content="자캐 커뮤니티입니다." />
-    <meta property="og:type" content="website" />
-    <meta property="og:title" content="네오 아보카도" />
-    <meta property="og:description" content="자캐 커뮤니티입니다." />
-    <meta property="og:image" content="" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <link rel="stylesheet" href="style.css" />
-    <link rel="stylesheet" href="plain.css" />
-    <link rel="stylesheet" href="theme.css" />
-    <script src="scheme.js"></script>
+    <!-- head.sub.php's title, description and share tags (cf_site_descript,
+         cf_site_img) are added here by the page's route (_naru/routes/):
+         each address gets its own, from the 디자인 settings and the page's
+         post, character, board or content page. -->
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/plain.css" />
+    <link rel="stylesheet" href="/theme.css" />
+    <script src="/scheme.js"></script>
   </head>
   <body class="site">
     <header class="top">
       <h1>
-        <a id="homeLink" href="#"
+        <a id="homeLink" href="/"
           ><picture
             ><source id="siteLogoMobile" media="(max-width: 700px)" />
             <img id="siteLogo" alt="" hidden /></picture
@@ -56,7 +50,7 @@
         <button id="bgmStop" type="button" hidden>정지</button>
         <span id="bgmFrame"></span>
       </div>
-      <a href="admin/">운영</a>
+      <a href="/admin/">운영</a>
       <div class="account">
         <span id="whoami"></span>
         <button id="editProfile" type="button" hidden>프로필 수정</button>
@@ -198,7 +192,7 @@
                 <a
                   id="cardAdmin"
                   class="badge admin"
-                  href="admin/"
+                  href="/admin/"
                   target="_blank"
                   rel="noopener"
                   hidden
@@ -238,7 +232,7 @@
         <p class="copyright">
           COPYRIGHT &copy; <span id="copyrightYear"></span> by
           <span id="copyrightName">네오 아보카도</span>
-          · <a href="admin/">운영</a>
+          · <a href="/admin/">운영</a>
         </p>
       </section>
 
@@ -356,7 +350,7 @@
       </section>
       <!-- member/viewer.php: one character's own page. -->
       <section id="characterView" hidden>
-        <p><a href="#/members">← 멤버목록</a></p>
+        <p><a href="/members">← 멤버목록</a></p>
         <div id="characterSheet"></div>
       </section>
       <section id="onlineView" hidden>
@@ -795,6 +789,6 @@
       </form>
     </dialog>
     <a id="gotoTop" href="#" aria-label="맨 위로">TOP</a>
-    <script type="module" src="app.js"></script>
+    <script type="module" src="/app.js"></script>
   </body>
 </html>
