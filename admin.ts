@@ -421,7 +421,8 @@ async function load({ more = false } = {}) {
     remove.onclick = () =>
       run(async () => {
         if (!confirm("이 자료를 삭제할까요?")) return;
-        // Its uploads stay; Naru's media library marks them 참조 없음.
+        // Its uploads stay; Naru's media library marks them 참조 없음 once no
+        // row of the site's tables names them.
         const removed = await owner.mutate(CALLS[section].remove, {
           id: row.id,
         });
@@ -1140,9 +1141,8 @@ async function openForm(row = null) {
 /**
  * A file picker beside an image field: saving uploads the file to Naru Media
  * and its address takes the field's place (quest images: joins the list).
- * Naru tracks only collection documents' references to uploads, and this site
- * keeps its data in tables, so the media library shows every upload as
- * unreferenced (참조 없음): check before deleting one.
+ * Naru's media library searches the site's tables for each upload when it
+ * opens, and marks those no row names 참조 없음 (unreferenced).
  */
 function imageUpload(field, value) {
   const upload = document.createElement("label");
