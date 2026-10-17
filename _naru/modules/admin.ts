@@ -78,6 +78,7 @@ export const TABLES: Record<string, Table> = {
       ["warnings", "warnings", "int", 0],
       ["warningNote", "warning_note", "text", ""],
       ["left", "left_on", "text", null],
+      ["blocked", "blocked_on", "text", null],
       ["note", "note", "text", ""],
       ["agreedAt", "agreed_at", "int", null],
       ["requestedAt", "requested_at", "int", null],

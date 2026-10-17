@@ -135,10 +135,12 @@ async function start() {
     return showAdmission(standing(error));
   }
   state.admission = "approved";
-  if (status.left) {
-    show();
-    return showAdmission("left");
-  }
+  // 회원 삭제, 접근차단 and 탈퇴: the community's own, apart from Naru's.
+  for (const standing of ["deleted", "blocked", "left"])
+    if (status[standing]) {
+      show();
+      return showAdmission(standing);
+    }
   state.role = status.role;
   state.owner = status.owner === true;
   state.level = status.level ?? 2;

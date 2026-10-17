@@ -306,6 +306,7 @@ async function load({ more = false } = {}) {
     $("boardTools").hidden = true;
     $("reviewTools").hidden = true;
     $("memberSearchLabel").hidden = true;
+    $("memberCounts").hidden = true;
     const row = await owner.query(CALLS[section].get, { section });
     if (requestedSection === section) await openForm(row);
     return;
@@ -316,6 +317,7 @@ async function load({ more = false } = {}) {
     $("boardTools").hidden = true;
     $("reviewTools").hidden = true;
     $("memberSearchLabel").hidden = true;
+    $("memberCounts").hidden = true;
     return model.report === "visits"
       ? visitsView()
       : model.report === "grants"
@@ -326,6 +328,7 @@ async function load({ more = false } = {}) {
   $("reviewTools").hidden = !model.review;
   $("boardTools").hidden = section !== "boards";
   $("memberSearchLabel").hidden = section !== "members";
+  $("memberCounts").hidden = section !== "members";
   const after = more ? cursor : null;
   let page;
   if (model.holdings)
@@ -356,6 +359,9 @@ async function load({ more = false } = {}) {
   } else page = await owner.query(CALLS[section].list, { after });
   if (requestedSection !== section || !owner) return;
   if (!more) $("adminRows").replaceChildren();
+  if (section === "members" && page.counts)
+    $("memberCounts").textContent =
+      `총회원수 ${page.counts.total.toLocaleString("ko-KR")}명 중, 차단 ${page.counts.blocked.toLocaleString("ko-KR")}명, 탈퇴 ${page.counts.left.toLocaleString("ko-KR")}명`;
   if (section === "boards") await loadReferences();
   for (const row of page.documents) {
     const li = document.createElement("li");
@@ -442,6 +448,27 @@ async function load({ more = false } = {}) {
         await load();
       });
     li.append(edit, " ", remove);
+    if (section === "members") {
+      // The record's 삭제 resets it; 회원 삭제 is member_delete.php.
+      remove.textContent = "기록 초기화";
+      const erase = document.createElement("button");
+      erase.type = "button";
+      erase.textContent = "회원 삭제";
+      erase.hidden = Boolean(row.deleted);
+      erase.onclick = () =>
+        run(async () => {
+          if (
+            !confirm(
+              `${row.nick ?? row.id} 회원을 삭제할까요? 닉네임은 남고, 쪽지·관심로그·화폐 내역과 잔액·운영 역할을 지우며 되돌릴 수 없습니다. 글·댓글·캐릭터는 남습니다.`,
+            )
+          )
+            return;
+          await owner.mutate("admin/members:deleteMember", { id: row.id });
+          $("adminStatus").textContent = "회원을 삭제했습니다.";
+          await load();
+        });
+      li.append(" ", erase);
+    }
     if (section === "titles") {
       const grant = document.createElement("button");
       grant.type = "button";

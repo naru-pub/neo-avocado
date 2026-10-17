@@ -1,6 +1,7 @@
 // 회원 관리 (adm/member_list.php): each member's level, role, warnings,
-// leaving day and note, with their nickname and last visit, newest visit
-// first, found by nickname or member number; and one member.
+// leaving and blocking days and note, with their nickname and last visit,
+// newest visit first, found by nickname or member number, and how many
+// there are, blocked and left (총회원수, 차단, 탈퇴); and one member.
 import {
   PAGE,
   TABLES,
@@ -23,7 +24,7 @@ export const list = ownerOnly(async function list(
   const offset = offsetOf(ctx, after);
   const needle = search.trim().toLocaleLowerCase();
   const { rows } = await ctx.sql(
-    `SELECT members.*, profiles.nick, presence.at AS last_seen
+    `SELECT members.*, profiles.nick, profiles.deleted_at, presence.at AS last_seen
      FROM members
      LEFT JOIN profiles ON profiles.member = members.member
      LEFT JOIN presence ON presence.member = members.member
@@ -33,15 +34,28 @@ export const list = ownerOnly(async function list(
     [needle, needle, PAGE + 1, offset],
   );
   const roles = await ctx.rolesOf(rows.map((row) => String(row.member)));
-  return pageOf(
-    rows.map((row) => ({
-      id: String(row.member),
-      data: memberData(row, roles[String(row.member)] ?? []),
-      nick: row.nick ?? null,
-      lastSeen: row.last_seen ?? null,
-    })),
-    offset,
+  const counts = await one<{ total: number; blocked: number; left: number }>(
+    ctx,
+    `SELECT count(*) AS total, coalesce(sum(blocked_on IS NOT NULL), 0) AS blocked,
+       coalesce(sum(left_on IS NOT NULL), 0) AS left FROM members`,
   );
+  return {
+    ...pageOf(
+      rows.map((row) => ({
+        id: String(row.member),
+        data: memberData(row, roles[String(row.member)] ?? []),
+        nick: row.nick ?? null,
+        lastSeen: row.last_seen ?? null,
+        ...(row.deleted_at !== null ? { deleted: true } : {}),
+      })),
+      offset,
+    ),
+    counts: {
+      total: Number(counts.total),
+      blocked: Number(counts.blocked),
+      left: Number(counts.left),
+    },
+  };
 });
 
 export const get = ownerOnly(async function get(

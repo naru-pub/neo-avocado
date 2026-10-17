@@ -12,6 +12,8 @@ export interface SqlCtx {
     readonly roles?: readonly string[];
   } | null;
   readonly owner?: boolean;
+  /** The call's time, when the ctx has one (queries' and mutations' do). */
+  readonly now?: number;
   sql: QueryCtx["sql"];
   rolesOf?: QueryCtx["rolesOf"];
 }
@@ -61,6 +63,9 @@ export interface Access {
   closed?: boolean;
   /** A member who left. */
   left?: boolean;
+  /** A member the owner blocked (접근차단일) or deleted (회원 삭제). */
+  blocked?: boolean;
+  deleted?: boolean;
   /** The board groups whose members-only boards they may use. */
   groups?: string[];
 }
@@ -157,11 +162,24 @@ export async function communityAccess(
   // A closed site (cf_open off) shows visitors nothing, as the original
   // sends them to log in from every page (check_site_auth).
   if (!id) return (await siteOpen(ctx)) ? GUEST_ACCESS : CLOSED_ACCESS;
-  const row = await one<{ level: number; left_on: string | null }>(
+  const row = await one<{
+    level: number;
+    left_on: string | null;
+    blocked_on: string | null;
+    deleted_at: number | null;
+  }>(
     ctx,
-    "SELECT level, left_on FROM members WHERE member = ?",
+    `SELECT level, left_on, blocked_on,
+       (SELECT deleted_at FROM profiles WHERE profiles.member = members.member) AS deleted_at
+     FROM members WHERE member = ?`,
     [id],
   );
+  // A member the owner deleted (adm/member_delete.php) is a guest for good.
+  if (row?.deleted_at)
+    return { ...GUEST_ACCESS, role: "member", deleted: true };
+  // From their 접근차단일 on, a blocked member is a guest (login_check.php).
+  if (row?.blocked_on && (!ctx.now || row.blocked_on <= kstDay(ctx.now)))
+    return { ...GUEST_ACCESS, role: "member", blocked: true };
   // A member who left (bbs/member_leave.php) is a guest until the owner
   // clears their leave date.
   if (row?.left_on) return { ...GUEST_ACCESS, role: "member", left: true };

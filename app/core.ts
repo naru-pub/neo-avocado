@@ -280,22 +280,21 @@ export function showAdmission(status) {
   $("community").hidden = true;
   $("profileSetup").hidden = true;
   $("admissionPanel").hidden = false;
-  $("admissionTitle").textContent =
-    status === "banned"
-      ? "접근 차단"
-      : status === "closed"
-        ? "가입 닫힘"
-        : status === "left"
-          ? "탈퇴한 회원"
-          : "가입 승인 대기";
-  $("admissionDescription").textContent =
-    status === "banned"
-      ? "이 커뮤니티에서 차단되었습니다."
-      : status === "closed"
-        ? "현재 신규 가입을 받지 않습니다."
-        : status === "left"
-          ? "탈퇴한 회원입니다. 다시 이용하려면 운영자에게 문의해 주세요."
-          : "운영자의 가입 승인이 필요합니다.";
+  const [title, description] = {
+    banned: ["접근 차단", "이 커뮤니티에서 차단되었습니다."],
+    blocked: ["접근 차단", "운영자가 이 커뮤니티의 접근을 차단했습니다."],
+    deleted: [
+      "삭제된 회원",
+      "운영자가 이 커뮤니티의 회원 정보를 삭제했습니다.",
+    ],
+    closed: ["가입 닫힘", "현재 신규 가입을 받지 않습니다."],
+    left: [
+      "탈퇴한 회원",
+      "탈퇴한 회원입니다. 다시 이용하려면 운영자에게 문의해 주세요.",
+    ],
+  }[status] ?? ["가입 승인 대기", "운영자의 가입 승인이 필요합니다."];
+  $("admissionTitle").textContent = title;
+  $("admissionDescription").textContent = description;
   $("admissionId").textContent = `가입 문의용 회원 번호: ${state.member.id}`;
   $("editProfile").hidden = true;
 }

@@ -546,6 +546,7 @@ function fakeDatabase(rows = {}) {
           owner: database.owner === true,
           adult: database.adult === true,
           profile,
+          ...database.standing,
         };
       }
       if (name === "community/membership:join") {
@@ -2699,4 +2700,23 @@ test("a plain board's post shows its pictures at the board's width, its LINKs, a
   );
   // Up to three pictures at once on this board.
   assert.equal($("logImage").multiple, true);
+});
+
+test("a member the owner blocked or deleted sees why, and nothing of the community", async () => {
+  for (const [standing, title] of [
+    [{ blocked: true }, "접근 차단"],
+    [{ deleted: true }, "삭제된 회원"],
+    [{ left: true }, "탈퇴한 회원"],
+  ]) {
+    const database = fakeDatabase({ [PROFILES]: [me] });
+    database.standing = standing;
+    const { $ } = await page(database);
+    assert.equal($("admissionPanel").hidden, false);
+    assert.equal($("admissionTitle").textContent, title);
+    assert.equal($("community").hidden, true);
+    assert.equal(
+      database.calls.some((call) => call.name === "community/posts:page"),
+      false,
+    );
+  }
 });

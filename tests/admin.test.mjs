@@ -371,6 +371,7 @@ test("a member's level, warnings and note are a row; their role and groups are N
     warnings: 0,
     warningNote: "",
     left: "",
+    blocked: "",
     note: "",
   });
   assert.deepEqual(site.roles("m-1"), ["group-writers", "keep", "staff"]);
@@ -1328,4 +1329,124 @@ test("게시판 복사 makes a board with the same settings, and with 구조와 
     [{ id: "none", target: "x", name: "없는" }, "document_not_found"],
   ])
     assert.equal(await refusal(copy(args)), reason, JSON.stringify(args));
+});
+
+test("회원관리 counts the blocked and the left, blocks from a day, and deletes a member's data", async () => {
+  const site = await testSite();
+  profile(site, "m-1", "하나");
+  profile(site, "m-2", "둘");
+  profile(site, "m-3", "셋");
+  for (const member of ["m-1", "m-2", "m-3"])
+    site.run("INSERT INTO members (member) VALUES (?)", member);
+  await update(site, "members", "m-2", { blocked: "2026-10-16" });
+  await update(site, "members", "m-3", {
+    left: "2026-10-01",
+    blocked: "2030-01-01",
+  });
+  const listed = await query(site, "members:list");
+  assert.deepEqual(listed.counts, { total: 3, blocked: 2, left: 1 });
+  // A block holds from its day: m-2 now, m-3 not yet (still only left).
+  const standing = async (member) =>
+    await site.query("community/membership:membership", null, { member });
+  assert.equal((await standing("m-2")).blocked, true);
+  assert.equal((await standing("m-2")).level, 1);
+  assert.equal((await standing("m-3")).blocked, undefined);
+  assert.equal((await standing("m-3")).left, true);
+  assert.equal(
+    await refusal(
+      site.mutate(
+        "community/membership:join",
+        { nick: "둘" },
+        { member: "m-2" },
+      ),
+    ),
+    "blocked",
+  );
+  // 회원 삭제: the nickname stays, the member's data goes.
+  site.setRoles("m-1", ["staff", "group-g", "keep"]);
+  site.run("INSERT INTO wallets (member, balance) VALUES ('m-1', 50)");
+  site.run(
+    "INSERT INTO history (owner, kind, at, delta, balance) VALUES ('m-1', 'daily', 0, 50, 50)",
+  );
+  site.run(
+    "INSERT INTO messages (sender, recipient, body, sent_at) VALUES ('m-1', 'm-2', 'a', 0), ('m-2', 'm-1', 'b', 0), ('m-2', 'm-3', 'c', 0)",
+  );
+  site.run("INSERT INTO favorites (member, post) VALUES ('m-1', 1)");
+  site.run(
+    "INSERT INTO boards (id, name, admin) VALUES ('free', '자유', 'm-1')",
+  );
+  site.run(
+    "INSERT INTO board_groups (id, name, admin) VALUES ('g', '그룹', 'm-1')",
+  );
+  site.run(
+    "INSERT INTO posts (board, number, owner, body, created_at, updated_at) VALUES ('free', 1, 'm-1', '남는 글', 0, 0)",
+  );
+  site.run(
+    "INSERT INTO characters (owner, name, created_at) VALUES ('m-1', 'Hero', 0)",
+  );
+  assert.deepEqual(await mutate(site, "members:deleteMember", { id: "m-1" }), {
+    id: "m-1",
+    deleted: true,
+  });
+  const [record] = site.rows(
+    "SELECT level, note FROM members WHERE member = 'm-1'",
+  );
+  assert.equal(record.level, 1);
+  assert.equal(record.note, "20261016 삭제함");
+  assert.equal(
+    site.rows(
+      "SELECT nick FROM profiles WHERE member = 'm-1' AND deleted_at IS NOT NULL",
+    )[0].nick,
+    "하나",
+  );
+  for (const [table, where] of [
+    ["wallets", "member = 'm-1'"],
+    ["history", "owner = 'm-1'"],
+    ["messages", "sender = 'm-1' OR recipient = 'm-1'"],
+    ["favorites", "member = 'm-1'"],
+    ["boards", "admin = 'm-1'"],
+    ["board_groups", "admin = 'm-1'"],
+  ])
+    assert.equal(
+      site.rows(`SELECT count(*) AS n FROM ${table} WHERE ${where}`)[0].n,
+      0,
+      table,
+    );
+  assert.equal(site.rows("SELECT count(*) AS n FROM messages")[0].n, 1);
+  assert.deepEqual(site.roles("m-1"), ["keep"]);
+  // Posts and characters stay; the nickname is no one's to take.
+  assert.equal(site.rows("SELECT count(*) AS n FROM posts")[0].n, 1);
+  assert.equal(site.rows("SELECT count(*) AS n FROM characters")[0].n, 1);
+  assert.equal((await standing("m-1")).deleted, true);
+  assert.equal(
+    await refusal(
+      site.mutate("community/membership:join", { nick: "다시" }, M1),
+    ),
+    "deleted",
+  );
+  assert.equal(
+    await refusal(
+      site.mutate(
+        "community/membership:join",
+        { nick: "하나" },
+        { member: "m-9" },
+      ),
+    ),
+    "nick_taken",
+  );
+  assert.equal(
+    (await query(site, "members:list")).documents.find(
+      (row) => row.id === "m-1",
+    ).deleted,
+    true,
+  );
+  // Once is enough; a stranger is not found.
+  assert.deepEqual(await mutate(site, "members:deleteMember", { id: "m-1" }), {
+    id: "m-1",
+    deleted: false,
+  });
+  assert.equal(
+    await refusal(mutate(site, "members:deleteMember", { id: "m-404" })),
+    "document_not_found",
+  );
 });
