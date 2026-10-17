@@ -405,15 +405,6 @@ try {
   await alice
     .locator("#characterSheet .character-name", { hasText: "초록" })
     .waitFor();
-  // An address of the old form (a bookmark, a link in an old post) opens,
-  // as its path.
-  await alice.goto(`${origin}/#/logs/default/1`);
-  await alice.locator("#logFocus .log", { hasText: "첫 로그" }).waitFor();
-  assert.equal(alice.url(), `${origin}/logs/default/1`);
-  await alice.goBack();
-  await alice
-    .locator("#characterSheet .character-name", { hasText: "초록" })
-    .waitFor();
   // The board list names its board; a post links to its own address and a
   // comment to its own, and both survive a reload; so does a tag.
   await menu(alice, "로그");

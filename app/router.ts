@@ -1,11 +1,10 @@
 // Opens the page an address names (/logs/free/12, /character/…), on load
 // and whenever the address changes: a shared link, a reload, the back and
 // forward buttons, a link within the site. app/core.js's route() writes the
-// addresses; an old #/… address (core.js's pathOfHash) opens as its path.
+// addresses.
 import {
   $,
   opening,
-  pathOfHash,
   run,
   say,
   shownAddress,
@@ -141,17 +140,12 @@ export function openRoute(path = location.pathname) {
   });
 }
 
-/**
- * The address changed: back or forward, or an old #/… link followed (which
- * becomes its path). A move within the page (#top) opens nothing.
- */
+/** The address changed: back or forward. A move within the page (#top) opens nothing. */
 function arrive() {
-  pathOfHash();
   if (location.pathname === shownAddress()) return;
   return run(() => openRoute());
 }
 addEventListener("popstate", arrive);
-addEventListener("hashchange", arrive);
 
 /** Opens `path` (one of the site's pages) as a new history entry. */
 export function navigate(path) {
@@ -183,15 +177,11 @@ document.addEventListener("click", (event) => {
   )
     return;
   // "#", "#top": the page's own business.
-  const written = link.getAttribute("href");
-  if (written.startsWith("#") && !written.startsWith("#/")) return;
+  if (link.getAttribute("href").startsWith("#")) return;
   const url = new URL(link.href, location.href);
   if (url.origin !== location.origin) return;
-  // An old #/… link inside a post or page: its path.
-  const path = url.hash.startsWith("#/")
-    ? `/${url.hash.slice(2)}`
-    : url.pathname;
-  if (!url.hash.startsWith("#/") && (url.hash || url.search)) return;
+  if (url.hash || url.search) return;
+  const path = url.pathname;
   if (!PAGES.has(parts(path)[0] ?? "")) return;
   event.preventDefault();
   navigate(path);

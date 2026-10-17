@@ -10,8 +10,8 @@ Decisions: production data starts fresh (nothing is moved); AvocadoEdition's
 member level 1–10 stays a number in neo-avocado's own `members` table; staff
 (moderators) and members-only groups are Naru roles (`staff`,
 `group-<name>`). Pages have path URLs (`/logs/free/12`), each served by a
-route in `_naru/routes/` with its link preview; old `#/` URLs open as their
-path.
+route in `_naru/routes/` with its link preview; old `#/` URLs are not
+redirected.
 
 ## What Naru gives queries and mutations
 

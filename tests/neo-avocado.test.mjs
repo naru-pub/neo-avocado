@@ -2166,13 +2166,14 @@ test("사이트공개 off: a visitor sees the welcome and sign-in card only, wha
     database.calls.filter((call) => call.method !== "call"),
     [],
   );
-  for (const hash of ["#/members", "#/character/hero", "#/logs/default"]) {
-    window.location.hash = hash;
+  for (const path of ["/members", "/character/hero", "/logs/default"]) {
+    window.history.pushState(null, "", path);
+    window.dispatchEvent(new window.PopStateEvent("popstate"));
     for (let n = 0; n < 4; n += 1) await settle();
-    assert.equal($("homeView").hidden, false, hash);
-    assert.equal($("charactersView").hidden, true, hash);
-    assert.equal($("characterView").hidden, true, hash);
-    assert.equal($("logsView").hidden, true, hash);
+    assert.equal($("homeView").hidden, false, path);
+    assert.equal($("charactersView").hidden, true, path);
+    assert.equal($("characterView").hidden, true, path);
+    assert.equal($("logsView").hidden, true, path);
   }
   assert.deepEqual(
     database.calls.filter((call) => call.method !== "call"),
@@ -2235,7 +2236,8 @@ test("사이트공개 on: a visitor opens 멤버목록, 신청자목록 and a ch
   ))
     assert.equal(button.hidden, true);
   // member/viewer.php through its address.
-  window.location.hash = "#/character/hero";
+  window.history.pushState(null, "", "/character/hero");
+  window.dispatchEvent(new window.PopStateEvent("popstate"));
   for (let n = 0; n < 8; n += 1) await settle();
   assert.equal($("characterView").hidden, false);
   assert.equal(
@@ -2249,7 +2251,7 @@ test("사이트공개 on: a visitor opens 멤버목록, 신청자목록 and a ch
   );
 });
 
-test("pages have path addresses: opened, followed, gone back to, and old #/ ones become paths", async () => {
+test("pages have path addresses: opened, followed and gone back to", async () => {
   const characters = [
     {
       id: "hero",
@@ -2298,16 +2300,15 @@ test("pages have path addresses: opened, followed, gone back to, and old #/ ones
     assert.equal(shownName($), "용사");
   }
 
-  // A bookmark of the old form: its path replaces it, and the page opens.
+  // An address of the old #/ form is not a page's: the home opens.
   {
     const { $, settle, window } = await page(fresh(), {
       url: "https://neo-avocado.naru.pub/#/character/hero",
     });
     await wait(settle);
-    assert.equal(window.location.pathname, "/character/hero");
-    assert.equal(window.location.hash, "");
-    assert.equal(window.history.length, 1);
-    assert.equal(shownName($), "용사");
+    assert.equal(window.location.pathname, "/");
+    assert.equal($("characterView").hidden, true);
+    assert.equal($("homeView").hidden, false);
   }
 
   // Links within the site open their page here, as a history entry; the
@@ -2345,22 +2346,6 @@ test("pages have path addresses: opened, followed, gone back to, and old #/ ones
   assert.equal(window.location.pathname, "/members");
   assert.equal($("charactersView").hidden, false);
   assert.equal($("characterView").hidden, true);
-
-  // An old #/ link inside a post or page goes to its path.
-  const old = window.document.createElement("a");
-  old.href = "#/character/hero";
-  $("homeView").append(old);
-  old.click();
-  await wait(settle);
-  assert.equal(window.location.pathname, "/character/hero");
-  assert.equal(window.location.hash, "");
-  assert.equal(shownName($), "용사");
-  // ...and so does one followed as a hash, as before.
-  window.location.hash = "#/members";
-  await wait(settle);
-  assert.equal(window.location.pathname, "/members");
-  assert.equal(window.location.hash, "");
-  assert.equal($("charactersView").hidden, false);
 
   // A link opened elsewhere, or to the admin, is left to the browser.
   let leftAlone = null;

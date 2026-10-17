@@ -520,21 +520,6 @@ export const addressOf = (path: string | string[]) =>
     .filter((part) => part !== "")
     .map(encodeURIComponent)
     .join("/")}`;
-/**
- * The address an old link names: #/logs/free/12 (from a bookmark or a post
- * written before paths) is /logs/free/12. Put in the address bar at once,
- * before any part of the page reads it.
- */
-export function pathOfHash() {
-  if (!location.hash.startsWith("#/")) return false;
-  history.replaceState(
-    history.state,
-    "",
-    `/${location.hash.slice(2)}`.replace(/^\/+/, "/"),
-  );
-  return true;
-}
-pathOfHash();
 export function route(path, { replace = false } = {}) {
   if (routing) return;
   moved = true;
