@@ -9,7 +9,9 @@ is deployed once, at the cutover; nothing here is pushed to `main` before.
 Decisions: production data starts fresh (nothing is moved); AvocadoEdition's
 member level 1–10 stays a number in neo-avocado's own `members` table; staff
 (moderators) and members-only groups are Naru roles (`staff`,
-`group-<name>`); URLs keep their `#/` form.
+`group-<name>`). Pages have path URLs (`/logs/free/12`), each served by a
+route in `_naru/routes/` with its link preview; old `#/` URLs open as their
+path.
 
 ## What Naru gives queries and mutations
 
@@ -54,6 +56,12 @@ name(ctx, args)`. Pages call them as `query("<area>/<module>:<name>", args)`
 - There is no `notify`/`broadcast`: pages subscribe to a query, and Naru
   re-runs it when a mutation writes a table it read.
 - Uploads are unchanged (`media.upload`); store the URL in a TEXT column.
+- `_naru/routes/<path>.ts` answers that path (a segment `_name` is a
+  parameter, `index` the directory): its default export runs as a
+  visitor's query and answers `{ file: "index.html", head, cache }`.
+  `modules/previews.ts` makes every route: the page's preview tags, from
+  what a visitor may read, by the same checks the queries make. Paths no
+  route answers are files, else 404.
 
 ## Tables
 
@@ -97,7 +105,9 @@ name(ctx, args)`. Pages call them as `query("<area>/<module>:<name>", args)`
   database with every migration applied; `site.query(name, args, who)` and
   `site.mutate(...)` call the built code (`who` is `{ member: "m-1" }`,
   `{ owner: true }`, or nothing for a visitor); `site.run`/`site.rows` set
-  up and inspect tables; `site.setRoles(member, roles)`.
+  up and inspect tables; `site.setRoles(member, roles)`; `site.route(path)`
+  answers a path as Naru would, matching it to a route
+  (`tests/routes.test.mjs`).
 - Page tests (JSDOM, `tests/neo-avocado.test.mjs`) fake `query`, `mutate` and
   `subscribe` in the synthetic SDK.
 - `npm run typecheck`, `npm test` and `npm run lint` pass before each commit.

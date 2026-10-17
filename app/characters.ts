@@ -349,7 +349,7 @@ async function characterItem(character) {
   if (character.data.image) image.src = character.data.image;
   else image.remove();
   const name = document.createElement("a");
-  name.href = `#/character/${encodeURIComponent(character.id)}`;
+  name.href = `/character/${encodeURIComponent(character.id)}`;
   name.textContent = character.data.name;
   item.querySelector(".character-name").replaceChildren(name);
   // 쪽지 to another member's owner, as the member list's memo link.
@@ -683,7 +683,7 @@ function wireCharacterDetails(item, character) {
       // The other character's page (viewer.php?ch_id=), when it still exists.
       const name = target
         ? Object.assign(document.createElement("a"), {
-            href: `#/character/${encodeURIComponent(target.id)}`,
+            href: `/character/${encodeURIComponent(target.id)}`,
             textContent: target.name,
           })
         : "삭제된 캐릭터";

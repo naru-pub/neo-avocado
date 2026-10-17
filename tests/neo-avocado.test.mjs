@@ -657,9 +657,9 @@ function fakeDatabase(rows = {}) {
   return database;
 }
 
-async function page(database) {
+async function page(database, { url = "https://neo-avocado.naru.pub/" } = {}) {
   const dom = new JSDOM(await readFile(new URL("index.html", root), "utf8"), {
-    url: "https://neo-avocado.naru.pub/",
+    url,
     runScripts: "outside-only",
   });
   const { window } = dom;
@@ -2032,7 +2032,7 @@ test("calls arrive by subscription and the history marks them seen", async () =>
   // A notification links to the post's own address.
   assert.equal(
     $("calls").querySelector("a").getAttribute("href"),
-    "#/post/log-9",
+    "/post/log-9",
   );
 });
 
@@ -2247,6 +2247,141 @@ test("사이트공개 on: a visitor opens 멤버목록, 신청자목록 and a ch
       (call) => call.name === "characters/progression:characterSheet",
     ),
   );
+});
+
+test("pages have path addresses: opened, followed, gone back to, and old #/ ones become paths", async () => {
+  const characters = [
+    {
+      id: "hero",
+      createdBy: "owner-1",
+      data: { name: "용사", state: "approved", owner: "owner-1" },
+    },
+    {
+      id: "mage",
+      createdBy: "owner-1",
+      data: { name: "마법사", state: "approved", owner: "owner-1" },
+    },
+  ];
+  const fresh = () => {
+    const database = fakeDatabase({
+      [PROFILES]: [{ id: "owner-1", data: { nick: "주인" } }],
+      [CHARACTERS]: characters,
+    });
+    database.signedIn = false;
+    database.answer = (name) =>
+      name === "characters/progression:characterStatus"
+        ? {
+            state: { exp: 3, points: 0, stats: {}, titles: [] },
+            definitions: [],
+            revision: null,
+            rank: "",
+          }
+        : name === "characters/progression:characterSheet"
+          ? { exp: [], inventory: null, balance: null }
+          : refuse("empty");
+    return database;
+  };
+  const shownName = ($) =>
+    $("characterSheet").querySelector(".character-name")?.textContent;
+  const wait = async (settle) => {
+    for (let n = 0; n < 8; n += 1) await settle();
+  };
+
+  // A direct visit to a path (Naru serves index.html there) opens its page.
+  {
+    const { $, settle, window } = await page(fresh(), {
+      url: "https://neo-avocado.naru.pub/character/hero",
+    });
+    await wait(settle);
+    assert.equal(window.location.pathname, "/character/hero");
+    assert.equal($("characterView").hidden, false);
+    assert.equal(shownName($), "용사");
+  }
+
+  // A bookmark of the old form: its path replaces it, and the page opens.
+  {
+    const { $, settle, window } = await page(fresh(), {
+      url: "https://neo-avocado.naru.pub/#/character/hero",
+    });
+    await wait(settle);
+    assert.equal(window.location.pathname, "/character/hero");
+    assert.equal(window.location.hash, "");
+    assert.equal(window.history.length, 1);
+    assert.equal(shownName($), "용사");
+  }
+
+  // Links within the site open their page here, as a history entry; the
+  // menu's are paths too; back goes back.
+  const { $, settle, window } = await page(fresh());
+  await wait(settle);
+  assert.equal(window.location.pathname, "/");
+  const members = [...$("siteMenu").querySelectorAll("a")].find(
+    (link) => link.textContent === "멤버목록",
+  );
+  assert.equal(members.getAttribute("href"), "/members");
+  members.click();
+  await wait(settle);
+  assert.equal(window.location.pathname, "/members");
+  assert.equal($("charactersView").hidden, false);
+  const link = [...$("characters").querySelectorAll("a")].find(
+    (anchor) => anchor.textContent === "마법사",
+  );
+  assert.equal(link.getAttribute("href"), "/character/mage");
+  const length = window.history.length;
+  const clicked = new window.MouseEvent("click", {
+    bubbles: true,
+    cancelable: true,
+    button: 0,
+  });
+  link.dispatchEvent(clicked);
+  assert.equal(clicked.defaultPrevented, true);
+  await wait(settle);
+  assert.equal(window.location.pathname, "/character/mage");
+  assert.equal(window.history.length, length + 1);
+  assert.equal($("characterView").hidden, false);
+  assert.equal(shownName($), "마법사");
+  window.history.back();
+  await wait(settle);
+  assert.equal(window.location.pathname, "/members");
+  assert.equal($("charactersView").hidden, false);
+  assert.equal($("characterView").hidden, true);
+
+  // An old #/ link inside a post or page goes to its path.
+  const old = window.document.createElement("a");
+  old.href = "#/character/hero";
+  $("homeView").append(old);
+  old.click();
+  await wait(settle);
+  assert.equal(window.location.pathname, "/character/hero");
+  assert.equal(window.location.hash, "");
+  assert.equal(shownName($), "용사");
+  // ...and so does one followed as a hash, as before.
+  window.location.hash = "#/members";
+  await wait(settle);
+  assert.equal(window.location.pathname, "/members");
+  assert.equal(window.location.hash, "");
+  assert.equal($("charactersView").hidden, false);
+
+  // A link opened elsewhere, or to the admin, is left to the browser.
+  let leftAlone = null;
+  window.addEventListener("click", (event) => {
+    leftAlone = !event.defaultPrevented;
+    event.preventDefault();
+  });
+  const admin = window.document.createElement("a");
+  admin.href = "/admin/";
+  $("homeView").append(admin);
+  admin.click();
+  assert.equal(leftAlone, true);
+  link.dispatchEvent(
+    new window.MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+      ctrlKey: true,
+    }),
+  );
+  assert.equal(leftAlone, true);
+  assert.equal(window.location.pathname, "/members");
 });
 
 test("on a Q&A board the comment form is the staff's alone", async () => {

@@ -1,6 +1,6 @@
 // The site's look and navigation: design, menus, banners and the intro.
 
-import { $, run, say, showTab, state, query } from "./core.js";
+import { $, addressOf, run, say, showTab, state, query } from "./core.js";
 import { configureBoard, loadLogs } from "./logs.js";
 import { loadContentBody, loadContentPages } from "./content.js";
 import { NAME_DEFAULTS } from "./names.js";
@@ -83,8 +83,8 @@ function applyItemNames(names) {
  * and the browser tab's icon, when the owner sets them, for the open tab.
  */
 function applyHead(design) {
-  // Without the owner's own, index.html's tags stay (link previews read
-  // those: crawlers do not run this page's script).
+  // Without the owner's own, the route's tags stay (link previews read
+  // those, which _naru/routes/ add: crawlers do not run this script).
   const set = (selector, create, attribute, value) => {
     let element = document.head.querySelector(selector);
     if (!value) return;
@@ -167,7 +167,7 @@ function expandPlaceholders(container: HTMLElement, slides) {
     LOGOUT: () =>
       controlLink("로그아웃", "#", "member-only", () => $("signOut").click()),
     MYPAGE: () =>
-      controlLink("마이페이지", "#/mypage", "member-only", () =>
+      controlLink("마이페이지", "/mypage", "member-only", () =>
         $("tabMypage").click(),
       ),
     BGM: () => null,
@@ -217,7 +217,7 @@ function menuLink(menu) {
     }
     return link;
   }
-  link.href = `#${menu.link}`;
+  link.href = menuAddress(menu.link);
   link.onclick = (event) => {
     event.preventDefault();
     document.body.classList.remove("open-gnb");
@@ -370,8 +370,8 @@ function showSlides(container: HTMLElement, banners) {
   stopping.set(container, stop);
   turn();
 }
-/** Whether the page was opened at the home (no address, or #/home). */
-const arrivedHome = /^(#\/?(home)?\/?)?$/.test(location.hash);
+/** Whether the page was opened at the home (/, or /home). */
+const arrivedHome = /^\/((home|index\.html)\/?)?$/.test(location.pathname);
 const INTRO_KEY = "neo-avocado-intro-closed";
 function renderBanners(banners) {
   const main = banners.filter((banner) => banner.place === "main");
@@ -463,6 +463,19 @@ document.addEventListener("click", (event) => {
     document.body.classList.remove("open-gnb");
 });
 $("enterSite").onclick = enterSite;
+/** The address of what a menu entry names: board:free is /logs/free. */
+export function menuAddress(link) {
+  const [kind, id = ""] = String(link).split(":");
+  const path =
+    kind === "board"
+      ? ["logs", id]
+      : kind === "content"
+        ? ["content", id]
+        : kind === "tab"
+          ? [id]
+          : [];
+  return addressOf(path);
+}
 /** Opens what a menu entry names: a board, a content page or a member tab. */
 export async function follow(link) {
   const [kind, id] = link.split(":");

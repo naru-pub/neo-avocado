@@ -496,26 +496,53 @@ export function noteVisit(place) {
 }
 
 /**
- * Every page has an address (#/logs/free/12, #/character/…, #/shop/이벤트),
- * as the original's pages have URLs: it can be shared, reloaded, and gone
- * back to. Moving to another page makes a history entry; changes within a
- * page (a board, a category) replace it. app/router.js opens addresses.
+ * Every page has an address (/logs/free/12, /character/…, /shop/이벤트), as
+ * the original's pages have URLs: it can be shared, reloaded, and gone back
+ * to, and Naru serves each with its link preview (_naru/routes/). Moving to
+ * another page makes a history entry; changes within a page (a board, a
+ * category) replace it. app/router.js opens addresses.
  */
 let routing = false;
 let moved = false;
+/** The path the page shows, as last opened or written. */
+let shownAt: string | null = null;
 /** Whether the visitor has gone somewhere themselves since the page opened. */
 export const movedSinceOpening = () => moved;
+/** The path the page shows now (null before the first is opened). */
+export const shownAddress = () => shownAt;
+/** Marks `path` as the one the page shows. */
+export const showingAddress = (path: string) => {
+  shownAt = path;
+};
+/** A page's path: ["logs", "free", "12"] → "/logs/free/12", "" → "/". */
+export const addressOf = (path: string | string[]) =>
+  `/${(Array.isArray(path) ? path : path.split("/"))
+    .filter((part) => part !== "")
+    .map(encodeURIComponent)
+    .join("/")}`;
+/**
+ * The address an old link names: #/logs/free/12 (from a bookmark or a post
+ * written before paths) is /logs/free/12. Put in the address bar at once,
+ * before any part of the page reads it.
+ */
+export function pathOfHash() {
+  if (!location.hash.startsWith("#/")) return false;
+  history.replaceState(
+    history.state,
+    "",
+    `/${location.hash.slice(2)}`.replace(/^\/+/, "/"),
+  );
+  return true;
+}
+pathOfHash();
 export function route(path, { replace = false } = {}) {
   if (routing) return;
   moved = true;
   // A list is taken part by part, so a tag or search with "/" stays one.
-  const parts = Array.isArray(path) ? path : path.split("/");
-  const hash = `#/${parts
-    .filter((part) => part !== "")
-    .map(encodeURIComponent)
-    .join("/")}`;
-  if (location.hash === hash) return;
-  history[replace ? "replaceState" : "pushState"](null, "", hash);
+  const address = addressOf(path);
+  shownAt = address;
+  if (location.pathname === address && !location.search) return;
+  history[replace ? "replaceState" : "pushState"](null, "", address);
 }
 /** While an address is being opened, the page does not write one back. */
 export async function opening(action) {

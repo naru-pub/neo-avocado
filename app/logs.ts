@@ -40,8 +40,8 @@ export const kindOf = (id = state.board) =>
   "image";
 /**
  * The list's address: the board, and its page, tag, search or category
- * (#/logs/free/page/3, #/logs/free/tag/봄, #/logs/free/search/바다,
- * #/logs/free/category/잡담/page/2).
+ * (/logs/free/page/3, /logs/free/tag/봄, /logs/free/search/바다,
+ * /logs/free/category/잡담/page/2).
  */
 function logsPath() {
   const base = ["logs", state.board];
@@ -114,7 +114,7 @@ function showCategories() {
   nav.replaceChildren(
     ...["", ...categories].map((name) => {
       const link = document.createElement("a");
-      link.href = `#/${["logs", state.board, ...(name ? ["category", name] : [])].map(encodeURIComponent).join("/")}`;
+      link.href = `/${["logs", state.board, ...(name ? ["category", name] : [])].map(encodeURIComponent).join("/")}`;
       link.textContent = name || "전체";
       if ((state.category ?? "") === name)
         link.setAttribute("aria-current", "page");
@@ -168,8 +168,8 @@ export async function openLogNumber(number) {
 }
 /**
  * One post on its own (?log=N&single=Y), at its permanent address
- * #/post/<id>, which survives a move to another board; with `comment`, its
- * comments open at that comment (#/post/<id>/comment/<id>).
+ * /post/<id>, which survives a move to another board; with `comment`, its
+ * comments open at that comment (/post/<id>/comment/<id>).
  */
 export async function openPost(id, { comment = null, log = null } = {}) {
   const post = log ?? (await query("community/posts:post", { id })).document;
@@ -418,7 +418,7 @@ export async function logItem(log) {
   item.dataset.id = log.id;
   // The post's number links to its permanent address.
   const number = document.createElement("a");
-  number.href = `#/post/${encodeURIComponent(log.id)}`;
+  number.href = `/post/${encodeURIComponent(log.id)}`;
   number.textContent = log.data.number ? `No. ${log.data.number}` : "링크";
   item
     .querySelector(".log-number")
@@ -897,10 +897,10 @@ async function commentItem(comment, log) {
     item.append(dice, " ");
   }
   item.append(postText(comment.data.text ?? "", await loadEmoticons()));
-  // The comment's own address (#/post/<id>/comment/<id>).
+  // The comment's own address (/post/<id>/comment/<id>).
   const link = document.createElement("a");
   link.className = "permalink";
-  link.href = `#/post/${encodeURIComponent(comment.data.logId)}/comment/${encodeURIComponent(comment.id)}`;
+  link.href = `/post/${encodeURIComponent(comment.data.logId)}/comment/${encodeURIComponent(comment.id)}`;
   link.title = "댓글 링크";
   link.textContent = "#";
   item.append(" ", link);

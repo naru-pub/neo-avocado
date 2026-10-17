@@ -19,7 +19,7 @@ function partner(character) {
   // Each side opens the character's page (couple/skin/list.skin.php:13-17).
   if (character) {
     const link = document.createElement("a");
-    link.href = `#/character/${encodeURIComponent(character.id)}`;
+    link.href = `/character/${encodeURIComponent(character.id)}`;
     link.textContent = character.data.name ?? "";
     name.append(link);
   } else name.textContent = "삭제된 캐릭터";

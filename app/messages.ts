@@ -238,7 +238,7 @@ export async function writeTo(member) {
 }
 
 /**
- * A message's address (#/messages/<id>): its conversation, at it.
+ * A message's address (/messages/<id>): its conversation, at it.
  */
 export async function openMessage(id) {
   showTab("messages");
