@@ -386,12 +386,89 @@
         <h2>커플목록 <small>Couple</small></h2>
         <ul id="coupleList" class="couple-list"></ul>
       </section>
+      <!-- bbs/new.php: the newest posts and comments of every board. -->
+      <section id="newView" hidden>
+        <h2>최근게시물 <small>New</small></h2>
+        <form id="newFilters" class="board-search">
+          <select id="newGroup" aria-label="그룹">
+            <option value="">전체그룹</option>
+          </select>
+          <select id="newKind" aria-label="보기">
+            <option value="">전체게시물</option>
+            <option value="posts">원글만</option>
+            <option value="comments">코멘트만</option>
+          </select>
+          <input
+            id="newNick"
+            maxlength="20"
+            placeholder="회원 닉네임"
+            aria-label="회원 닉네임"
+          />
+          <button type="submit">보기</button>
+        </form>
+        <table id="newList" class="ledger">
+          <thead>
+            <tr>
+              <th>그룹</th>
+              <th>게시판</th>
+              <th>제목</th>
+              <th>이름</th>
+              <th>일시</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <nav
+          id="newPages"
+          class="pages"
+          aria-label="최근게시물 페이지"
+          hidden
+        ></nav>
+      </section>
+      <!-- bbs/search.php: every board's posts and comments. -->
+      <section id="searchView" hidden>
+        <h2>전체검색 <small>Search</small></h2>
+        <form id="searchForm" class="board-search" role="search">
+          <select id="searchGroup" aria-label="그룹">
+            <option value="">전체그룹</option>
+          </select>
+          <select id="searchField" aria-label="검색조건">
+            <option value="content">제목+내용</option>
+            <option value="title">제목</option>
+            <option value="body">내용</option>
+            <option value="nick">회원 닉네임</option>
+            <option value="name">이름</option>
+          </select>
+          <input
+            id="searchWords"
+            type="search"
+            maxlength="20"
+            required
+            aria-label="검색어 (두 글자 이상, 공백은 한 개까지)"
+          />
+          <label
+            ><input type="radio" name="searchOperator" value="or" /> OR</label
+          >
+          <label
+            ><input type="radio" name="searchOperator" value="and" checked />
+            AND</label
+          >
+          <button type="submit">검색</button>
+        </form>
+        <p id="searchSummary"></p>
+        <ul id="searchBoards" class="sub-tabs"></ul>
+        <ol id="searchResults" class="search-results"></ol>
+        <button id="searchAllMore" type="button" hidden>더 보기</button>
+      </section>
 
       <section id="logsView" hidden>
         <label
           >게시판
           <select id="board"></select
         ></label>
+        <p class="board-links">
+          <a href="/new">최근게시물</a> · <a href="/search">전체검색</a>
+        </p>
         <div id="boardDescription" class="rich-text"></div>
         <!-- mmb_counter (skin/board/mmb/list.skin.php's connect-wiget). -->
         <div id="boardCounter" class="rich-text"></div>

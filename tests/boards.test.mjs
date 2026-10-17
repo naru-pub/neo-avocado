@@ -2607,3 +2607,202 @@ test("글쓰기 간격 keeps a member's next post or comment that many seconds a
     "too_fast",
   );
 });
+
+test("최근게시물 lists the newest posts and comments of every readable board, by group, kind or member", async () => {
+  const site = await boardSite();
+  profile(site, "m-1", "하나");
+  profile(site, "m-2", "둘");
+  insert(site, "board_groups", { id: "club", name: "동아리", members_only: 1 });
+  board(site, "free", { ...PUBLIC_BOARD, name: "자유" });
+  board(site, "club", { ...PUBLIC_BOARD, name: "동아리방", group: "club" });
+  const at = (n) => site.now + n * 1000;
+  const a = post(site, {
+    board: "free",
+    owner: "m-1",
+    title: "가",
+    body: "가",
+    created_at: at(1),
+  });
+  const secret = post(site, {
+    board: "free",
+    owner: "m-2",
+    title: "비밀",
+    body: "s",
+    secret: 1,
+    created_at: at(2),
+  });
+  const hidden = post(site, {
+    board: "club",
+    owner: "m-2",
+    title: "동아리 글",
+    body: "c",
+    created_at: at(3),
+  });
+  const members = post(site, {
+    board: "free",
+    owner: "m-2",
+    title: "멤버",
+    body: "m",
+    members_only: 1,
+    created_at: at(4),
+  });
+  const anon = post(site, {
+    board: "free",
+    owner: "m-1",
+    title: "익명",
+    body: "x",
+    anonymous: 1,
+    created_at: at(5),
+  });
+  const c1 = comment(site, {
+    post_id: Number(a),
+    owner: "m-2",
+    body: "댓글",
+    created_at: at(6),
+  });
+  comment(site, {
+    post_id: Number(secret),
+    owner: "m-2",
+    body: "비밀 댓글",
+    created_at: at(7),
+  });
+  const recent = (args = {}, who = M1) =>
+    site.query("community/search:recent", args, who);
+  const keys = (result) =>
+    result.entries.map((entry) =>
+      entry.kind === "post" ? `p${entry.post.id}` : `c${entry.comment.id}`,
+    );
+  const listed = await recent();
+  // Not the secret post (nor its comment), nor the members-only group's.
+  assert.deepEqual(keys(listed), [
+    `c${c1}`,
+    `p${anon}`,
+    `p${members}`,
+    `p${a}`,
+  ]);
+  assert.equal(listed.total, 4);
+  assert.equal(listed.size, 15);
+  assert.equal(listed.entries[0].board.name, "자유");
+  assert.equal(listed.entries[0].post.id, a);
+  assert.deepEqual(keys(await recent({ view: "posts" })), [
+    `p${anon}`,
+    `p${members}`,
+    `p${a}`,
+  ]);
+  assert.deepEqual(keys(await recent({ view: "comments" })), [`c${c1}`]);
+  // A visitor sees no 멤버공개 post; the staff see the secret one.
+  assert.deepEqual(keys(await recent({}, VISITOR)), [
+    `c${c1}`,
+    `p${anon}`,
+    `p${a}`,
+  ]);
+  moderator(site, "m-2");
+  assert.equal((await recent({}, M2)).total, 7);
+  assert.deepEqual(keys(await recent({ group: "club" }, M2)), [`p${hidden}`]);
+  // By member: 하나's own, but not their 익명 one to another.
+  assert.deepEqual(keys(await recent({ nick: "하나" }, M1)), [
+    `p${anon}`,
+    `p${a}`,
+  ]);
+  site.setRoles("m-2", []);
+  assert.deepEqual(keys(await recent({ nick: "하나" }, M2)), [`p${a}`]);
+  assert.equal((await recent({ nick: "아무도" })).total, 0);
+  // 최근게시물 라인수 (cf_new_rows) sizes the pages.
+  setSettings(site, "community", { newRows: 2 });
+  const first = await recent();
+  assert.deepEqual(keys(first), [`c${c1}`, `p${anon}`]);
+  assert.deepEqual(keys(await recent({ page: 2 })), [`p${members}`, `p${a}`]);
+  assert.equal(await reasonOf(recent({ view: "all" })), "invalid_input");
+});
+
+test("전체검색 finds words in every readable board's posts and comments, with each board's count", async () => {
+  const site = await boardSite();
+  profile(site, "m-1", "하나");
+  profile(site, "m-2", "둘");
+  board(site, "free", { ...PUBLIC_BOARD, name: "자유" });
+  board(site, "notice", { ...PUBLIC_BOARD, name: "공지" });
+  board(site, "staff", {
+    ...PUBLIC_BOARD,
+    name: "운영",
+    listLevel: 9,
+    readLevel: 9,
+  });
+  const p1 = post(site, {
+    board: "free",
+    owner: "m-1",
+    title: "바다 여행",
+    body: "푸른 바다를 보았다",
+  });
+  const p2 = post(site, {
+    board: "notice",
+    owner: "m-2",
+    title: "공지",
+    body: "바다 금지",
+  });
+  post(site, {
+    board: "staff",
+    owner: "m-2",
+    title: "바다 회의",
+    body: "비공개",
+  });
+  const p4 = post(site, {
+    board: "free",
+    owner: "m-2",
+    title: "산",
+    body: "산에 갔다",
+    secret: 1,
+  });
+  const p5 = post(site, {
+    board: "free",
+    owner: "m-2",
+    title: "숲",
+    body: "나무",
+  });
+  comment(site, { post_id: Number(p5), owner: "m-1", body: "바다가 그립다" });
+  const search = (args, who = M1) =>
+    site.query("community/search:everything", args, who);
+  const ids = (result) => result.documents.map((row) => row.id);
+  const all = await search({ text: "바다" });
+  // Posts first, newest first, then the posts found by their comments.
+  assert.deepEqual(ids(all), [p2, p1, p5]);
+  assert.deepEqual(all.counts, [
+    { id: "free", name: "자유", count: 2 },
+    { id: "notice", name: "공지", count: 1 },
+  ]);
+  assert.equal(all.documents[0].boardName, "공지");
+  assert.deepEqual(ids(await search({ text: "바다", board: "notice" })), [p2]);
+  assert.deepEqual(ids(await search({ text: "바다", field: "title" })), [p1]);
+  assert.deepEqual(ids(await search({ text: "바다 여행" })), [p1]);
+  assert.deepEqual(ids(await search({ text: "여행 금지", operator: "or" })), [
+    p2,
+    p1,
+  ]);
+  // A two-letter word is found by LIKE; a secret post only by its own.
+  assert.deepEqual(ids(await search({ text: "산에" })), []);
+  assert.deepEqual(ids(await search({ text: "산에" }, M2)), [p4]);
+  // By writer: 회원 is the nickname, 이름 a guest's name too.
+  assert.deepEqual(ids(await search({ text: "하나", field: "nick" })), [
+    p1,
+    p5,
+  ]);
+  const guest = post(site, {
+    board: "free",
+    guest_name: "나그네",
+    title: "손님 글",
+    body: "안녕",
+  });
+  assert.deepEqual(ids(await search({ text: "나그네", field: "name" })), [
+    guest,
+  ]);
+  // The level-9 board is the staff's to search.
+  site.run("INSERT INTO members (member, level) VALUES ('m-2', 9)");
+  assert.equal((await search({ text: "바다" }, M2)).counts.length, 3);
+  for (const text of ["바", "바다 산 숲", ""])
+    assert.equal(await reasonOf(search({ text })), "invalid_search", text);
+  assert.equal(
+    await reasonOf(search({ text: "바다", field: "mb_id" })),
+    "invalid_input",
+  );
+  // Visitors search what level 1 reads.
+  assert.deepEqual(ids(await search({ text: "바다" }, VISITOR)), [p2, p1, p5]);
+});

@@ -20,6 +20,7 @@ import {
   openPost,
 } from "./logs.js";
 import { openMessage } from "./messages.js";
+import { showRecent, showSearch } from "./across.js";
 import { follow } from "./site.js";
 import { openCharacter } from "./characters.js";
 import { showShopCategory } from "./shop.js";
@@ -45,6 +46,8 @@ export const PAGES = new Set([
   "quests",
   "calls",
   "online",
+  "new",
+  "search",
 ]);
 
 /** The address's parts: "/logs/free/12" → ["logs", "free", "12"]. */
@@ -112,6 +115,9 @@ export function openRoute(path = location.pathname) {
       $("tabMessages").click();
       return openMessage(first);
     }
+    // 최근게시물 and 전체검색 (bbs/new.php, search.php), at /search/<words>.
+    if (kind === "new") return showRecent();
+    if (kind === "search") return showSearch(first ?? null);
     // The character viewer (member/viewer.php), open to visitors too.
     if (kind === "character" && first) return openCharacter(first);
     if (kind === "content" && first) return follow(`content:${first}`);

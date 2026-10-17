@@ -60,6 +60,8 @@ const initialState = {
   warnings: { count: 0, note: "" },
   emoticons: null,
   boards: [],
+  // The board groups (community/boards:boards), for the group pickers.
+  groups: [] as { id: string; data: Record<string, any> }[],
   board: "default",
   tag: null,
   // The board list's 분류 (sca), while one is chosen.
@@ -434,6 +436,8 @@ const PLACES = {
   myFavorites: "마이페이지",
   myMoney: "마이페이지",
   online: "현재접속자",
+  new: "최근게시물",
+  search: "전체검색",
 };
 /** The browser, OS and device a page reports with a visit, for statistics. */
 function client() {
@@ -609,6 +613,8 @@ export function showTab(name) {
     ["myFavoritesView", "myFavorites"],
     ["myMoneyView", "myMoney"],
     ["couplesView", "couples"],
+    ["newView", "new"],
+    ["searchView", "search"],
   ])
     $(view).hidden = name !== key;
   $("tabCouples").setAttribute("aria-pressed", String(name === "couples"));
@@ -631,10 +637,6 @@ export function showTab(name) {
   }
 }
 
-/**
- * The page numbers under a list: ‹ 1 2 3 4 5 › around the current page, as
- * the original shows five at a time.
- */
 /**
  * get_paging (lib/common.lib.php:20): the page links in blocks of
  * 페이지 표시 수 (cf_write_pages, cf_mobile_pages on a phone), with 처음,

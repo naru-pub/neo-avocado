@@ -43,6 +43,7 @@ const arrivedAt = location.pathname;
 const arrivesAtList = () =>
   !movedSinceOpening() && /^\/logs(\/|$)/.test(arrivedAt);
 import "./app/online.js";
+import "./app/across.js";
 
 export { diceOf } from "./app/posts.js";
 

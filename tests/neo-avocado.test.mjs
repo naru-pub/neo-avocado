@@ -2835,3 +2835,94 @@ test("addresses in a post become links: in 새창 링크's window, and Link URL 
     [["https://b.example/", "_self", "https://b.example/"]],
   );
 });
+
+test("최근게시물 and 전체검색 have their own addresses, read across the boards", async () => {
+  const database = fakeDatabase({ [PROFILES]: [me] });
+  const post = {
+    id: "7",
+    createdAt: "2026-10-16T03:00:00.000Z",
+    data: {
+      title: "바다",
+      text: "푸른 바다",
+      number: 3,
+      owner: ME,
+      board: "default",
+    },
+  };
+  database.answer = (name, args) => {
+    if (name === "community/search:recent")
+      return {
+        entries: [
+          {
+            kind: "post",
+            board: { id: "default", name: "로그" },
+            group: null,
+            post,
+          },
+          {
+            kind: "comment",
+            board: { id: "default", name: "로그" },
+            group: null,
+            post,
+            comment: {
+              id: "9",
+              createdAt: post.createdAt,
+              data: { text: "댓글", owner: ME },
+            },
+          },
+        ],
+        total: 2,
+        size: 15,
+      };
+    if (name === "community/search:everything")
+      return {
+        documents: [{ ...post, boardName: "로그" }],
+        nextCursor: null,
+        counts: [{ id: "default", name: "로그", count: 1 }],
+      };
+    refuse("empty");
+  };
+  const { $, settle } = await page(database, {
+    url: "https://neo-avocado.naru.pub/new",
+  });
+  for (let n = 0; n < 4; n += 1) await settle();
+  assert.equal($("newView").hidden, false);
+  const rows = [...$("newList").querySelectorAll("tbody tr")].map((row) =>
+    [...row.querySelectorAll("td")].map((cell) => cell.textContent),
+  );
+  assert.deepEqual(
+    rows.map((cells) => cells.slice(1, 4)),
+    [
+      ["로그", "바다", "나"],
+      ["로그", "[코] 바다", "나"],
+    ],
+  );
+  assert.equal(
+    $("newList").querySelectorAll("tbody a")[3].getAttribute("href"),
+    "/post/7/comment/9",
+  );
+  const { $: $search, settle: wait } = await page(database, {
+    url: "https://neo-avocado.naru.pub/search/%EB%B0%94%EB%8B%A4",
+  });
+  for (let n = 0; n < 4; n += 1) await wait();
+  assert.equal($search("searchView").hidden, false);
+  assert.equal($search("searchWords").value, "바다");
+  assert.deepEqual(
+    database.calls
+      .filter((call) => call.name === "community/search:everything")
+      .at(-1).args,
+    {
+      text: "바다",
+      field: "content",
+      operator: "and",
+      group: "",
+      board: "",
+      after: null,
+    },
+  );
+  assert.equal($search("searchSummary").textContent, "게시판 1개 · 게시물 1개");
+  assert.equal(
+    $search("searchResults").querySelector("a").textContent,
+    "[로그] 바다",
+  );
+});

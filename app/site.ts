@@ -5,6 +5,7 @@ import { configureBoard, loadLogs } from "./logs.js";
 import { loadContentBody, loadContentPages } from "./content.js";
 import { NAME_DEFAULTS } from "./names.js";
 import { renderContent } from "../content-renderer.js";
+import { showRecent, showSearch } from "./across.js";
 
 const SITE_COLORS = {
   accent: "--avocado",
@@ -532,6 +533,8 @@ export async function follow(link) {
     }
     return $("tabCharacters").click();
   }
+  if (id === "new") return showRecent();
+  if (id === "search") return showSearch();
   const tab = $(`tab${id.charAt(0).toUpperCase()}${id.slice(1)}`);
   if (!tab) return;
   if (!state.member && tab.classList.contains("member-only"))

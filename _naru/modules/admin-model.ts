@@ -1086,6 +1086,13 @@ export const models: Record<string, Model> = {
         type: "number",
         default: 15,
       },
+      // cf_new_rows: 최근게시물 (bbs/new.php) a page.
+      {
+        key: "newRows",
+        label: "최근게시물 라인수 (최근게시물 한 페이지의 글·댓글 수, 최대 50)",
+        type: "number",
+        default: 15,
+      },
       {
         key: "writePages",
         label: "페이지 표시 수 (번호로 넘기는 목록의 페이지 링크 수)",
@@ -1580,7 +1587,7 @@ models.design = {
 };
 models.menus = {
   label: "메뉴",
-  help: "상단 메뉴입니다. 연결은 board:게시판ID, content:내용페이지ID, tab:members(멤버목록)·applicants(신청자목록)·couples(커플목록)·shop·mypage(마이페이지)·quests·content·messages·calls·characters, 또는 https:// 주소입니다. 메뉴를 하나도 만들지 않으면 원본의 기본 메뉴가 보입니다. 상위 메뉴 ID를 적으면 하위 메뉴가 됩니다. 보기 등급 1은 손님에게도 보입니다.",
+  help: "상단 메뉴입니다. 연결은 board:게시판ID, content:내용페이지ID, tab:members(멤버목록)·applicants(신청자목록)·couples(커플목록)·shop·mypage(마이페이지)·quests·content·messages·calls·characters·new(최근게시물)·search(전체검색), 또는 https:// 주소입니다. 메뉴를 하나도 만들지 않으면 원본의 기본 메뉴가 보입니다. 상위 메뉴 ID를 적으면 하위 메뉴가 됩니다. 보기 등급 1은 손님에게도 보입니다.",
   fields: [
     { key: "name", label: "메뉴 이름", required: true, max: 40 },
     { key: "link", label: "연결", required: true, max: 2000 },

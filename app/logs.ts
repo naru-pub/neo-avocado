@@ -1166,6 +1166,7 @@ export async function loadBoards() {
     emoticons,
   } = await query("community/boards:boards");
   state.boards = boards;
+  state.groups = listed;
   state.emoticons = emoticons;
   // As in the original, there is nothing to read or post on until the owner
   // makes a board (adm/board_form.php).
