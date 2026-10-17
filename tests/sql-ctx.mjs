@@ -187,13 +187,13 @@ export async function testSite({
      * What Naru answers `path` with: the route matching it run as a
      * visitor's query (null when none does, and the path is a file's).
      */
-    async route(path, query = {}) {
+    async route(path, query = {}, origin) {
       const match = matchRoute(await routes(), path);
       if (!match) return null;
       const url = pathToFileURL(join(dist, "routes", `${match.route}.js`)).href;
       const render = (await import(url)).default;
       const input = JSON.parse(
-        JSON.stringify({ path, params: match.params, query }),
+        JSON.stringify({ path, origin, params: match.params, query }),
       );
       return JSON.parse(
         JSON.stringify((await render(context("query", {}), input)) ?? null),

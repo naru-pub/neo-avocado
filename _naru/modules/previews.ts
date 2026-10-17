@@ -28,6 +28,8 @@ import type { QueryCtx } from "./naru-types.js";
 /** What Naru hands a route: the path asked, its parameters and query. */
 export interface RouteInput {
   path?: string;
+  /** The address the page was asked on (Naru's), such as https://x.naru.pub. */
+  origin?: string;
   params?: Record<string, string>;
   query?: Record<string, string>;
 }
@@ -104,8 +106,8 @@ export async function siteOf(ctx: QueryCtx) {
     description: text(design.description, 300) || SITE_DESCRIPTION,
     // cf_site_img, else the logo.
     image: https(design.shareImage) ?? https(design.logo),
-    // Naru tells a route its path, not its host: the owner's address
-    // makes the links whole. Without it they are the path.
+    // The owner's address, when set, is the one canonical address of
+    // the site's pages; else the address the page was asked on (route).
     address: (https(design.address) ?? "").replace(/\/+$/, ""),
   };
 }
@@ -168,10 +170,16 @@ export function route(page?: Page) {
     const access = await communityAccess(ctx);
     const shown = page ? await page(ctx, input?.params ?? {}, access) : null;
     if (shown === false) return NOT_FOUND;
+    const site = await siteOf(ctx);
+    const origin =
+      typeof input?.origin === "string" &&
+      /^https?:\/\/[^/]+$/.test(input.origin)
+        ? input.origin
+        : "";
     return {
       file: "index.html",
       head: headOf(
-        await siteOf(ctx),
+        { ...site, address: site.address || origin },
         access.closed ? null : shown,
         input?.path ?? "/",
       ),

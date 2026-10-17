@@ -166,6 +166,24 @@ test("the home and the views are index.html with the site's preview, from 디자
   const shared = tags(await site.route("/members"));
   assert.equal(shared["og:image"], "https://media.naru.pub/share.png");
   assert.equal(shared["og:url"], "/members");
+  // Without the owner's address, the address the page was asked on.
+  const asked = tags(
+    await site.route("/members", {}, "https://neo-avocado.naru.pub"),
+  );
+  assert.equal(asked["og:url"], "https://neo-avocado.naru.pub/members");
+  assert.equal(asked.canonical, "https://neo-avocado.naru.pub/members");
+  assert.equal(
+    tags(await site.route("/members", {}, "javascript:alert(1)"))["og:url"],
+    "/members",
+  );
+  // With it, the owner's address is the one canonical address.
+  setSettings(site, "design", { address: "https://avocado.example" });
+  assert.equal(
+    tags(await site.route("/members", {}, "https://neo-avocado.naru.pub"))[
+      "og:url"
+    ],
+    "https://avocado.example/members",
+  );
 });
 
 test("a post's preview: its title, opening text and picture, else its speaker's", async () => {
