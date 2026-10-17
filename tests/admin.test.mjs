@@ -1089,7 +1089,8 @@ test("activity counts each member's posts and comments on a board in a Korean da
   post("free", "a", "2030-01-31T15:30:00Z");
   reply(l1, "b", "2030-01-02T01:00:00Z");
   reply(l2, "b", "2030-01-02T01:00:00Z");
-  const report = (args) => query(site, "activity:report", args);
+  const report = async (args) =>
+    (await query(site, "activity:report", args)).rows;
   assert.deepEqual(
     await report({ board: "free", from: "2030-01-02", to: "2030-01-31" }),
     [
@@ -1126,6 +1127,54 @@ test("activity counts each member's posts and comments on a board in a Korean da
     ],
   );
   assert.equal(await refusal(report({ from: "어제" })), "invalid_input");
+  assert.equal(
+    await refusal(query(site, "activity:report", { after: "[1]" })),
+    "invalid_input",
+  );
+});
+
+test("활동량 관리 reads a community of any size to its end, 100 members a page", async () => {
+  const site = await testSite();
+  const members = 1250;
+  const insertMany = site.db.prepare(
+    "INSERT INTO profiles (member, nick) VALUES (?, ?)",
+  );
+  for (let n = 0; n < members; n += 1)
+    insertMany.run(`m-${n}`, `회원${String(n).padStart(4, "0")}`);
+  // A few active ones come first, the most active first.
+  const write = site.db.prepare(
+    "INSERT INTO posts (board, number, owner, created_at, updated_at) VALUES ('free', ?, ?, 0, 0)",
+  );
+  let number = 0;
+  for (const [member, count] of [
+    ["m-7", 3],
+    ["m-900", 2],
+    ["m-3", 2],
+  ])
+    for (let n = 0; n < count; n += 1) write.run(++number, member);
+  const seen = [];
+  let after = null;
+  let pages = 0;
+  do {
+    const page = await query(site, "activity:report", { after });
+    seen.push(...page.rows);
+    after = page.nextCursor;
+    pages += 1;
+  } while (after);
+  assert.equal(pages, 13);
+  assert.equal(seen.length, members);
+  assert.equal(new Set(seen.map((row) => row.id)).size, members);
+  assert.deepEqual(
+    seen.slice(0, 4).map((row) => [row.id, row.logs]),
+    [
+      ["m-7", 3],
+      ["m-3", 2],
+      ["m-900", 2],
+      ["m-0", 0],
+    ],
+  );
+  // The rest by nickname.
+  assert.equal(seen.at(-1).nick, "회원1249");
 });
 
 test("the history reads newest first, and the grants' log by its actor", async () => {

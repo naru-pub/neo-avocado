@@ -1794,15 +1794,26 @@ async function activityView() {
   show.type = "button";
   show.textContent = "보기";
   const output = document.createElement("div");
-  const draw = async () => {
+  // 100 members a page, 더 보기 for the next, each after the last one read.
+  let rows = [];
+  let cursor = null;
+  const draw = async ({ more = false } = {}) => {
     // "all" stands for every board, which has no ID of its own.
     adminRoute(["activity", board.value || "all", from.value, to.value]);
     // Counted by the server's SQL.
-    const rows = await owner.query("admin/activity:report", {
+    const page = await owner.query("admin/activity:report", {
       board: board.value,
       from: from.value,
       to: to.value,
+      after: more ? cursor : null,
     });
+    rows = more ? [...rows, ...page.rows] : page.rows;
+    cursor = page.nextCursor;
+    const next = document.createElement("button");
+    next.type = "button";
+    next.textContent = "더 보기";
+    next.hidden = !cursor;
+    next.onclick = () => run(() => draw({ more: true }));
     output.replaceChildren(
       table(
         [
@@ -1853,9 +1864,10 @@ async function activityView() {
           ];
         }),
       ),
+      next,
     );
   };
-  show.onclick = () => run(draw);
+  show.onclick = () => run(() => draw());
   const bar = document.createElement("div");
   bar.className = "report-filters";
   bar.append(
