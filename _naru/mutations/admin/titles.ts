@@ -3,7 +3,7 @@
 import { invalid, ownerOnly, saveRecord } from "../../modules/admin.js";
 import { one } from "../../modules/access.js";
 import { characterKey } from "../../modules/characters.js";
-import type { MutationCtx, SqlValue } from "../../modules/naru-types.js";
+import type { MutationCtx } from "../../modules/naru-types.js";
 
 export const save = (
   ctx: MutationCtx,
@@ -39,8 +39,8 @@ export async function remove(ctx: MutationCtx, { id }: { id?: string } = {}) {
 
 /** At most this many characters named at once. */
 const MAX_TARGETS = 1000;
-/** Characters a statement names, within its 100 bound values. */
-const CHUNK = 90;
+/** The named characters, bound as one JSON array. */
+const NAMED = "SELECT value FROM json_each(?)";
 
 /**
  * Gives a title to characters (`action` "grant") or takes it back
@@ -111,39 +111,36 @@ export async function grant(
     ctx.fail("INVALID_REQUEST", "대상 캐릭터를 확인해 주세요.", {
       reason: "no_character",
     });
-  for (let start = 0; start < keys.length; start += CHUNK) {
-    const chunk: SqlValue[] = keys.slice(start, start + CHUNK);
-    const marks = chunk.map(() => "?").join(", ");
-    const { count } = await one<{ count: number }>(
-      ctx,
-      `SELECT count(*) AS count FROM characters WHERE id IN (${marks})`,
-      chunk,
+  const named = JSON.stringify(keys);
+  const { count } = await one<{ count: number }>(
+    ctx,
+    `SELECT count(*) AS count FROM characters WHERE id IN (${NAMED})`,
+    [named],
+  );
+  if (count !== keys.length)
+    ctx.fail("INVALID_REQUEST", "대상 캐릭터를 확인해 주세요.", {
+      reason: "no_character",
+    });
+  if (action === "grant") {
+    await ctx.sql(
+      `INSERT INTO character_titles (character_id, title_id)
+       SELECT id, ? FROM characters WHERE id IN (${NAMED})
+       ON CONFLICT (character_id, title_id) DO NOTHING`,
+      [title, named],
     );
-    if (count !== chunk.length)
-      ctx.fail("INVALID_REQUEST", "대상 캐릭터를 확인해 주세요.", {
-        reason: "no_character",
-      });
-    if (action === "grant") {
-      await ctx.sql(
-        `INSERT INTO character_titles (character_id, title_id)
-         SELECT id, ? FROM characters WHERE id IN (${marks})
-         ON CONFLICT (character_id, title_id) DO NOTHING`,
-        [title, ...chunk],
-      );
-      await ctx.sql(
-        `UPDATE characters SET version = version + 1 WHERE id IN (${marks})`,
-        chunk,
-      );
-    } else {
-      await ctx.sql(
-        `DELETE FROM character_titles WHERE title_id = ? AND character_id IN (${marks})`,
-        [title, ...chunk],
-      );
-      await ctx.sql(
-        `UPDATE characters SET active_title = CASE WHEN active_title = ? THEN NULL ELSE active_title END, version = version + 1 WHERE id IN (${marks})`,
-        [title, ...chunk],
-      );
-    }
+    await ctx.sql(
+      `UPDATE characters SET version = version + 1 WHERE id IN (${NAMED})`,
+      [named],
+    );
+  } else {
+    await ctx.sql(
+      `DELETE FROM character_titles WHERE title_id = ? AND character_id IN (${NAMED})`,
+      [title, named],
+    );
+    await ctx.sql(
+      `UPDATE characters SET active_title = CASE WHEN active_title = ? THEN NULL ELSE active_title END, version = version + 1 WHERE id IN (${NAMED})`,
+      [title, named],
+    );
   }
   return { completed: keys.length };
 }

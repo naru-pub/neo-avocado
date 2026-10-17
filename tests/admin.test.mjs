@@ -767,14 +767,12 @@ test("a title is given and taken back in one call, and deleting it takes it from
       "SELECT character_id FROM character_titles WHERE title_id = 'award' ORDER BY character_id",
     ).length;
   assert.equal(holders(), 120);
+  // In the order given, not the titles' order.
   assert.deepEqual(
-    (
-      await query(site, "character_state:get", { id: approved[0] })
-    ).data.titles.sort(),
-    ["award", "old"],
+    (await query(site, "character_state:get", { id: approved[0] })).data.titles,
+    ["old", "award"],
   );
-  // The selected, once each; a hundred at once, beyond one statement's
-  // values.
+  // The selected, once each; a hundred at once, bound as one JSON array.
   assert.deepEqual(
     await grant({ action: "grant", characters: [editing, editing] }),
     { completed: 1 },
@@ -995,6 +993,32 @@ test("visits are totalled for a range and broken down as the original's tabs, an
   );
 });
 
+test("a report sums every day in its range, past a statement's 1,000 rows, and counts only numbers", async () => {
+  const site = await testSite();
+  const start = Date.parse("2030-01-01T00:00:00Z");
+  for (let i = 0; i < 1200; i++)
+    site.run(
+      "INSERT INTO visits (day, total, members, hours, domains) VALUES (?, 1, ?, ?, ?)",
+      new Date(start + i * 24 * 3600 * 1000).toISOString().slice(0, 10),
+      JSON.stringify({ [`m-${i % 1100}`]: 1 }),
+      JSON.stringify({ 9: 1, 10: i === 0 ? "x" : 0 }),
+      JSON.stringify(i === 0 ? { "b.example": 2, "a.example": 2 } : {}),
+    );
+  const report = (args) => query(site, "visits:report", args);
+  const hours = await report({ by: "hour" });
+  assert.deepEqual([hours.total, hours.members], [1200, 1100]);
+  assert.deepEqual(hours.rows, [
+    { label: "09시", count: 1200 },
+    { label: "10시", count: 0 },
+  ]);
+  // Most first, then by name.
+  assert.deepEqual((await report({ by: "domains" })).rows, [
+    { label: "a.example", count: 2 },
+    { label: "b.example", count: 2 },
+  ]);
+  assert.equal((await report({ by: "year" })).rows.length, 4);
+});
+
 test("activity counts each member's posts and comments on a board in a Korean date range", async () => {
   const site = await testSite();
   const main = character(site, { owner: "a", name: "초록" });
@@ -1139,5 +1163,32 @@ test("the forms' pick lists come in one read", async () => {
       references.fields,
     ],
     [[], [], [], []],
+  );
+});
+
+test("pick lists page past a statement's 1,000 rows, in their order", async () => {
+  const site = await testSite();
+  for (let i = 0; i < 2500; i++) {
+    const id = `t${String(i).padStart(4, "0")}`;
+    site.run("INSERT INTO titles (id, name) VALUES (?, ?)", id, id);
+    // Ordered by sort_order, then ID: odd ones first.
+    site.run(
+      "INSERT INTO sides (id, name, sort_order) VALUES (?, ?, ?)",
+      id,
+      id,
+      i % 2 ? 0 : 1,
+    );
+  }
+  const references = await query(site, "references:references");
+  assert.equal(references.titles.length, 2500);
+  assert.deepEqual(
+    [references.titles[0].id, references.titles[2499].id],
+    ["t0000", "t2499"],
+  );
+  const sides = references.sides.map((side) => side.id);
+  assert.equal(new Set(sides).size, 2500);
+  assert.deepEqual(
+    [sides[0], sides[1249], sides[1250], sides[2499]],
+    ["t0001", "t2499", "t0000", "t2498"],
   );
 });

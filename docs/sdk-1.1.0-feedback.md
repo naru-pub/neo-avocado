@@ -7,50 +7,38 @@ rules and site functions to SQL tables, queries, mutations and live queries
 membership, function-written documents without authors, the document
 quota, a local emulator), is answered by the new design or by naru-dev and
 is not repeated. Each item below is something the port works around; the
-workaround is named so it can go when Naru grows the feature.
+workaround is named so it can go when Naru grows the feature. Items 1–3 are
+resolved; how is said in each.
 
-## 1. JSON in a row cannot be opened by SQL
+## 1. JSON in a row cannot be opened by SQL (resolved)
 
 A day's visit counts keep their hourly, browser, OS, device and referrer
-breakdowns as JSON maps. Summing them with `json_each` is refused by the
-plan rule, since the table-valued function is a second table scanned for
-every day:
+breakdowns as JSON maps. Naru's plan rule now lets a table-valued function
+over the current row's own column (`json_each(visits.hours)`) through, so
+`admin/visits:report` sums the maps, and counts the different members, in
+SQL over every day in the range instead of reading at most 1,000 days and
+summing them in code.
 
-> Invalid SQL: it would read all of j for every row before it; give j an
-> index on the column it joins on.
+## 2. An ordered aggregate in a correlated subquery (resolved)
 
-`admin/visits:report` therefore sums days, months, years and weekdays in SQL
-but reads the days' rows (at most 1,000) and sums the maps in code.
+A scan of a subquery's own result (`SCAN (subquery-1)` beside its
+`CO-ROUTINE`) no longer counts as a table scan inside a correlated subquery;
+the subquery's own steps are still checked. The admin's record view lists a
+character's titles in the order given again, with `json_group_array` over
+`(SELECT title_id FROM character_titles WHERE character_id = characters.id
+ORDER BY id)`. This needs the naru-pub release with that rule.
 
-**Suggestion:** let a table-valued function over the current row's own
-column (`json_each(visits.hours)`) count as reaching that row, not as a
-scan; its size is bounded by the row's.
+## 3. One statement's limits (resolved)
 
-## 2. An ordered aggregate in a correlated subquery
-
-`json_group_array` over a character's titles in the order given needs an
-ordered inner subquery, which the plan rule refuses even though it only
-reads that character's rows by index:
-
-> Invalid SQL: a subquery would read all of (subquery-1) for every row;
-> give (subquery-1) an index on the column it compares.
-
-The admin's record view lists titles in index order instead.
-
-**Suggestion:** treat a scan of a subquery's own result (an ephemeral
-table) as part of the subquery it belongs to.
-
-## 3. One statement's limits
-
-A statement binds at most 100 values and returns at most 1,000 rows
-("ctx.sql returns at most 1000 rows and 1 MiB; add a LIMIT."). Granting a
-title to many chosen characters runs in chunks of 90 IDs; the admin's pick
-lists read 1,000 rows at a time; 활동량 관리 shows 1,000 members and the
-visits report 1,000 days.
-
-**Suggestion:** a documented way to pass a list as one value (a JSON array
-used with `IN (SELECT value FROM json_each(?))` exempt from item 1), and
-streaming or paging for owner-only reads.
+A statement still binds at most 100 values and returns at most 1,000 rows,
+but Naru documents the ways past them. Granting a title to many chosen
+characters binds their IDs as one JSON array
+(`IN (SELECT value FROM json_each(?))`), one statement each instead of
+chunks of 90; the admin's pick lists page by key (`WHERE (sort_order, id) >
+(?, ?)`) instead of by `OFFSET`; the visits report no longer reads days.
+활동량 관리 still shows its 1,000 most active members: paging it means a
+cursor of (activity, nickname, member) over its ordered subquery and a
+"더 보기" in the page.
 
 ## 4. The runtime's globals
 

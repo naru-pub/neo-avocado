@@ -1,12 +1,11 @@
 // 접속자 집계 (adm/visit_list.php and its tabs): visits between two Korean
 // days, inclusive, broken down by day, hour, weekday, month, year, browser,
 // operating system, device or where visitors came from, with the totals:
-// visits, guests' visits and how many members visited. Days, months, years
-// and weekdays are summed by SQL; the hours and the rest are JSON maps a day
-// keeps, which Naru's plan rule does not let SQL open row by row
-// (json_each would be read whole for every day), so they are summed here.
+// visits, guests' visits and how many members visited. All of it is summed
+// by SQL: the hours and the rest are JSON maps a day keeps, opened with
+// json_each(visits.<column>) row by row.
 import { invalid, ownerOnly } from "../../modules/admin.js";
-import { one, parsed } from "../../modules/access.js";
+import { one } from "../../modules/access.js";
 import type { QueryCtx, SqlValue } from "../../modules/naru-types.js";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -47,27 +46,29 @@ export async function report(
     `SELECT coalesce(sum(total), 0) AS total, coalesce(sum(guests), 0) AS guests FROM visits WHERE ${within}`,
     range,
   );
-  // Each day's members (a JSON map), for how many different ones visited.
-  const days = (
-    await ctx.sql(
-      `SELECT members${Object.hasOwn(MAPS, by) ? `, ${MAPS[by]} AS breakdown` : ""} FROM visits WHERE ${within} ORDER BY day LIMIT 1000`,
-      range,
-    )
-  ).rows;
-  const members = new Set<string>();
-  for (const day of days)
-    for (const id of Object.keys(parsed(day.members, {}))) members.add(id);
+  // Each day's members (a JSON map of member to visits): how many different
+  // ones visited.
+  const members = await one<{ count: number }>(
+    ctx,
+    `SELECT count(DISTINCT j.key) AS count FROM visits, json_each(visits.members) AS j WHERE ${within}`,
+    range,
+  );
   let rows: { label: string; count: number }[];
   if (Object.hasOwn(MAPS, by)) {
-    const counts = new Map<string, number>();
-    for (const day of days)
-      for (const [label, count] of Object.entries(parsed(day.breakdown, {})))
-        if (Number.isFinite(count))
-          counts.set(label, (counts.get(label) ?? 0) + Number(count));
-    rows = [...counts].map(([label, count]) =>
+    // Each label's counts over the days; a value that is not a number is
+    // not counted.
+    const counts = (
+      await ctx.sql(
+        `SELECT j.key AS label, sum(j.value) AS count FROM visits, json_each(visits.${MAPS[by as keyof typeof MAPS]}) AS j
+         WHERE ${within} AND j.type IN ('integer', 'real')
+         GROUP BY j.key ORDER BY count DESC, label LIMIT 1000`,
+        range,
+      )
+    ).rows;
+    rows = counts.map(({ label, count }) =>
       by === "hour"
-        ? { label: `${label.padStart(2, "0")}시`, count }
-        : { label, count },
+        ? { label: `${String(label).padStart(2, "0")}시`, count: Number(count) }
+        : { label: String(label), count: Number(count) },
     );
     rows.sort(
       by === "hour"
@@ -103,7 +104,7 @@ export async function report(
   return {
     total: totals.total,
     guests: totals.guests,
-    members: members.size,
+    members: members.count,
     rows,
     older,
   };

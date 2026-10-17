@@ -427,17 +427,28 @@ export async function getRecord(
   return row ? recordOf(t, row) : null;
 }
 
-/** Up to `limit` rows of a statement, read 1,000 at a time. */
+/**
+ * Up to `limit` rows of `select` (a SELECT without WHERE or ORDER BY), in
+ * the order of `keys`, columns it selects that together name a row: read
+ * 1,000 at a time, each page after the last one's keys (keyset paging, so
+ * no page reads the rows before it again).
+ */
 export async function allRows(
   ctx: QueryCtx,
-  text: string,
-  values: SqlValue[] = [],
+  select: string,
+  keys: string[] = ["id"],
   limit = 20000,
 ) {
   const rows: Record<string, SqlValue>[] = [];
-  for (let offset = 0; offset < limit; offset += 1000) {
+  const order = `ORDER BY ${keys.join(", ")} LIMIT 1000`;
+  const after = `WHERE (${keys.join(", ")}) > (${keys.map(() => "?").join(", ")})`;
+  while (rows.length < limit) {
+    const last = rows.at(-1);
     const page = (
-      await ctx.sql(`${text} LIMIT 1000 OFFSET ?`, [...values, offset])
+      await ctx.sql(
+        `${select} ${last ? after : ""} ${order}`,
+        last ? keys.map((key) => last[key]) : [],
+      )
     ).rows;
     rows.push(...page);
     if (page.length < 1000) break;
@@ -454,55 +465,59 @@ export async function catalogues(
   names: string[],
 ): Promise<References> {
   const references: References = {};
-  const read = async (name: string, text: string, data: (row) => any) => {
+  const read = async (
+    name: string,
+    text: string,
+    data: (row) => any,
+    keys = ["id"],
+  ) => {
     if (names.includes(name))
-      references[name] = (await allRows(ctx, text)).map((row) => ({
+      references[name] = (await allRows(ctx, text, keys)).map((row) => ({
         id: String(row.id),
         data: data(row),
       }));
   };
-  await read(
-    "titles",
-    "SELECT id, name, image FROM titles ORDER BY id",
-    (row) => ({ name: row.name, image: row.image }),
-  );
-  await read(
-    "stats",
-    "SELECT id, name, initial, max FROM stats ORDER BY id",
-    (row) => ({ name: row.name, initial: row.initial, max: row.max }),
-  );
-  await read(
-    "items",
-    "SELECT id, name, craft_material FROM items ORDER BY id",
-    (row) => ({ name: row.name, craftMaterial: row.craft_material === 1 }),
-  );
+  await read("titles", "SELECT id, name, image FROM titles", (row) => ({
+    name: row.name,
+    image: row.image,
+  }));
+  await read("stats", "SELECT id, name, initial, max FROM stats", (row) => ({
+    name: row.name,
+    initial: row.initial,
+    max: row.max,
+  }));
+  await read("items", "SELECT id, name, craft_material FROM items", (row) => ({
+    name: row.name,
+    craftMaterial: row.craft_material === 1,
+  }));
   for (const name of ["sides", "classes"])
     await read(
       name,
-      `SELECT id, name, sort_order FROM ${name} ORDER BY sort_order, id`,
+      `SELECT id, name, sort_order FROM ${name}`,
       (row) => ({ name: row.name, order: row.sort_order }),
+      ["sort_order", "id"],
     );
-  await read("boards", "SELECT id, name FROM boards ORDER BY id", (row) => ({
+  await read("boards", "SELECT id, name FROM boards", (row) => ({
     name: row.name,
   }));
   await read(
     "groups",
-    "SELECT id, name FROM board_groups ORDER BY sort_order, id",
+    "SELECT id, name, sort_order FROM board_groups",
     (row) => ({ name: row.name }),
+    ["sort_order", "id"],
   );
   await read(
     "recipes",
-    "SELECT id, name, (SELECT json_group_array(json_object('item', item_id, 'count', count)) FROM recipe_ingredients WHERE recipe_id = recipes.id) AS ingredients FROM recipes ORDER BY id",
+    "SELECT id, name, (SELECT json_group_array(json_object('item', item_id, 'count', count)) FROM recipe_ingredients WHERE recipe_id = recipes.id) AS ingredients FROM recipes",
     (row) => ({ name: row.name, ingredients: parsed(row.ingredients, []) }),
   );
-  await read(
-    "characters",
-    "SELECT id, owner, name FROM characters ORDER BY id",
-    (row) => ({ name: row.name, owner: row.owner }),
-  );
+  await read("characters", "SELECT id, owner, name FROM characters", (row) => ({
+    name: row.name,
+    owner: row.owner,
+  }));
   if (names.includes("profiles"))
     references.profiles = (
-      await allRows(ctx, "SELECT member, nick FROM profiles ORDER BY member")
+      await allRows(ctx, "SELECT member, nick FROM profiles", ["member"])
     ).map((row) => ({ id: String(row.member), data: { nick: row.nick } }));
   return references;
 }
@@ -788,6 +803,6 @@ export function stateOf(row: Record<string, SqlValue>) {
   };
 }
 
-/** Characters with the titles each holds, for `stateOf`. */
+/** Characters with the titles each holds in the order given, for `stateOf`. */
 export const STATE_SELECT =
-  "SELECT characters.*, (SELECT json_group_array(title_id) FROM character_titles WHERE character_id = characters.id) AS titles FROM characters";
+  "SELECT characters.*, (SELECT json_group_array(title_id) FROM (SELECT title_id FROM character_titles WHERE character_id = characters.id ORDER BY id)) AS titles FROM characters";
