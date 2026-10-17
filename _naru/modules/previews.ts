@@ -4,8 +4,9 @@
 // post and a direct visit or reload serves the page there. A route runs as
 // a visitor's query, so a preview shows only what a visitor may read, by
 // the same checks the queries make; anything else (a secret, 멤버공개 or
-// 19금 post, a members-only board, every page of a closed site) shows the
-// site's own preview, which tells nothing of it.
+// 19금 post, a members-only board) shows the site's own preview, which tells
+// nothing of it. A closed site's pages show no preview at all, not even the
+// site's own name, description or picture.
 import { communityAccess, imageUrl, one, settingsOf } from "./access.js";
 import type { Access } from "./access.js";
 import {
@@ -161,15 +162,24 @@ export const NOT_FOUND = Object.freeze({
 });
 
 /**
+ * What a closed site's pages add to index.html's <head>: no preview, not even
+ * the site's own, so a shared link shows nothing of the community, and it is
+ * kept out of search results. The page sets its title once it loads.
+ */
+export const CLOSED_HEAD = '<meta name="robots" content="noindex, nofollow" />';
+
+/**
  * A route: index.html with `page`'s preview (the site's own without one),
- * kept at the edge for CACHE seconds. A closed site's pages all show the
- * site's own.
+ * kept at the edge for CACHE seconds. A closed site's pages show none
+ * (CLOSED_HEAD).
  */
 export function route(page?: Page) {
   return async (ctx: QueryCtx, input: RouteInput) => {
     const access = await communityAccess(ctx);
     const shown = page ? await page(ctx, input?.params ?? {}, access) : null;
     if (shown === false) return NOT_FOUND;
+    if (access.closed)
+      return { file: "index.html", head: CLOSED_HEAD, cache: CACHE };
     const site = await siteOf(ctx);
     const origin =
       typeof input?.origin === "string" &&
@@ -180,7 +190,7 @@ export function route(page?: Page) {
       file: "index.html",
       head: headOf(
         { ...site, address: site.address || origin },
-        access.closed ? null : shown,
+        shown,
         input?.path ?? "/",
       ),
       cache: CACHE,

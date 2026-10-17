@@ -3,7 +3,8 @@
 // site's migrations (tests/sql-ctx.mjs): every address the pages know is
 // served as index.html with its link preview, read as a visitor reads, and
 // what a visitor may not read (secret, 멤버공개 and 19금 posts, boards above
-// level 1 or in a members-only group, a closed site) shows the site's own.
+// level 1 or in a members-only group) shows the site's own; a closed site's
+// pages show none.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { testSite } from "./sql-ctx.mjs";
@@ -95,6 +96,12 @@ const generic = (path, site = {}) => ({
   "twitter:card": site.image ? "summary_large_image" : "summary",
 });
 const NOT_FOUND = { body: "Not Found", type: "text/plain", status: 404 };
+/** What a closed site's page answers: index.html with no preview at all. */
+const CLOSED = {
+  file: "index.html",
+  head: '<meta name="robots" content="noindex, nofollow" />',
+  cache: 60,
+};
 
 test("the home and the views are index.html with the site's preview, from 디자인", async () => {
   const site = await testSite();
@@ -290,12 +297,12 @@ test("a post a visitor may not read whole shows the site's preview", async () =>
   );
   assert.equal(tags(await site.route(`/post/${unlisted}`))["og:title"], "비밀");
 
-  // 사이트공개 off: nothing of the community, whatever the address.
+  // 사이트공개 off: no preview at all, not even the site's own.
   const open = post(site, { ...secret });
   assert.equal(tags(await site.route(`/post/${open}`))["og:title"], "비밀");
   setSettings(site, "community", { siteOpen: false });
-  for (const path of [`/post/${open}`, "/logs/free/1", "/members"])
-    assert.deepEqual(tags(await site.route(path)), generic(path), path);
+  for (const path of [`/post/${open}`, "/logs/free/1", "/members", "/"])
+    assert.deepEqual(await site.route(path), CLOSED, path);
 });
 
 test("a board's preview: its name and description, while a visitor may list and read it", async () => {
@@ -350,7 +357,7 @@ test("a board's preview: its name and description, while a visitor may list and 
   ])
     assert.deepEqual(await at(path), generic(path), path);
   setSettings(site, "community", { siteOpen: false });
-  assert.deepEqual(await at("/logs/free"), generic("/logs/free"));
+  assert.deepEqual(await site.route("/logs/free"), CLOSED);
 });
 
 test("a character's preview: its name, profile and picture, while the site is open", async () => {
@@ -383,9 +390,7 @@ test("a character's preview: its name, profile and picture, while the site is op
   assert.deepEqual(await site.route("/character/hero"), NOT_FOUND);
   // 사이트공개 off: characters are not a visitor's (characters' viewable).
   setSettings(site, "community", { siteOpen: false });
-  const closed = await site.route(`/character/${hero}`);
-  assert.deepEqual(tags(closed), generic(`/character/${hero}`));
-  assert.ok(!closed.head.includes("용사"));
+  assert.deepEqual(await site.route(`/character/${hero}`), CLOSED);
 });
 
 test("a content page's preview: its title, at a visitor's level", async () => {
@@ -406,8 +411,5 @@ test("a content page's preview: its title, at a visitor's level", async () => {
   ])
     assert.deepEqual(tags(await site.route(path)), generic(path), path);
   setSettings(site, "community", { siteOpen: false });
-  assert.deepEqual(
-    tags(await site.route("/content/rules")),
-    generic("/content/rules"),
-  );
+  assert.deepEqual(await site.route("/content/rules"), CLOSED);
 });
