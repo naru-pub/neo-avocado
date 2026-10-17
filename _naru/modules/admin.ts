@@ -557,7 +557,7 @@ async function named(
     .map(characterKey)
     .filter((key) => key !== null);
   // Added to a catalogue the section read whole, if it did.
-  references.characters ??= [];
+  references.characters = references.characters ?? [];
   for (const key of new Set(characters)) {
     const row = await one(
       ctx,
@@ -574,7 +574,7 @@ async function named(
     ...(section === "inventory" ? [values.owner] : []),
     ...(section === "wallets" ? [id] : []),
   ].filter((member) => typeof member === "string" && member);
-  references.profiles ??= [];
+  references.profiles = references.profiles ?? [];
   for (const member of new Set(members)) {
     const row = await one(
       ctx,
