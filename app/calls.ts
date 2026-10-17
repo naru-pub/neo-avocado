@@ -21,7 +21,7 @@ async function loadCalls({ more = false } = {}) {
     li.textContent = `${row.data.unread ? "[새 알림] " : ""}${row.data.nick || "이름 없음"}${row.data.speaker ? ` (${row.data.speaker})` : ""}님이 ${row.data.kind === "comment" ? "내 글에 댓글을 남겼습니다" : "호출했습니다"} · ${formatTime(row.data.at)} · ${row.data.preview} `;
     // The post, at the comment when there is one: their own addresses.
     const open = document.createElement("a");
-    open.href = `#/post/${encodeURIComponent(row.data.logId)}${row.data.commentId ? `/comment/${encodeURIComponent(row.data.commentId)}` : ""}`;
+    open.href = `/post/${encodeURIComponent(row.data.logId)}${row.data.commentId ? `/comment/${encodeURIComponent(row.data.commentId)}` : ""}`;
     open.textContent = "글 보기";
     li.append(open);
     $("calls").append(li);

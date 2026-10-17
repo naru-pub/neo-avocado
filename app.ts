@@ -37,11 +37,14 @@ import { createCharacter } from "./app/mypage.js";
 import "./app/couples.js";
 import { openRoute } from "./app/router.js";
 
-/** The address the page was opened at, before anything is shown. */
-const arrivedAt = location.hash;
+/**
+ * The address the page was opened at, before anything is shown (an old
+ * #/… one is its path already: core.js).
+ */
+const arrivedAt = location.pathname;
 /** Whether the address the page opened at names a board, which reads its own list. */
 const arrivesAtList = () =>
-  !movedSinceOpening() && /^#\/?logs(\/|$)/.test(arrivedAt);
+  !movedSinceOpening() && /^\/logs(\/|$)/.test(arrivedAt);
 import "./app/online.js";
 
 export { diceOf } from "./app/posts.js";

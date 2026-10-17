@@ -104,7 +104,7 @@ async function loadMyPage() {
       const item = document.createElement("li");
       item.className = "character-card";
       const link = document.createElement("a");
-      link.href = `#/character/${encodeURIComponent(character.id)}`;
+      link.href = `/character/${encodeURIComponent(character.id)}`;
       if (character.data.image?.startsWith("https://"))
         link.append(
           Object.assign(new Image(), {
@@ -241,7 +241,7 @@ async function loadMyFavorites(page = 1) {
       );
       const item = document.createElement("li");
       const open = document.createElement("a");
-      open.href = `#/post/${encodeURIComponent(log.id)}`;
+      open.href = `/post/${encodeURIComponent(log.id)}`;
       const text = (log.data.title || log.data.text || "그림 로그").slice(
         0,
         60,
