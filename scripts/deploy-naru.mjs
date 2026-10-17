@@ -103,9 +103,30 @@ for (const upload of plan.uploads) {
     throw new Error(`Uploading ${upload.path}: ${response.status}`);
 }
 // Plan and finalize each check the token, which lasts minutes: ask again.
-await call("/api/deploy/github/finalize", await oidcToken(), {
+const finalized = await call("/api/deploy/github/finalize", await oidcToken(), {
   deploymentId: plan.deploymentId,
 });
+// Finalize answers once the files are published; the site's code (_naru/)
+// activates after, since its migrations can take minutes. Wait for it, so a
+// release Naru refuses fails the deploy.
+if (finalized.functions?.status === "activating") {
+  const deadline = Date.now() + 15 * 60 * 1000;
+  for (;;) {
+    const { functions } = await call(
+      "/api/deploy/github/status",
+      await oidcToken(),
+      { deploymentId: plan.deploymentId },
+    );
+    if (!functions || functions.status === "active") break;
+    if (functions.status === "refused")
+      throw new Error(
+        `Naru refused the site's code: ${functions.error?.message} ${JSON.stringify(functions.error?.details ?? {})}. The files are published; the previous code stays active.`,
+      );
+    if (Date.now() > deadline)
+      throw new Error("The site's code is still activating after 15 minutes.");
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+  }
+}
 console.log(
   `Deployed ${manifest.length} files to ${site} (${plan.uploads.length} uploaded, ${plan.deletedPaths?.length ?? 0} removed).`,
 );
