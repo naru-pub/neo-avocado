@@ -217,7 +217,9 @@ try {
     .locator("#myCharacters li", { hasText: "초록" })
     .filter({ hasText: "대표" })
     .waitFor();
-  assert.equal(await alice.locator("#newCharacter").isVisible(), false);
+  // Her one character is all the site allows: the button goes once the page
+  // has her character.
+  await alice.locator("#newCharacter").waitFor({ state: "hidden" });
   await menu(alice, "신청자목록");
   await alice
     .locator("#characters .character")
@@ -245,7 +247,21 @@ try {
   await alice.locator('#logForm [type="submit"]').click();
   const post = alice.locator("#logs .log").filter({ hasText: "첫 로그" });
   await post.waitFor();
-  assert.equal(await post.locator(".log-number").textContent(), "No. 1");
+  // The number, and the 새글 mark (bo_new) a post just written carries.
+  assert.equal(
+    await post.locator(".log-number").evaluate((node) =>
+      [...node.childNodes]
+        .filter((child) => !child.classList?.contains("new-mark"))
+        .map((child) => child.textContent)
+        .join("")
+        .trim(),
+    ),
+    "No. 1",
+  );
+  assert.equal(
+    (await post.locator(".log-number .new-mark").textContent()).trim(),
+    "N",
+  );
   await alice.waitForFunction(
     () => document.querySelector("#logs .log img.log-image")?.naturalWidth > 0,
   );
@@ -741,6 +757,7 @@ try {
     "회원가입 설정",
     "기능 설정",
     "화폐",
+    "게시판 기본 설정",
     "쪽지",
     "상점",
     "캐릭터 보기",
@@ -750,6 +767,13 @@ try {
   // 소속 (cf_side_title) has no menu entry, as in the original.
   await owner.locator('#adminFields [name="moneyName"]').fill("골드");
   await owner.locator('#adminFields [name="sideTitle"]').fill("");
+  // 글쓰기 간격 offers the original's 30 seconds on a site never saved; this
+  // test writes in quick succession, so it saves 0 (no limit).
+  assert.equal(
+    await owner.locator('#adminFields [name="writeDelay"]').inputValue(),
+    "30",
+  );
+  await owner.locator('#adminFields [name="writeDelay"]').fill("0");
   await owner.locator('#adminForm [type="submit"]').click();
   await owner
     .locator("#adminNav a", { hasText: "골드 관리" })
@@ -845,7 +869,7 @@ try {
     .locator("#adminRows .review")
     .filter({ hasText: "운영자캐 · 앨리스 · 승인" });
   await moved.waitFor();
-  await moved.locator("button", { hasText: "삭제" }).click();
+  await moved.locator("button", { hasText: "영구 삭제" }).click();
   await moved.waitFor({ state: "detached" });
   await owner
     .locator("#adminStatus", { hasText: "운영자캐을(를) 삭제했습니다." })
