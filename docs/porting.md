@@ -28,7 +28,7 @@ workflows to the port, and says what was left out and why.
 | Addresses, character viewer, member list by 소속      | page URLs, `member/viewer.php`, `member/index.php`, `shop/index.php`                     | Implemented: an address for every page (shareable, reloadable, back and forward), the viewer page with experience history and (opt-in) inventory and money, the member list by 소속 with 쪽지 links, shop display dates, hours and weekdays                                                                                                                                                                                                                                  |
 | Page numbers, board search, Q&A and settlement boards | `lib/common.lib.php` `get_paging`, `skin/board/qna`, `skin/board/caculate`               | Implemented: numbered pages for posts, characters and the shop, in get_paging's blocks; a search over every readable post of a board, 500 a call; 최근게시물 (`bbs/new.php`) and 전체검색 (`bbs/search.php`) across the readable boards; a board's RSS feed (`bbs/rss.php`, `/rss/<board>` by a route, for public boards with RSS 보이기 on); Q&A boards with guests' secret questions opened by password; settlement boards settled by moderators with experience and money |
 | My page, couples, shop front and music                | `mypage/*`, `member/exp.php`, `bbs/member_leave.php`, `couple`, `shop/skin`, `bgm.php`   | Implemented: account, own characters, own posts, experience history (recorded when the owner changes experience), leaving (soft, as the original), couple list, shop categories with NPC and greeting, YouTube background music                                                                                                                                                                                                                                              |
-| Browser and server acceptance                         | Naru release checklist                                                                   | 256 unit, server and page tests, and the e2e suite on naru-dev (a real Chromium against the real edge Worker: owner, members and guests) pass                                                                                                                                                                                                                                                                                                                                |
+| Browser and server acceptance                         | Naru release checklist                                                                   | 292 unit, server and page tests, and the e2e suite on naru-dev (a real Chromium against the real edge Worker: owner, members and guests) pass                                                                                                                                                                                                                                                                                                                                |
 
 ## Not ported, with reasons
 
@@ -37,6 +37,10 @@ workflows to the port, and says what was left out and why.
 - Votes (`bo_use_good`), used only by the unused `theme/basic` skin.
 - Threaded comment replies (`wr_comment_reply`), mail, SMS and captcha:
   platform plumbing, or unused by the mmb skin.
+- Mail settings (`cf_email_use`, `cf_use_email_certify`, `cf_email_*`,
+  `adm/mail_*`): sites cannot send email on Naru; sign-in and email
+  verification are Naru's (사이트 회원 settings). 입력 금지 메일
+  (`cf_prohibit_email`) has no addresses to check.
 - Visitors' IP addresses (`visit_search` by IP): Naru does not give them to
   queries and mutations. Visits are counted by day, hour, browser, OS, device and
   referring site instead, and 현재접속자 lists members, not guests.
@@ -69,8 +73,9 @@ workflows to the port, and says what was left out and why.
 ## How it is built
 
 - **Tables**: every row the community keeps is in the site's own SQLite
-  tables, which `_naru/migrations/0001`–`0005` make when the files arrive
-  (the foundation, boards, characters, economy and mail). There are no
+  tables, which `_naru/migrations/0001`–`0011` make when the files arrive
+  (the foundation, boards, characters, economy, mail and search, then the
+  columns later features added). There are no
   collections, collection rules or site functions, and the owner's sign-in
   asks for no access.
 - **Queries and mutations**: pages call `_naru/queries/` (read-only) and
