@@ -1,7 +1,7 @@
 // The shapes Naru hands queries and mutations (SDK 1.1.0), for type checking
 // only: this module exports types and compiles to nothing. They are Naru's
 // own declarations (naru-functions.d.ts, a copy of
-// naru.pub/sdk/1.1.0/functions.d.ts).
+// https://sdk.naru.pub/sdk/1.1.0/functions.d.ts).
 export type {
   QueryCtx,
   MutationCtx,

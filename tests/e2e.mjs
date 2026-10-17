@@ -104,7 +104,8 @@ try {
   assert.match(log, /owner signed in: 0 collections, 0 created/);
   // Setup through the owner's own SDK handle: a public board and fields.
   await owner.evaluate(async () => {
-    const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+    const { createNaru } =
+      await import("https://sdk.naru.pub/sdk/1.1.0/naru.js");
     const admin = await createNaru().auth.session();
     // A day's first visit pays this (cf_login_point); the original installs 0.
     // The owner's admin mutations check what they save as the forms do, and
@@ -171,7 +172,8 @@ try {
   );
   assert.equal(await owner.locator("#adminFormStatus").textContent(), "");
   const smile = await owner.evaluate(async () => {
-    const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+    const { createNaru } =
+      await import("https://sdk.naru.pub/sdk/1.1.0/naru.js");
     const admin = await createNaru().auth.session();
     return (await admin.query("admin/emoticons:get", { id: "smile" })).data
       .image;
@@ -312,7 +314,8 @@ try {
   // The owner pairs two characters, as the form does: 초록 and one the
   // owner registers for Bob. Members see them in 커플목록.
   const partner = await owner.evaluate(async () => {
-    const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+    const { createNaru } =
+      await import("https://sdk.naru.pub/sdk/1.1.0/naru.js");
     const admin = await createNaru().auth.session();
     const { characters } = await admin.query("admin/references:references");
     const { document } = await admin.mutate("characters/sheet:save", {
@@ -365,7 +368,8 @@ try {
   );
   // Bob's character goes again, and the couple with it.
   await owner.evaluate(async (id) => {
-    const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+    const { createNaru } =
+      await import("https://sdk.naru.pub/sdk/1.1.0/naru.js");
     const admin = await createNaru().auth.session();
     await admin.mutate("characters/sheet:remove", { id });
   }, partner);
@@ -380,7 +384,8 @@ try {
 
   // Every page has an address: a character's viewer, a post, a category.
   const greenId = await alice.evaluate(async () => {
-    const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+    const { createNaru } =
+      await import("https://sdk.naru.pub/sdk/1.1.0/naru.js");
     const member = await createNaru().members.session();
     const { document } = await member.query("characters/sheet:named", {
       name: "초록",
@@ -443,7 +448,8 @@ try {
   await alice.locator("#shopBuyNote").waitFor();
   await owner.evaluate(
     async ({ id }) => {
-      const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+      const { createNaru } =
+        await import("https://sdk.naru.pub/sdk/1.1.0/naru.js");
       const admin = await createNaru().auth.session();
       await admin.mutate("characters/review:reviewCharacter", {
         character: id,
@@ -600,7 +606,8 @@ try {
   // nothing (extend/community.config.php sends guests to log in).
   const siteOpen = (open) =>
     owner.evaluate(async (open) => {
-      const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+      const { createNaru } =
+        await import("https://sdk.naru.pub/sdk/1.1.0/naru.js");
       const admin = await createNaru().auth.session();
       await admin.mutate("admin/settings:save", {
         section: "settings",
@@ -615,13 +622,15 @@ try {
   // Members' IDs, as their pages know them.
   const idOf = (page) =>
     page.evaluate(async () => {
-      const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+      const { createNaru } =
+        await import("https://sdk.naru.pub/sdk/1.1.0/naru.js");
       return (await createNaru().members.session()).id;
     });
   const memberIds = [await idOf(alice), await idOf(bob)];
   const closedReads = await guest.evaluate(
     async ({ memberIds }) => {
-      const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+      const { createNaru } =
+        await import("https://sdk.naru.pub/sdk/1.1.0/naru.js");
       const naru = createNaru();
       const ids = (name, args, list) =>
         naru.query(name, args).then(
@@ -657,7 +666,8 @@ try {
   // a visitor reads nicknames and no wallet.
   const reads = (page) =>
     page.evaluate(async (memberIds) => {
-      const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+      const { createNaru } =
+        await import("https://sdk.naru.pub/sdk/1.1.0/naru.js");
       const naru = createNaru();
       const member = await naru.members.session();
       const reader = member ?? naru;
@@ -690,7 +700,8 @@ try {
   // A member changes their own nickname and preferences through
   // profiles:update; another's nickname is not theirs to take.
   const profileWrites = await bob.evaluate(async (alice) => {
-    const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+    const { createNaru } =
+      await import("https://sdk.naru.pub/sdk/1.1.0/naru.js");
     const member = await createNaru().members.session();
     const settle = (promise) =>
       promise.then(
@@ -896,7 +907,8 @@ try {
   // A Q&A board: a guest asks in secret and opens it with the password;
   // a settlement board: Alice asks as her character, the owner settles.
   await owner.evaluate(async () => {
-    const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+    const { createNaru } =
+      await import("https://sdk.naru.pub/sdk/1.1.0/naru.js");
     const admin = await createNaru().auth.session();
     for (const [id, values] of [
       ["ask", { name: "문의", kind: "qna", secret: "optional" }],
@@ -943,7 +955,8 @@ try {
   await alice.locator('#logForm [type="submit"]').click();
   await alice.locator("#logs .log", { hasText: "정산 부탁" }).waitFor();
   await owner.evaluate(async () => {
-    const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+    const { createNaru } =
+      await import("https://sdk.naru.pub/sdk/1.1.0/naru.js");
     const admin = await createNaru().auth.session();
     // The owner reads the board as its staff.
     const { documents } = await admin.query("community/posts:page", {

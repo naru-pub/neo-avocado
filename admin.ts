@@ -1307,7 +1307,7 @@ $("adminSignOut").onclick = () =>
     $("adminWelcome").hidden = false;
   });
 await run(async () => {
-  const { createNaru } = await import("https://naru.pub/sdk/1.1.0/naru.js");
+  const { createNaru } = await import("https://sdk.naru.pub/sdk/1.1.0/naru.js");
   naru = createNaru(config.site ? { site: config.site } : undefined);
   renderNav();
   owner = await naru.auth.session();
