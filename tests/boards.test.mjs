@@ -3383,3 +3383,27 @@ test("a writer's character carries its 소속, whose icon every reader's frame n
   const { sideIcons } = await site.query("content/site:site");
   assert.deepEqual(sideIcons, { 숲: "https://e.com/f.png" });
 });
+
+test("a post's links count the times they are followed (wr_link1_hit), and go with the post", async () => {
+  const site = await boardSite();
+  board(site, "free", { ...PUBLIC_BOARD, kind: "text" });
+  profile(site, "m-1", "하나");
+  const { document: saved } = await write(site, {
+    data: {
+      board: "free",
+      text: "보세요",
+      links: ["https://a.example/", "https://b.example/"],
+    },
+  });
+  const follow = (url, who = M2) =>
+    site.mutate("community/posts:linkHit", { id: saved.id, url }, who);
+  await follow("https://b.example/");
+  await follow("https://b.example/", VISITOR);
+  assert.equal(await refusal(follow("https://c.example/")), "no_link");
+  assert.deepEqual(
+    (await read(site, { id: saved.id })).document.data.linkHits,
+    [0, 2],
+  );
+  await site.mutate("community/posts:remove", { id: saved.id }, M1);
+  assert.equal(count(site, "link_hits"), 0);
+});

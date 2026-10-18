@@ -202,6 +202,8 @@ export interface PostRow {
   attachments: string;
   /** Their 다운로드 counts by address (attachment_downloads), with TAGS. */
   downloads?: string | null;
+  /** Its links' 연결 counts by address (link_hits), with TAGS. */
+  link_hits?: string | null;
   comment_count?: number;
 }
 
@@ -300,7 +302,7 @@ export interface Written {
 
 /** A post's tags, as a column of a SELECT from posts. */
 export const TAGS =
-  "(SELECT json_group_array(tag) FROM post_tags WHERE post_tags.post_id = posts.id) AS tags, (SELECT hits FROM post_hits WHERE post_hits.post_id = posts.id) AS hits, (SELECT json_group_object(url, downloads) FROM attachment_downloads WHERE attachment_downloads.post_id = posts.id) AS downloads";
+  "(SELECT json_group_array(tag) FROM post_tags WHERE post_tags.post_id = posts.id) AS tags, (SELECT hits FROM post_hits WHERE post_hits.post_id = posts.id) AS hits, (SELECT json_group_object(url, downloads) FROM attachment_downloads WHERE attachment_downloads.post_id = posts.id) AS downloads, (SELECT json_group_object(url, hits) FROM link_hits WHERE link_hits.post_id = posts.id) AS link_hits";
 /** A post with its tags and 조회수. */
 export const POST_SELECT = `SELECT posts.*, ${TAGS} FROM posts`;
 
@@ -360,6 +362,13 @@ export function postOf(row: PostRow): Written {
       : {}),
     ...(row.tags !== undefined ? { tags: list(row.tags) } : {}),
     ...(row.hits !== undefined ? { hits: row.hits ?? 0 } : {}),
+    ...(row.link_hits !== undefined && list(row.links).length
+      ? {
+          linkHits: list(row.links).map((url) =>
+            Number(parsed<Record<string, number>>(row.link_hits, {})[url] ?? 0),
+          ),
+        }
+      : {}),
     ...(list(row.attachments).length
       ? {
           attachments: list(row.attachments).map((file) => ({

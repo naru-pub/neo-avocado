@@ -585,7 +585,7 @@ export async function logItem(log) {
   // wr_link1, wr_link2: the mmb skin's LINK, in a new window.
   const links = item.querySelector<HTMLElement>(".log-links");
   if (!log.data.locked && Array.isArray(log.data.links))
-    for (const url of log.data.links)
+    for (const [n, url] of log.data.links.entries())
       if (typeof url === "string" && /^https?:\/\//.test(url)) {
         const link = Object.assign(document.createElement("a"), {
           href: url,
@@ -594,7 +594,25 @@ export async function logItem(log) {
           className: "link",
           textContent: "LINK",
         });
-        links.append(link, " ");
+        // bbs/link.php counts each one followed (wr_link1_hit); a plain
+        // board says how many times (basic view's 회 연결).
+        let hits = Number(log.data.linkHits?.[n] ?? 0);
+        const count = document.createElement("span");
+        count.className = "link-hits";
+        const showHits = () => {
+          count.textContent =
+            kindOf(log.data.board) === "text" ? ` ${hits}회 연결` : "";
+        };
+        showHits();
+        link.onclick = () => {
+          mutate("community/posts:linkHit", { id: log.id, url })
+            .then(() => {
+              hits += 1;
+              showHits();
+            })
+            .catch(() => {});
+        };
+        links.append(link, count, " ");
       }
   links.hidden = !links.children.length;
   // basic/view.skin.php:36-62: each 첨부파일 with its size and 다운로드 count.

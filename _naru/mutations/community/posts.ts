@@ -532,6 +532,22 @@ export async function hit(ctx: MutationCtx, { id }: { id?: string } = {}) {
 }
 
 /**
+ * 링크 (bbs/link.php): one of a readable post's links was followed; its
+ * count goes up (wr_link1_hit + 1). Answers its address.
+ */
+export async function linkHit(
+  ctx: MutationCtx,
+  { id, url }: { id?: string; url?: string } = {},
+) {
+  const { row } = await readablePost(ctx, id);
+  if (!parsed<string[]>(row.links, []).includes(url as string))
+    ctx.fail("NOT_FOUND", "링크가 존재하지 않습니다.", { reason: "no_link" });
+  await ctx.sql`INSERT INTO link_hits (post_id, url, hits) VALUES (${row.id}, ${url}, 1)
+    ON CONFLICT (post_id, url) DO UPDATE SET hits = link_hits.hits + 1`;
+  return { url };
+}
+
+/**
  * 다운로드 (bbs/download.php): one of a readable post's 첨부파일 was
  * downloaded; its count goes up (bf_download + 1). Answers its address.
  */
@@ -632,6 +648,7 @@ export async function remove(
   await ctx.sql`DELETE FROM post_tags WHERE post_id = ${previous.id}`;
   await ctx.sql`DELETE FROM post_hits WHERE post_id = ${previous.id}`;
   await ctx.sql`DELETE FROM attachment_downloads WHERE post_id = ${previous.id}`;
+  await ctx.sql`DELETE FROM link_hits WHERE post_id = ${previous.id}`;
   await ctx.sql`DELETE FROM calls WHERE post_id = ${previous.id}`;
   await ctx.sql`DELETE FROM favorites WHERE post = ${previous.id}`;
   await ctx.sql`DELETE FROM posts WHERE id = ${previous.id}`;
