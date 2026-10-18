@@ -1765,7 +1765,33 @@ await run(async () => {
   await loadNames();
   await openAddress();
   adminRoute([section]);
+  // bbs/db_table.optimize.php, as the owner arrives: in the background.
+  maintain().catch(() => {});
 });
+
+/**
+ * The day's cleanup (admin/maintenance:run) where 커뮤니티 설정 asks for it,
+ * called again while members who left remain to delete; what it did shows.
+ */
+async function maintain() {
+  const total = { visits: 0, messages: 0, members: 0 };
+  for (let calls = 0; calls < 50; calls += 1) {
+    const result = await owner.mutate("admin/maintenance:run");
+    if (!result.ran) break;
+    total.visits += result.visits;
+    total.messages += result.messages;
+    total.members += result.members;
+    if (!result.remaining) break;
+  }
+  const done = [
+    total.visits && `접속자로그 ${total.visits}일`,
+    total.messages && `쪽지 ${total.messages}통`,
+    total.members && `탈퇴 회원 ${total.members}명`,
+  ].filter(Boolean);
+  if (done.length)
+    $("adminStatus").textContent =
+      `설정한 기간이 지난 ${done.join(", ")}을(를) 정리했습니다.`;
+}
 
 $("titleGrantCancel").onclick = () => {
   $("titleGrantForm").hidden = true;

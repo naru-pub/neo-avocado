@@ -1245,6 +1245,30 @@ export const models: Record<string, Model> = {
           "쪽지·호출 알림음 (새 쪽지·호출 창이 뜰 때 짧은 소리. 회원이 화면을 누른 뒤부터 나며, 회원은 알림 창에서 끌 수 있음)",
         type: "checkbox",
       },
+      // bbs/db_table.optimize.php's cleanups, once a day as the owner opens
+      // the admin. The original installs 180, 180 and 30 days; here each is
+      // off (0) until the owner asks, as nothing is deleted unasked.
+      { type: "heading", label: "자동 정리" },
+      {
+        key: "visitDays",
+        label:
+          "접속자로그 삭제 (일, 이보다 지난 접속자 집계를 지움, 0이면 지우지 않음)",
+        type: "number",
+        default: 0,
+      },
+      {
+        key: "memoDays",
+        label: "쪽지 삭제 (일, 이보다 지난 쪽지를 지움, 0이면 지우지 않음)",
+        type: "number",
+        default: 0,
+      },
+      {
+        key: "leaveDays",
+        label:
+          "회원탈퇴후 삭제일 (일, 탈퇴한 지 이보다 지난 회원을 회원 삭제처럼 지움, 0이면 지우지 않음)",
+        type: "number",
+        default: 0,
+      },
       { type: "heading", label: "상점" },
       {
         key: "shopCategories",

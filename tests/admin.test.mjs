@@ -1509,6 +1509,66 @@ test("the other lists are searched by an entry's ID or name, as board_list and q
   assert.deepEqual(await ids("_1"), ["log_100"]);
 });
 
+test("the day's cleanup deletes only what 커뮤니티 설정 asks, once a day, as db_table.optimize.php", async () => {
+  // 2030-03-01 12:00 in Korea.
+  const site = await testSite({ now: Date.parse("2030-03-01T03:00:00Z") });
+  for (const n of [1, 2, 3, 4, 5, 6]) profile(site, `m-${n}`, `회원${n}`);
+  site.run(
+    "INSERT INTO visits (day, total) VALUES ('2029-12-01', 3), ('2030-02-20', 4)",
+  );
+  site.run(
+    "INSERT INTO messages (sender, recipient, body, sent_at) VALUES ('m-6', 'm-9', '옛 쪽지', ?), ('m-6', 'm-9', '새 쪽지', ?)",
+    Date.parse("2029-12-01T00:00:00Z"),
+    Date.parse("2030-02-28T00:00:00Z"),
+  );
+  // Five left long ago, one lately.
+  site.run(
+    "INSERT INTO members (member, left_on) VALUES ('m-1', '2029-01-01'), ('m-2', '2029-01-02'), ('m-3', '2029-01-03'), ('m-4', '2029-01-04'), ('m-5', '2029-01-05'), ('m-6', '2030-02-27')",
+  );
+  const run = () => mutate(site, "maintenance:run");
+  // Nothing asked, nothing deleted.
+  assert.deepEqual(await run(), {
+    ran: true,
+    visits: 0,
+    messages: 0,
+    members: 0,
+    remaining: 0,
+  });
+  assert.equal((await run()).ran, false);
+  site.run("DELETE FROM settings WHERE key = 'maintenance'");
+  site.run(
+    "INSERT INTO settings (key, value) VALUES ('community', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+    JSON.stringify({ visitDays: 30, memoDays: 30, leaveDays: 30 }),
+  );
+  const first = await run();
+  assert.deepEqual(first, {
+    ran: true,
+    visits: 1,
+    messages: 1,
+    members: 4,
+    remaining: 1,
+  });
+  // The rest the next call, even the same day.
+  assert.equal((await run()).members, 1);
+  assert.equal((await run()).ran, false);
+  assert.deepEqual(
+    site.rows("SELECT day FROM visits").map((row) => row.day),
+    ["2030-02-20"],
+  );
+  assert.deepEqual(
+    site.rows("SELECT body FROM messages").map((row) => row.body),
+    ["새 쪽지"],
+  );
+  assert.deepEqual(
+    site
+      .rows(
+        "SELECT member FROM profiles WHERE deleted_at IS NULL ORDER BY member",
+      )
+      .map((row) => row.member),
+    ["m-6"],
+  );
+});
+
 test("the forms' pick lists come in one read", async () => {
   const site = await testSite();
   profile(site, "m-1", "하나");
