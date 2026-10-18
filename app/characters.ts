@@ -340,6 +340,12 @@ function fieldInput(row, value) {
     if (type === "image" || type === "url") input.placeholder = "https://";
   }
   input.value = value ?? "";
+  // ar_size (character_form.php:283-287): one line's width, or the
+  // textarea's height.
+  if (row.data.size > 0) {
+    if (type === "textarea") input.style.height = `${row.data.size}px`;
+    else input.style.width = `min(${row.data.size}px, 100%)`;
+  }
   return [label, input];
 }
 /** Custom values of a character the characters rule let the caller see, in catalogue order. */

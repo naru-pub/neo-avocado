@@ -1838,6 +1838,32 @@ test("팝업레이어 show between their times, and 설문조사 take members' o
   assert.equal(site.rows("SELECT * FROM poll_votes").length, 0);
 });
 
+test("a profile field's 입력칸 크기 (ar_size) and the {{TWITTER}} account reach the pages", async () => {
+  const site = await testSite();
+  await create(site, "character_fields", "motto", {
+    label: "좌우명",
+    type: "text",
+    size: "300",
+  });
+  await create(site, "character_fields", "plain", {
+    label: "기타",
+    type: "text",
+  });
+  const { fields } = await site.query("characters/sheet:choices", {}, M1);
+  assert.equal(fields.find((row) => row.id === "motto").data.size, 300);
+  assert.equal(fields.find((row) => row.id === "plain").data.size, undefined);
+  await mutate(site, "settings:save", {
+    section: "settings",
+    values: { twitter: "avocado_ed" },
+  });
+  assert.equal((await site.query("content/site:site")).twitter, "avocado_ed");
+  // Anything but a handle never reaches the page.
+  site.run(
+    "UPDATE settings SET value = json_set(value, '$.twitter', 'x\"><script>') WHERE key = 'community'",
+  );
+  assert.equal((await site.query("content/site:site")).twitter, null);
+});
+
 test("the forms' pick lists come in one read", async () => {
   const site = await testSite();
   profile(site, "m-1", "하나");

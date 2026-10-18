@@ -891,6 +891,12 @@ export const models: Record<string, Model> = {
         type: "tokens",
       },
       { key: "help", label: "도움말", max: 200 },
+      // ar_size: the input's width, or a textarea's height (character_form.php:283).
+      {
+        key: "size",
+        label: "입력칸 크기 (px, 한 줄은 폭·여러 줄은 높이, 빈칸이면 기본)",
+        type: "optional-number",
+      },
       // ar_text: a unit shown after a one-line value (character_form.php:331).
       {
         key: "suffix",
@@ -1102,6 +1108,13 @@ export const models: Record<string, Model> = {
         key: "bgm",
         label: "배경음악 (유튜브 재생목록·영상 주소, 빈칸: 끄기)",
         max: 300,
+      },
+      // cf_twitter (community_form_update.php:72): the account
+      // {{TWITTER}} shows (templete/txt.twitter.php).
+      {
+        key: "twitter",
+        label: "트위터(X) 계정 ({{TWITTER}}가 보일 계정, @ 없이)",
+        max: 15,
       },
       // 관리자 아이콘 (admin_icon_file, adm/config_form.php:100): shown on the
       // site owner's comments in place of the 관리자 mark.

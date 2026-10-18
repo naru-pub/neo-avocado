@@ -201,6 +201,10 @@ export async function site(ctx: QueryCtx) {
         .filter((row) => https(row.image))
         .map((row) => [row.name, row.image]),
     ),
+    // cf_twitter: the account {{TWITTER}} shows, a handle and nothing else.
+    twitter: /^[A-Za-z0-9_]{1,15}$/.test(settings.twitter ?? "")
+      ? settings.twitter
+      : null,
     // 관리자 아이콘 (ico_admin): the site owner's mark on their comments.
     adminIcon: https(settings.adminIcon),
     // 조합(레시피)사용 (cf_5): whether a post offers 조합.

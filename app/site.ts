@@ -24,6 +24,7 @@ export async function loadSite() {
   state.names = { ...NAME_DEFAULTS, ...site.names };
   state.adminIcon = site.adminIcon ?? null;
   state.sideIcons = site.sideIcons ?? {};
+  state.twitter = site.twitter ?? null;
   if (Array.isArray(site.images)) state.images = site.images;
   if (site.nameField) {
     state.nameField = site.nameField;
@@ -183,10 +184,36 @@ function controlLink(text, href, className, action) {
  * extend/community.config.php's get_site_content: {{VISUAL_SLIDE}} the main
  * slides, {{OUTLOGIN}} the member card, {{LOGIN}}, {{JOIN}}, {{LOGOUT}} and
  * {{MYPAGE}} links that show to guests or members as the original's, and
- * {{BGM}} and {{TWITTER}} nothing (the music plays from the header; the
- * timeline embed is gone). Others stay as written. The page is sanitized
+ * {{BGM}} nothing (the music plays from the header) and {{TWITTER}} the
+ * owner's timeline (templete/txt.twitter.php). Others stay as written. The page is sanitized
  * already; the parts are the page's own elements, put in as nodes.
  */
+/**
+ * templete/txt.twitter.php: cf_twitter's timeline, by X's own widget, with
+ * the account's link standing where the widget does not load.
+ */
+function twitterTimeline() {
+  if (!state.twitter) return null;
+  const box = document.createElement("div");
+  box.className = "twitter theme-box";
+  const link = Object.assign(document.createElement("a"), {
+    className: "twitter-timeline",
+    href: `https://twitter.com/${state.twitter}`,
+    target: "_blank",
+    rel: "noopener",
+    textContent: `@${state.twitter}`,
+  });
+  link.dataset.height = "310";
+  box.append(link);
+  if (!document.getElementById("twitterWidgets")) {
+    const script = document.createElement("script");
+    script.id = "twitterWidgets";
+    script.async = true;
+    script.src = "https://platform.twitter.com/widgets.js";
+    document.head.append(script);
+  }
+  return box;
+}
 function expandPlaceholders(container: HTMLElement, slides) {
   const parts = {
     VISUAL_SLIDE: () => {
@@ -207,7 +234,7 @@ function expandPlaceholders(container: HTMLElement, slides) {
         $("tabMypage").click(),
       ),
     BGM: () => null,
-    TWITTER: () => null,
+    TWITTER: () => twitterTimeline(),
   };
   const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
   const texts: Text[] = [];

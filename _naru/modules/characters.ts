@@ -184,6 +184,8 @@ export interface FieldDefinition {
   order: number;
   visibility: string;
   required: boolean;
+  /** ar_size: the input's width, or a textarea's height, in px (0: none). */
+  size: number;
 }
 
 interface FieldRow {
@@ -196,6 +198,7 @@ interface FieldRow {
   sort_order: number;
   visibility: string;
   required: number;
+  size?: number;
 }
 
 /** Valid definitions in display order. Malformed rows are skipped, not trusted. */
@@ -225,6 +228,7 @@ export async function fieldCatalogue(ctx: SqlCtx): Promise<FieldDefinition[]> {
           ? row.visibility
           : "public",
         required: row.required !== 0,
+        size: Number.isSafeInteger(row.size) && row.size > 0 ? row.size : 0,
       };
     });
 }
@@ -241,6 +245,7 @@ export const definitionDocument = (definition: FieldDefinition) => ({
     order: definition.order,
     visibility: definition.visibility,
     required: definition.required,
+    ...(definition.size ? { size: definition.size } : {}),
   },
 });
 

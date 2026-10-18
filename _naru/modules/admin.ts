@@ -230,6 +230,7 @@ export const TABLES: Record<string, Table> = {
     ["order", "sort_order", "int", 0],
     ["visibility", "visibility", "text", "public"],
     ["required", "required", "bool", 0],
+    ["size", "size", "int", 0],
   ]),
   stat_config: table("stats", [
     ["name", "name", "text", ""],
