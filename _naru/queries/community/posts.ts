@@ -25,6 +25,7 @@ import {
   requireBoard,
   secretClause,
   secretReadable,
+  readableComments,
 } from "../../modules/boards.js";
 import type { Board, PostRow, Written } from "../../modules/boards.js";
 import {
@@ -277,17 +278,23 @@ export async function search(
     const room = SEARCH_PAGE - found.length;
     const writer = named("comments");
     const commented = holding("comments", ["body"]);
+    // Others' secret comments are found by no one but the staff.
+    const unhidden = readableComments(
+      viewer,
+      isStaff(access, board) ? true : [],
+    );
     const { rows } = await ctx.sql<PostRow>(
       `SELECT posts.*, ${TAGS}, max(comments.id) AS found
        FROM comments JOIN posts ON posts.id = comments.post_id
        WHERE ${visible.text} AND NOT ${matches.text}
-         AND (${commented.text} OR ${writer.text})
+         AND (${commented.text} OR ${writer.text}) AND ${unhidden.text}
        GROUP BY posts.id ORDER BY found DESC LIMIT ? OFFSET ?`,
       [
         ...visible.values,
         ...matches.values,
         ...commented.values,
         ...writer.values,
+        ...unhidden.values,
         room + 1,
         from,
       ],

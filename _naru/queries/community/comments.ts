@@ -5,7 +5,7 @@ import {
   commentOf,
   postReadable,
   postRow,
-  presentPost,
+  presentComment,
   readerOf,
 } from "../../modules/boards.js";
 import type { CommentRow } from "../../modules/boards.js";
@@ -39,7 +39,13 @@ export async function list(
     WHERE post_id = ${post.id} AND id > ${cursor} ORDER BY id LIMIT ${COMMENT_PAGE + 1}`;
   const documents = rows
     .slice(0, COMMENT_PAGE)
-    .map((row) => presentPost(commentOf(row), readerOf(ctx, access, board)));
+    .map((row) =>
+      presentComment(
+        commentOf(row),
+        readerOf(ctx, access, board),
+        post.owner ?? null,
+      ),
+    );
   return {
     documents,
     nextCursor: rows.length > COMMENT_PAGE ? documents.at(-1).id : null,

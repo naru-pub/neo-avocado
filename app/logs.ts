@@ -952,6 +952,9 @@ export async function logItem(log) {
       const anonymous = form.querySelector<HTMLInputElement>(
         ".comment-anonymous-check",
       ).checked;
+      const secret = form.querySelector<HTMLInputElement>(
+        ".comment-secret-check",
+      ).checked;
       if (!text && !dice && !action && !used) return;
       const guest = state.member ? null : guestCredentials();
       const { document: saved } = await mutate("community/comments:write", {
@@ -963,6 +966,7 @@ export async function logItem(log) {
           ...(action && !guest ? { action } : {}),
           ...(used && !guest ? { item: used } : {}),
           ...(anonymous && !guest ? { anonymous: true } : {}),
+          ...(secret && !guest ? { secret: true } : {}),
         },
         ...(guest ? { guest } : {}),
       });
@@ -970,6 +974,8 @@ export async function logItem(log) {
       form.querySelector<HTMLTextAreaElement>(".comment-text").value = "";
       form.querySelector<HTMLInputElement>(".comment-dice").checked = false;
       form.querySelector<HTMLInputElement>(".comment-anonymous-check").checked =
+        false;
+      form.querySelector<HTMLInputElement>(".comment-secret-check").checked =
         false;
       actionChoice.value = "";
       if (used || action) {
@@ -1061,11 +1067,31 @@ async function commentItem(comment, log) {
     dice.textContent = diceText(comment);
     item.append(dice, " ");
   }
-  item.append(
-    postText(comment.data.text ?? "", await loadEmoticons(), {
-      pictureBoard: kindOf(log.data.board) === "image",
-    }),
-  );
+  // 비밀글 (bbs/view_comment.php:39): its text to the staff and the two
+  // writers only; they see its mark.
+  if (comment.data.hidden)
+    item.append(
+      Object.assign(document.createElement("span"), {
+        className: "secret-comment",
+        textContent: "비밀글 입니다.",
+      }),
+    );
+  else {
+    if (comment.data.secret)
+      item.append(
+        Object.assign(document.createElement("span"), {
+          className: "secret-mark",
+          textContent: "🔒",
+          title: "비밀글",
+        }),
+        " ",
+      );
+    item.append(
+      postText(comment.data.text ?? "", await loadEmoticons(), {
+        pictureBoard: kindOf(log.data.board) === "image",
+      }),
+    );
+  }
   // The comment's own address (/post/<id>/comment/<id>).
   const link = document.createElement("a");
   link.className = "permalink";
@@ -1114,13 +1140,27 @@ async function commentItem(comment, log) {
             multiline: true,
             max: 2000,
           },
+          ...(guestComment
+            ? []
+            : [
+                {
+                  name: "secret",
+                  label: "비밀글",
+                  type: "checkbox",
+                  value: comment.data.secret === true,
+                },
+              ]),
         ],
-        async ({ text, password }) => {
+        async ({ text, password, secret = false }) => {
           if (!text && !comment.data.dice)
             throw new Error("댓글을 입력해 주세요.");
           const { document: saved } = await mutate("community/comments:write", {
             id: comment.id,
-            data: { ...comment.data, text },
+            data: {
+              ...comment.data,
+              text,
+              ...(guestComment ? {} : { secret }),
+            },
             revision: comment.revision,
             ...(guestComment ? { guest: { password } } : {}),
           });

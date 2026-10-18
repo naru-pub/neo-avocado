@@ -1703,3 +1703,8 @@ img.admin-icon {
   padding: 0;
   vertical-align: middle;
 }
+/* 비밀글 comments: hidden ones say so, and their readers see the mark. */
+.secret-comment {
+  color: var(--muted);
+  font-style: italic;
+}

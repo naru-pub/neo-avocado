@@ -68,11 +68,11 @@ name(ctx, args)`. Pages call them as `query("<area>/<module>:<name>", args)`
 - Migrations are `_naru/migrations/NNNN_<area>.sql`, applied in name order:
   0001 foundation, 0002 boards, 0003 characters, 0004 economy, 0005 mail,
   0006 search, 0007 board admins, 0008 post links (and pictures), 0009
-  member blocks, 0010 recommenders, 0011 item details, 0012 stat order.
+  member blocks, 0010 recommenders, 0011 item details, 0012 stat order, 0013 secret comments.
   Applied migrations
   are never edited; a change is a new one. 0001–0005 started fresh,
   writing each area's tables once; 0006 fills its tables from the rows
-  already there; 0007–0012 add columns (0011 files the personal items
+  already there; 0007–0013 add columns (0011 files the personal items
   already made).
 - Names: snake_case, no prefix, never one of Naru's names above.
 - Keys: `id INTEGER PRIMARY KEY` for rows the site makes; a member's id is

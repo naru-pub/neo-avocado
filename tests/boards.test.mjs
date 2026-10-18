@@ -2894,3 +2894,76 @@ test("최근게시물 leaves out what is older than its 기간 (cf_new_del), by 
   setSettings(site, "community", { newDays: 30 });
   assert.deepEqual(await ids(), [`post${kept}`]);
 });
+
+test("a secret comment is read by the staff and the two writers alone, and found by no one else", async () => {
+  const site = await boardSite();
+  board(site, "free", PUBLIC_BOARD);
+  profile(site, "m-1", "글쓴이");
+  profile(site, "m-2", "댓글러");
+  profile(site, "m-3", "구경꾼");
+  profile(site, "m-4", "운영진");
+  const thread = post(site, { board: "free", owner: "m-1", body: "본문" });
+  const { document: saved } = await reply(
+    site,
+    {
+      data: {
+        logId: thread,
+        text: "비밀 이야기입니다 [[구경꾼]]",
+        secret: true,
+      },
+    },
+    M2,
+  );
+  assert.equal(saved.data.secret, true);
+  const textFor = async (who) =>
+    (await commentsOf(site, thread, who)).map((row) => [
+      row.data.text,
+      row.data.hidden === true,
+    ]);
+  assert.deepEqual(await textFor(M1), [
+    ["비밀 이야기입니다 [[구경꾼]]", false],
+  ]);
+  assert.deepEqual(await textFor(M2), [
+    ["비밀 이야기입니다 [[구경꾼]]", false],
+  ]);
+  assert.deepEqual(await textFor(M3), [["", true]]);
+  assert.deepEqual(await textFor(VISITOR), [["", true]]);
+  moderator(site, "m-4");
+  assert.deepEqual(await textFor({ member: "m-4" }), [
+    ["비밀 이야기입니다 [[구경꾼]]", false],
+  ]);
+  // The call names the comment, not what it says.
+  assert.deepEqual(
+    callsTo(site, "m-3").map((row) => row.preview),
+    ["비밀글 입니다."],
+  );
+  // Neither the board's search nor 전체검색 finds it for others.
+  assert.deepEqual(await searched(site, "free", "이야기", M3), []);
+  assert.deepEqual(await searched(site, "free", "이야기", M1), [thread]);
+  const everything = (who) =>
+    site
+      .query("community/search:everything", { text: "이야기" }, who)
+      .then((result) => result.documents.map((row) => row.id));
+  assert.deepEqual(await everything(M3), []);
+  assert.deepEqual(await everything(M2), [thread]);
+  // 최근게시물 lists it, without its text.
+  const recentFor = async (who) =>
+    (await site.query("community/search:recent", { view: "comments" }, who))
+      .entries[0].comment.data;
+  assert.equal((await recentFor(M3)).text, "");
+  assert.equal((await recentFor(M1)).text, "비밀 이야기입니다 [[구경꾼]]");
+  // A guest cannot write one.
+  assert.equal(
+    await refusal(
+      reply(
+        site,
+        {
+          data: { logId: thread, text: "손님 비밀", secret: true },
+          guest: { name: "손님", password: "1234" },
+        },
+        VISITOR,
+      ),
+    ),
+    "guest_secret",
+  );
+});

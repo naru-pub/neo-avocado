@@ -21,7 +21,9 @@ import {
   isStaff,
   phrase,
   postOf,
+  presentComment,
   presentPost,
+  readableComments,
   readerOf,
 } from "../../modules/boards.js";
 import type {
@@ -215,7 +217,11 @@ export async function recent(
       post: shown(ctx, access, excerpt(postOf(post)), board),
       ...(comment
         ? {
-            comment: shown(ctx, access, excerpt(commentOf(comment)), board),
+            comment: presentComment(
+              excerpt(commentOf(comment)),
+              readerOf(ctx, access, board),
+              post.owner ?? null,
+            ),
           }
         : {}),
     });
@@ -339,9 +345,16 @@ export async function everything(
       field === "nick" || field === "name"
         ? ` AND (${table}.anonymous = 0 OR posts.board IN (SELECT value FROM json_each(?)))`
         : "";
+    // Others' secret comments are found by no one but the staff.
+    const unhidden =
+      table === "comments" ? readableComments(viewer, staffIds) : null;
     return {
-      text: `(${clauses.join(join)})${named}`,
-      values: [...values, ...(named ? [staffIds] : [])],
+      text: `(${clauses.join(join)})${named}${unhidden ? ` AND ${unhidden.text}` : ""}`,
+      values: [
+        ...values,
+        ...(named ? [staffIds] : []),
+        ...(unhidden?.values ?? []),
+      ],
     };
   };
   if (!boards.size || (only && !boards.has(only)))

@@ -266,6 +266,7 @@ export interface CommentRow {
   reward: number;
   admin: number;
   settlement: number;
+  secret: number;
   guest_name: string | null;
   guest_hash: string | null;
   created_at: number;
@@ -353,7 +354,51 @@ export function commentOf(row: CommentRow): Written {
     text: row.body,
     ...(row.admin ? { admin: true } : {}),
     ...(row.settlement ? { settlement: true } : {}),
+    ...(row.secret ? { secret: true } : {}),
   });
+}
+
+/**
+ * A comment as presentPost shows it, and a secret one (wr_option secret,
+ * bbs/view_comment.php:39-56) without its text and dice but to the staff,
+ * the post's writer and the comment's own: "비밀글 입니다." on the page.
+ */
+export function presentComment(
+  row: Written,
+  reader: { member?: string | null; staff?: boolean },
+  postOwner: string | null,
+): Written {
+  const shown = presentPost(row, reader);
+  if (
+    row.data.secret !== true ||
+    reader.staff ||
+    (reader.member &&
+      (row.data.owner === reader.member || postOwner === reader.member))
+  )
+    return shown;
+  const { text, dice, rolls, actions, ...rest } = shown.data;
+  return { ...shown, data: { ...rest, text: "", hidden: true } };
+}
+
+/**
+ * Comments a reader may find by their text: not others' secret ones, but
+ * for the staff of `staffBoards` (board IDs, or JSON of them; true: every
+ * board). The statement joins the comment's post as `posts`.
+ */
+export function readableComments(
+  viewer: string | null,
+  staffBoards: string[] | string | true,
+): { text: string; values: SqlValue[] } {
+  if (staffBoards === true) return { text: "1", values: [] };
+  return {
+    text: `(comments.secret = 0${viewer ? " OR comments.owner = ? OR posts.owner = ?" : ""} OR posts.board IN (SELECT value FROM json_each(?)))`,
+    values: [
+      ...(viewer ? [viewer, viewer] : []),
+      typeof staffBoards === "string"
+        ? staffBoards
+        : JSON.stringify(staffBoards),
+    ],
+  };
 }
 
 /** A post's or comment's ID as its row's number, or null when it is none. */

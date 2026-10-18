@@ -44,6 +44,8 @@ export interface CommentInput {
   action?: "explore";
   /** An owned inventory row to use. */
   item?: string;
+  /** 비밀글 (wr_secret): only the staff and the two writers read it. */
+  secret?: boolean;
 }
 
 const invalid = (ctx: MutationCtx) =>
@@ -113,6 +115,16 @@ export async function write(
   )
     invalid(ctx);
   if (!body && !dice && !acting) invalid(ctx);
+  // 비밀글 (view_comment.skin.php's wr_secret), set or cleared on edit too.
+  // A guest could not read theirs back.
+  if (data.secret !== undefined && typeof data.secret !== "boolean")
+    invalid(ctx);
+  const secret =
+    data.secret === undefined ? previous?.secret === 1 : data.secret;
+  if (secret && guest)
+    ctx.fail("ACCESS_DENIED", "손님은 비밀 댓글을 쓸 수 없습니다.", {
+      reason: "guest_secret",
+    });
   if (body)
     checkLength(
       ctx,
@@ -136,7 +148,7 @@ export async function write(
   if (previous)
     row = (
       await ctx.sql<CommentRow>`UPDATE comments SET body = ${body}, called = ${JSON.stringify(calls.called)},
-        updated_at = ${ctx.now}, version = version + 1 WHERE id = ${previous.id} RETURNING *`
+        secret = ${secret}, updated_at = ${ctx.now}, version = version + 1 WHERE id = ${previous.id} RETURNING *`
     ).rows[0];
   else {
     speaker = await speakerOf(ctx, data.character);
@@ -156,11 +168,11 @@ export async function write(
         );
     row = (
       await ctx.sql<CommentRow>`INSERT INTO comments (post_id, owner, body, dice, rolls, anonymous,
-        character_id, speaker, actions, called, reward, admin, guest_name, guest_hash, created_at, updated_at)
+        character_id, speaker, actions, called, reward, admin, secret, guest_name, guest_hash, created_at, updated_at)
         VALUES (${post.id}, ${ctx.member?.id ?? null}, ${body}, ${dice}, ${dice ? JSON.stringify(rollDice()) : null},
         ${anonymous}, ${speaker ? Number(speaker.character) : null}, ${speaker ? JSON.stringify(speaker) : null},
         ${JSON.stringify(actions)}, ${JSON.stringify(calls.called)}, ${reward},
-        ${ctx.owner === true && !anonymous}, ${guest?.name ?? null}, ${guest?.hash ?? null}, ${ctx.now}, ${ctx.now})
+        ${ctx.owner === true && !anonymous}, ${secret}, ${guest?.name ?? null}, ${guest?.hash ?? null}, ${ctx.now}, ${ctx.now})
         RETURNING *`
     ).rows[0];
   }
@@ -174,6 +186,7 @@ export async function write(
     notifyAuthor: !previous,
     guest: guest?.name ?? null,
     anonymous,
+    secret,
   });
   return { document: commentOf(row) };
 }
