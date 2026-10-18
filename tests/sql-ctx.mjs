@@ -10,9 +10,11 @@
 // What it shares with Naru: SQLite and its dialect; ctx.sql's tag and
 // (text, values) forms, booleans bound as 1 and 0, { rows, changes };
 // queries only read; a mutation is one transaction, kept only if it
-// returns; ctx.fail's coded error; roles; guest passwords (hashed here as a
-// plain marker, not a real hash); a statement's limits (100 bound values,
-// 1,000 rows). What it does not: Naru's checks on names, a call's limits,
+// returns; ctx.fail's coded error; roles, and Naru's views of them and of
+// uploads (_naru_member_roles, _naru_uploads; tables here, which a test
+// fills with site.setRoles and site.upload); ctx.media.types; guest
+// passwords (hashed here as a plain marker, not a real hash); a
+// statement's limits (100 bound values, 1,000 rows). What it does not: Naru's checks on names, a call's limits,
 // and the 3-second statement time.
 import { DatabaseSync } from "node:sqlite";
 import { readdir, readFile } from "node:fs/promises";
@@ -63,9 +65,34 @@ export async function migrations() {
   );
 }
 
+/** What Naru Media stores (Naru's ctx.media.types). */
+export const MEDIA_TYPES = Object.freeze([
+  "image/avif",
+  "image/gif",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "audio/mpeg",
+  "audio/ogg",
+  "audio/opus",
+  "audio/wav",
+  "application/pdf",
+  "application/zip",
+  "text/plain",
+]);
+
+/** Naru's views site SQL reads, kept here as plain tables. */
+const NARU_VIEWS = `
+  CREATE TABLE _naru_member_roles (member TEXT NOT NULL, role TEXT NOT NULL,
+    PRIMARY KEY (member, role));
+  CREATE TABLE _naru_uploads (id TEXT PRIMARY KEY, url TEXT NOT NULL UNIQUE,
+    member TEXT, name TEXT NOT NULL, type TEXT NOT NULL, size INTEGER NOT NULL,
+    created_at INTEGER NOT NULL);`;
+
 /** An empty database with `sql` (the migrations' text) applied. */
 export function database(sql) {
   const db = new DatabaseSync(":memory:");
+  db.exec(NARU_VIEWS);
   for (const text of sql) db.exec(text);
   return db;
 }
@@ -192,7 +219,13 @@ export async function testSite({
     pending = names.length - first;
   }
   const db = database(sql.slice(0, sql.length - pending));
-  const roles = new Map();
+  const rolesOf = (member) =>
+    db
+      .prepare(
+        "SELECT role FROM _naru_member_roles WHERE member = ? ORDER BY role",
+      )
+      .all(member)
+      .map((row) => row.role);
   const site = {
     db,
     now,
@@ -210,10 +243,38 @@ export async function testSite({
     /** Runs a statement directly, as a test's setup. */
     run: (text, ...values) => db.prepare(text).run(...values.map(bind)),
     setRoles(member, list) {
-      roles.set(member, [...new Set(list)].sort());
+      db.prepare("DELETE FROM _naru_member_roles WHERE member = ?").run(member);
+      for (const role of new Set(list))
+        db.prepare("INSERT INTO _naru_member_roles VALUES (?, ?)").run(
+          member,
+          role,
+        );
     },
     /** A member's roles, as Naru keeps them. */
-    roles: (member) => [...(roles.get(member) ?? [])],
+    roles: rolesOf,
+    /**
+     * Records an upload as Naru Media does once it is finished (member null:
+     * the owner's), and answers its address.
+     */
+    upload({
+      member = null,
+      name = "file.pdf",
+      type = "application/pdf",
+      size = 1024,
+    } = {}) {
+      const id = `upload-${db.prepare("SELECT count(*) AS n FROM _naru_uploads").get().n + 1}`;
+      const url = `https://media.naru.pub/test/${id}/${encodeURIComponent(name)}`;
+      db.prepare("INSERT INTO _naru_uploads VALUES (?, ?, ?, ?, ?, ?, ?)").run(
+        id,
+        url,
+        member,
+        name,
+        type,
+        size,
+        site.now,
+      );
+      return url;
+    },
     query: (name, args = null, who = {}) => call("query", name, args, who),
     mutate: (name, args = null, who = {}) => call("mutation", name, args, who),
     /**
@@ -249,7 +310,7 @@ export async function testSite({
           ? null
           : Object.freeze({
               id: member,
-              roles: Object.freeze(roles.get(member) ?? []),
+              roles: Object.freeze(rolesOf(member)),
             }),
       owner: member === null && owner === true,
       visitor: member === null && owner !== true,
@@ -259,8 +320,9 @@ export async function testSite({
       },
       sql,
       async rolesOf(ids) {
-        return Object.fromEntries(ids.map((id) => [id, roles.get(id) ?? []]));
+        return Object.fromEntries(ids.map((id) => [id, rolesOf(id)]));
       },
+      media: Object.freeze({ types: MEDIA_TYPES }),
       passwords,
       ...(kind === "mutation"
         ? {
@@ -286,7 +348,6 @@ export async function testSite({
       return JSON.parse(
         JSON.stringify((await fn(context(kind, who), input)) ?? null),
       );
-    const saved = new Map(roles);
     db.exec("BEGIN");
     try {
       const result = await fn(context(kind, who), input);
@@ -294,8 +355,6 @@ export async function testSite({
       return JSON.parse(JSON.stringify(result ?? null));
     } catch (error) {
       db.exec("ROLLBACK");
-      roles.clear();
-      for (const [key, value] of saved) roles.set(key, value);
       throw error;
     }
   }

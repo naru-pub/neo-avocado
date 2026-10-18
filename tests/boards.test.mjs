@@ -3206,18 +3206,21 @@ test("a plain board's post keeps 첨부파일 with its pictures' count, and coun
   const site = await boardSite();
   board(site, "free", { ...PUBLIC_BOARD, kind: "text", uploadCount: 2 });
   profile(site, "m-1", "하나");
-  const pdf = {
-    url: "https://media.naru.pub/a.pdf",
+  const upload = (file) => ({ url: site.upload(file), ...file });
+  const pdf = upload({
+    member: "m-1",
     name: "규칙.pdf",
     size: 2048,
     type: "application/pdf",
-  };
-  const zip = {
-    ...pdf,
-    url: "https://media.naru.pub/b.zip",
+  });
+  const zip = upload({
+    member: "m-1",
     name: "b.zip",
+    size: 2048,
     type: "application/zip",
-  };
+  });
+  delete pdf.member;
+  delete zip.member;
   const { document: saved } = await write(site, {
     data: {
       board: "free",
@@ -3241,19 +3244,32 @@ test("a plain board's post keeps 첨부파일 with its pictures' count, and coun
     ),
     "upload_count",
   );
-  // Only what Naru Media stores, and only on plain boards.
-  assert.equal(
-    await refusal(
-      write(site, {
-        data: {
-          board: "free",
-          text: "x",
-          attachments: [{ ...pdf, type: "application/x-msdownload" }],
-        },
-      }),
-    ),
-    "invalid_input",
-  );
+  // Only the writer's own uploads that Naru Media finished, as Naru
+  // recorded them, and only on plain boards.
+  const theirs = upload({
+    member: "m-2",
+    name: "c.pdf",
+    size: 10,
+    type: "application/pdf",
+  });
+  for (const attachments of [
+    [{ ...pdf, url: "https://media.naru.pub/never-uploaded.pdf" }],
+    [{ url: theirs.url, name: "c.pdf", size: 10, type: "application/pdf" }],
+  ])
+    assert.equal(
+      await refusal(
+        write(site, { data: { board: "free", text: "x", attachments } }),
+      ),
+      "invalid_input",
+    );
+  const { document: told } = await write(site, {
+    data: {
+      board: "free",
+      text: "x",
+      attachments: [{ ...pdf, name: "other.exe", size: 1, type: "text/plain" }],
+    },
+  });
+  assert.deepEqual(told.data.attachments, [{ ...pdf, downloads: 0 }]);
   assert.equal(
     await refusal(
       write(site, {
@@ -3437,12 +3453,18 @@ test("첨부파일 take a 설명 where the board asks, and stay within 파일 �
   });
   profile(site, "m-1", "하나");
   const file = {
-    url: "https://media.naru.pub/a.pdf",
+    url: site.upload({ member: "m-1", name: "a.pdf", size: 1000 }),
     name: "a.pdf",
     size: 1000,
     type: "application/pdf",
     note: "규칙 모음",
   };
+  // Naru's record of an upload's size counts, whatever the page says.
+  const big = site.upload({
+    member: "m-1",
+    name: "big.pdf",
+    size: 2 * 1048576,
+  });
   const { document: saved } = await write(site, {
     data: { board: "free", text: "x", attachments: [file] },
   });
@@ -3453,7 +3475,7 @@ test("첨부파일 take a 설명 where the board asks, and stay within 파일 �
         data: {
           board: "free",
           text: "y",
-          attachments: [{ ...file, size: 2 * 1048576 }],
+          attachments: [{ ...file, url: big, size: 1000 }],
         },
       }),
     ),

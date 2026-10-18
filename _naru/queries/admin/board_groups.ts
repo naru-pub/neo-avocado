@@ -12,14 +12,13 @@ export const get = ownerOnly((ctx: QueryCtx, args: { id?: string }) =>
   getRecord(ctx, "board_groups", args),
 );
 
-/** Members a call looks through for a group's: five rolesOf calls. */
-const SCAN = 500;
+/** Members a page of 접근회원 lists. */
+const PAGE = 100;
 
 /**
  * 접근회원 (adm/boardgroupmember_list.php): the members holding the group's
- * role (group-<id>), with their nicknames, by member ID. Naru tells the roles
- * of members a site names, so the call looks through 500 of them after
- * `after` and answers those it found and where to go on (null at the end).
+ * role (group-<id>), with their nicknames, by member ID: a page after
+ * `after`, and where to go on (null at the end).
  */
 export const members = ownerOnly(async function members(
   ctx: QueryCtx,
@@ -31,22 +30,16 @@ export const members = ownerOnly(async function members(
     (after !== null && typeof after !== "string")
   )
     invalid(ctx);
-  const { rows } = await ctx.sql<{ member: string; nick: string }>`
-    SELECT member, nick FROM profiles
-    WHERE member > ${after ?? ""} AND deleted_at IS NULL
-    ORDER BY member LIMIT ${SCAN + 1}`;
-  const scanned = rows.slice(0, SCAN);
-  const role = `${GROUP_ROLE}${group}`;
-  const found = [];
-  for (let start = 0; start < scanned.length; start += 100) {
-    const batch = scanned.slice(start, start + 100);
-    const roles = await ctx.rolesOf(batch.map((row) => row.member));
-    for (const row of batch)
-      if ((roles[row.member] ?? []).includes(role))
-        found.push({ id: row.member, nick: row.nick });
-  }
+  const { rows } = await ctx.sql<{ id: string; nick: string }>`
+    SELECT roles.member AS id, profiles.nick
+    FROM _naru_member_roles AS roles
+    JOIN profiles ON profiles.member = roles.member
+    WHERE roles.role = ${`${GROUP_ROLE}${group}`} AND roles.member > ${after ?? ""}
+      AND profiles.deleted_at IS NULL
+    ORDER BY roles.member LIMIT ${PAGE + 1}`;
+  const members = rows.slice(0, PAGE);
   return {
-    members: found,
-    nextCursor: rows.length > SCAN ? scanned.at(-1).member : null,
+    members,
+    nextCursor: rows.length > PAGE ? members.at(-1).id : null,
   };
 });

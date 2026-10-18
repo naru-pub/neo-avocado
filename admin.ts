@@ -16,10 +16,11 @@ import {
   type Names,
 } from "./app/names.js";
 import { imageSlotsOf } from "./_naru/modules/images.js";
+import type { NaruClient } from "https://sdk.naru.pub/sdk/1.1.0/naru.js";
 const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
   document.getElementById(id) as T;
 let grantTitleId;
-let naru,
+let naru: NaruClient,
   owner,
   section = "couples",
   cursor = null,

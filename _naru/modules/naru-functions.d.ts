@@ -74,6 +74,8 @@ export interface QueryCtx {
   readonly member: CallingMember | null;
   /** The site's owner called. */
   readonly owner: boolean;
+  /** The site's owner's Naru login, whoever calls: the site's own name. */
+  readonly ownerName: string;
   /** No one is signed in. */
   readonly visitor: boolean;
   /** The call's time in milliseconds, fixed for the whole call. */
@@ -91,7 +93,11 @@ export interface QueryCtx {
    * binds every interpolated value as a parameter; given text and values,
    * it runs a query builder's compiled statement. SELECT, INSERT, UPDATE and
    * DELETE run; a query only reads. Naru's own tables, pragmas, triggers,
-   * transactions and recursion are refused. A statement is stopped once
+   * transactions and recursion are refused, but two of Naru's views may be
+   * read and joined: `_naru_member_roles (member, role)`, a row for each
+   * role a member holds, and `_naru_uploads (id, url, member, name, type,
+   * size, created_at)`, the site's finished uploads (`member` null for the
+   * owner's). A statement is stopped once
    * SQLite works on one step of it for 3 seconds; one stopped 3 times within
    * a minute is paused for 5 minutes. It binds at most 100 values, returns at most 1,000 rows and 1 MiB, BLOB columns as
    * Uint8Arrays, and counts as one database operation; a call's statements
@@ -121,6 +127,8 @@ export interface QueryCtx {
   ): Promise<SqlResult<Row>>;
   /** Members' roles, by ID: at most 100 IDs a call; a member without any has []. */
   rolesOf(members: string[]): Promise<Record<string, string[]>>;
+  /** The types Naru Media stores (the browser SDK's `MEDIA_TYPES`). */
+  media: { readonly types: readonly string[] };
   /**
    * Guests' passwords, kept by the site as hashes. `verify` allows ten wrong
    * passwords an hour for each `key` (such as "post:42"), whoever tries,

@@ -108,48 +108,57 @@ export interface PostInput {
   }[];
 }
 
-/** What Naru Media stores besides pictures, as a post's 첨부파일 may be. */
-const ATTACHMENT_TYPES = [
-  "image/avif",
-  "image/gif",
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "audio/mpeg",
-  "audio/ogg",
-  "audio/opus",
-  "audio/wav",
-  "application/pdf",
-  "application/zip",
-  "text/plain",
-];
-/** A post's 첨부파일, each an upload's address, name, size and type. */
-function attachmentsOf(ctx: MutationCtx, value: unknown) {
+/**
+ * A post's 첨부파일, each an upload's address and 설명. A file the post
+ * already had stays as it was; a new one must be an upload of the writer's
+ * own (the owner's, for the owner) that Naru Media finished, and its name,
+ * size and type are Naru's record of it, not what the page says.
+ */
+type Upload = {
+  url: string;
+  member?: string | null;
+  name: string;
+  size: number;
+  type: string;
+};
+async function attachmentsOf(
+  ctx: MutationCtx,
+  value: unknown,
+  previous: Upload[],
+) {
   if (value === null || value === undefined) return [];
   if (!Array.isArray(value) || value.length > UPLOAD_LIMIT) invalid(ctx);
-  try {
-    return (value as unknown[]).map((entry) => {
-      const file = (entry ?? {}) as Record<string, unknown>;
-      const size = Number(file.size);
-      if (
-        !Number.isSafeInteger(size) ||
-        size < 0 ||
-        !ATTACHMENT_TYPES.includes(file.type as string)
-      )
-        throw new Error("Not an attachment.");
-      // bf_content: a file's 설명, where the board takes them.
-      const note = text(file.note ?? "", 255);
-      return {
-        url: imageUrl(file.url),
-        name: text(file.name, 200, true),
-        size,
-        type: file.type as string,
-        ...(note ? { note } : {}),
-      };
-    });
-  } catch {
-    return invalid(ctx);
-  }
+  const entries = (value as unknown[]).map(
+    (entry) => (entry ?? {}) as Record<string, unknown>,
+  );
+  if (entries.some((file) => typeof file.url !== "string")) invalid(ctx);
+  const kept = new Map(previous.map((file) => [file.url, file]));
+  const added = entries
+    .map((file) => file.url as string)
+    .filter((url) => !kept.has(url));
+  const { rows } = added.length
+    ? await ctx.sql<Upload>`SELECT url, member, name, size, type FROM _naru_uploads
+         WHERE url IN (SELECT value FROM json_each(${JSON.stringify(added)}))`
+    : { rows: [] };
+  const uploads = new Map(rows.map((row) => [row.url, row] as const));
+  // Whose uploads a new file may be: the member's, or the owner's own.
+  const own = (upload: Upload) =>
+    ctx.member ? upload.member === ctx.member.id : ctx.owner && !upload.member;
+  return entries.map((file) => {
+    const url = file.url as string;
+    const added = uploads.get(url);
+    const upload = kept.get(url) ?? (added && own(added) ? added : undefined);
+    if (!upload || !ctx.media.types.includes(upload.type)) return invalid(ctx);
+    // bf_content: a file's 설명, where the board takes them.
+    const note = text(file.note ?? "", 255);
+    return {
+      url,
+      name: upload.name,
+      size: upload.size,
+      type: upload.type,
+      ...(note ? { note } : {}),
+    };
+  });
 }
 
 /** G5_LINK_COUNT: a post's links. */
@@ -286,7 +295,11 @@ export async function write(
   const attachments =
     Object.hasOwn(data, "attachments") &&
     JSON.stringify(data.attachments ?? []) !== (previous?.attachments ?? "[]")
-      ? attachmentsOf(ctx, data.attachments)
+      ? await attachmentsOf(
+          ctx,
+          data.attachments,
+          parsed<any[]>(previous?.attachments, []),
+        )
       : parsed<any[]>(previous?.attachments, []);
   if (board.data.kind !== "text" && attachments.length) invalid(ctx);
   // 파일 업로드 용량 (bo_upload_size): each new file within it.

@@ -17,7 +17,8 @@ redirected.
 
 The types are `_naru/modules/naru-functions.d.ts` (Naru's own
 `functions.d.ts`), re-exported by `naru-types.ts` as `QueryCtx` and
-`MutationCtx`.
+`MutationCtx`. The pages' SDK client is typed by Naru's `naru.d.ts`, a copy
+at the root that `tsconfig.json` maps the SDK's address to.
 
 - `_naru/queries/<area>/<module>.ts` exports read-only functions,
   `_naru/mutations/<area>/<module>.ts` writing ones: `export async function
@@ -50,6 +51,10 @@ name(ctx, args)`. Pages call them as `query("<area>/<module>:<name>", args)`
   `INVALID_REQUEST`, `RATE_LIMITED`, …). Messages are Korean, written for
   visitors.
 - `ctx.rolesOf([ids])`, and in mutations `ctx.setRoles(member, roles)`.
+  Statements read Naru's views of roles and uploads: 접근회원 joins
+  `_naru_member_roles` with `profiles`, and a post's new 첨부파일 must be the
+  writer's own upload in `_naru_uploads`, whose name, size and type it
+  keeps (not the page's). `ctx.media.types` is what Naru Media stores.
 - Guests: `ctx.passwords.hash(password)` in mutations keeps a hash in a
   column; `ctx.passwords.verify(password, hash, key)` checks it, ten wrong
   tries an hour per key (use `post:<id>`, `comment:<id>`).
