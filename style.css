@@ -1680,3 +1680,14 @@ body.admin-page {
   height: auto;
   margin: 8px auto;
 }
+/* A writer's character opens its page and their nickname a 쪽지
+   (view_comment.skin.php's viewer and send_memo links). */
+a.speaker-name,
+a.send-memo {
+  color: inherit;
+  text-decoration: none;
+}
+a.speaker-name:hover,
+a.send-memo:hover {
+  text-decoration: underline;
+}

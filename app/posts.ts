@@ -3,6 +3,8 @@
 import { emoticonContent } from "../emoticons.js";
 import { nickOf, ownCharacters, query, run, state } from "./core.js";
 import { openLogNumber, searchTag } from "./logs.js";
+import { openCharacter } from "./characters.js";
+import { writeTo } from "./messages.js";
 
 // 댓글 주사위: 굴린 값을 페이지가 정하면 누구나 원하는 눈을 적을 수 있다.
 // 대신 서버가 댓글에 붙이는 ID에서 읽는다. ID는 회원이 고를 수 없으므로,
@@ -85,12 +87,27 @@ export async function speakerLabel(row) {
   }
   if (row.data.anonymous === true) fragment.append("(익명) ");
   // Guests sign with a name of their own.
+  const writer = row.createdBy ?? row.data.owner;
   const nick = row.data.guest?.name
     ? `${row.data.guest.name} (손님)`
-    : await nickOf(row.createdBy ?? row.data.owner);
+    : await nickOf(writer);
+  // view_comment.skin.php:66-71: a member's name opens a 쪽지 to them.
+  const nickNode =
+    !row.data.guest && writer && state.member && writer !== state.member.id
+      ? Object.assign(document.createElement("a"), {
+          href: "/messages",
+          className: "send-memo",
+          textContent: nick,
+          title: "쪽지 보내기",
+          onclick: (event) => {
+            event.preventDefault();
+            run(() => writeTo(writer));
+          },
+        })
+      : nick;
   const speaker = row.data.speaker;
   if (!speaker?.name) {
-    fragment.append(nick);
+    fragment.append(nickNode);
     return fragment;
   }
   if (speaker.portrait?.startsWith("https://")) {
@@ -114,10 +131,18 @@ export async function speakerLabel(row) {
     title.append(speaker.title);
     fragment.append(title, " ");
   }
-  const name = document.createElement("span");
+  // view_comment.skin.php:38-60: the character's name opens its page.
+  const name = document.createElement(speaker.character ? "a" : "span");
   name.className = "speaker-name";
   name.textContent = speaker.name;
-  fragment.append(name, ` (${nick})`);
+  if (speaker.character) {
+    (name as HTMLAnchorElement).href = `/character/${speaker.character}`;
+    name.onclick = (event) => {
+      event.preventDefault();
+      run(() => openCharacter(speaker.character));
+    };
+  }
+  fragment.append(name, " (", nickNode, ")");
   return fragment;
 }
 /** What an in-post action did, as the mmb skin's action logs (log.S, log.item). */

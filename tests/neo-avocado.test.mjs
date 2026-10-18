@@ -2713,6 +2713,9 @@ test("a board lists by 분류, shows its HTML notice and new-post text, and mark
   assert.match(mine.querySelector(".author").textContent, /^▶ .+ ◀$/);
   assert.equal(staff.classList.contains("owner"), false);
   assert.doesNotMatch(staff.querySelector(".author").textContent, /▶|◀/);
+  // Another member's name opens a 쪽지 to them; one's own does not.
+  assert.equal(mine.querySelector(".send-memo"), null);
+  assert.ok(staff.querySelector(".send-memo"));
   assert.equal(staff.querySelector(".admin-mark").textContent, "관리자");
 });
 
