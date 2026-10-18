@@ -1374,6 +1374,68 @@ test("그룹적용 and 전체적용 save the ticked settings to the group's boar
   );
 });
 
+test("회원 관리 finds members by 권한 and 추천인, lists their characters, and changes or retires many at once", async () => {
+  const site = await testSite({ now: Date.parse("2030-01-01T03:00:00Z") });
+  profile(site, "m-1", "하나");
+  profile(site, "m-2", "둘");
+  profile(site, "m-3", "셋");
+  site.run(
+    "INSERT INTO members (member, level, recommender) VALUES ('m-1', 2, NULL), ('m-2', 5, 'm-1'), ('m-3', 5, NULL)",
+  );
+  character(site, { owner: "m-2", name: "용사" });
+  character(site, { owner: "m-2", name: "지운", state: "deleted" });
+  const found = async (args) =>
+    (await query(site, "members:list", args)).documents
+      .map((row) => row.nick)
+      .sort();
+  assert.deepEqual(await found({ field: "level", search: "5" }), ["둘", "셋"]);
+  assert.deepEqual(await found({ field: "recommender", search: "하" }), ["둘"]);
+  assert.equal(
+    await refusal(query(site, "members:list", { field: "level", search: "x" })),
+    "invalid_input",
+  );
+  const two = (await query(site, "members:list", { search: "둘" }))
+    .documents[0];
+  assert.deepEqual(
+    two.characters.map((row) => row.name),
+    ["용사"],
+  );
+  await mutate(site, "members:bulk", {
+    ids: ["m-1", "m-3"],
+    action: "level",
+    level: 7,
+  });
+  assert.deepEqual(
+    site.rows("SELECT member, level FROM members ORDER BY member"),
+    [
+      { member: "m-1", level: 7 },
+      { member: "m-2", level: 5 },
+      { member: "m-3", level: 7 },
+    ],
+  );
+  site.run("UPDATE members SET left_on = '2029-12-01' WHERE member = 'm-1'");
+  await mutate(site, "members:bulk", { ids: ["m-1", "m-2"], action: "leave" });
+  // One who left keeps their day.
+  assert.deepEqual(
+    site.rows("SELECT member, left_on FROM members ORDER BY member"),
+    [
+      { member: "m-1", left_on: "2029-12-01" },
+      { member: "m-2", left_on: "2030-01-01" },
+      { member: "m-3", left_on: null },
+    ],
+  );
+  assert.equal(
+    await refusal(
+      mutate(site, "members:bulk", {
+        ids: ["m-1"],
+        action: "level",
+        level: 11,
+      }),
+    ),
+    "invalid_input",
+  );
+});
+
 test("the forms' pick lists come in one read", async () => {
   const site = await testSite();
   profile(site, "m-1", "하나");

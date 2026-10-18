@@ -128,3 +128,38 @@ export const deleteMember = ownerOnly(async function deleteMember(
   await setRolesOf(ctx, id, rolesOfData({}, roles));
   return { id, deleted: true };
 });
+
+/**
+ * member_list_update.php's 선택수정 (`level`: the members' 권한) and
+ * 선택탈퇴 (`leave`: their 탈퇴일, today, as member_leave.php writes it;
+ * one who left already keeps their day), for up to 100 members at once.
+ */
+export const bulk = ownerOnly(async function bulk(
+  ctx: MutationCtx,
+  {
+    ids,
+    action,
+    level,
+  }: { ids?: string[]; action?: string; level?: number } = {},
+) {
+  if (
+    !Array.isArray(ids) ||
+    !ids.length ||
+    ids.length > 100 ||
+    ids.some((id) => typeof id !== "string" || !id) ||
+    !["level", "leave"].includes(action) ||
+    (action === "level" &&
+      (!Number.isInteger(level) || level < 1 || level > 10))
+  )
+    invalid(ctx);
+  const list = JSON.stringify([...new Set(ids)]);
+  const { changes } =
+    action === "level"
+      ? await ctx.sql`INSERT INTO members (member, level)
+          SELECT value, ${level} FROM json_each(${list}) WHERE true
+          ON CONFLICT (member) DO UPDATE SET level = excluded.level`
+      : await ctx.sql`INSERT INTO members (member, left_on)
+          SELECT value, ${kstDay(ctx.now)} FROM json_each(${list}) WHERE true
+          ON CONFLICT (member) DO UPDATE SET left_on = coalesce(members.left_on, excluded.left_on)`;
+  return { changed: changes };
+});

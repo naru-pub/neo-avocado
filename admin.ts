@@ -330,6 +330,7 @@ async function load({ more = false } = {}) {
     $("reviewTools").hidden = true;
     $("memberSearchLabel").hidden = true;
     $("memberCounts").hidden = true;
+    $("memberTools").hidden = true;
     $("itemCategoryLabel").hidden = true;
     $("logSearch").hidden = true;
     const row = await owner.query(CALLS[section].get, { section });
@@ -343,6 +344,7 @@ async function load({ more = false } = {}) {
     $("reviewTools").hidden = true;
     $("memberSearchLabel").hidden = true;
     $("memberCounts").hidden = true;
+    $("memberTools").hidden = true;
     $("itemCategoryLabel").hidden = true;
     $("logSearch").hidden = true;
     return model.report === "visits"
@@ -356,6 +358,7 @@ async function load({ more = false } = {}) {
   $("boardTools").hidden = section !== "boards";
   $("memberSearchLabel").hidden = section !== "members";
   $("memberCounts").hidden = section !== "members";
+  $("memberTools").hidden = section !== "members";
   $("itemCategoryLabel").hidden = section !== "items";
   $("logSearch").hidden = !["history", "inventory"].includes(section);
   $("logKind").hidden = section !== "history";
@@ -379,6 +382,7 @@ async function load({ more = false } = {}) {
     // 회원 관리 (adm/member_list.php): every member, found by nickname.
     page = await owner.query(CALLS[section].list, {
       search: $<HTMLInputElement>("memberSearch").value,
+      field: $<HTMLSelectElement>("memberField").value,
       after,
     });
   else if (model.review) {
@@ -502,8 +506,28 @@ async function load({ more = false } = {}) {
     // A character's record and a member's balance are named by their
     // character and member.
     li.append(row.data.name ?? row.label ?? row.nick ?? row.id, " ");
-    if (section === "members")
+    if (section === "members") {
+      const pick = document.createElement("input");
+      pick.type = "checkbox";
+      pick.dataset.member = row.id;
+      pick.dataset.nick = row.nick ?? row.id;
+      pick.setAttribute("aria-label", `${row.nick ?? row.id} 선택`);
+      li.prepend(pick, " ");
       li.append(`· ${memberSummary({ row, lastSeen: row.lastSeen })} `);
+      // 보유캐릭터 (member_list.php:175-190), each opening its record.
+      if (row.characters?.length) {
+        li.append("· 보유캐릭터 ");
+        for (const [n, character] of row.characters.entries()) {
+          const link = document.createElement("a");
+          link.href = `../character/${character.id}`;
+          link.target = "_blank";
+          link.rel = "noopener";
+          link.textContent = character.name;
+          li.append(...(n ? [", "] : []), link);
+        }
+        li.append(" ");
+      }
+    }
     if (section === "wallets")
       li.append(`${moneyText(itemNames, row.data.balance)} `);
     if (section === "inventory")
@@ -1761,6 +1785,62 @@ $("titleGrantForm").onsubmit = async (event) => {
 };
 
 $("holdingsFind").onclick = () => run(() => load());
+/** The members ticked in 회원 관리's list. */
+const pickedMembers = () =>
+  [
+    ...$("adminRows").querySelectorAll<HTMLInputElement>(
+      "input[data-member]:checked",
+    ),
+  ].map((box) => ({ id: box.dataset.member, nick: box.dataset.nick }));
+const memberBulk = (action) =>
+  run(async () => {
+    const picked = pickedMembers();
+    if (!picked.length)
+      return ($("adminStatus").textContent =
+        "하나 이상의 회원을 선택해 주세요.");
+    const level = Number($<HTMLSelectElement>("memberLevel").value);
+    if (
+      !confirm(
+        action === "level"
+          ? `선택한 ${picked.length}명의 등급을 ${level}(으)로 바꿀까요?`
+          : `선택한 ${picked.length}명을 탈퇴 처리할까요? 탈퇴일을 지우면 되돌릴 수 있습니다.`,
+      )
+    )
+      return;
+    const { changed } = await owner.mutate("admin/members:bulk", {
+      ids: picked.map((member) => member.id),
+      action,
+      ...(action === "level" ? { level } : {}),
+    });
+    $("adminStatus").textContent = `${changed}명을 바꿨습니다.`;
+    await load();
+  });
+$("membersLevel").onclick = () => memberBulk("level");
+$("membersLeave").onclick = () => memberBulk("leave");
+$("membersDelete").onclick = () =>
+  run(async () => {
+    const picked = pickedMembers();
+    if (!picked.length)
+      return ($("adminStatus").textContent =
+        "하나 이상의 회원을 선택해 주세요.");
+    if (
+      !confirm(
+        `선택한 ${picked.length}명을 삭제할까요? 닉네임은 남고, 쪽지·관심로그·화폐 내역과 잔액·운영 역할을 지우며 되돌릴 수 없습니다. 글·댓글·캐릭터는 남습니다.`,
+      )
+    )
+      return;
+    // One call a member: each deletion is a dozen statements.
+    let deleted = 0;
+    for (const member of picked) {
+      $("adminStatus").textContent = `${member.nick} 삭제 중…`;
+      const result = await owner.mutate("admin/members:deleteMember", {
+        id: member.id,
+      });
+      if (result.deleted) deleted += 1;
+    }
+    $("adminStatus").textContent = `${deleted}명을 삭제했습니다.`;
+    await load();
+  });
 $("logSearch").onsubmit = (event) => {
   event.preventDefault();
   run(() => load());
