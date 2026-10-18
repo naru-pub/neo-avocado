@@ -32,7 +32,8 @@ export async function loadSite() {
   applyNames(design);
   applyHead(design);
   renderMenus(site.menus);
-  renderBanners(site.banners);
+  const entering = showEntrance(site, design);
+  renderBanners(site.banners, entering);
   await showMainPage(site.main === true, site.banners);
   setMusic(site.bgm);
   state.alarmSound = site.alarmSound === true;
@@ -396,11 +397,58 @@ function showSlides(container: HTMLElement, banners) {
 /** Whether the page was opened at the home (/, or /home). */
 const arrivedHome = /^\/((home|index\.html)\/?)?$/.test(location.pathname);
 const INTRO_KEY = "neo-avocado-intro-closed";
-function renderBanners(banners) {
+const ENTRANCE_KEY = "neo-avocado-entered";
+/** What runs once the entrance is clicked through: the intro, if any. */
+let afterEntrance: (() => void) | null = null;
+/**
+ * enter.php (index.php:57-64): a visitor, not signed in, arriving at an open
+ * site's home sees its logo (or name) first, once a browser session, and
+ * clicks through to the main page. Answers whether it shows.
+ */
+function showEntrance(site, design) {
+  let entered = false;
+  try {
+    entered = sessionStorage.getItem(ENTRANCE_KEY) === "1";
+  } catch {
+    /* Without storage the entrance shows on each arrival. */
+  }
+  const dialog = $<HTMLDialogElement>("entrance");
+  if (site.member || site.open === false || !arrivedHome || entered)
+    return dialog.open;
+  if (dialog.open) return true;
+  const logo = $<HTMLImageElement>("entranceLogo");
+  logo.hidden = !design.logo;
+  if (design.logo) logo.src = design.logo;
+  $("entranceTitle").textContent = design.logo
+    ? ""
+    : design.title || $("siteTitle").textContent;
+  dialog.showModal?.();
+  return true;
+}
+$("entranceEnter").onclick = () => {
+  try {
+    sessionStorage.setItem(ENTRANCE_KEY, "1");
+  } catch {
+    /* It shows again next time. */
+  }
+  $<HTMLDialogElement>("entrance").close();
+  const next = afterEntrance;
+  afterEntrance = null;
+  next?.();
+};
+function renderBanners(banners, entering = false) {
   const main = banners.filter((banner) => banner.place === "main");
   showSlides($("banners"), main);
   $("banners").hidden = !main.length;
   const intro = banners.filter((banner) => banner.place === "intro");
+  // main.php's intro comes after enter.php's click.
+  if (entering) {
+    afterEntrance = () => openIntro(intro);
+    return;
+  }
+  openIntro(intro);
+}
+function openIntro(intro) {
   // intro.php: only on the main page, and not for a day once seen through
   // (its intro_close cookie, 24 hours).
   let closed = false;

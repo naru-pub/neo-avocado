@@ -3036,3 +3036,24 @@ test("답변 opens the log form on a plain board's post, and the post it writes 
   assert.equal(added.data.replyTo, "first");
   assert.equal($("logReplying").hidden, true);
 });
+
+test("a visitor arriving at an open site's home clicks through the entrance first, then the intro", async () => {
+  const database = fakeDatabase({ [PROFILES]: [me] });
+  database.site = {
+    member: false,
+    open: true,
+    design: { title: "아보카도", font: "sans", colors: {} },
+    banners: [slide("a", "intro")],
+  };
+  database.answer = () => refuse("empty");
+  const { $, settle, window } = await page(database);
+  await settle();
+  assert.equal($("entrance").open, true);
+  assert.equal($("entranceTitle").textContent, "아보카도");
+  // The intro waits for the click.
+  assert.equal($("intro").open, false);
+  $("entranceEnter").onclick();
+  assert.equal($("entrance").open, false);
+  assert.equal($("intro").open, true);
+  assert.equal(window.sessionStorage.getItem("neo-avocado-entered"), "1");
+});
