@@ -824,8 +824,7 @@ try {
   );
   assert.equal(await owner.locator("#adminStatus").textContent(), "");
 
-  // The admin page has addresses too: an entry's form, and old links to
-  // admin.html carry on to /admin/ with their address.
+  // The admin page has addresses too: an entry's form, and a report.
   await owner.goto(`${origin}/admin/#/emoticons/smile`);
   await owner.reload();
   await owner.locator('#adminFields [name="name"]').waitFor();
@@ -833,8 +832,7 @@ try {
     await owner.locator('#adminFields [name="name"]').inputValue(),
     "웃음",
   );
-  await owner.goto(`${origin}/admin.html#/visits`);
-  await owner.waitForURL(/\/admin\/#\/visits/);
+  await owner.goto(`${origin}/admin/#/visits`);
   await owner.locator("#adminReport table.report").waitFor();
 
   // The smaller lists edit in place (선택수정), a board group lists its

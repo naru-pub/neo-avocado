@@ -585,7 +585,9 @@ test("회원 관리 shows each member's level, role, warnings, leaving and last 
 
 test("no page or server code names a collection: the site declares none", async () => {
   const { readdir, readFile } = await import("node:fs/promises");
-  const files = ["admin/main.js", "admin/forms.js", "admin/reports.js"];
+  const files = [];
+  for (const name of await readdir(new URL("../dist/admin", import.meta.url)))
+    if (name.endsWith(".js")) files.push(`admin/${name}`);
   for (const name of await readdir(new URL("../dist/app", import.meta.url)))
     files.push(`app/${name}`);
   for (const dir of ["modules", "queries", "mutations"])

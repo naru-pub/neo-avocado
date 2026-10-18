@@ -492,3 +492,16 @@ test("an address names the same place for the page and for Naru's routes", async
   ])
     assert.equal(placeOf(path), null, path);
 });
+
+test("index.html names its scripts and styles from the site's root, as every address serves it", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const html = await readFile(
+    new URL("../dist/index.html", import.meta.url),
+    "utf8",
+  );
+  const paths = [...html.matchAll(/(?:src|href)="([^"]+\.(?:js|css))"/g)].map(
+    (match) => match[1],
+  );
+  assert.ok(paths.length >= 5);
+  for (const path of paths) assert.match(path, /^\//, path);
+});

@@ -1,6 +1,6 @@
 // The owner's reports' filters: visits' breakdowns (adm/visit_list and its
 // tabs) and Korean days. The reports themselves are queries
-// (admin/visits:report, admin/activity:report); admin.js draws the tables.
+// (admin/visits:report, admin/activity:report); views.ts draws the tables.
 
 /** How visits can be broken down, as the original's tabs. */
 export const VISIT_BREAKDOWNS = [

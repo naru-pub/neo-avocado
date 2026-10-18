@@ -62,41 +62,17 @@ server kept.
 
 ## How it is built
 
-- **Tables**: every row the community keeps is in the site's own SQLite
-  tables, which `_naru/migrations/0001_schema.sql` makes when the files
-  arrive. There are no
-  collections, collection rules or site functions, and the owner's sign-in
-  asks for no access.
-- **Queries and mutations**: pages call `_naru/queries/` (read-only) and
-  `_naru/mutations/` (one transaction each; `ctx.fail` or any error keeps
-  nothing) by `"<module>:<export>"`. Anyone may call any of them, so each
-  decides from `ctx.member` (with its Naru roles), `ctx.owner` and
-  `ctx.visitor` what the caller may read and do (`_naru/modules/access.js`,
-  `boards.js`). Guests' passwords are hashes `ctx.passwords` makes and checks.
-- **Live queries**: nothing is pushed. Pages subscribe to a query
-  (`community/inbox:status` for unread 쪽지 and calls, `community/posts:latest`
-  for a board's newest post), and Naru answers again when a mutation writes a
-  table it read.
-- **The owner's admin**: `admin/` calls `_naru/queries/admin/` and
-  `_naru/mutations/admin/`: `admin/records` for every section's plain
-  calls, and a module of its own where a section does more, each refusing
-  anyone but the owner. Saves are checked with the forms' own rules
-  (`_naru/modules/admin-model.js`); a balance and its history, a character's
-  record and its experience history, and title grants are single mutations;
-  the reports count with SQL.
-- **Membership**: Naru decides who may sign in (open, approval or closed, and
-  bans, set on Naru's 데이터베이스 → 사이트 회원 page). The community's level
-  (1–10), warnings and leaving day are the `members` table; moderators are
-  the Naru role `staff` and members-only board groups the roles
-  `group-<id>`.
-- **Uploads** go to Naru Media (`media.upload`); rows keep their URLs. Naru's
-  media library searches the site's tables when it opens and marks the
-  uploads no row names 참조 없음. Nothing is deleted unasked.
+[architecture.md](architecture.md) says how the port is laid out and
+written. In short: every row the community keeps is in the site's own
+SQLite tables; pages call queries and mutations, each deciding who may read
+and do what; nothing is pushed but answers to live queries; Naru decides
+who may sign in, and the community's level, warnings and leaving day are its
+`members` table; uploads go to Naru Media, and rows keep their addresses.
 
 ## Verifying
 
 - `npm test`: the queries and mutations against a real SQLite database with
-  the migrations (`tests/sql-ctx.mjs`), one suite per area and the admin
+  the schema (`tests/sql-ctx.mjs`), one suite per area and the admin
   (`tests/admin.test.mjs`), and page behaviour against a synthetic SDK.
 - `npm run test:e2e`: the whole site on naru-dev (Naru's real edge Worker,
   tables, queries, mutations and live queries) in Chromium, as an owner, two

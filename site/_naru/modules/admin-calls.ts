@@ -1,5 +1,5 @@
-// The owner's admin sections' calls, as admin.ts makes them and Naru answers
-// them. A section's plain calls are admin/records' (_naru/queries/admin/
+// The owner's admin sections' calls, as the admin page (site/admin/) makes
+// them and Naru answers them. A section's plain calls are admin/records' (_naru/queries/admin/
 // records.ts, _naru/mutations/admin/records.ts), which take the section and
 // do what modules/admin.ts does for every one; the rest are the section's
 // own module's, admin/<module>:<call>, for what only it does.

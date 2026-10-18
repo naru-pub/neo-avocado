@@ -1,5 +1,5 @@
 // What the unit tests share: who calls, refusals, rows made directly, and
-// the owner's admin calls routed as admin.ts routes them
+// the owner's admin calls routed as the admin page routes them
 // (_naru/modules/admin-calls.ts).
 import { adminCall } from "../dist/_naru/modules/admin-calls.js";
 
@@ -83,7 +83,7 @@ export const count = (site, table) =>
   site.rows(`SELECT count(*) AS n FROM ${table}`)[0].n;
 
 /**
- * An admin call, "<section>:<call>" or "<module>:<export>", as admin.ts
+ * An admin call, "<section>:<call>" or "<module>:<export>", as the admin page
  * makes it: a section's plain calls are admin/records', with its section.
  */
 function routed(name, args) {

@@ -6,12 +6,12 @@ import { readdir, readFile } from "node:fs/promises";
 // "<module/path>:<export>", as the SDK takes them. Every such reference must
 // name a function a module exports, and every callable export must be one
 // the pages call.
-const pages = [
-  "admin/main.js",
-  ...(await readdir(new URL("../dist/app", import.meta.url))).map(
-    (file) => `app/${file}`,
-  ),
-];
+const pages = [];
+for (const folder of ["app", "admin"])
+  for (const file of await readdir(
+    new URL(`../dist/${folder}`, import.meta.url),
+  ))
+    if (file.endsWith(".js")) pages.push(`${folder}/${file}`);
 const references = new Set();
 for (const page of pages) {
   const source = await readFile(
@@ -24,7 +24,7 @@ for (const page of pages) {
     references.add(reference);
 }
 
-// The admin's section calls, which admin.js makes from
+// The admin's section calls, which the admin page makes from
 // modules/admin-calls.js rather than writes out.
 const calls = await import(
   new URL("../dist/_naru/modules/admin-calls.js", import.meta.url).href

@@ -47,14 +47,15 @@
 
 개발할 때는:
 
-- 소스는 TypeScript(`.ts`)입니다. `npm run build`가 같은 경로의 JavaScript로
-  `dist/`에 만들고, 나루에는 이 `dist/`가 올라갑니다. main에 푸시하면 GitHub
+- 사이트로 올라가는 것은 `site/` 폴더입니다. 소스는 TypeScript(`.ts`)이고, `npm run build`가
+  `site/`를 같은 경로의 JavaScript로 `dist/`에 만들며, 나루에는 이 `dist/`가 올라갑니다
+  (구조는 [docs/architecture.md](docs/architecture.md)). main에 푸시하면 GitHub
   Actions가 검사한 뒤 `dist/`를 나루의 GitHub Actions 배포로 올립니다
   (`scripts/deploy-naru.mjs`). 나루 배포 설정에 이 저장소와 `refs/heads/main`의
   GitHub Actions 배포 대상이 있어야 합니다.
 - 검사: `npm run typecheck`, `npm test`(빌드 후 `dist/`를 검사), `npm run lint`
 - 로컬 나루(naru-dev)에서 실제 Chromium으로 전체 흐름:
-  `NARU_REPO_PATH=… PLAYWRIGHT_MODULE=… npm run test:e2e`
+  `NARU_REPO_PATH=… PLAYWRIGHT_MODULE=… npm run test:e2e`(다른 빌드와 동시에 돌리지 않음)
 - 직접 써 보기: `npm run build` 후 나루 저장소의 `control-plane/`에서
   `pnpm naru-dev ~/Git/neo-avocado/dist --site neo-avocado` 후 http://localhost:4000
 
@@ -463,30 +464,32 @@ HTML은 [DOMPurify](https://github.com/cure53/DOMPurify)로 정리하여 표시�
 `ctx.visitor`)을 보고 무엇을 읽고 쓸지 정합니다.
 돈·재고·주사위처럼 회원이 마음대로 정하면 안 되는 값은 뮤테이션만 바꿉니다.
 
-| 기능                   | 화면                                   | 서버 코드                                                          |
-| ---------------------- | -------------------------------------- | ------------------------------------------------------------------ |
-| 로그인·가입·닉네임     | `app.js`                               | `_naru/queries/community/`, `_naru/mutations/community/`           |
-| 게시판·로그·댓글       | `app/logs.js`, `app/posts.js`          | `_naru/queries/community/`, `_naru/mutations/community/`           |
-| 캐릭터                 | `app/characters.js`, `app/couples.js`  | `_naru/queries/characters/`, `_naru/mutations/characters/`         |
-| 상점·인벤토리·제작     | `app/shop.js`                          | `_naru/queries/economy/`, `_naru/mutations/economy/`               |
-| 쪽지                   | `app/messages.js`                      | `_naru/queries/community/messages.js`, `mutations/community/`      |
-| 알림(호출)             | `app/calls.js`                         | `_naru/queries/community/calls.js`, `mutations/community/calls.js` |
-| 퀘스트·안내 페이지     | `app/content.js`                       | `_naru/queries/content/`                                           |
-| 디자인·메뉴·배너       | `app/site.js`                          | `_naru/queries/content/site.js`                                    |
-| 새 글·알림 실시간 수신 | `app/live.js`                          | `_naru/queries/community/inbox.js`, `posts.js`                     |
-| 운영 화면              | `admin/`, `admin.js`, `admin-model.js` | `_naru/queries/admin/`, `_naru/mutations/admin/`                   |
+| 기능                   | 화면 (`site/`)                                                         | 서버 코드 (`site/_naru/`)                                     |
+| ---------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------- |
+| 로그인·가입·닉네임     | `app/main.js`                                                          | `queries/community/`, `mutations/community/`                  |
+| 게시판·로그·댓글       | `app/logs.js`, `log-item.js`, `comments.js`, `log-form.js`, `posts.js` | `queries/community/`, `mutations/community/`                  |
+| 캐릭터                 | `app/characters.js`, `app/couples.js`                                  | `queries/characters/`, `mutations/characters/`                |
+| 상점·인벤토리·제작     | `app/shop.js`                                                          | `queries/economy/`, `mutations/economy/`                      |
+| 쪽지                   | `app/messages.js`                                                      | `queries/community/messages.js`, `mutations/community/`       |
+| 알림(호출)             | `app/calls.js`                                                         | `queries/community/calls.js`, `mutations/community/calls.js`  |
+| 퀘스트·안내 페이지     | `app/content.js`                                                       | `queries/content/`                                            |
+| 디자인·메뉴·배너       | `app/site.js`                                                          | `queries/content/site.js`                                     |
+| 새 글·알림 실시간 수신 | `app/live.js`                                                          | `queries/community/inbox.js`, `posts.js`                      |
+| 운영 화면              | `admin/` (`main.js`와 영역별 모듈, `forms.js`)                         | `queries/admin/`, `mutations/admin/`, `modules/admin-models/` |
 
 `app/core.js`는 모든 화면이 함께 쓰는 것(상태, 오류 표시, 편집 창)입니다.
 
 모든 기능이 `_naru/migrations/`의 테이블을 쓰고, 화면은 `query`·`mutate`·`subscribe`
-(`app/core.js`)로 `_naru/queries/`·`_naru/mutations/`를 부릅니다(`docs/port.md`).
+(`app/core.js`)로 `_naru/queries/`·`_naru/mutations/`를 부릅니다.
 누가 무엇을 읽고 쓰는지는 그 코드가 정합니다(게시판은 `_naru/modules/boards.js`).
 새 쪽지와 알림은 `community/inbox:status`를 구독해 받습니다: 나루는 쪽지·호출을 쓰는
 mutation이 끝날 때마다 그 답을 다시 보내 줍니다.
 
-운영 화면은 섹션마다 운영자만 부를 수 있는 쿼리·뮤테이션(`admin/boards:save`,
-`admin/members:list` 등)을 씁니다. 저장은 양식에 적은 값을 그대로 보내고, 서버가
-양식과 같은 규칙(`_naru/modules/admin-model.js`)으로 검사한 뒤 테이블에 씁니다.
+운영 화면은 운영자만 부를 수 있는 쿼리·뮤테이션을 씁니다. 목록·읽기·저장·삭제만 하는
+섹션은 `admin/records`가 맡고(`{ section }`을 함께 보냄), 더 하는 일이 있는 섹션은
+자기 모듈(`admin/members:list`, `admin/boards:save` 등)이 맡습니다. 저장은 양식에 적은
+값을 그대로 보내고, 서버가 양식과 같은 규칙(`_naru/modules/admin-models/`의 영역별
+양식과 규칙)으로 검사한 뒤 테이블에 씁니다.
 잔액과 그 조정 기록, 경험치와 그 기록, 여러 캐릭터의 타이틀 지급·회수는 각각 한 번의
 뮤테이션입니다.
 
@@ -536,11 +539,11 @@ export async function gacha(ctx, args) {
 
 `ctx.fail`은 호출을 멈추고 그때까지의 쓰기를 모두 되돌립니다. `mutate`는 그 메시지로
 오류를 던지고, `run`이 그 메시지를 화면에 그대로 보여 줍니다. 공통 코드는 `_naru/modules/`에 있고 쿼리와 뮤테이션이 정적 import합니다.
-번들 생성은 필요하지 않습니다. 자세한 구조는 [_naru/README.md](_naru/README.md)를
+번들 생성은 필요하지 않습니다. 자세한 구조는 [docs/architecture.md](docs/architecture.md)를
 참고하세요.
 
 ## 라이선스
 
 [아보카도 에디션](https://avocado-edition-rout.postype.com/)을 옮긴 것이므로 원본과
-같은 GNU GPL v3를 따릅니다([LICENSE](LICENSE)). `vendor/`의 라이브러리는 각자의
+같은 GNU GPL v3를 따릅니다([LICENSE](LICENSE)). `site/vendor/`의 라이브러리는 각자의
 라이선스 파일을 따릅니다.
