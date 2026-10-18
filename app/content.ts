@@ -1,7 +1,7 @@
 // Quests and the site's own pages.
 
 import { renderContent } from "../content-renderer.js";
-import { $, query, route, run, showTab, state } from "./core.js";
+import { $, pageTitle, query, route, run, showTab, state } from "./core.js";
 
 let questCursor = null;
 async function loadQuests(more = false) {
@@ -58,6 +58,11 @@ export async function loadContentBody() {
   )
     return;
   renderContent($("contentBody"), result.page);
+  if (!$("contentView").hidden)
+    pageTitle(
+      $<HTMLSelectElement>("contentPage").selectedOptions[0]?.textContent ??
+        null,
+    );
 }
 export async function loadContentPages() {
   const previous = $<HTMLSelectElement>("contentPage").value;

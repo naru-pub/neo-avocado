@@ -22,6 +22,7 @@ import {
   route,
   formatTime,
   renderPages,
+  pageTitle,
 } from "./core.js";
 import { writeTo } from "./messages.js";
 import { expText, moneyText } from "./names.js";
@@ -1109,6 +1110,7 @@ export async function openCharacter(id) {
     outfitImage,
   } = await query("characters/sheet:sheet", { id });
   if (!character) throw new Error("캐릭터를 찾을 수 없습니다.");
+  pageTitle(character.data.name);
   keepNicks(nicks);
   const item = await characterItem(character);
   item.classList.add("viewer");

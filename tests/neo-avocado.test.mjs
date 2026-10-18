@@ -1399,6 +1399,18 @@ test("a member links a log's picture by address, and changes it when editing", a
   assert.equal(write.data.image, "https://cdn.example/new.png");
 });
 
+test("the browser's title names the page before the site, as head.sub.php", async () => {
+  const database = fakeDatabase({ [PROFILES]: [me] });
+  const { $, window, settle } = await page(database);
+  const site = $("siteTitle").textContent.trim();
+  $("tabCharacters").click();
+  for (let n = 0; n < 4; n += 1) await settle();
+  assert.equal(window.document.title, `멤버목록 | ${site}`);
+  $("tabHome").click();
+  await settle();
+  assert.equal(window.document.title, site);
+});
+
 test("the 쪽지 recipient field suggests nicknames for the last name typed", async () => {
   const database = fakeDatabase({
     [PROFILES]: [

@@ -660,9 +660,18 @@ const MYPAGE = {
   messages: "myMailTab",
   calls: "myCallsTab",
 };
+/**
+ * The browser's title for what is shown: "page | site", as head.sub.php
+ * writes $g5['title'] before cf_title; the site's name alone at home.
+ */
+export function pageTitle(part?: string | null) {
+  const site = $("siteTitle")?.textContent?.trim() || document.title;
+  document.title = part ? `${part} | ${site}` : site;
+}
 export function showTab(name) {
   // What an action said belongs to the page it was done on.
   say("");
+  pageTitle(name === "home" ? null : (PLACES[name] ?? null));
   noteVisit(PLACES[name] ?? name);
   route(viewPath(name));
   $("mypageNav").hidden = !Object.hasOwn(MYPAGE, name);

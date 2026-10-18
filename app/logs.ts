@@ -7,6 +7,7 @@ import {
   boardStaff,
   edit,
   type EditField,
+  pageTitle,
   formatTime,
   guestCredentials,
   mine,
@@ -97,6 +98,8 @@ export async function loadLogs({ page: number = 1 } = {}) {
     row.id === page.board.id ? page.board : row,
   );
   state.logPage = number;
+  if (!$("logsView").hidden && $("logFocusPanel").hidden)
+    pageTitle(page.board.data.name || null);
   routeList();
   await preloadNicks(page.documents);
   $("logs").replaceChildren();
@@ -210,6 +213,10 @@ export async function openPost(id, { comment = null, log = null } = {}) {
   const item = await logItem(post);
   $("logFocus").replaceChildren(item);
   $("logFocusPanel").hidden = false;
+  pageTitle(
+    post.data.title ||
+      `${state.boards.find((row) => row.id === board)?.data.name ?? "로그"} ${post.data.number ?? ""}`.trim(),
+  );
   route(["post", post.id, ...(comment ? ["comment", comment] : [])], {
     replace: true,
   });
