@@ -2821,3 +2821,45 @@ test("로그번호 lists a board from log N down, as the mmb search's wr_num >= 
   assert.equal((await listPage(site, { board: "default", upTo: 3 })).total, 3);
   await assert.rejects(listPage(site, { board: "default", upTo: 0 }));
 });
+
+test("a board lists by 제목, 글쓴이 or 분류명; a 익명 post's writer sorts as blank", async () => {
+  const site = await boardSite();
+  profile(site, "m-1", "가나");
+  profile(site, "m-2", "다라");
+  board(site, "free", { ...PUBLIC_BOARD, categories: ["a", "b"] });
+  const one = post(site, {
+    board: "free",
+    owner: "m-2",
+    title: "나",
+    category: "a",
+  });
+  const two = post(site, {
+    board: "free",
+    owner: "m-1",
+    title: "다",
+    category: "b",
+  });
+  const three = post(site, {
+    board: "free",
+    guest_name: "손님",
+    title: "가",
+    category: "a",
+  });
+  const four = post(site, {
+    board: "free",
+    owner: "m-2",
+    title: "라",
+    anonymous: 1,
+  });
+  const order = async (sortField) => {
+    board(site, "free", { ...PUBLIC_BOARD, categories: ["a", "b"], sortField });
+    return (await listPage(site, { board: "free" })).documents.map(
+      (row) => row.id,
+    );
+  };
+  assert.deepEqual(await order("subject asc"), [three, one, two, four]);
+  assert.deepEqual(await order("subject desc"), [four, two, one, three]);
+  // "" (익명), 가나, 다라, 손님.
+  assert.deepEqual(await order("name asc"), [four, two, one, three]);
+  assert.deepEqual(await order("category desc"), [two, three, one, four]);
+});

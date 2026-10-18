@@ -253,6 +253,12 @@ export const models: Record<string, Model> = {
           ["last desc", "최근글 최근것 부터 (글·댓글 시각)"],
           ["comment asc", "댓글수 낮은것 부터"],
           ["comment desc", "댓글수 높은것 부터"],
+          ["subject asc", "제목 오름차순"],
+          ["subject desc", "제목 내림차순"],
+          ["name asc", "글쓴이 오름차순"],
+          ["name desc", "글쓴이 내림차순"],
+          ["category asc", "분류명 오름차순"],
+          ["category desc", "분류명 내림차순"],
         ],
       },
       // bo_new: hours a new post shows its N mark (board_form.php:668).

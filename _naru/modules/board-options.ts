@@ -30,6 +30,12 @@ export const BOARD_DEFAULTS = Object.freeze({
  * after its notices, by the SQL each sorts by. 조회수 and 추천수 have no
  * counts here.
  */
+/**
+ * A post's wr_name: the guest's name, else its member's nickname; a 익명
+ * post's is blank, so where it sorts says nothing of who wrote it.
+ */
+const WRITER_NAME =
+  "CASE WHEN posts.anonymous != 0 THEN '' ELSE coalesce(posts.guest_name, (SELECT nick FROM profiles WHERE profiles.member = posts.owner), '') END";
 export const SORTS: Record<string, string> = {
   "": "posts.id DESC",
   "datetime asc": "posts.id ASC",
@@ -43,6 +49,14 @@ export const SORTS: Record<string, string> = {
     "(SELECT count(*) FROM comments WHERE comments.post_id = posts.id) ASC, posts.id DESC",
   "comment desc":
     "(SELECT count(*) FROM comments WHERE comments.post_id = posts.id) DESC, posts.id DESC",
+  // wr_subject, wr_name (the guest's name or the member's nickname) and
+  // ca_name, then wr_num: the newest first.
+  "subject asc": "posts.title ASC, posts.id DESC",
+  "subject desc": "posts.title DESC, posts.id DESC",
+  "name asc": `${WRITER_NAME} ASC, posts.id DESC`,
+  "name desc": `${WRITER_NAME} DESC, posts.id DESC`,
+  "category asc": "posts.category ASC, posts.id DESC",
+  "category desc": "posts.category DESC, posts.id DESC",
 };
 /** A board's list order, its notices first. */
 export const sortOf = (board: Board | null) =>
