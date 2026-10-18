@@ -215,7 +215,24 @@ export async function openPost(id, { comment = null, log = null } = {}) {
     await loadLogs();
   }
   await preloadNicks([post]);
-  countView(post.id);
+  // 글읽기 포인트: where the board has them, reading waits for the charge,
+  // and a member short of it does not read (bbs/board.php:130).
+  const priced = Boolean(
+    state.member &&
+    state.boards.find((row) => row.id === board)?.data.readReward,
+  );
+  if (priced) {
+    try {
+      await countView(post.id, { always: true });
+    } catch (error) {
+      if (error?.details?.reason === "read_point") {
+        $("logFocus").replaceChildren();
+        $("logFocusPanel").hidden = true;
+        say(error.message);
+        return;
+      }
+    }
+  } else countView(post.id).catch(() => {});
   const item = await logItem(post);
   $("logFocus").replaceChildren(item);
   await showNeighbors(post);
@@ -1448,15 +1465,25 @@ async function showNeighbors(post) {
  * 조회수: a post opened on its own counts once until the browser closes
  * (bbs/board.php:116's ss_view_ session), and never holds the page up.
  */
-function countView(id) {
+async function countView(id, { always = false } = {}) {
   const key = `neo-avocado:viewed:${id}`;
+  let seen = false;
   try {
-    if (sessionStorage.getItem(key)) return;
-    sessionStorage.setItem(key, "1");
+    seen = Boolean(sessionStorage.getItem(key));
   } catch {
     // Without storage, each opening counts.
   }
-  mutate("community/posts:hit", { id }).catch(() => {});
+  // A priced post asks every time: the server charges it once a post.
+  if (seen && !always) return;
+  await mutate("community/posts:hit", {
+    id,
+    ...(seen ? { count: false } : {}),
+  });
+  try {
+    sessionStorage.setItem(key, "1");
+  } catch {
+    // It counts again next time.
+  }
 }
 // bo_use_file_content: a 설명 box for each file chosen.
 $("logAttachments").addEventListener("change", () => {

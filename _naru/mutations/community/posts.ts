@@ -547,8 +547,49 @@ export async function write(
  * opened on its own. The page asks once a browser session, as the original
  * counts once until the browser closes.
  */
-export async function hit(ctx: MutationCtx, { id }: { id?: string } = {}) {
-  const { row } = await readablePost(ctx, id);
+export async function hit(
+  ctx: MutationCtx,
+  { id, count = true }: { id?: string; count?: boolean } = {},
+) {
+  const { row, board } = await readablePost(ctx, id);
+  // 글읽기 포인트 (bbs/board.php:121-133): a member reading another's post
+  // is paid it, or charged it when negative, once a post (insert_point's
+  // rel_table, rel_id, rel_action); one short of the charge cannot read.
+  const points = Number.isSafeInteger(board.data.readReward)
+    ? board.data.readReward
+    : 0;
+  const me = ctx.member?.id ?? null;
+  if (
+    points &&
+    me &&
+    row.owner !== me &&
+    !(await one(
+      ctx,
+      "SELECT 1 FROM history WHERE owner = ? AND kind = 'read' AND json_extract(details, '$.post') = ?",
+      [me, row.id],
+    ))
+  ) {
+    const current = await walletOf(ctx, me);
+    if (current.balance + points < 0)
+      ctx.fail(
+        "CONFLICT",
+        `보유하신 ${(await names(ctx)).moneyName}(${current.balance})가 없거나 모자라서 글읽기(${points})가 불가합니다.`,
+        { reason: "read_point" },
+      );
+    const balance = current.balance + points;
+    await saveWallet(ctx, me, balance);
+    await addHistory(ctx, {
+      owner: me,
+      kind: "read",
+      at: ctx.now,
+      delta: points,
+      balance,
+      memo: memoOf(board, row.number, "글읽기"),
+      post: row.id,
+    });
+  }
+  // Asked again in the same session only for its 글읽기 포인트.
+  if (count === false) return { counted: false };
   await ctx.sql`INSERT INTO post_hits (post_id, hits) VALUES (${row.id}, 1)
     ON CONFLICT (post_id) DO UPDATE SET hits = post_hits.hits + 1`;
   return { counted: true };

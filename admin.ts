@@ -65,6 +65,7 @@ const HISTORY_KINDS = {
   exp: "경험치",
   settle: "정산",
   message: "쪽지 비용",
+  read: "글읽기",
   board: "글·댓글 보상",
 };
 const CALLS: Record<
@@ -1545,7 +1546,7 @@ async function openForm(row = null) {
     // An image field may be filled by an upload instead; buildRecord checks.
     input.required = Boolean(field.required) && !field.image;
     if (!isSelect && field.type !== "textarea")
-      input.type = ["optional-number", "decimal"].includes(field.type)
+      input.type = ["optional-number", "decimal", "signed"].includes(field.type)
         ? "number"
         : ["tokens", "pick", "css-color"].includes(field.type)
           ? "text"
@@ -1555,6 +1556,7 @@ async function openForm(row = null) {
       input.min = "0";
       input.step = field.type === "decimal" ? "any" : "1";
     }
+    if (field.type === "signed") input.step = "1";
     if (isSelect) {
       input.multiple = field.type === "titles" || Boolean(field.multiple);
       if (field.optional) {

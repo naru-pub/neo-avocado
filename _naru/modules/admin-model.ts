@@ -350,6 +350,15 @@ export const models: Record<string, Model> = {
       },
       // bo_write_point, bo_comment_point: paid in the community's money.
       {
+        key: "readReward",
+        // bo_read_point: paid, or taken when negative, on opening a post
+        // alone, once a post; a member short of a charge cannot open it.
+        label:
+          "글읽기 포인트 (글을 따로 열 때 한 번, 음수면 차감, 모자라면 읽을 수 없음)",
+        type: "signed",
+        default: 0,
+      },
+      {
         key: "writeReward",
         label: "글쓰기 보상 (화폐, 글을 지우면 회수)",
         type: "number",
@@ -1941,7 +1950,12 @@ export function buildRecord(section, values, previous, references) {
     }
     let result;
     if (field.type === "checkbox") result = Boolean(value);
-    else if (field.type === "number" || field.type === "optional-number")
+    // A whole number that may be negative (글읽기 포인트).
+    else if (field.type === "signed") {
+      result = Number(value ?? 0);
+      if (!Number.isSafeInteger(result) || Math.abs(result) > 1_000_000_000)
+        throw new Error(`${field.label}을(를) 정수로 입력하세요.`);
+    } else if (field.type === "number" || field.type === "optional-number")
       result =
         field.type === "optional-number" &&
         (value === "" || value === undefined)

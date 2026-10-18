@@ -241,6 +241,7 @@ test("boards and groups are saved as their forms check them, and members see the
       listFile: false,
       imageWidth: 600,
       editLock: 1,
+      readReward: 0,
       writeReward: 5,
       commentReward: 0,
       insertContent: "",

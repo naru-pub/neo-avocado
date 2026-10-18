@@ -3448,3 +3448,42 @@ test("첨부파일 take a 설명 where the board asks, and stay within 파일 �
   });
   assert.equal(plain.data.attachments[0].note, undefined);
 });
+
+test("글읽기 포인트 pays or charges a member once a post they open, and stops one who cannot pay", async () => {
+  const site = await boardSite();
+  board(site, "free", { ...PUBLIC_BOARD, readReward: -3 });
+  profile(site, "m-1", "하나");
+  profile(site, "m-2", "둘");
+  site.run("INSERT INTO wallets (member, balance) VALUES ('m-2', 4)");
+  const first = post(site, { board: "free", owner: "m-1", number: 1 });
+  const second = post(site, { board: "free", owner: "m-1", number: 2 });
+  const open = (id, who = M2, count) =>
+    site.mutate(
+      "community/posts:hit",
+      { id, ...(count === undefined ? {} : { count }) },
+      who,
+    );
+  const balance = () =>
+    site.rows("SELECT balance FROM wallets WHERE member = 'm-2'")[0].balance;
+  await open(first);
+  assert.equal(balance(), 1);
+  // Once a post: again costs nothing, and counts no view when asked not to.
+  await open(first, M2, false);
+  assert.equal(balance(), 1);
+  assert.equal(
+    site.rows("SELECT hits FROM post_hits WHERE post_id = ?", first)[0].hits,
+    1,
+  );
+  assert.equal(await refusal(open(second)), "read_point");
+  assert.equal(balance(), 1);
+  // Its writer and visitors are not charged.
+  await open(second, M1);
+  await open(second, VISITOR);
+  const history = site.rows(
+    "SELECT owner, delta, memo FROM history WHERE kind = 'read'",
+  );
+  assert.deepEqual(history, [
+    { owner: "m-2", delta: -3, memo: history[0].memo },
+  ]);
+  assert.match(history[0].memo, /글읽기/);
+});
