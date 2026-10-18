@@ -826,12 +826,16 @@ export async function statDefinitions(ctx: SqlCtx): Promise<StatDefinition[]> {
     max: number;
     min: number;
     help: string;
+    use_max: number;
   }>(
-    "SELECT id, name, initial, max, min, help FROM stats ORDER BY sort_order, id",
+    "SELECT id, name, initial, max, min, help, use_max FROM stats ORDER BY sort_order, id",
   );
   if (rows.length > MAX_STATS)
     throw new Error(`At most ${MAX_STATS} stats may be configured.`);
-  return rows.map(({ id, ...data }) => ({ id, data }));
+  return rows.map(({ id, use_max, ...data }) => ({
+    id,
+    data: { ...data, ...(use_max ? { useMax: true } : {}) },
+  }));
 }
 
 /** The rank table (adm/level_list.php), lowest first. */

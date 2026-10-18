@@ -241,6 +241,13 @@ test("boards and groups are saved as their forms check them, and members see the
       listFile: false,
       imageWidth: 600,
       editLock: 1,
+      // 여분필드, blank until the owner fills them.
+      ...Object.fromEntries(
+        Array.from({ length: 10 }, (_, i) => [
+          [`extra${i + 1}Subject`, ""],
+          [`extra${i + 1}`, ""],
+        ]).flat(),
+      ),
       readReward: 0,
       writeReward: 5,
       commentReward: 0,
@@ -1643,6 +1650,33 @@ test("상점 진열 entries are saved with the items form's shop fields, for an 
     ),
     "진열 시각은 0~23시로 입력하세요.",
   );
+});
+
+test("최대값 기준 출력, 아이템 기능 and 접속기기 are saved and reach the pages", async () => {
+  const site = await testSite();
+  await create(site, "stat_config", "hp", {
+    name: "HP",
+    max: 50,
+    useMax: true,
+  });
+  const hero = character(site, { name: "용사", state: "approved" });
+  const { definitions } = await site.query(
+    "characters/progression:characterStatus",
+    { character: hero },
+    M1,
+  );
+  assert.equal(definitions[0].data.useMax, true);
+  await create(site, "items", "potion", { name: "물약", itemType: "회복" });
+  assert.deepEqual(
+    (await query(site, "items:list", { search: "회복" })).documents.map(
+      (row) => row.id,
+    ),
+    ["potion"],
+  );
+  await create(site, "board_groups", "m", { name: "모바일", device: "mobile" });
+  await create(site, "boards", "talk", { name: "수다", group: "m" });
+  const { boards } = await site.query("community/boards:boards", {}, M1);
+  assert.equal(boards.find((row) => row.id === "talk").data.device, "mobile");
 });
 
 test("the forms' pick lists come in one read", async () => {

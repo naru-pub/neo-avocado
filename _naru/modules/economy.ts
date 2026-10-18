@@ -38,6 +38,7 @@ export const GACHA_COST = 50;
 /** An items row. */
 export interface ItemRow {
   id: string;
+  item_type?: string;
   name: string;
   description: string;
   effect_description: string;
@@ -101,6 +102,7 @@ export function itemOf(row: ItemRow): Item {
   const effect = parsed<Record<string, any> | null>(row.effect, null);
   if (effect) data.effect = effect;
   if (row.personal !== 0) data.personal = true;
+  if (row.item_type) data.itemType = row.item_type;
   return { id: row.id, data };
 }
 

@@ -1661,7 +1661,11 @@ export async function loadBoards() {
     groups: listed,
     emoticons,
   } = await query("community/boards:boards");
-  state.boards = boards;
+  // gr_device (G5_IS_MOBILE): a group's boards for PC or mobile only.
+  const mobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+  state.boards = boards.filter(
+    (row) => !row.data.device || row.data.device === (mobile ? "mobile" : "pc"),
+  );
   state.groups = listed;
   state.emoticons = emoticons;
   // As in the original, there is nothing to read or post on until the owner

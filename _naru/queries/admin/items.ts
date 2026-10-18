@@ -47,7 +47,7 @@ export const list = ownerOnly(async function list(
   const { rows } = await ctx.sql(
     `${selectOf(t)} WHERE (? = '' OR category = ?)
        AND (? = '' OR coalesce(json_extract(effect, '$.type'), 'none') = ?)
-       AND (? = '' OR name LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')
+       AND (? = '' OR name LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\' OR item_type LIKE ? ESCAPE '\\')
      ORDER BY id LIMIT ? OFFSET ?`,
     [
       category,
@@ -55,6 +55,7 @@ export const list = ownerOnly(async function list(
       effect,
       effect,
       term,
+      containing(term),
       containing(term),
       containing(term),
       PAGE + 1,

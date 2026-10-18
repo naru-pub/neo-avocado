@@ -167,6 +167,7 @@ export const TABLES: Record<string, Table> = {
     ["admin", "admin", "text", null],
     ["membersOnly", "members_only", "bool", 0],
     ["order", "sort_order", "int", 0],
+    ["device", "device", "text", "both"],
   ]),
   emoticons: table("emoticons", [
     ["name", "name", "text", ""],
@@ -214,6 +215,7 @@ export const TABLES: Record<string, Table> = {
     ["min", "min", "int", 0],
     ["help", "help", "text", ""],
     ["order", "sort_order", "int", 0],
+    ["useMax", "use_max", "bool", 0],
   ]),
   levels: table("levels", [
     ["name", "name", "text", ""],
@@ -246,6 +248,7 @@ export const TABLES: Record<string, Table> = {
     ["personal", "personal", "bool", 0],
     ["category", "category", "text", "general"],
     ["detailImage", "detail_image", "text", null],
+    ["itemType", "item_type", "text", ""],
   ]),
   // 상점 진열 (0017_shop_entries.sql): an item's further sales.
   shop_entries: table("shop_entries", [

@@ -411,6 +411,17 @@ export const models: Record<string, Model> = {
           ["required", "모든 글 비밀글"],
         ],
       },
+      // 게시판 여분필드 설정 (bo_1_subj…bo_10): free fields the owner keeps
+      // for a board, as the original's skins and add-ons read them.
+      { type: "group", label: "여분필드" },
+      ...Array.from({ length: 10 }, (_, i) => [
+        {
+          key: `extra${i + 1}Subject`,
+          label: `여분필드 ${i + 1} 제목`,
+          max: 255,
+        },
+        { key: `extra${i + 1}`, label: `여분필드 ${i + 1} 값`, max: 255 },
+      ]).flat(),
     ],
   },
   members: {
@@ -516,6 +527,12 @@ export const models: Record<string, Model> = {
         ],
       },
       { key: "description", label: "설명", type: "textarea", max: 2000 },
+      // it_type: one of 커뮤니티 설정's 아이템 기능 (cf_item_category).
+      {
+        key: "itemType",
+        label: "아이템 기능 (커뮤니티 설정의 아이템 기능 중 하나, 빈칸 가능)",
+        max: 40,
+      },
       // it_content2: what it does, under the description in the item's detail.
       {
         key: "effectDescription",
@@ -789,6 +806,18 @@ export const models: Record<string, Model> = {
         optional: true,
       },
       { key: "membersOnly", label: "그룹 회원만", type: "checkbox" },
+      // gr_device: where the group's boards show.
+      {
+        key: "device",
+        label: "접속기기 (그룹의 게시판이 보이는 기기)",
+        type: "choice",
+        default: "both",
+        options: [
+          ["both", "PC와 모바일"],
+          ["pc", "PC 전용"],
+          ["mobile", "모바일 전용"],
+        ],
+      },
       { key: "order", label: "정렬 순서", type: "number", default: 0 },
     ],
   },
@@ -926,6 +955,13 @@ export const models: Record<string, Model> = {
       { key: "help", label: "도움말 (배분할 때 보임)", max: 200 },
       // st_order: the order stats are shown in, lowest first.
       { key: "order", label: "순서 (작은 수부터)", type: "number", default: 0 },
+      // st_use_max: shown against 최대값, not the character's own maximum.
+      {
+        key: "useMax",
+        label:
+          "최대값 기준으로 출력 (캐릭터의 최대치 대신 위 최대값과 비교해 보임)",
+        type: "checkbox",
+      },
     ],
   },
   levels: {
@@ -1317,6 +1353,13 @@ export const models: Record<string, Model> = {
         label: "상점 NPC 인사말",
         type: "textarea",
         max: 500,
+      },
+      // cf_item_category: the names the item form's 아이템 기능 takes.
+      {
+        key: "itemTypes",
+        label: "아이템 기능 (쉼표로 구분, 아이템을 분류해 찾을 때 씀)",
+        type: "textarea",
+        max: 1000,
       },
       { type: "heading", label: "캐릭터 보기" },
       {

@@ -625,7 +625,10 @@ function wireCharacterDetails(item, character) {
     for (const definition of status.definitions) {
       const li = document.createElement("li");
       const stat = status.state.stats[definition.id];
-      li.textContent = `${definition.data.name ?? definition.id}: ${stat.current} / ${stat.max}`;
+      // 최대값 기준 출력 (st_use_max): against the stat's 최대값.
+      li.textContent = `${definition.data.name ?? definition.id}: ${stat.current} / ${
+        definition.data.useMax ? definition.data.max : stat.max
+      }`;
       item.querySelector(".stats").append(li);
     }
     // Once approved, only the points left are spent, and no stat goes below
