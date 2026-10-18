@@ -1569,6 +1569,44 @@ test("the day's cleanup deletes only what 커뮤니티 설정 asks, once a day, 
   );
 });
 
+test("a board group's 접근회원 are listed, added and removed by nickname, keeping other roles", async () => {
+  const site = await testSite();
+  await create(site, "board_groups", "g", { name: "그룹", membersOnly: true });
+  for (let n = 0; n < 7; n += 1) profile(site, `m-${n}`, `회원${n}`);
+  site.setRoles("m-3", ["staff"]);
+  const listed = async () => {
+    const found = [];
+    let after = "";
+    do {
+      const page = await query(site, "board_groups:members", {
+        group: "g",
+        after,
+      });
+      found.push(...page.members.map((row) => row.nick));
+      after = page.nextCursor;
+    } while (after);
+    return found;
+  };
+  assert.deepEqual(await listed(), []);
+  await mutate(site, "board_groups:setMember", { group: "g", nick: "회원3" });
+  await mutate(site, "board_groups:setMember", { group: "g", nick: "회원5" });
+  assert.deepEqual(await listed(), ["회원3", "회원5"]);
+  assert.deepEqual(site.roles("m-3"), ["group-g", "staff"]);
+  await mutate(site, "board_groups:setMember", {
+    group: "g",
+    nick: "회원3",
+    remove: true,
+  });
+  assert.deepEqual(await listed(), ["회원5"]);
+  assert.deepEqual(site.roles("m-3"), ["staff"]);
+  assert.equal(
+    await refusal(
+      mutate(site, "board_groups:setMember", { group: "g", nick: "없음" }),
+    ),
+    "no_member",
+  );
+});
+
 test("the forms' pick lists come in one read", async () => {
   const site = await testSite();
   profile(site, "m-1", "하나");

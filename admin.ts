@@ -597,6 +597,19 @@ async function load({ more = false } = {}) {
         });
       li.append(" ", erase);
     }
+    if (section === "board_groups") {
+      // adm/boardgroupmember_list.php: the group's 접근회원.
+      const people = document.createElement("button");
+      people.type = "button";
+      people.textContent = "접근회원";
+      people.onclick = () =>
+        run(async () => {
+          const open = li.querySelector(".group-members");
+          if (open) return open.remove();
+          li.append(await groupMembers(row));
+        });
+      li.append(" ", people);
+    }
     if (section === "titles") {
       const grant = document.createElement("button");
       grant.type = "button";
@@ -621,6 +634,73 @@ async function load({ more = false } = {}) {
   }
   cursor = page.nextCursor;
   $("adminMore").hidden = !cursor;
+}
+/**
+ * A board group's 접근회원 (boardgroupmember_list.php, _form, _update): who
+ * has its access, each with 삭제, and a nickname to add.
+ */
+async function groupMembers(group) {
+  const box = document.createElement("div");
+  box.className = "group-members";
+  const list = document.createElement("ul");
+  const status = document.createElement("p");
+  status.setAttribute("role", "status");
+  const show = async () => {
+    list.replaceChildren();
+    status.textContent = "읽는 중…";
+    let after = "";
+    let count = 0;
+    do {
+      const page = await owner.query("admin/board_groups:members", {
+        group: group.id,
+        after,
+      });
+      for (const member of page.members) {
+        count += 1;
+        const item = document.createElement("li");
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.textContent = "삭제";
+        remove.onclick = () =>
+          run(async () => {
+            await owner.mutate("admin/board_groups:setMember", {
+              group: group.id,
+              nick: member.nick,
+              remove: true,
+            });
+            await show();
+          });
+        item.append(`${member.nick} `, remove);
+        list.append(item);
+      }
+      after = page.nextCursor;
+    } while (after);
+    status.textContent = `접근회원 ${count}명`;
+  };
+  const form = document.createElement("form");
+  const nick = document.createElement("input");
+  nick.required = true;
+  nick.maxLength = 20;
+  nick.placeholder = "회원 닉네임";
+  nick.setAttribute("aria-label", "추가할 회원 닉네임");
+  const add = document.createElement("button");
+  add.type = "submit";
+  add.textContent = "추가";
+  form.append(nick, " ", add);
+  form.onsubmit = (event) => {
+    event.preventDefault();
+    run(async () => {
+      await owner.mutate("admin/board_groups:setMember", {
+        group: group.id,
+        nick: nick.value.trim(),
+      });
+      nick.value = "";
+      await show();
+    });
+  };
+  box.append(status, list, form);
+  await show();
+  return box;
 }
 const STATES = {
   editing: "수정 중",
