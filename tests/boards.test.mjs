@@ -3081,3 +3081,55 @@ test("조회수 counts a readable post's openings, lists them, sorts by them, an
   await site.mutate("community/posts:remove", { id: busy }, M1);
   assert.equal(count(site, "post_hits"), 1);
 });
+
+test("복사 copies a post with its comments and 조회수 to a board the moderator keeps, and 이동·복사 note it", async () => {
+  // 2030-01-01 12:00 in Korea.
+  const site = await testSite({ now: Date.parse("2030-01-01T03:00:00Z") });
+  board(site, "free", PUBLIC_BOARD);
+  board(site, "notes", { ...PUBLIC_BOARD, name: "기록" });
+  profile(site, "m-1", "하나");
+  profile(site, "m-2", "운영");
+  moderator(site, "m-2");
+  const original = post(site, {
+    board: "free",
+    owner: "m-1",
+    title: "원본",
+    body: "본문",
+    reward: 5,
+  });
+  comment(site, { post_id: Number(original), owner: "m-1", body: "댓글" });
+  site.run("INSERT INTO post_hits (post_id, hits) VALUES (?, 7)", original);
+  const copyPost = (args, who = M2) =>
+    site.mutate("community/boards:copyPost", args, who);
+  assert.equal(
+    await refusal(copyPost({ id: original, board: "notes" }, M1)),
+    "access_denied",
+  );
+  const { document: copy } = await copyPost({ id: original, board: "notes" });
+  assert.equal(copy.data.board, "notes");
+  assert.equal(copy.data.number, 1);
+  assert.equal(copy.data.hits, 7);
+  assert.equal(
+    copy.data.text,
+    "본문\n\n[이 게시물은 운영님에 의해 2030-01-01 12:00:00 자유에서 복사 됨]",
+  );
+  assert.equal(
+    site.rows("SELECT reward FROM posts WHERE id = ?", copy.id)[0].reward,
+    0,
+  );
+  assert.deepEqual(
+    (await commentsOf(site, copy.id)).map((row) => row.data.text),
+    ["댓글"],
+  );
+  // The original is as it was; the copy's words are searched.
+  assert.equal((await read(site, { id: original })).document.data.text, "본문");
+  assert.deepEqual(await searched(site, "notes", "복사 됨"), [copy.id]);
+  // A move notes itself the same way.
+  const { document: moved } = await site.mutate(
+    "community/boards:moderatePost",
+    { id: original, board: "notes" },
+    M2,
+  );
+  assert.match(moved.data.text, /자유에서 이동 됨\]$/);
+  assert.equal(moved.data.number, 2);
+});

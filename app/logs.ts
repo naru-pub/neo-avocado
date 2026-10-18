@@ -505,10 +505,21 @@ export async function logItem(log) {
       item.replaceWith(await logItem(saved));
       await loadLogs();
     });
+  // bbs/move.php's 이동 and 복사 (sw=move, copy).
+  move.textContent = "이동·복사";
   move.onclick = () =>
     edit(
-      "다른 게시판으로 이동",
+      "다른 게시판으로 이동·복사",
       [
+        {
+          name: "how",
+          label: "방식",
+          value: "move",
+          options: [
+            ["move", "이동"],
+            ["copy", "복사 (댓글과 함께)"],
+          ],
+        },
         {
           name: "board",
           label: "게시판",
@@ -519,7 +530,13 @@ export async function logItem(log) {
             .map((row) => [row.id, row.data.name]),
         },
       ],
-      async ({ board }) => {
+      async ({ how, board }) => {
+        if (how === "copy") {
+          await mutate("community/boards:copyPost", { id: log.id, board });
+          say("복사했습니다.");
+          if (board === (log.data.board ?? "default")) await loadLogs();
+          return;
+        }
         await mutate("community/boards:moderatePost", {
           id: log.id,
           board,
