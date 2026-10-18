@@ -105,7 +105,24 @@
             <option value="general">일반</option>
             <option value="personal">개인</option>
             <option value="attendance">출석</option>
-          </select></label
+          </select>
+          <!-- item_list.php's 아이템 기능 (it_type) and 이름·설명 search. -->
+          <select id="itemEffect" aria-label="아이템 기능">
+            <option value="">기능 전체</option>
+            <option value="none">사용 효과 없음</option>
+            <option value="restore">능력치 회복</option>
+            <option value="draw">뽑기권</option>
+            <option value="create">개인 아이템 제작권</option>
+            <option value="profile">프로필 수정권</option>
+          </select>
+          <input
+            id="itemSearch"
+            type="search"
+            maxlength="40"
+            aria-label="이름·설명 검색"
+            placeholder="이름·설명"
+          />
+          <button id="itemFind" type="button">검색</button></label
         >
         <!-- point_list.php, exp_list.php, order_list.php and
              inventory_list.php's search (sfl, stx). -->

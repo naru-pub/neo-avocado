@@ -1801,6 +1801,28 @@ test("추천인: a new member names one who joined before, who is paid, and repa
   );
 });
 
+test("the item list is found by 아이템 기능 and by name or description, as item_list.php", async () => {
+  const site = await testSite();
+  site.run(
+    `INSERT INTO items (id, name, description, effect) VALUES
+     ('potion', '물약', '체력을 채웁니다', '{"type":"restore","stat":"hp","amount":5}'),
+     ('ticket', '뽑기권', '100%_당첨', '{"type":"draw"}'),
+     ('rock', '돌', '그냥 돌', NULL)`,
+  );
+  const ids = async (args) =>
+    (await query(site, "items:list", args)).documents.map((row) => row.id);
+  assert.deepEqual(await ids({ effect: "restore" }), ["potion"]);
+  assert.deepEqual(await ids({ effect: "none" }), ["rock"]);
+  assert.deepEqual(await ids({ search: "돌" }), ["rock"]);
+  assert.deepEqual(await ids({ search: "채웁" }), ["potion"]);
+  // LIKE's own characters are only themselves.
+  assert.deepEqual(await ids({ search: "%_" }), ["ticket"]);
+  assert.equal(
+    await refusal(query(site, "items:list", { effect: "x" })),
+    "invalid_input",
+  );
+});
+
 test("아이템 분류 files items as 일반, 개인 or 출석, the list by one, and 상세이미지 shows in their detail", async () => {
   const site = await testSite({ pending: "0011" });
   // Personal items made before the migration are filed as 개인 by it.

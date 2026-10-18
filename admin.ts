@@ -411,6 +411,8 @@ async function load({ more = false } = {}) {
     page = await owner.query(CALLS[section].list, {
       after,
       category: $<HTMLSelectElement>("itemCategory").value,
+      effect: $<HTMLSelectElement>("itemEffect").value,
+      search: $<HTMLInputElement>("itemSearch").value,
     });
   else page = await owner.query(CALLS[section].list, { after });
   if (requestedSection !== section || !owner) return;
@@ -658,6 +660,14 @@ $("reviewTools").onsubmit = (event) => {
 };
 $("reviewSide").onchange = $("reviewClass").onchange = () => run(() => load());
 $("itemCategory").onchange = () => run(() => load());
+$("itemEffect").onchange = () => run(() => load());
+$("itemFind").onclick = () => run(() => load());
+$("itemSearch").onkeydown = (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    run(() => load());
+  }
+};
 /**
  * 선택승인, 선택삭제 and 선택제거 (character_list_update.php): each chosen
  * character through the review, in turn. 선택삭제 sets 삭제, which another
