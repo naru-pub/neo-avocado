@@ -112,6 +112,12 @@ export async function site(ctx: QueryCtx) {
     useHeader: designLayout(saved).useHeader,
     menuPosition: designLayout(saved).menuPosition,
     css: designCss(saved),
+    // 사용자 CSS: the owner's own, after the rest, whether 디자인 사용 is on or
+    // not. CSS set as a style element's text runs no script.
+    customCss:
+      typeof saved.customCss === "string"
+        ? saved.customCss.slice(0, 50000)
+        : "",
     // 「작성자」 원글 작성자's 접두문자 and 접미문자, which the page writes as text.
     ownerMarks: ownerMarks(saved),
     // mmb_counter: the owner's HTML, which the page sanitizes as posts.

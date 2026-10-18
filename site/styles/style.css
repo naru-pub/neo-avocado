@@ -2,12 +2,14 @@
    Its saved design config has no palette overrides; these are neutral defaults. */
 :root {
   color-scheme: light;
-  --avocado: #444;
-  --pit: #777;
-  --paper: #fff;
-  --ink: #333;
-  --line: #ddd;
-  --surface: #f7f7f7;
+  /* The palette: the six 디자인 sets (README.md's 꾸미기 says what each
+     colours, for 사용자 CSS). */
+  --avocado: #444; /* accent: the chosen tab, buttons */
+  --pit: #777; /* muted text: authors, times */
+  --paper: #fff; /* the page */
+  --ink: #333; /* text */
+  --line: #ddd; /* lines and borders */
+  --surface: #f7f7f7; /* boxes and cards */
   /* Colours the palette above doesn't cover, so dark mode can swap them. */
   --on-avocado: #fff;
   --control-line: #bbb;

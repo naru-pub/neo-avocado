@@ -70,6 +70,15 @@ export async function loadSite() {
     document.head.append(styles);
   }
   styles.textContent = design.enabled ? (design.css ?? "") : "";
+  // 사용자 CSS, after the design's, so it has the last word.
+  let own = document.getElementById("ownerStyles");
+  if (!own) {
+    own = document.createElement("style");
+    own.id = "ownerStyles";
+  }
+  // Last in <head> again whenever the design's is made.
+  document.head.append(own);
+  own.textContent = design.customCss ?? "";
   if (!design.enabled) return;
   for (const [key, variable] of Object.entries(SITE_COLORS))
     if (design.colors[key]) root.setProperty(variable, design.colors[key]);

@@ -478,6 +478,7 @@ test("the site frame shows only safe design values and menus/banners a reader ma
     useHeader: true,
     menuPosition: "left",
     css: ":root:has(body.site.designed) {\n  --menu-width: 200px;\n  --menu-height: 50px;\n}\n",
+    customCss: "",
     ownerMarks: { prefix: "▶", suffix: "◀" },
     counter: "",
   });
@@ -984,4 +985,22 @@ test("출생년도 is given on joining or later, shown on 계정정보, and chec
   await update(null);
   assert.equal((await own()).birthYear, undefined);
   assert.equal(await refusal(update(1800)), "invalid_input");
+});
+
+test("사용자 CSS reaches every reader, whether 디자인 사용 is on or not, as the owner wrote it", async () => {
+  const site = await testSite();
+  const css =
+    ":root { --avocado: #c04 !important; }\n.log-title { font-weight: bold; }";
+  for (const enabled of [false, true]) {
+    setSettings(site, "design", { enabled, customCss: css });
+    const { design } = await site.query("content/site:site");
+    assert.equal(design.customCss, css);
+  }
+  setSettings(site, "design", { customCss: "x".repeat(60000) });
+  assert.equal(
+    (await site.query("content/site:site")).design.customCss.length,
+    50000,
+  );
+  setSettings(site, "design", { customCss: 7 });
+  assert.equal((await site.query("content/site:site")).design.customCss, "");
 });

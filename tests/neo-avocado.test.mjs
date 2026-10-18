@@ -3090,3 +3090,23 @@ test("a plain board without 전체목록보이기 shows a post opened alone with
   $("closeFocus").onclick();
   assert.equal($("logs").hidden, false);
 });
+
+test("사용자 CSS is the page's last style, with 디자인 사용 off too", async () => {
+  const database = fakeDatabase({ [PROFILES]: [me] });
+  const customCss = ".log-title { color: #c04; }";
+  database.site = {
+    design: { enabled: false, title: "", font: "sans", colors: {}, customCss },
+  };
+  const { window, settle } = await page(database, {
+    url: "https://neo-avocado.naru.pub/logs/default",
+  });
+  await settle();
+  const own = window.document.getElementById("ownerStyles");
+  assert.equal(own.textContent, customCss);
+  // The last of the page's styles, so it has the last word.
+  const styles = window.document.querySelectorAll(
+    'style, link[rel="stylesheet"]',
+  );
+  assert.equal(styles[styles.length - 1], own);
+  assert.equal(window.document.getElementById("designStyles").textContent, "");
+});
