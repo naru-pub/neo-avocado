@@ -1215,6 +1215,57 @@ test("the history reads newest first, and the grants' log by its actor", async (
   );
 });
 
+test("the history is searched as point_list, exp_list and order_list search, and names its member and character", async () => {
+  const site = await testSite();
+  profile(site, "m-1", "하나");
+  profile(site, "m-2", "둘_");
+  const hero = character(site, { name: "용사" });
+  site.run(
+    `INSERT INTO history (owner, kind, at, delta, exp_delta, memo, item_id, character_id) VALUES
+     ('m-1', 'daily', 1, 10, NULL, '첫로그인', NULL, NULL),
+     ('m-1', 'exp', 2, NULL, 5, '퀘스트', NULL, ?),
+     ('m-2', 'buy', 3, -3, NULL, '케이크 구매', 'cake', NULL)`,
+    String(hero),
+  );
+  site.run("INSERT INTO items (id, name) VALUES ('cake', '케이크')");
+  const kinds = async (args) =>
+    (await query(site, "history:list", args)).documents.map(
+      (row) => row.data.kind,
+    );
+  assert.deepEqual(await kinds({}), ["buy", "exp", "daily"]);
+  assert.deepEqual(await kinds({ kind: "money" }), ["buy", "daily"]);
+  assert.deepEqual(await kinds({ kind: "exp" }), ["exp"]);
+  assert.deepEqual(await kinds({ kind: "buy" }), ["buy"]);
+  assert.deepEqual(await kinds({ field: "nick", text: "하" }), [
+    "exp",
+    "daily",
+  ]);
+  // LIKE's own characters are only themselves.
+  assert.deepEqual(await kinds({ field: "nick", text: "_" }), ["buy"]);
+  assert.deepEqual(await kinds({ field: "character", text: "용" }), ["exp"]);
+  assert.deepEqual(await kinds({ field: "item", text: "케이" }), ["buy"]);
+  assert.deepEqual(await kinds({ field: "memo", text: "퀘스트" }), ["exp"]);
+  const [, exp] = (await query(site, "history:list")).documents;
+  assert.equal(exp.ownerNick, "하나");
+  assert.equal(exp.characterName, "용사");
+  assert.equal(
+    await refusal(query(site, "history:list", { kind: "x" })),
+    "invalid_input",
+  );
+  // 아이템 보유현황 by owner, character or item.
+  site.run(
+    "INSERT INTO inventory (owner, item_id, name, character_id) VALUES ('m-1', 'cake', '케이크', ?), ('m-2', 'cake', '사탕', NULL)",
+    hero,
+  );
+  const held = async (args) =>
+    (await query(site, "inventory:list", args)).documents.map(
+      (row) => row.ownerNick,
+    );
+  assert.deepEqual(await held({ field: "character", text: "용사" }), ["하나"]);
+  assert.deepEqual(await held({ field: "item", text: "사탕" }), ["둘_"]);
+  assert.deepEqual(await held({ field: "nick", text: "둘" }), ["둘_"]);
+});
+
 test("the forms' pick lists come in one read", async () => {
   const site = await testSite();
   profile(site, "m-1", "하나");

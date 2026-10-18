@@ -85,6 +85,29 @@
             <option value="attendance">출석</option>
           </select></label
         >
+        <!-- point_list.php, exp_list.php, order_list.php and
+             inventory_list.php's search (sfl, stx). -->
+        <form id="logSearch" hidden>
+          <select id="logKind" aria-label="기록 종류">
+            <option value="">전체 기록</option>
+            <option value="money" data-name="moneyName">화폐</option>
+            <option value="exp" data-name="expName">경험치</option>
+            <option value="buy">구매기록</option>
+          </select>
+          <select id="logField" aria-label="검색 대상">
+            <option value="nick">회원 닉네임</option>
+            <option value="character">캐릭터 이름</option>
+            <option value="item">아이템 이름</option>
+            <option value="memo">내용</option>
+          </select>
+          <input
+            id="logText"
+            type="search"
+            maxlength="40"
+            aria-label="검색어"
+          />
+          <button type="submit">검색</button>
+        </form>
         <!-- adm/member_list.php's 총회원수, 차단 and 탈퇴. -->
         <p id="memberCounts" hidden></p>
         <button id="adminNew" type="button">새로 등록</button>

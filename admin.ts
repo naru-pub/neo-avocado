@@ -46,6 +46,27 @@ let references: Record<string, any[]> = {
  * server as its form is) and deleting one. A section without `remove`
  * keeps its entries.
  */
+/** What each kind of history entry was (전체 활동·구매 기록). */
+const HISTORY_KINDS = {
+  adjust: "운영자 조정",
+  grant: "운영자 지급",
+  daily: "첫 로그인",
+  signup: "회원가입 축하",
+  recommend: "추천인",
+  buy: "구매",
+  sell: "판매",
+  gift: "선물 보냄",
+  giftReceived: "선물 받음",
+  moneySent: "화폐 보냄",
+  craft: "제작",
+  gacha: "뽑기",
+  explore: "탐색",
+  use: "아이템 사용",
+  exp: "경험치",
+  settle: "정산",
+  message: "쪽지 비용",
+  board: "글·댓글 보상",
+};
 const CALLS: Record<
   string,
   { list?: string; get?: string; save?: string; remove?: string }
@@ -310,6 +331,7 @@ async function load({ more = false } = {}) {
     $("memberSearchLabel").hidden = true;
     $("memberCounts").hidden = true;
     $("itemCategoryLabel").hidden = true;
+    $("logSearch").hidden = true;
     const row = await owner.query(CALLS[section].get, { section });
     if (requestedSection === section) await openForm(row);
     return;
@@ -322,6 +344,7 @@ async function load({ more = false } = {}) {
     $("memberSearchLabel").hidden = true;
     $("memberCounts").hidden = true;
     $("itemCategoryLabel").hidden = true;
+    $("logSearch").hidden = true;
     return model.report === "visits"
       ? visitsView()
       : model.report === "grants"
@@ -334,6 +357,16 @@ async function load({ more = false } = {}) {
   $("memberSearchLabel").hidden = section !== "members";
   $("memberCounts").hidden = section !== "members";
   $("itemCategoryLabel").hidden = section !== "items";
+  $("logSearch").hidden = !["history", "inventory"].includes(section);
+  $("logKind").hidden = section !== "history";
+  // An inventory copy has no memo of its own.
+  $<HTMLOptionElement>('#logField option[value="memo"]').hidden =
+    section !== "history";
+  if (
+    section === "inventory" &&
+    $<HTMLSelectElement>("logField").value === "memo"
+  )
+    $<HTMLSelectElement>("logField").value = "nick";
   const after = more ? cursor : null;
   let page;
   if (model.holdings)
@@ -361,7 +394,16 @@ async function load({ more = false } = {}) {
     });
     references.fields = page.fields;
     reviewFilters(page);
-  } else if (section === "items")
+  } else if (section === "history" || section === "inventory")
+    page = await owner.query(CALLS[section].list, {
+      after,
+      field: $<HTMLSelectElement>("logField").value,
+      text: $<HTMLInputElement>("logText").value,
+      ...(section === "history"
+        ? { kind: $<HTMLSelectElement>("logKind").value }
+        : {}),
+    });
+  else if (section === "items")
     page = await owner.query(CALLS[section].list, {
       after,
       category: $<HTMLSelectElement>("itemCategory").value,
@@ -415,7 +457,19 @@ async function load({ more = false } = {}) {
       continue;
     }
     if (model.readOnly) {
-      li.textContent = `${new Date(row.data.at).toLocaleString("ko-KR")} · ${row.data.owner} · ${row.data.kind}${row.data.delta !== undefined ? ` · ${moneyText(itemNames, row.data.delta)}` : ""}${row.data.memo ? ` · ${row.data.memo}` : ""}`;
+      const who = row.ownerNick ?? row.data.owner;
+      li.textContent = [
+        new Date(row.data.at).toLocaleString("ko-KR"),
+        row.characterName ? `${row.characterName} (${who})` : who,
+        HISTORY_KINDS[row.data.kind] ?? row.data.kind,
+        row.data.delta !== undefined &&
+          `${row.data.delta > 0 ? "+" : ""}${moneyText(itemNames, row.data.delta)}`,
+        row.data.expDelta !== undefined &&
+          `${itemNames.expName} ${row.data.expDelta > 0 ? "+" : ""}${row.data.expDelta}`,
+        row.data.memo,
+      ]
+        .filter(Boolean)
+        .join(" · ");
       $("adminRows").append(li);
       continue;
     }
@@ -1633,6 +1687,11 @@ $("titleGrantForm").onsubmit = async (event) => {
 };
 
 $("holdingsFind").onclick = () => run(() => load());
+$("logSearch").onsubmit = (event) => {
+  event.preventDefault();
+  run(() => load());
+};
+$("logKind").onchange = () => run(() => load());
 $("memberFind").onclick = () => run(() => load());
 $("memberSearch").onkeydown = (event) => {
   if (event.key === "Enter") {
