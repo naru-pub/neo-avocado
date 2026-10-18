@@ -130,7 +130,7 @@ const CALLS: Record<
     save: "admin/inventory:save",
     remove: "admin/inventory:remove",
   },
-  history: { list: "admin/history:list" },
+  history: { list: "admin/history:list", remove: "admin/history:remove" },
   items: {
     list: "admin/items:list",
     get: "admin/items:get",
@@ -470,6 +470,32 @@ async function load({ more = false } = {}) {
       ]
         .filter(Boolean)
         .join(" · ");
+      // exp_list_delete.php and point_list_delete.php: the entry goes, and
+      // what it moved is taken back.
+      if (row.data.delta !== undefined || row.data.expDelta !== undefined) {
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.textContent = "삭제";
+        remove.onclick = () =>
+          run(async () => {
+            if (
+              !confirm(
+                "이 기록을 지우고 기록이 바꾼 경험치·화폐를 되돌릴까요? 되돌릴 수 없습니다.",
+              )
+            )
+              return;
+            remove.disabled = true;
+            try {
+              await owner.mutate(CALLS.history.remove, { ids: [row.id] });
+              $("adminStatus").textContent =
+                "기록을 지우고 경험치·화폐를 되돌렸습니다.";
+              await load();
+            } finally {
+              remove.disabled = false;
+            }
+          });
+        li.append(" ", remove);
+      }
       $("adminRows").append(li);
       continue;
     }

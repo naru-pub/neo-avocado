@@ -1266,6 +1266,65 @@ test("the history is searched as point_list, exp_list and order_list search, and
   assert.deepEqual(await held({ field: "nick", text: "둘" }), ["둘_"]);
 });
 
+test("deleting history entries takes back what they moved, as exp_list_delete and point_list_delete do", async () => {
+  const site = await testSite();
+  profile(site, "m-1", "하나");
+  await create(site, "levels", "rank-2", {
+    name: "2랭크",
+    exp: 10,
+    bonusPoints: 3,
+  });
+  const hero = character(site, { name: "용사", state: "approved", points: 0 });
+  // 경험치 지급 (exp_update.php): 0 → 12 (reaches rank 2, +3 points) → 15.
+  const exp = (value) =>
+    site.mutate(
+      "economy/grants:grant",
+      { kind: "exp", target: "one", name: "용사", value, memo: "x" },
+      OWNER,
+    );
+  await exp(12);
+  await exp(3);
+  const [first, second] = history(site).filter((row) => row.kind === "exp");
+  assert.deepEqual(
+    [first.exp_delta, first.exp, second.exp_delta, second.exp],
+    [12, 12, 3, 15],
+  );
+  assert.deepEqual(site.rows("SELECT exp, points FROM characters")[0], {
+    exp: 15,
+    points: 3,
+  });
+  // Without the +12, it is below rank 2 again: its points go back.
+  await mutate(site, "history:remove", { ids: [String(first.id)] });
+  assert.deepEqual(site.rows("SELECT exp, points FROM characters")[0], {
+    exp: 3,
+    points: 0,
+  });
+  assert.deepEqual(
+    history(site)
+      .filter((row) => row.kind === "exp")
+      .map((row) => [row.exp_delta, row.exp]),
+    [[3, 3]],
+  );
+  // Money: the balance and the later entries' balances.
+  await update(site, "wallets", "m-1", { balance: 0, note: "a" }).catch(() =>
+    create(site, "wallets", "m-1", { balance: 0, note: "a" }),
+  );
+  site.run("DELETE FROM history WHERE kind = 'adjust'");
+  await update(site, "wallets", "m-1", { balance: 50, note: "a" });
+  await update(site, "wallets", "m-1", { balance: 70, note: "b" });
+  const [plus50, plus20] = history(site).filter((row) => row.kind === "adjust");
+  await mutate(site, "history:remove", { ids: [String(plus50.id)] });
+  assert.equal(site.rows("SELECT balance FROM wallets")[0].balance, 20);
+  assert.equal(history(site).find((row) => row.id === plus20.id).balance, 20);
+  // Undoing what would leave less than none keeps nothing.
+  await update(site, "wallets", "m-1", { balance: 0, note: "c" });
+  assert.equal(
+    await refusal(mutate(site, "history:remove", { ids: [String(plus20.id)] })),
+    "below_zero",
+  );
+  assert.ok(history(site).some((row) => row.id === plus20.id));
+});
+
 test("the forms' pick lists come in one read", async () => {
   const site = await testSite();
   profile(site, "m-1", "하나");
