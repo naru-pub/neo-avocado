@@ -29,7 +29,7 @@ export const BOARD_DEFAULTS = Object.freeze({
 
 /**
  * 리스트 정렬 필드 (bo_sort_field, board_form.php:697): the list's order
- * after its notices, by the SQL each sorts by. 추천수 has no counts here.
+ * after its notices, by the SQL each sorts by.
  */
 /**
  * A post's wr_name: the guest's name, else its member's nickname; a 익명
@@ -51,6 +51,15 @@ export const SORTS: Record<string, string> = {
     "(SELECT count(*) FROM comments WHERE comments.post_id = posts.id) ASC, posts.id DESC",
   "comment desc":
     "(SELECT count(*) FROM comments WHERE comments.post_id = posts.id) DESC, posts.id DESC",
+  // wr_good, wr_nogood: 추천수 and 비추천수 (post_votes).
+  "good asc":
+    "(SELECT count(*) FROM post_votes WHERE post_votes.post_id = posts.id AND vote = 1) ASC, posts.id DESC",
+  "good desc":
+    "(SELECT count(*) FROM post_votes WHERE post_votes.post_id = posts.id AND vote = 1) DESC, posts.id DESC",
+  "nogood asc":
+    "(SELECT count(*) FROM post_votes WHERE post_votes.post_id = posts.id AND vote = -1) ASC, posts.id DESC",
+  "nogood desc":
+    "(SELECT count(*) FROM post_votes WHERE post_votes.post_id = posts.id AND vote = -1) DESC, posts.id DESC",
   // wr_hit: 조회수 (post_hits).
   "hit asc":
     "coalesce((SELECT hits FROM post_hits WHERE post_hits.post_id = posts.id), 0) ASC, posts.id DESC",

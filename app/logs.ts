@@ -747,7 +747,34 @@ export async function logItem(log) {
       say(on ? "관심로그에 담았습니다." : "관심로그에서 뺐습니다.");
     });
   item.querySelector(".log-title").textContent =
-    `${log.data.settlement ? `[${log.data.settlement.state}] ` : ""}${log.data.secret ? "🔒 " : ""}${log.data.title ?? ""}${log.data.category ? ` · ${log.data.category}` : ""}`;
+    `${log.data.writing ? "[작성 중] " : ""}${log.data.settlement ? `[${log.data.settlement.state}] ` : ""}${log.data.secret ? "🔒 " : ""}${log.data.title ?? ""}${log.data.category ? ` · ${log.data.category}` : ""}`;
+  if (log.data.writing) item.classList.add("writing");
+  // 추천 and 비추천 (bbs/good.php), where the board takes them.
+  const voteBoard = state.boards.find(
+    (row) => row.id === (log.data.board ?? "default"),
+  );
+  for (const [kind, label, enabled] of [
+    ["good", "추천", voteBoard?.data.useGood],
+    ["nogood", "비추천", voteBoard?.data.useNogood],
+  ]) {
+    if (!enabled || log.data.locked) continue;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `vote ${kind}`;
+    const show = (n) => (button.textContent = `${label} ${n ?? 0}`);
+    show(log.data[kind]);
+    button.disabled = !state.member || mine(log);
+    button.onclick = () =>
+      run(async () => {
+        const counts = await mutate("community/posts:vote", {
+          id: log.id,
+          vote: kind,
+        });
+        show(counts[kind]);
+        say(`${label}했습니다.`);
+      });
+    item.querySelector(".meta").append(" ", button);
+  }
   if (log.data.settlement) item.classList.add("settled");
   // 답변글 (wr_reply): under what they answer, a step in for each level.
   if (log.data.depth) {
@@ -1646,13 +1673,20 @@ $("logForm").onsubmit = (event) => {
     if (action || used) forgetInventory();
     state.ownPosts.add(log.id);
     if (state.newPost === log.id) showNewPost(null);
-    $("logs").prepend(await logItem(log));
+    const added = await logItem(log);
+    $("logs").prepend(added);
     $<HTMLFormElement>("logForm").reset?.();
     $("logAttachmentNotes").replaceChildren();
     $("logAttachmentNotes").hidden = true;
     $<HTMLSelectElement>("logCharacter").value = character;
     configureBoard();
     say("로그를 올렸습니다.");
+    // 췩: the picture holds its place; its words follow at once
+    // (mmb/write_update.skin.php sends the writer to write.php?w=u).
+    if (log.data.writing) {
+      say("자리를 잡았습니다. 이어서 글을 써 주세요.");
+      added.querySelector<HTMLButtonElement>(".edit")?.click();
+    }
   });
 };
 export async function loadBoards() {

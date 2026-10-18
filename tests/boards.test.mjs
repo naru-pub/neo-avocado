@@ -3505,3 +3505,61 @@ test("글읽기 포인트 pays or charges a member once a post they open, and st
   ]);
   assert.match(history[0].memo, /글읽기/);
 });
+
+test("췩: a picture posted first holds its place until its writer finishes it, by edit or comment", async () => {
+  const site = await testSite({ now: 1000 });
+  board(site, "default", { ...LOG_BOARD, chick: true });
+  profile(site, "m-1", "하나");
+  profile(site, "m-2", "둘");
+  const picture = "https://e.com/a.png";
+  const { document: held } = await write(site, {
+    data: { image: picture, text: "" },
+  });
+  assert.equal(held.data.writing, true);
+  // Someone else's comment does not finish it; its writer's edit does.
+  site.now = 5000;
+  await reply(site, { data: { logId: held.id, text: "기대돼요" } }, M2);
+  assert.equal((await read(site, { id: held.id })).document.data.writing, true);
+  const { document: done } = await write(site, {
+    id: held.id,
+    data: { image: picture, text: "완성" },
+    revision: (await read(site, { id: held.id })).document.revision,
+  });
+  assert.equal(done.data.writing, undefined);
+  assert.equal(
+    site.rows("SELECT created_at FROM posts WHERE id = ?", Number(held.id))[0]
+      .created_at,
+    5000,
+  );
+  // The writer's own comment finishes another.
+  const { document: second } = await write(site, {
+    data: { image: picture, text: "" },
+  });
+  await reply(site, { data: { logId: second.id, text: "이어서" } });
+  assert.equal(
+    (await read(site, { id: second.id })).document.data.writing,
+    undefined,
+  );
+  // With words already, a log is finished as it is posted.
+  const { document: whole } = await write(site, {
+    data: { image: picture, text: "한 번에" },
+  });
+  assert.equal(whole.data.writing, undefined);
+});
+
+test("추천 and 비추천 are members' one vote each on others' posts, where the board takes them", async () => {
+  const site = await boardSite();
+  board(site, "free", { ...PUBLIC_BOARD, useGood: true });
+  profile(site, "m-1", "하나");
+  profile(site, "m-2", "둘");
+  const id = post(site, { board: "free", owner: "m-1", body: "글" });
+  const vote = (kind, who = M2) =>
+    site.mutate("community/posts:vote", { id, vote: kind }, who);
+  assert.deepEqual(await vote("good"), { good: 1, nogood: 0 });
+  assert.equal(await refusal(vote("good")), "voted");
+  assert.equal(await refusal(vote("good", M1)), "own_post");
+  assert.equal(await refusal(vote("nogood", M3)), "invalid_input");
+  assert.equal(await refusal(vote("good", VISITOR)), "sign_in");
+  const listed = (await listPage(site, { board: "free" })).documents[0];
+  assert.deepEqual([listed.data.good, listed.data.nogood], [1, 0]);
+});

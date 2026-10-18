@@ -211,6 +211,11 @@ export async function write(
     ).rows[0];
   }
   await saveCommentSearch(ctx, row, !previous);
+  // 췩 (mmb/write_comment_update.skin.php:27-33): the writer's own comment
+  // finishes a log still being written, at the time it is finished.
+  if (!previous && post.writing && post.owner && post.owner === ctx.member?.id)
+    await ctx.sql`UPDATE posts SET writing = 0, created_at = ${ctx.now},
+      version = version + 1 WHERE id = ${post.id}`;
   await deliverCalls(ctx, {
     post,
     comment: row.id,

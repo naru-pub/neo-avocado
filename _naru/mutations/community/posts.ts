@@ -242,7 +242,9 @@ export async function write(
       reason: "settled",
     });
   requireBoard(ctx, board, access, "write");
-  if (previous) await checkEditable(ctx, previous, board, access);
+  // A 췩 log still being written is its writer's to finish, comments or not.
+  if (previous && !previous.writing)
+    await checkEditable(ctx, previous, board, access);
   // Posting as a character, dice and calls (skin/board/mmb). The speaker and
   // the dice are fixed when a post is made; edits keep them.
   let speaker: Speaker | null = before?.speaker ?? null;
@@ -429,6 +431,13 @@ export async function write(
     attachments: JSON.stringify(attachments),
     updated_at: ctx.now,
   };
+  // 췩 (mmb/write_update.skin.php:46-55): its writer's edit finishes a log
+  // still being written, and it takes the time it is finished.
+  if (
+    previous?.writing &&
+    (guest || (previous.owner && previous.owner === ctx.member?.id))
+  )
+    Object.assign(columns, { writing: 0, created_at: ctx.now });
   let row: PostRow;
   if (previous) {
     row = (
@@ -505,6 +514,12 @@ export async function write(
       created_at: ctx.now,
       thread,
       reply_path: replyPath,
+      // 췩 사용 (bo_use_chick): a picture posted first, its words to follow,
+      // holds its place as a log still being written.
+      writing:
+        board.data.kind === "image" && board.data.chick === true && !body.trim()
+          ? 1
+          : 0,
     });
     row = (
       await ctx.sql<PostRow>(
@@ -588,6 +603,51 @@ export async function hit(
   await ctx.sql`INSERT INTO post_hits (post_id, hits) VALUES (${row.id}, 1)
     ON CONFLICT (post_id) DO UPDATE SET hits = post_hits.hits + 1`;
   return { counted: true };
+}
+
+/**
+ * 추천 and 비추천 (bbs/good.php): a member's one vote on another's post,
+ * where its board takes them (bo_use_good, bo_use_nogood); never again.
+ */
+export async function vote(
+  ctx: MutationCtx,
+  { id, vote: kind }: { id?: string; vote?: string } = {},
+) {
+  const me = ctx.member?.id;
+  if (!me)
+    ctx.fail("AUTH_REQUIRED", "회원만 가능합니다.", { reason: "sign_in" });
+  const { row, board } = await readablePost(ctx, id);
+  if (
+    !["good", "nogood"].includes(kind) ||
+    (kind === "good" && !board.data.useGood) ||
+    (kind === "nogood" && !board.data.useNogood)
+  )
+    invalid(ctx);
+  if (row.owner === me)
+    ctx.fail("CONFLICT", "자신의 글에는 추천 또는 비추천 하실 수 없습니다.", {
+      reason: "own_post",
+    });
+  if (
+    await one(
+      ctx,
+      "SELECT 1 FROM post_votes WHERE post_id = ? AND member = ?",
+      [row.id, me],
+    )
+  )
+    ctx.fail(
+      "CONFLICT",
+      `이미 ${kind === "good" ? "추천" : "비추천"} 하신 글입니다.`,
+      { reason: "voted" },
+    );
+  await ctx.sql`INSERT INTO post_votes (post_id, member, vote)
+    VALUES (${row.id}, ${me}, ${kind === "good" ? 1 : -1})`;
+  const { good, nogood } = await one<{ good: number; nogood: number }>(
+    ctx,
+    `SELECT coalesce(sum(vote = 1), 0) AS good, coalesce(sum(vote = -1), 0) AS nogood
+     FROM post_votes WHERE post_id = ?`,
+    [row.id],
+  );
+  return { good, nogood };
 }
 
 /**
@@ -708,6 +768,7 @@ export async function remove(
   await ctx.sql`DELETE FROM post_hits WHERE post_id = ${previous.id}`;
   await ctx.sql`DELETE FROM attachment_downloads WHERE post_id = ${previous.id}`;
   await ctx.sql`DELETE FROM link_hits WHERE post_id = ${previous.id}`;
+  await ctx.sql`DELETE FROM post_votes WHERE post_id = ${previous.id}`;
   await ctx.sql`DELETE FROM calls WHERE post_id = ${previous.id}`;
   await ctx.sql`DELETE FROM favorites WHERE post = ${previous.id}`;
   await ctx.sql`DELETE FROM posts WHERE id = ${previous.id}`;

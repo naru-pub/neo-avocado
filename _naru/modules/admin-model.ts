@@ -272,6 +272,10 @@ export const models: Record<string, Model> = {
           ["comment desc", "댓글수 높은것 부터"],
           ["hit asc", "조회수 낮은것 부터"],
           ["hit desc", "조회수 높은것 부터"],
+          ["good asc", "추천수 낮은것 부터"],
+          ["good desc", "추천수 높은것 부터"],
+          ["nogood asc", "비추천수 낮은것 부터"],
+          ["nogood desc", "비추천수 높은것 부터"],
           ["subject asc", "제목 오름차순"],
           ["subject desc", "제목 내림차순"],
           ["name asc", "글쓴이 오름차순"],
@@ -295,6 +299,18 @@ export const models: Record<string, Model> = {
         type: "checkbox",
         default: true,
         newDefault: false,
+      },
+      // bo_use_good, bo_use_nogood (bbs/good.php): members' votes on others'
+      // posts, once each.
+      { key: "useGood", label: "추천 사용", type: "checkbox" },
+      { key: "useNogood", label: "비추천 사용", type: "checkbox" },
+      // bo_use_chick (mmb): a picture posted first holds its place while its
+      // writer writes it.
+      {
+        key: "chick",
+        label:
+          "췩 사용 (그림 로그 게시판: 그림을 먼저 올려 자리를 잡고, 글은 이어서 씀)",
+        type: "checkbox",
       },
       // bo_use_list_view (bbs/board.php:234): a post opened on its own has
       // the list under it, or only 윗글·아래글. Off as the original makes a
