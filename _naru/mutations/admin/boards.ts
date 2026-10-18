@@ -5,6 +5,7 @@ import {
   conflict,
   dataOf,
   invalid,
+  recordOf,
   removeRecord,
   rowById,
   saveRecord,
@@ -15,18 +16,68 @@ import {
   COMMENT_COPY_COLUMNS,
   POST_COPY_COLUMNS,
 } from "../../modules/boards.js";
+import { models } from "../../modules/admin-model.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
-export const save = ownerOnly(
-  (
-    ctx: MutationCtx,
-    args: {
-      id?: string;
-      values?: Record<string, unknown>;
-      create?: boolean;
-    },
-  ) => saveRecord(ctx, "boards", args),
-);
+/** Boards 그룹적용 and 전체적용 reach in one call: one write each. */
+const APPLY_LIMIT = 90;
+
+/**
+ * Saves a board; with `applyTo` (board_form.php's 그룹적용 or 전체적용), the
+ * settings `applyFields` names go to every other board of its group, or to
+ * every other board, in the same call (board_form_update.php:245-).
+ */
+export const save = ownerOnly(async function save(
+  ctx: MutationCtx,
+  args: {
+    id?: string;
+    values?: Record<string, unknown>;
+    create?: boolean;
+    applyTo?: string;
+    applyFields?: string[];
+  },
+) {
+  const { applyTo = "", applyFields = [], ...rest } = args ?? {};
+  const keys = new Set(
+    models.boards.fields
+      .map((field) => field.key)
+      .filter((key) => key && !["name", "group"].includes(key)),
+  );
+  if (
+    !["", "group", "all"].includes(applyTo) ||
+    !Array.isArray(applyFields) ||
+    applyFields.some((key) => !keys.has(key))
+  )
+    invalid(ctx);
+  const saved = await saveRecord(ctx, "boards", rest);
+  if (!applyTo || !applyFields.length) return saved;
+  if (applyTo === "group" && !saved.data.group)
+    ctx.fail(
+      "INVALID_REQUEST",
+      "그룹이 없는 게시판은 그룹적용할 수 없습니다.",
+      {
+        reason: "no_group",
+      },
+    );
+  const t = TABLES.boards;
+  const others = (
+    applyTo === "group"
+      ? await ctx.sql`SELECT * FROM boards WHERE group_id = ${saved.data.group} AND id != ${saved.id} LIMIT ${APPLY_LIMIT + 1}`
+      : await ctx.sql`SELECT * FROM boards WHERE id != ${saved.id} LIMIT ${APPLY_LIMIT + 1}`
+  ).rows;
+  if (others.length > APPLY_LIMIT)
+    ctx.fail(
+      "INVALID_REQUEST",
+      `한 번에 ${APPLY_LIMIT}개 게시판까지 적용할 수 있습니다.`,
+      { reason: "too_many_boards" },
+    );
+  for (const row of others) {
+    const record = recordOf(t, row);
+    for (const key of applyFields) record.data[key] = saved.data[key];
+    await writeRow(ctx, t, record.id, record.data);
+  }
+  return { ...saved, applied: others.length };
+});
 
 export const remove = ownerOnly((ctx: MutationCtx, args: { id?: string }) =>
   removeRecord(ctx, "boards", args),

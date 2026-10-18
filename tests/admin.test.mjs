@@ -1325,6 +1325,55 @@ test("deleting history entries takes back what they moved, as exp_list_delete an
   assert.ok(history(site).some((row) => row.id === plus20.id));
 });
 
+test("그룹적용 and 전체적용 save the ticked settings to the group's boards, or to all", async () => {
+  const site = await testSite();
+  await create(site, "board_groups", "g", { name: "그룹" });
+  await create(site, "boards", "a", { name: "가", group: "g" });
+  await create(site, "boards", "b", { name: "나", group: "g", pageRows: 7 });
+  await create(site, "boards", "c", { name: "다" });
+  const rows = () =>
+    site.rows(
+      "SELECT id, name, page_rows, write_level, group_id FROM boards ORDER BY id",
+    );
+  await mutate(site, "boards:save", {
+    id: "a",
+    values: { name: "가!", group: "g", pageRows: 20, writeLevel: 5 },
+    applyTo: "group",
+    applyFields: ["pageRows"],
+  });
+  assert.deepEqual(rows(), [
+    { id: "a", name: "가!", page_rows: 20, write_level: 5, group_id: "g" },
+    { id: "b", name: "나", page_rows: 20, write_level: 2, group_id: "g" },
+    { id: "c", name: "다", page_rows: 15, write_level: 2, group_id: null },
+  ]);
+  await mutate(site, "boards:save", {
+    id: "a",
+    values: { name: "가!", group: "g", pageRows: 20, writeLevel: 5 },
+    applyTo: "all",
+    applyFields: ["writeLevel"],
+  });
+  assert.deepEqual(
+    rows().map((row) => [row.id, row.write_level, row.name]),
+    [
+      ["a", 5, "가!"],
+      ["b", 5, "나"],
+      ["c", 5, "다"],
+    ],
+  );
+  // A board's name and group are its own.
+  assert.equal(
+    await refusal(
+      mutate(site, "boards:save", {
+        id: "a",
+        values: { name: "가!", group: "g" },
+        applyTo: "all",
+        applyFields: ["name"],
+      }),
+    ),
+    "invalid_input",
+  );
+});
+
 test("the forms' pick lists come in one read", async () => {
   const site = await testSite();
   profile(site, "m-1", "하나");

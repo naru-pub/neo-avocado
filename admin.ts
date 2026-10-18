@@ -1484,7 +1484,40 @@ async function openForm(row = null) {
     if (field.image || field.images)
       container.append(imageUpload(field, value));
   }
+  if (section === "boards") $("adminFields").append(boardApply(model));
   $("adminForm").hidden = false;
+}
+
+/**
+ * board_form.php's 그룹적용 and 전체적용: the settings ticked here are
+ * saved to every board of this board's group, or to every board, too.
+ */
+function boardApply(model) {
+  const fieldset = document.createElement("fieldset");
+  fieldset.id = "boardApply";
+  const legend = document.createElement("legend");
+  legend.textContent = "그룹적용 · 전체적용";
+  const to = document.createElement("select");
+  to.dataset.applyTo = "";
+  to.append(
+    new Option("이 게시판에만 저장", ""),
+    new Option("같은 그룹의 게시판에도 적용", "group"),
+    new Option("모든 게시판에도 적용", "all"),
+  );
+  const list = document.createElement("p");
+  list.className = "apply-fields";
+  for (const field of model.fields) {
+    if (!field.key || ["name", "group"].includes(field.key)) continue;
+    if (field.type === "heading" || field.type === "group") continue;
+    const label = document.createElement("label");
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.dataset.applyField = field.key;
+    label.append(box, ` ${field.label}`);
+    list.append(label);
+  }
+  fieldset.append(legend, control("적용 범위", to), list);
+  return fieldset;
 }
 
 /**
@@ -1575,6 +1608,21 @@ $("adminForm").onsubmit = async (event) => {
           create: !selected,
           ...(section === "character_state"
             ? { revision: selected?.revision ?? null }
+            : {}),
+          ...(section === "boards" &&
+          $("adminFields").querySelector<HTMLSelectElement>("[data-apply-to]")
+            ?.value
+            ? {
+                applyTo:
+                  $("adminFields").querySelector<HTMLSelectElement>(
+                    "[data-apply-to]",
+                  ).value,
+                applyFields: [
+                  ...$("adminFields").querySelectorAll<HTMLInputElement>(
+                    "[data-apply-field]:checked",
+                  ),
+                ].map((box) => box.dataset.applyField),
+              }
             : {}),
         });
     $("adminForm").hidden = true;
