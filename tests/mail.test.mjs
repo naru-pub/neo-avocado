@@ -213,11 +213,17 @@ test("the 쪽지함 has one entry a correspondent, newest first, with the last m
   await send(site, ["m-3"], "x".repeat(5000));
   site.now += 1000;
   await send(site, ["m-1"], "반가워", M2);
+  // m-2's main character shows with them (memo_view.skin.php's thumbnail).
+  site.run(
+    "INSERT INTO characters (id, owner, name, image, state, created_at) VALUES (9, 'm-2', '카도', 'https://e.com/k.png', 'approved', 0)",
+  );
+  site.run("UPDATE profiles SET main_character = '9' WHERE member = 'm-2'");
   const listed = await boxes(site, M1);
   assert.equal(listed.total, 2);
   assert.deepEqual(listed.documents, [
     {
       partner: "m-2",
+      character: { id: "9", name: "카도", image: "https://e.com/k.png" },
       last: {
         id: listed.documents[0].last.id,
         preview: "반가워",
@@ -229,6 +235,7 @@ test("the 쪽지함 has one entry a correspondent, newest first, with the last m
     },
     {
       partner: "m-3",
+      character: null,
       last: {
         id: listed.documents[1].last.id,
         preview: "x".repeat(150),

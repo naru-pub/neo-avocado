@@ -11,6 +11,39 @@ const BOX_PAGE = 5;
 /** Messages a conversation shows at a time, newest first. */
 const THREAD_PAGE = 50;
 
+/**
+ * The main characters of `members` (memo_view.skin.php:5-15's thumbnail and
+ * [캐릭터명]), by member: its ID, name and 두상.
+ */
+async function mainCharacters(ctx: QueryCtx, members: string[]) {
+  if (!members.length) return new Map();
+  const { rows } = await ctx.sql<{
+    member: string;
+    id: number;
+    name: string;
+    image: string | null;
+  }>(
+    `SELECT profiles.member, characters.id, characters.name, characters.image
+     FROM profiles JOIN characters ON characters.id = profiles.main_character
+     WHERE profiles.member IN (SELECT value FROM json_each(?))
+       AND characters.state != 'deleted'`,
+    [JSON.stringify(members)],
+  );
+  return new Map(
+    rows.map((row) => [
+      row.member,
+      {
+        id: String(row.id),
+        name: row.name,
+        image:
+          typeof row.image === "string" && row.image.startsWith("https://")
+            ? row.image
+            : null,
+      },
+    ]),
+  );
+}
+
 const invalid = (ctx: QueryCtx) =>
   ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
     reason: "invalid_input",
@@ -76,12 +109,17 @@ export async function conversations(ctx: QueryCtx, args: { page?: number }) {
       : []
     ).map((row) => [row.id, row]),
   );
+  const characters = await mainCharacters(
+    ctx,
+    rows.map((row) => row.partner),
+  );
   return {
     total,
     documents: rows.map((row) => {
       const message = last.get(row.last);
       return {
         partner: row.partner,
+        character: characters.get(row.partner) ?? null,
         last: {
           id: String(row.last),
           preview: message.preview,
@@ -137,5 +175,6 @@ export async function conversation(
     documents: rows.slice(0, THREAD_PAGE).reverse().map(messageOf),
     more: rows.length > THREAD_PAGE,
     unread: unread[0].n,
+    character: (await mainCharacters(ctx, [partner])).get(partner) ?? null,
   };
 }

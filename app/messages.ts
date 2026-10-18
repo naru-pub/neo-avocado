@@ -15,6 +15,7 @@ import {
   suggestNames,
 } from "./core.js";
 import { moneyText } from "./names.js";
+import { openCharacter } from "./characters.js";
 
 $("tabMessages").onclick = () =>
   run(async () => {
@@ -74,6 +75,15 @@ async function loadMessageCost() {
   $("messageCost").textContent =
     `회원 한 명당 ${moneyText(state.names, settings.messageCost ?? 0)}`;
 }
+/** A main character's 두상, small, beside a correspondent's name. */
+function characterThumb(character) {
+  return Object.assign(document.createElement("img"), {
+    className: "memo-thumb",
+    src: character.image,
+    alt: "",
+    loading: "lazy",
+  });
+}
 /**
  * 쪽지함 (mypage/memo/index.php): one entry a correspondent, newest first,
  * with their last message, how many, and N while one is unread.
@@ -89,6 +99,9 @@ async function loadMailbox(page = 1) {
     open.className = "conversation-entry";
     const name = document.createElement("strong");
     name.textContent = await nickOf(entry.partner);
+    // mypage/memo/index.php: their main character's 두상 and [이름].
+    if (entry.character?.image) open.append(characterThumb(entry.character));
+    if (entry.character) name.append(` [${entry.character.name}]`);
     const info = document.createElement("span");
     info.className = "info";
     info.textContent = ` ${formatTime(entry.last.sentAt)} · ${entry.count}통`;
@@ -168,6 +181,19 @@ async function openConversation(partner, focus = null) {
   const nick = await nickOf(partner);
   const heading = document.createElement("h3");
   heading.textContent = `${nick}님과의 쪽지`;
+  // memo_view.skin.php:5-15: their main character, to its page.
+  if (result.character) {
+    const link = document.createElement("a");
+    link.href = `/character/${result.character.id}`;
+    link.className = "memo-character";
+    if (result.character.image) link.append(characterThumb(result.character));
+    link.append(`[${result.character.name}]`);
+    link.onclick = (event) => {
+      event.preventDefault();
+      run(() => openCharacter(result.character.id));
+    };
+    heading.append(" ", link);
+  }
   const list = document.createElement("ol");
   list.className = "messages-thread";
   list.append(...result.documents.map(messageItem));

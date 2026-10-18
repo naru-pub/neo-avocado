@@ -1722,3 +1722,12 @@ img.admin-icon {
   gap: 4px;
   margin: 8px 0;
 }
+/* 쪽지: a correspondent's main character (memo_view.skin.php's ui-thumb). */
+.memo-thumb {
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: 50%;
+  vertical-align: middle;
+  margin-right: 6px;
+}
