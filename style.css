@@ -1817,3 +1817,7 @@ img.side-icon {
 .file-note {
   color: var(--muted);
 }
+/* The admin's 선택수정 rows: short number boxes. */
+.quick-fields .quick-number {
+  width: 6em;
+}

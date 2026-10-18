@@ -1682,6 +1682,21 @@ test("최대값 기준 출력, 아이템 기능 and 접속기기 are saved and r
   assert.equal(boards.find((row) => row.id === "talk").data.device, "mobile");
 });
 
+test("선택수정 saves a row's in-place fields and keeps the rest of the entry", async () => {
+  const site = await testSite();
+  await create(site, "levels", "rank-2", {
+    name: "2랭크",
+    exp: 10,
+    bonusPoints: 3,
+  });
+  await update(site, "levels", "rank-2", { name: "이랭크", exp: "20" });
+  const saved = await query(site, "levels:get", { id: "rank-2" });
+  assert.deepEqual(
+    [saved.data.name, saved.data.exp, saved.data.bonusPoints],
+    ["이랭크", 20, 3],
+  );
+});
+
 test("the forms' pick lists come in one read", async () => {
   const site = await testSite();
   profile(site, "m-1", "하나");

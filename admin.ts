@@ -46,6 +46,96 @@ let references: Record<string, any[]> = {
  * server as its form is) and deleting one. A section without `remove`
  * keeps its entries.
  */
+/**
+ * The fields the smaller lists edit in place (title_list.php's ti_title and
+ * ti_use, level_list's lv_name, lv_exp and lv_add_state, side_list and
+ * class_list's name and 권한, recipi_list's name and use, status_list's
+ * fields), each [key, label, kind].
+ */
+const QUICK: Record<string, [string, string, string][]> = {
+  titles: [
+    ["name", "이름", "text"],
+    ["enabled", "사용", "checkbox"],
+  ],
+  levels: [
+    ["name", "이름", "text"],
+    ["exp", "필요 경험치", "number"],
+    ["bonusPoints", "추가 포인트", "number"],
+  ],
+  sides: [
+    ["name", "이름", "text"],
+    ["level", "권한", "number"],
+    ["order", "순서", "number"],
+  ],
+  classes: [
+    ["name", "이름", "text"],
+    ["level", "권한", "number"],
+    ["order", "순서", "number"],
+  ],
+  recipes: [
+    ["name", "이름", "text"],
+    ["hidden", "숨김", "checkbox"],
+  ],
+  stat_config: [
+    ["name", "이름", "text"],
+    ["max", "최대값", "number"],
+    ["min", "최소값", "number"],
+    ["order", "순서", "number"],
+    ["useMax", "최대값 기준", "checkbox"],
+  ],
+};
+/** One list row's in-place fields, and its 선택 box. */
+function quickFields(row) {
+  const box = document.createElement("span");
+  box.className = "quick-fields";
+  const pick = document.createElement("input");
+  pick.type = "checkbox";
+  pick.dataset.quick = row.id;
+  pick.setAttribute("aria-label", `${row.data.name ?? row.id} 선택`);
+  box.append(pick, " ");
+  for (const [key, label, kind] of QUICK[section]) {
+    const input = document.createElement("input");
+    input.dataset.key = key;
+    input.setAttribute("aria-label", label);
+    if (kind === "checkbox") input.type = "checkbox";
+    else if (kind === "number") {
+      input.type = "number";
+      input.step = "1";
+      input.className = "quick-number";
+    }
+    if (kind === "checkbox") input.checked = Boolean(row.data[key]);
+    else input.value = row.data[key] ?? "";
+    // Changing a row ticks it, as the original's forms do.
+    input.oninput = input.onchange = () => (pick.checked = true);
+    box.append(kind === "checkbox" ? `${label} ` : "", input, " ");
+  }
+  return box;
+}
+$("quickSave").onclick = () =>
+  run(async () => {
+    const rows = [
+      ...$("adminRows").querySelectorAll<HTMLInputElement>(
+        "input[data-quick]:checked",
+      ),
+    ];
+    if (!rows.length)
+      return ($("adminStatus").textContent =
+        "선택수정 하실 항목을 하나 이상 선택하세요.");
+    for (const pick of rows) {
+      const values = {};
+      for (const input of pick.parentElement.querySelectorAll<HTMLInputElement>(
+        "input[data-key]",
+      ))
+        values[input.dataset.key] =
+          input.type === "checkbox" ? input.checked : input.value;
+      await owner.mutate(CALLS[section].save, {
+        id: pick.dataset.quick,
+        values,
+      });
+    }
+    $("adminStatus").textContent = `${rows.length}개를 수정했습니다.`;
+    await load();
+  });
 /** What each kind of history entry was (전체 활동·구매 기록). */
 const HISTORY_KINDS = {
   adjust: "운영자 조정",
@@ -342,7 +432,9 @@ async function load({ more = false } = {}) {
     $("memberTools").hidden = true;
     $("itemCategoryLabel").hidden = true;
     $("logSearch").hidden = true;
+    $("quickTools").hidden = !Object.hasOwn(QUICK, section);
     $("recordSearch").hidden = true;
+    $("quickTools").hidden = true;
     const row = await owner.query(CALLS[section].get, { section });
     if (requestedSection === section) await openForm(row);
     return;
@@ -358,6 +450,7 @@ async function load({ more = false } = {}) {
     $("itemCategoryLabel").hidden = true;
     $("logSearch").hidden = true;
     $("recordSearch").hidden = true;
+    $("quickTools").hidden = true;
     return model.report === "visits"
       ? visitsView()
       : model.report === "grants"
@@ -525,8 +618,10 @@ async function load({ more = false } = {}) {
       continue;
     }
     // A character's record and a member's balance are named by their
-    // character and member.
-    li.append(row.data.name ?? row.label ?? row.nick ?? row.id, " ");
+    // character and member; the smaller lists edit in place.
+    if (Object.hasOwn(QUICK, section))
+      li.append(`${row.id} `, quickFields(row));
+    else li.append(row.data.name ?? row.label ?? row.nick ?? row.id, " ");
     if (section === "members") {
       const pick = document.createElement("input");
       pick.type = "checkbox";
