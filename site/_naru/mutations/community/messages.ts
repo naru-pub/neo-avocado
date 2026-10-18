@@ -13,6 +13,7 @@ import {
 import { pay, record, wallet } from "../../modules/economy.js";
 import { messageOf, ownMessage } from "../../modules/mail.js";
 import { profileOf } from "../../modules/members.js";
+import { push } from "../../modules/push.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
 /** Messages a member may send a day unless the owner sets another number. */
@@ -39,7 +40,8 @@ export async function sendMessage(
       reason: "invalid_recipients",
     });
   const message = text(body, 5000, true);
-  if (!(await profileOf(ctx, me)))
+  const profile = await profileOf(ctx, me);
+  if (!profile)
     ctx.fail("CONFLICT", "먼저 닉네임을 등록해 주세요.", {
       reason: "no_profile",
     });
@@ -82,11 +84,17 @@ export async function sendMessage(
       reason: "not_enough",
     });
   const balance = cost ? await pay(ctx, current, total) : current.balance;
-  const { rows: sent } = await ctx.sql<{ id: number }>(
+  const { rows: sent } = await ctx.sql<{ id: number; recipient: string }>(
     `INSERT INTO messages (sender, recipient, body, sent_at)
-     VALUES ${recipients.map(() => "(?, ?, ?, ?)").join(", ")} RETURNING id`,
+     VALUES ${recipients.map(() => "(?, ?, ?, ?)").join(", ")} RETURNING id, recipient`,
     recipients.flatMap((to) => [me, to, message, ctx.now]),
   );
+  for (const row of sent)
+    await push(ctx, [row.recipient], {
+      title: `${profile.data.nick}님의 쪽지`,
+      body: message.slice(0, 100),
+      path: `/messages/${row.id}`,
+    });
   if (cost)
     await record(ctx, "message", { recipients, delta: -total, balance });
   return { ids: sent.map((row) => String(row.id)), balance };

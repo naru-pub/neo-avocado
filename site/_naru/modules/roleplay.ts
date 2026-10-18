@@ -27,6 +27,7 @@ import {
 import { characterState, ownCharacter, saveState } from "./characters.js";
 import { profileByNick, profileOf } from "./members.js";
 import { postReadable } from "./boards.js";
+import { push } from "./push.js";
 import type { PostRow } from "./boards.js";
 import type { MutationCtx, QueryCtx } from "./naru-types.js";
 import type { SqlCtx } from "./access.js";
@@ -211,12 +212,17 @@ export async function deliverCalls(
     const shownPreview =
       secret && to !== post.owner ? "비밀글 입니다." : preview;
     // A 익명 writer's notice names no one (view_comment.skin.php: 익명의 누군가).
+    const nick = anonymous
+      ? "익명의 누군가"
+      : (me?.data.nick ?? (guest ? `${guest} (손님)` : ""));
     await ctx.sql`INSERT INTO calls (recipient, sender, nick, speaker, kind, board, post_id, comment_id, preview, at)
-      VALUES (${to}, ${anonymous ? null : from}, ${
-        anonymous
-          ? "익명의 누군가"
-          : (me?.data.nick ?? (guest ? `${guest} (손님)` : ""))
-      }, ${anonymous ? null : (speaker?.name ?? null)}, ${kind}, ${post.board}, ${post.id}, ${comment}, ${shownPreview}, ${ctx.now})`;
+      VALUES (${to}, ${anonymous ? null : from}, ${nick}, ${anonymous ? null : (speaker?.name ?? null)}, ${kind}, ${post.board}, ${post.id}, ${comment}, ${shownPreview}, ${ctx.now})`;
+    // The arrival popup's words (app/live.ts), in the Naru app.
+    await push(ctx, [to], {
+      title: `${nick || "누군가"}님이 ${kind === "comment" ? "내 글에 댓글을 남겼습니다" : "호출하셨습니다"}`,
+      body: shownPreview,
+      path: `/post/${encodeURIComponent(post.id)}${comment ? `/comment/${encodeURIComponent(comment)}` : ""}`,
+    });
   };
   for (const recipient of recipients) await send(recipient.id, "call");
   const owner = post.owner;

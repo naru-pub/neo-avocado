@@ -10,7 +10,8 @@
 // What it shares with Naru: SQLite and its dialect; ctx.sql's tag and
 // (text, values) forms, booleans bound as 1 and 0, { rows, changes };
 // queries only read; a mutation is one transaction, kept only if it
-// returns; ctx.fail's coded error; roles, and Naru's views of them and of
+// returns; ctx.fail's coded error; ctx.notify (site.notifications, kept
+// only if the mutation returns); roles, and Naru's views of them and of
 // uploads (_naru_member_roles, _naru_uploads; tables here, which a test
 // fills with site.setRoles and site.upload); ctx.media.types; guest
 // passwords (hashed here as a plain marker, not a real hash); a
@@ -229,6 +230,11 @@ export async function testSite({
     /** A member's roles, as Naru keeps them. */
     roles: rolesOf,
     /**
+     * What mutations sent with ctx.notify, kept as Naru keeps its outbox:
+     * only from a mutation that returned. { members, title, body, path }.
+     */
+    notifications: [],
+    /**
      * Records an upload as Naru Media does once it is finished (member null:
      * the owner's), and answers its address.
      */
@@ -269,7 +275,7 @@ export async function testSite({
   };
 
   /** `ctx` for one call; `who` is { member } or { owner: true }, else a visitor. */
-  function context(kind, { member = null, owner = false } = {}) {
+  function context(kind, { member = null, owner = false } = {}, outbox = []) {
     const sql = sqlOf(db, kind);
     const passwords = {
       verify: async (password, hash) => hash === `hash:${password}`,
@@ -303,6 +309,24 @@ export async function testSite({
               site.setRoles(memberId, list);
               return null;
             },
+            async notify(members, { title, body = "", path = "/", ...rest }) {
+              if (
+                Object.keys(rest).length ||
+                !title?.trim() ||
+                title.length > 100 ||
+                body.length > 500 ||
+                !path.startsWith("/") ||
+                path.startsWith("//")
+              )
+                throw new Error("ctx.notify: invalid message.");
+              outbox.push({
+                members: [...new Set(members)],
+                title,
+                body,
+                path,
+              });
+              return null;
+            },
           }
         : {}),
     });
@@ -323,8 +347,10 @@ export async function testSite({
       );
     db.exec("BEGIN");
     try {
-      const result = await fn(context(kind, who), input);
+      const outbox = [];
+      const result = await fn(context(kind, who, outbox), input);
       db.exec("COMMIT");
+      site.notifications.push(...outbox);
       return JSON.parse(JSON.stringify(result ?? null));
     } catch (error) {
       db.exec("ROLLBACK");

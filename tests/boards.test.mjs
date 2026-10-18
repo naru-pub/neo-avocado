@@ -692,6 +692,21 @@ test("[[nick]] calls and comment notices reach members who can read the post", a
   );
   assert.equal(rows[0].preview, "세번째 ??? 아보 안녕");
   assert.equal(rows[0].comment_id, Number(said.id));
+  // Each also reaches the Naru app, in the arrival popup's words.
+  assert.deepEqual(site.notifications, [
+    {
+      members: ["m-3"],
+      title: "아보님이 호출하셨습니다",
+      body: "세번째 ??? 아보 안녕",
+      path: `/post/${thread}/comment/${said.id}`,
+    },
+    {
+      members: ["m-2"],
+      title: "아보님이 내 글에 댓글을 남겼습니다",
+      body: "세번째 ??? 아보 안녕",
+      path: `/post/${thread}/comment/${said.id}`,
+    },
+  ]);
   // What the called see: a new call on their 알림 tab.
   assert.deepEqual(tabs(await site.query("community/inbox:status", null, M3)), {
     messages: 0,
@@ -728,6 +743,12 @@ test("[[nick]] calls and comment notices reach members who can read the post", a
     data: { image: "https://example.com/a.png", text: "[[카도]] 보세요" },
   });
   assert.equal(count(site, "calls"), before + 1);
+  // One notification a call: none for those not called.
+  assert.equal(site.notifications.length, count(site, "calls"));
+  assert.equal(
+    site.notifications.at(-1).path,
+    `/post/${site.rows("SELECT max(id) AS id FROM posts")[0].id}`,
+  );
 });
 
 test("call history shows readable posts newest first and is cleared once seen", async () => {

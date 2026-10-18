@@ -5,6 +5,7 @@ import { one } from "./access.js";
 import type { SqlCtx } from "./access.js";
 import { rowKey } from "./boards.js";
 import type { QueryCtx } from "./naru-types.js";
+import { push, type PushCtx } from "./push.js";
 
 export interface MessageRow {
   id: number;
@@ -80,11 +81,18 @@ export async function unreadMessages(ctx: SqlCtx, member: string) {
  * the sender's daily limit.
  */
 export async function sendNote(
-  ctx: SqlCtx & { readonly now: number },
+  ctx: SqlCtx & PushCtx & { readonly now: number },
   to: string,
   body: string,
   gift: Record<string, string | number>,
 ) {
-  await ctx.sql`INSERT INTO messages (sender, recipient, body, sent_at, gift)
-    VALUES (${ctx.member.id}, ${to}, ${body}, ${ctx.now}, ${JSON.stringify(gift)})`;
+  const { rows } = await ctx.sql<{
+    id: number;
+  }>`INSERT INTO messages (sender, recipient, body, sent_at, gift)
+    VALUES (${ctx.member.id}, ${to}, ${body}, ${ctx.now}, ${JSON.stringify(gift)}) RETURNING id`;
+  await push(ctx, [to], {
+    title: "쪽지가 도착했습니다",
+    body,
+    path: `/messages/${rows[0].id}`,
+  });
 }

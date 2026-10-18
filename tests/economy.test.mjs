@@ -538,6 +538,15 @@ test("gifts go to a character, another member's or one's own, keep who sent them
     ["m-1", "m-2", site.now, null],
   );
   assert.deepEqual(JSON.parse(note.gift), { kind: "item", inventory: mine });
+  // And reaches the Naru app, opening the note.
+  assert.deepEqual(site.notifications, [
+    {
+      members: ["m-2"],
+      title: "쪽지가 도착했습니다",
+      body: note.body,
+      path: `/messages/${note.id}`,
+    },
+  ]);
   assert.match(note.body, /나님이 보내신 《씨앗》 아이템이 도착/);
   assert.deepEqual(tabs(await site.query("community/inbox:status", null, M2)), {
     messages: 1,

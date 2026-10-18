@@ -82,6 +82,21 @@ test("a 쪽지 goes to members who take them, pays its cost for each, and tells 
       [sent.ids[1], "m-1", "m-3", "안녕", null, null],
     ],
   );
+  // Each recipient hears of theirs in the Naru app; refused sends told no one.
+  assert.deepEqual(site.notifications, [
+    {
+      members: ["m-2"],
+      title: "m1님의 쪽지",
+      body: "안녕",
+      path: `/messages/${sent.ids[0]}`,
+    },
+    {
+      members: ["m-3"],
+      title: "m1님의 쪽지",
+      body: "안녕",
+      path: `/messages/${sent.ids[1]}`,
+    },
+  ]);
   const [cost] = site.rows("SELECT * FROM history WHERE kind = 'message'");
   assert.deepEqual([cost.owner, cost.delta, cost.balance], ["m-1", -4, 6]);
   assert.deepEqual(await status(site, M2), { messages: 1, calls: false });
@@ -99,6 +114,7 @@ test("a 쪽지 goes to members who take them, pays its cost for each, and tells 
     "not_enough",
   );
   assert.equal(messages(site).length, 2);
+  assert.equal(site.notifications.length, 2);
 });
 
 test("a member sends so many a day, counted from the Korean midnight, and a gift's note is not one", async () => {
