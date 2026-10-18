@@ -12,6 +12,7 @@ import {
   renderPages,
   query,
   mutate,
+  suggestNames,
 } from "./core.js";
 import { moneyText } from "./names.js";
 
@@ -254,3 +255,5 @@ export async function openMessage(id) {
   route(["messages", id], { replace: true });
   return message;
 }
+// memo_form.php's 받는 회원 search (ajax/_search_member.php).
+suggestNames($<HTMLInputElement>("messageTo"), "member", { list: true });

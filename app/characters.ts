@@ -840,6 +840,7 @@ function wireCharacterDetails(item, character) {
             value: current?.name ?? "",
             required: true,
             max: 40,
+            suggest: "character",
           },
           {
             name: "affinity",

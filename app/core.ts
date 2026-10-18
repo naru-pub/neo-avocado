@@ -346,6 +346,62 @@ export interface EditField {
   required?: boolean;
   max?: number;
   min?: number;
+  // Suggests names while typing: members' nicknames or characters'.
+  suggest?: "member" | "character";
+}
+let suggestions = 0;
+/**
+ * Names to pick from as a member types one (ajax/_search_member.php,
+ * _search_character.php), as the input's datalist. With `list`, the input
+ * holds several, comma separated, and the last is the one suggested.
+ */
+export function suggestNames(
+  input: HTMLInputElement,
+  kind: "member" | "character",
+  { list = false } = {},
+) {
+  const options = document.createElement("datalist");
+  options.id = `nameSuggestions${(suggestions += 1)}`;
+  input.after(options);
+  input.setAttribute("list", options.id);
+  let timer = null;
+  let asked = "";
+  input.addEventListener("input", () => {
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      if (!state.member) return;
+      const parts = list ? input.value.split(",") : [input.value];
+      const text = parts.at(-1).trim();
+      const before = list
+        ? parts
+            .slice(0, -1)
+            .map((part) => part.trim())
+            .filter(Boolean)
+        : [];
+      if (!text || text === asked || text.length > 40) return;
+      asked = text;
+      try {
+        const { names } = await query("community/profiles:suggest", {
+          kind,
+          text,
+        });
+        options.replaceChildren(
+          ...names.map(({ name, detail }) =>
+            Object.assign(document.createElement("option"), {
+              value: [...before, name].join(", "),
+              label: detail
+                ? kind === "member"
+                  ? `대표 캐릭터: ${detail}`
+                  : `오너: ${detail}`
+                : "",
+            }),
+          ),
+        );
+      } catch {
+        // Suggestions are a help; typing the whole name still works.
+      }
+    }, 250);
+  });
 }
 /** An inline form retains the draft when saving fails. */
 export function edit(
@@ -380,6 +436,10 @@ export function edit(
     if (field.max) input.maxLength = field.max;
     if (field.min !== undefined) input.min = String(field.min);
     label.append(input);
+    if (field.suggest) {
+      input.autocomplete = "off";
+      suggestNames(input, field.suggest);
+    }
     $("editorFields").append(label);
     inputs[field.name] = input;
   }

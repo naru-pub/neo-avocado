@@ -16,6 +16,7 @@ import {
   memberSettings,
   mutate,
   query,
+  suggestNames,
 } from "./core.js";
 import { expText, moneyText } from "./names.js";
 import { configureBoard, openLogNumber } from "./logs.js";
@@ -387,3 +388,5 @@ $("myLeave").onclick = () =>
     say("탈퇴했습니다.");
     showAdmission("left");
   });
+// get_ajax_character (mypage/money/index.php): approved characters' names.
+suggestNames($<HTMLInputElement>("moneyTo"), "character");

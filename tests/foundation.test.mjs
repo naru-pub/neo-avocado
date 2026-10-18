@@ -910,3 +910,35 @@ test("디자인's 로그 card and 원글 작성자 styles, and the writer's 접�
   assert.doesNotMatch(design.css, /★/);
   assert.deepEqual(design.ownerMarks, { prefix: "★", suffix: "" });
 });
+
+test("names are suggested to members as they type: nicknames, and approved characters", async () => {
+  const site = await testSite();
+  await site.mutate("community/membership:join", { nick: "앨리스" }, M1);
+  await site.mutate("community/membership:join", { nick: "앨_리" }, M2);
+  site.run(
+    "INSERT INTO characters (id, owner, name, state, created_at) VALUES (1, 'm-1', '아보 카도', 'approved', 0), (2, 'm-2', '아보 씨앗', 'editing', 0)",
+  );
+  site.run("UPDATE profiles SET main_character = '1' WHERE member = 'm-1'");
+  assert.equal(
+    await refusal(
+      site.query("community/profiles:suggest", { kind: "member", text: "앨" }),
+    ),
+    "sign_in",
+  );
+  const named = (kind, text) =>
+    site
+      .query("community/profiles:suggest", { kind, text }, M2)
+      .then(({ names }) => names);
+  assert.deepEqual(await named("member", "앨"), [
+    { name: "앨_리", detail: null },
+    { name: "앨리스", detail: "아보 카도" },
+  ]);
+  // LIKE's own characters are only themselves.
+  assert.deepEqual(await named("member", "_"), [
+    { name: "앨_리", detail: null },
+  ]);
+  assert.deepEqual(await named("character", "아보"), [
+    { name: "아보 카도", detail: "앨리스" },
+  ]);
+  assert.deepEqual(await named("character", " "), []);
+});

@@ -495,7 +495,13 @@ function giveItem(owned) {
   edit(
     `${owned.data.name} 선물`,
     [
-      { name: "name", label: "받는 캐릭터 이름", required: true, max: 40 },
+      {
+        name: "name",
+        label: "받는 캐릭터 이름",
+        required: true,
+        max: 40,
+        suggest: "character",
+      },
       { name: "memo", label: "전달 메시지", multiline: true, max: 500 },
     ],
     async (data) => {

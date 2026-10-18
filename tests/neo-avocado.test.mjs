@@ -577,6 +577,12 @@ function fakeDatabase(rows = {}) {
               acceptMessages: row.data.acceptMessages !== false,
             })),
         }),
+        "community/profiles:suggest": () => ({
+          names: store
+            .get(PROFILES)
+            .filter((row) => row.data.nick.includes(args.text))
+            .map((row) => ({ name: row.data.nick, detail: null })),
+        }),
         "community/profiles:own": () => ({ profile: profileOf(ME) }),
         "community/profiles:update": async () => ({
           profile: await member
@@ -1391,6 +1397,27 @@ test("a member links a log's picture by address, and changes it when editing", a
   await submit($("editorForm"));
   const write = database.calls.filter((call) => call.method === "set").at(-1);
   assert.equal(write.data.image, "https://cdn.example/new.png");
+});
+
+test("the 쪽지 recipient field suggests nicknames for the last name typed", async () => {
+  const database = fakeDatabase({
+    [PROFILES]: [
+      me,
+      { id: "m-2", data: { nick: "앨리스" }, createdBy: "m-2" },
+      { id: "m-3", data: { nick: "앨런" }, createdBy: "m-3" },
+    ],
+  });
+  const { $, window } = await page(database);
+  const input = $("messageTo");
+  const list = window.document.getElementById(input.getAttribute("list"));
+  input.value = "나, 앨";
+  input.dispatchEvent(new window.Event("input"));
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(
+    [...list.querySelectorAll("option")].map((option) => option.value),
+    ["나, 앨리스", "나, 앨런"],
+  );
 });
 
 test("characters are read when their tab is first opened, and registered by members", async () => {
