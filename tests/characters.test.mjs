@@ -1355,3 +1355,39 @@ test("선택삭제 puts a character away, out of every list and use, until the o
   await site.mutate("characters/sheet:remove", { id: hero }, OWNER);
   assert.equal(row(site, hero), undefined);
 });
+
+test("신청자목록 is searched by a 공개 profile field, as member/ready.php's arcode", async () => {
+  const site = await testSite();
+  profile(site, "m-1", "하나");
+  define(site, "age", { label: "나이" });
+  define(site, "secret", { label: "비밀", visibility: "admin" });
+  character(site, {
+    name: "가",
+    state: "submitted",
+    fields: { age: "17세", secret: "x" },
+  });
+  character(site, { name: "나", state: "editing", fields: { age: "20세" } });
+  character(site, { name: "다", state: "approved", fields: { age: "17세" } });
+  const names = async (args) =>
+    (
+      await site.query(
+        "characters/sheet:list",
+        { filter: "applicants", size: 0, ...args },
+        M1,
+      )
+    ).documents.map((row) => row.data.name);
+  assert.deepEqual(await names({ field: "age", text: "17" }), ["가"]);
+  assert.equal(
+    (
+      await site.query(
+        "characters/sheet:list",
+        { filter: "applicants", size: 0, field: "age", text: "세" },
+        M1,
+      )
+    ).total,
+    2,
+  );
+  // A field not everyone reads is not searched.
+  await assert.rejects(names({ field: "secret", text: "x" }));
+  await assert.rejects(names({ field: "nope", text: "x" }));
+});

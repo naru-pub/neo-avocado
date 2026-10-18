@@ -3,7 +3,7 @@
 // reader may see, the owner's lists and fields to fill, and what a
 // character's page shows beside its sheet. Visitors read them while the
 // site is open (사이트공개).
-import { one, signedIn } from "../../modules/access.js";
+import { containing, one, signedIn } from "../../modules/access.js";
 import {
   characterRow,
   characterState,
@@ -76,33 +76,62 @@ export async function choices(ctx: QueryCtx) {
  */
 export async function list(
   ctx: QueryCtx,
-  args: { filter?: string | null; page?: number; size?: number } | null = {},
+  args: {
+    filter?: string | null;
+    page?: number;
+    size?: number;
+    field?: string | null;
+    text?: string;
+  } | null = {},
 ) {
   await viewable(ctx);
-  const { filter = null, page = 1, size = 20 } = args ?? {};
+  const {
+    filter = null,
+    page = 1,
+    size = 20,
+    field = null,
+    text = "",
+  } = args ?? {};
   if (
     (filter !== null && !Object.hasOwn(FILTERS, filter)) ||
     !Number.isSafeInteger(page) ||
     page < 1 ||
     !Number.isInteger(size) ||
     size < 0 ||
-    size > 100
+    size > 100 ||
+    (field !== null && typeof field !== "string") ||
+    typeof text !== "string" ||
+    text.length > 40
   )
     ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
       reason: "invalid_input",
     });
-  const where = ` WHERE ${filter ? FILTERS[filter] : LIVE}`;
+  // member/ready.php's arcode search: a 공개 profile field holding `text`.
+  const searched: SqlValue[] = [];
+  let where = ` WHERE ${filter ? FILTERS[filter] : LIVE}`;
+  if (field !== null && text.trim()) {
+    const definition = (await fieldCatalogue(ctx)).find(
+      (row) => row.code === field && row.visibility === "public",
+    );
+    if (!definition)
+      ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+        reason: "invalid_input",
+      });
+    where += ` AND json_extract(fields, ?) LIKE ? ESCAPE '\\'`;
+    searched.push(`$."${definition.code}"`, containing(text.trim()));
+  }
   const order = filter === "approved" ? "id" : "id DESC";
   const values: SqlValue[] = size ? [size, (page - 1) * size] : [MOST, 0];
   const { rows } = await ctx.sql<CharacterRow>(
     `SELECT * FROM characters${where} ORDER BY ${order} LIMIT ? OFFSET ?`,
-    values,
+    [...searched, ...values],
   );
   const total =
     (
       await one<{ n: number }>(
         ctx,
         `SELECT count(*) AS n FROM characters${where}`,
+        searched,
       )
     )?.n ?? 0;
   return {

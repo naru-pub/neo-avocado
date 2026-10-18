@@ -99,8 +99,13 @@ function choiceEdit(name, label, rows, value) {
  * The characters the filter picks by numbered pages: 멤버목록 oldest first
  * (get_character_list's ch_id asc), the rest newest first; `size` 0, all.
  */
-async function characterPage(filter, page, size) {
-  const result = await query("characters/sheet:list", { filter, page, size });
+async function characterPage(filter, page, size, search = {}) {
+  const result = await query("characters/sheet:list", {
+    filter,
+    page,
+    size,
+    ...search,
+  });
   keepNicks(result.nicks);
   return result;
 }
@@ -152,7 +157,8 @@ async function showApplicants(number = 1) {
   for (const row of rows)
     nicks.set(row.id, await nickOf(row.createdBy ?? row.data.owner));
   const searched = rows.filter((row) => {
-    if (!applicants.text) return true;
+    // A profile field's search was the server's (member/ready.php's arcode).
+    if (!applicants.text || applicants.field.startsWith("field:")) return true;
     const value =
       applicants.field === "nick" ? nicks.get(row.id) : row.data.name;
     return String(value ?? "").includes(applicants.text);
@@ -222,6 +228,17 @@ $("applicantSearch").onsubmit = (event) => {
   run(async () => {
     applicants.field = $<HTMLSelectElement>("applicantField").value;
     applicants.text = $<HTMLInputElement>("applicantText").value.trim();
+    // A 공개 profile field: the server finds the applicants holding it.
+    applicants.rows = (
+      await characterPage(
+        "applicants",
+        1,
+        0,
+        applicants.field.startsWith("field:") && applicants.text
+          ? { field: applicants.field.slice(6), text: applicants.text }
+          : {},
+      )
+    ).documents;
     await showApplicants();
   });
 };
@@ -266,6 +283,16 @@ async function loadFieldCatalogue() {
 /** The registration form's inputs for the custom fields. */
 function showFieldCatalogue(rows) {
   state.fieldCatalogue = rows;
+  // 신청자목록's search by each 공개 profile field (member/ready.php).
+  const choice = $<HTMLSelectElement>("applicantField");
+  const chosen = choice.value;
+  for (const option of [...choice.options])
+    if (option.value.startsWith("field:")) option.remove();
+  for (const row of rows)
+    if (row.data.visibility === "public")
+      choice.append(new Option(row.data.label, `field:${row.id}`));
+  if ([...choice.options].some((option) => option.value === chosen))
+    choice.value = chosen;
   $("characterFields").replaceChildren(
     ...rows.flatMap((row) => {
       const [label, input] = fieldInput(row, "");
