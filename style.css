@@ -1796,3 +1796,12 @@ dialog.entrance::backdrop {
 #logPages.under-post {
   display: none;
 }
+/* 댓글 답변: a step in for each level (basic/view_comment.skin.php's
+   cmt_depth). */
+.comment.comment-reply {
+  margin-left: calc(var(--depth, 1) * 20px);
+}
+.comment.comment-reply::before {
+  content: "↳ ";
+  color: var(--muted);
+}

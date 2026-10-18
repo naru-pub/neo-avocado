@@ -25,8 +25,11 @@ export async function list(
   args: { post?: string; after?: string | null },
 ) {
   const { post: id, after = null } = args ?? {};
-  const cursor = after === null ? 0 : Number(after);
-  if (!Number.isSafeInteger(cursor) || cursor < 0)
+  // The last comment read, as "<thread>:<path>" (a bare number: a thread's
+  // first comment), in the order threads and their replies list.
+  const [root, path = ""] = String(after ?? "0").split(":");
+  const cursor = Number(root);
+  if (!Number.isSafeInteger(cursor) || cursor < 0 || !/^(?:\d{3})*$/.test(path))
     ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
       reason: "invalid_input",
     });
@@ -35,8 +38,12 @@ export async function list(
   const board = post ? await boardOf(ctx, post.board) : null;
   if (!post || !(await postReadable(ctx, post, access, ctx.member?.id, board)))
     return { documents: [], nextCursor: null };
+  // wr_comment, wr_comment_reply: each thread in turn, its replies in place.
   const { rows } = await ctx.sql<CommentRow>`SELECT * FROM comments
-    WHERE post_id = ${post.id} AND id > ${cursor} ORDER BY id LIMIT ${COMMENT_PAGE + 1}`;
+    WHERE post_id = ${post.id}
+      AND (coalesce(thread, id) > ${cursor}
+        OR (coalesce(thread, id) = ${cursor} AND reply_path > ${path}))
+    ORDER BY coalesce(thread, id), reply_path LIMIT ${COMMENT_PAGE + 1}`;
   const documents = rows
     .slice(0, COMMENT_PAGE)
     .map((row) =>
@@ -48,6 +55,9 @@ export async function list(
     );
   return {
     documents,
-    nextCursor: rows.length > COMMENT_PAGE ? documents.at(-1).id : null,
+    nextCursor:
+      rows.length > COMMENT_PAGE
+        ? `${rows[COMMENT_PAGE - 1].thread ?? rows[COMMENT_PAGE - 1].id}:${rows[COMMENT_PAGE - 1].reply_path}`
+        : null,
   };
 }

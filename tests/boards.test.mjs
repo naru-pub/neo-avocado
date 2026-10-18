@@ -3274,3 +3274,88 @@ test("a plain board's post keeps 첨부파일 with its pictures' count, and coun
   await site.mutate("community/posts:remove", { id: saved.id }, M1);
   assert.equal(count(site, "attachment_downloads"), 0);
 });
+
+test("댓글 답변 sit under the comment they answer, five deep, and keep a comment with replies", async () => {
+  const site = await boardSite();
+  board(site, "free", { ...PUBLIC_BOARD, kind: "text" });
+  profile(site, "m-1", "하나");
+  profile(site, "m-2", "둘");
+  const thread = post(site, { board: "free", owner: "m-1", body: "본문" });
+  const say = async (text, replyTo, who = M1) =>
+    (
+      await reply(
+        site,
+        { data: { logId: thread, text, ...(replyTo ? { replyTo } : {}) } },
+        who,
+      )
+    ).document;
+  const a = await say("가");
+  const b = await say("나");
+  const a1 = await say("가-1", a.id, M2);
+  await say("가-2", a.id);
+  const a11 = await say("가-1-1", a1.id);
+  assert.equal(a11.data.depth, 2);
+  const texts = async (after = null) =>
+    (await site.query("community/comments:list", { post: thread, after }, M1))
+      .documents;
+  assert.deepEqual(
+    (await texts()).map((row) => row.data.text),
+    ["가", "가-1", "가-1-1", "가-2", "나"],
+  );
+  // Five deep, then no more.
+  let deep = a11;
+  for (let n = 3; n <= 5; n += 1) deep = await say(`깊이 ${n}`, deep.id);
+  assert.equal(deep.data.depth, 5);
+  assert.equal(await refusal(say("여섯", deep.id)), "reply_depth");
+  // A comment with replies stays, but for the staff.
+  assert.equal(
+    await refusal(site.mutate("community/comments:remove", { id: a.id }, M1)),
+    "has_replies",
+  );
+  assert.equal(
+    await reasonOf(site.mutate("community/comments:remove", { id: b.id }, M1)),
+    "ok",
+  );
+  // Picture boards' comments take no replies.
+  const picture = post(site, { owner: "m-1", image: "https://e.com/a.png" });
+  const first = await reply(site, { data: { logId: picture, text: "x" } });
+  assert.equal(
+    await refusal(
+      reply(site, {
+        data: { logId: picture, text: "y", replyTo: first.document.id },
+      }),
+    ),
+    "invalid_input",
+  );
+});
+
+test("a post's comments page on in thread order, past fifty", async () => {
+  const site = await boardSite();
+  board(site, "free", { ...PUBLIC_BOARD, kind: "text" });
+  profile(site, "m-1", "하나");
+  const thread = post(site, { board: "free", owner: "m-1", body: "본문" });
+  const ids = [];
+  for (let n = 0; n < 51; n += 1)
+    ids.push(
+      (await reply(site, { data: { logId: thread, text: `c${n}` } })).document
+        .id,
+    );
+  await reply(site, { data: { logId: thread, text: "re", replyTo: ids[0] } });
+  const first = await site.query(
+    "community/comments:list",
+    { post: thread },
+    M1,
+  );
+  assert.equal(first.documents.length, 50);
+  assert.equal(first.documents[1].data.text, "re");
+  const second = await site.query(
+    "community/comments:list",
+    { post: thread, after: first.nextCursor },
+    M1,
+  );
+  assert.deepEqual(
+    second.documents.map((row) => row.data.text),
+    ["c49", "c50"],
+  );
+  assert.equal(second.nextCursor, null);
+});

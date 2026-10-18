@@ -991,6 +991,10 @@ export async function logItem(log) {
   item.querySelector<HTMLButtonElement>(".more-comments").onclick = () =>
     load(true);
   const form = item.querySelector<HTMLFormElement>(".comment-form");
+  form.querySelector<HTMLButtonElement>(".cancel-reply").onclick = () => {
+    delete form.dataset.replyTo;
+    form.querySelector<HTMLElement>(".comment-replying").hidden = true;
+  };
   const picker = document.createElement("details");
   const summary = document.createElement("summary");
   summary.textContent = "이모티콘";
@@ -1078,10 +1082,20 @@ export async function logItem(log) {
           ...(used && !guest ? { item: used } : {}),
           ...(anonymous && !guest ? { anonymous: true } : {}),
           ...(secret && !guest ? { secret: true } : {}),
+          ...(form.dataset.replyTo ? { replyTo: form.dataset.replyTo } : {}),
         },
         ...(guest ? { guest } : {}),
       });
-      item.querySelector(".comment-list").append(await commentItem(saved, log));
+      if (form.dataset.replyTo) {
+        // A reply sits under what it answers: the list is read again.
+        delete form.dataset.replyTo;
+        form.querySelector<HTMLElement>(".comment-replying").hidden = true;
+        first = load(false);
+        await first;
+      } else
+        item
+          .querySelector(".comment-list")
+          .append(await commentItem(saved, log));
       form.querySelector<HTMLTextAreaElement>(".comment-text").value = "";
       form.querySelector<HTMLInputElement>(".comment-dice").checked = false;
       form.querySelector<HTMLInputElement>(".comment-anonymous-check").checked =
@@ -1169,6 +1183,11 @@ async function commentItem(comment, log) {
   const item = document.createElement("li");
   item.className = "comment";
   item.dataset.id = comment.id;
+  // 댓글 답변 (wr_comment_reply): a step in for each level.
+  if (comment.data.depth) {
+    item.classList.add("comment-reply");
+    item.style.setProperty("--depth", String(comment.data.depth));
+  }
   // The post's own writer commenting (view_comment.skin.php:74-80): not
   // where either is 익명.
   if (
@@ -1254,6 +1273,37 @@ async function commentItem(comment, log) {
       textContent: fullTime(comment.createdAt),
     }),
   );
+  // basic/view_comment.skin.php:71's 답변, on a plain board, five deep.
+  const commentForm = () =>
+    item.closest(".log")?.querySelector<HTMLFormElement>(".comment-form");
+  const commentBoard = state.boards.find(
+    (row) => row.id === (log.data.board ?? "default"),
+  );
+  if (
+    kindOf(log.data.board) === "text" &&
+    (comment.data.depth ?? 0) < 5 &&
+    commentBoard?.data.enabled !== false &&
+    (boardStaff(log.data.board) ||
+      state.owner ||
+      state.level >= (commentBoard?.data.commentLevel ?? 2))
+  ) {
+    const answer = document.createElement("button");
+    answer.type = "button";
+    answer.className = "answer";
+    answer.textContent = "답변";
+    answer.onclick = () => {
+      const form = commentForm();
+      if (!form) return;
+      form.dataset.replyTo = comment.id;
+      const note = form.querySelector<HTMLElement>(".comment-replying");
+      note.hidden = false;
+      note.querySelector("span").textContent = `${
+        item.querySelector(".author")?.textContent ?? ""
+      }님께 답변`;
+      form.querySelector<HTMLTextAreaElement>(".comment-text").focus();
+    };
+    item.append(" ", answer);
+  }
   const guestComment = !state.member && Boolean(comment.data.guest);
   if (mine(comment) || boardStaff(log.data.board) || guestComment) {
     const change = document.createElement("button");

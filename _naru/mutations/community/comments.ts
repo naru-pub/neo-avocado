@@ -1,8 +1,11 @@
 // Comments under posts. Visitors comment where the board lets level 1, as
 // guests with a name and password.
-import { parsed, text } from "../../modules/access.js";
+import { one, parsed, text } from "../../modules/access.js";
 import {
   COMMENT_LIMIT,
+  COMMENT_REPLY_DEPTH,
+  REPLY_DIGITS,
+  commentRow,
   boardOf,
   commentOf,
   isStaff,
@@ -46,6 +49,8 @@ export interface CommentInput {
   item?: string;
   /** 비밀글 (wr_secret): only the staff and the two writers read it. */
   secret?: boolean;
+  /** 답변 (basic/view_comment.skin.php): the comment a new one answers. */
+  replyTo?: string;
 }
 
 const invalid = (ctx: MutationCtx) =>
@@ -151,6 +156,36 @@ export async function write(
         secret = ${secret}, updated_at = ${ctx.now}, version = version + 1 WHERE id = ${previous.id} RETURNING *`
     ).rows[0];
   else {
+    // 댓글 답변 (write_comment_update.php w=c): on a plain board, to a
+    // comment of the same post, five deep at most; the later below.
+    let thread: number | null = null;
+    let replyPath = "";
+    if (data.replyTo !== undefined) {
+      const parent = await commentRow(ctx, data.replyTo);
+      if (!parent || parent.post_id !== post.id || board.data.kind !== "text")
+        invalid(ctx);
+      if (parent.reply_path.length / REPLY_DIGITS >= COMMENT_REPLY_DEPTH)
+        ctx.fail("INVALID_REQUEST", "더 이상 답변하실 수 없습니다.", {
+          reason: "reply_depth",
+        });
+      thread = parent.thread ?? parent.id;
+      const { n } = await one<{ n: number }>(
+        ctx,
+        `SELECT count(*) AS n FROM comments WHERE thread = ?
+         AND length(reply_path) = ? AND substr(reply_path, 1, ?) = ?`,
+        [
+          thread,
+          parent.reply_path.length + REPLY_DIGITS,
+          parent.reply_path.length,
+          parent.reply_path,
+        ],
+      );
+      if (n >= 999)
+        ctx.fail("INVALID_REQUEST", "더 이상 답변하실 수 없습니다.", {
+          reason: "reply_count",
+        });
+      replyPath = parent.reply_path + String(n + 1).padStart(REPLY_DIGITS, "0");
+    }
     speaker = await speakerOf(ctx, data.character);
     const actions = [];
     if (data.action === "explore") actions.push(await explore(ctx, speaker));
@@ -168,11 +203,11 @@ export async function write(
         );
     row = (
       await ctx.sql<CommentRow>`INSERT INTO comments (post_id, owner, body, dice, rolls, anonymous,
-        character_id, speaker, actions, called, reward, admin, secret, guest_name, guest_hash, created_at, updated_at)
+        character_id, speaker, actions, called, reward, admin, secret, thread, reply_path, guest_name, guest_hash, created_at, updated_at)
         VALUES (${post.id}, ${ctx.member?.id ?? null}, ${body}, ${dice}, ${dice ? JSON.stringify(rollDice()) : null},
         ${anonymous}, ${speaker ? Number(speaker.character) : null}, ${speaker ? JSON.stringify(speaker) : null},
         ${JSON.stringify(actions)}, ${JSON.stringify(calls.called)}, ${reward},
-        ${ctx.owner === true && !anonymous}, ${secret}, ${guest?.name ?? null}, ${guest?.hash ?? null}, ${ctx.now}, ${ctx.now})
+        ${ctx.owner === true && !anonymous}, ${secret}, ${thread}, ${replyPath}, ${guest?.name ?? null}, ${guest?.hash ?? null}, ${ctx.now}, ${ctx.now})
         RETURNING *`
     ).rows[0];
   }
@@ -197,14 +232,35 @@ export async function remove(
   args: { id?: string; guest?: GuestCredentials },
 ) {
   const { id, guest } = args ?? {};
-  const { previous } = await startWrite(ctx, "comment", {
+  const { access, previous } = await startWrite(ctx, "comment", {
     id: id ?? "",
     guest,
   });
+  const post = await postRow(ctx, previous.post_id);
+  const board = post ? await boardOf(ctx, post.board) : null;
+  // 이 코멘트와 관련된 답변코멘트가 존재하므로 삭제 할 수 없습니다
+  // (bbs/delete_comment.php:41), but for the staff.
+  if (
+    !isStaff(access, board) &&
+    (await one(
+      ctx,
+      `SELECT 1 FROM comments WHERE thread = ? AND length(reply_path) > ?
+       AND substr(reply_path, 1, ?) = ? LIMIT 1`,
+      [
+        previous.thread ?? previous.id,
+        previous.reply_path.length,
+        previous.reply_path.length,
+        previous.reply_path,
+      ],
+    ))
+  )
+    ctx.fail(
+      "CONFLICT",
+      "이 코멘트와 관련된 답변코멘트가 존재하므로 삭제 할 수 없습니다.",
+      { reason: "has_replies" },
+    );
   // 댓글쓰기 포인트 goes back (bbs/delete_comment.php:63).
   if (previous.reward > 0) {
-    const post = await postRow(ctx, previous.post_id);
-    const board = post ? await boardOf(ctx, post.board) : null;
     await takeBackReward(
       ctx,
       previous,

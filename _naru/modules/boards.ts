@@ -279,6 +279,9 @@ export interface CommentRow {
   admin: number;
   settlement: number;
   secret: number;
+  /** 댓글 답변: the thread's first comment, and the reply's place in it. */
+  thread: number | null;
+  reply_path: string;
   guest_name: string | null;
   guest_hash: string | null;
   created_at: number;
@@ -389,8 +392,17 @@ export function commentOf(row: CommentRow): Written {
     ...(row.admin ? { admin: true } : {}),
     ...(row.settlement ? { settlement: true } : {}),
     ...(row.secret ? { secret: true } : {}),
+    ...(row.reply_path
+      ? {
+          depth: row.reply_path.length / REPLY_DIGITS,
+          thread: String(row.thread),
+        }
+      : {}),
   });
 }
+
+/** How deep comment replies go (G5's wr_comment_reply of 5). */
+export const COMMENT_REPLY_DEPTH = 5;
 
 /**
  * A comment as presentPost shows it, and a secret one (wr_option secret,
