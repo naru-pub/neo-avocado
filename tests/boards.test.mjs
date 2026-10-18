@@ -3176,3 +3176,94 @@ test("윗글 and 아래글 are the posts above and below in the list's order, of
   assert.deepEqual(await near(two, M2), ["비밀", "1"]);
   assert.equal(three.length > 0, true);
 });
+
+test("a plain board's post keeps 첨부파일 with its pictures' count, and counts their downloads", async () => {
+  const site = await boardSite();
+  board(site, "free", { ...PUBLIC_BOARD, kind: "text", uploadCount: 2 });
+  profile(site, "m-1", "하나");
+  const pdf = {
+    url: "https://media.naru.pub/a.pdf",
+    name: "규칙.pdf",
+    size: 2048,
+    type: "application/pdf",
+  };
+  const zip = {
+    ...pdf,
+    url: "https://media.naru.pub/b.zip",
+    name: "b.zip",
+    type: "application/zip",
+  };
+  const { document: saved } = await write(site, {
+    data: {
+      board: "free",
+      title: "자료",
+      text: "받으세요",
+      attachments: [pdf],
+    },
+  });
+  assert.deepEqual(saved.data.attachments, [{ ...pdf, downloads: 0 }]);
+  // One picture and two files is more than 업로드 개수 2.
+  assert.equal(
+    await refusal(
+      write(site, {
+        data: {
+          board: "free",
+          text: "많이",
+          image: "https://e.com/a.png",
+          attachments: [pdf, zip],
+        },
+      }),
+    ),
+    "upload_count",
+  );
+  // Only what Naru Media stores, and only on plain boards.
+  assert.equal(
+    await refusal(
+      write(site, {
+        data: {
+          board: "free",
+          text: "x",
+          attachments: [{ ...pdf, type: "application/x-msdownload" }],
+        },
+      }),
+    ),
+    "invalid_input",
+  );
+  assert.equal(
+    await refusal(
+      write(site, {
+        data: { image: "https://e.com/a.png", text: "x", attachments: [pdf] },
+      }),
+    ),
+    "invalid_input",
+  );
+  await site.mutate(
+    "community/posts:download",
+    { id: saved.id, url: pdf.url },
+    VISITOR,
+  );
+  await site.mutate(
+    "community/posts:download",
+    { id: saved.id, url: pdf.url },
+    M2,
+  );
+  assert.equal(
+    (await read(site, { id: saved.id })).document.data.attachments[0].downloads,
+    2,
+  );
+  assert.equal(
+    await refusal(
+      site.mutate("community/posts:download", { id: saved.id, url: zip.url }),
+    ),
+    "no_file",
+  );
+  // An edit keeps them unless it says otherwise.
+  const { document: edited } = await write(site, {
+    id: saved.id,
+    data: { board: "free", title: "자료", text: "고침" },
+    revision: saved.revision,
+  });
+  assert.equal(edited.data.attachments.length, 1);
+  await site.mutate("community/posts:remove", { id: saved.id }, M1);
+  assert.equal(count(site, "attachment_downloads"), 0);
+});

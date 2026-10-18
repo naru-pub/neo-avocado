@@ -543,6 +543,16 @@
             설명
             <textarea id="logText" maxlength="2000" rows="3"></textarea>
           </label>
+          <!-- basic/write.skin.php's 파일 (bf_file): a plain board's
+               attachments, as Naru Media stores them. -->
+          <label id="logAttachmentsLabel" class="member-only" hidden
+            >첨부파일 (PDF·ZIP·텍스트·오디오·그림)
+            <input
+              id="logAttachments"
+              type="file"
+              multiple
+              accept=".pdf,.zip,.txt,.mp3,.ogg,.opus,.wav,image/*,application/pdf,application/zip,text/plain,audio/*"
+          /></label>
           <!-- mmb/write.skin.php's Link #1 and #2 (wr_link1, wr_link2). -->
           <label
             >링크 #1 <input id="logLink1" type="url" maxlength="2000"

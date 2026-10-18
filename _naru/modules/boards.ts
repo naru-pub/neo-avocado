@@ -198,6 +198,10 @@ export interface PostRow {
   tags?: string | null;
   /** 조회수 (post_hits), where read with TAGS. */
   hits?: number | null;
+  /** 첨부파일: a JSON list of {url, name, size, type}. */
+  attachments: string;
+  /** Their 다운로드 counts by address (attachment_downloads), with TAGS. */
+  downloads?: string | null;
   comment_count?: number;
 }
 
@@ -235,6 +239,7 @@ export const POST_COPY_COLUMNS = [
   "links",
   "files",
   "reply_path",
+  "attachments",
 ] as const;
 /** A comment's columns a copy keeps: all but its id, its post and its reward. */
 export const COMMENT_COPY_COLUMNS = [
@@ -292,7 +297,7 @@ export interface Written {
 
 /** A post's tags, as a column of a SELECT from posts. */
 export const TAGS =
-  "(SELECT json_group_array(tag) FROM post_tags WHERE post_tags.post_id = posts.id) AS tags, (SELECT hits FROM post_hits WHERE post_hits.post_id = posts.id) AS hits";
+  "(SELECT json_group_array(tag) FROM post_tags WHERE post_tags.post_id = posts.id) AS tags, (SELECT hits FROM post_hits WHERE post_hits.post_id = posts.id) AS hits, (SELECT json_group_object(url, downloads) FROM attachment_downloads WHERE attachment_downloads.post_id = posts.id) AS downloads";
 /** A post with its tags and 조회수. */
 export const POST_SELECT = `SELECT posts.*, ${TAGS} FROM posts`;
 
@@ -352,6 +357,16 @@ export function postOf(row: PostRow): Written {
       : {}),
     ...(row.tags !== undefined ? { tags: list(row.tags) } : {}),
     ...(row.hits !== undefined ? { hits: row.hits ?? 0 } : {}),
+    ...(list(row.attachments).length
+      ? {
+          attachments: list(row.attachments).map((file) => ({
+            ...file,
+            downloads: Number(
+              parsed<Record<string, number>>(row.downloads, {})[file.url] ?? 0,
+            ),
+          })),
+        }
+      : {}),
     // 답변글: how deep a reply is (wr_reply's length), and what it answers.
     ...(row.reply_path
       ? {

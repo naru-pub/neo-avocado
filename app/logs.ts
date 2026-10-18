@@ -584,6 +584,38 @@ export async function logItem(log) {
         links.append(link, " ");
       }
   links.hidden = !links.children.length;
+  // basic/view.skin.php:36-62: each 첨부파일 with its size and 다운로드 count.
+  if (!log.data.locked && Array.isArray(log.data.attachments)) {
+    const list = document.createElement("ul");
+    list.className = "log-attachments";
+    for (const file of log.data.attachments) {
+      if (typeof file?.url !== "string" || !file.url.startsWith("https://"))
+        continue;
+      const entry = document.createElement("li");
+      const link = Object.assign(document.createElement("a"), {
+        href: file.url,
+        target: "_blank",
+        rel: "noopener",
+        textContent: file.name,
+      });
+      link.setAttribute("download", file.name);
+      const count = Object.assign(document.createElement("span"), {
+        className: "downloads",
+        textContent: ` (${sizeText(file.size)}) ${file.downloads ?? 0}회 다운로드`,
+      });
+      link.onclick = () => {
+        mutate("community/posts:download", { id: log.id, url: file.url })
+          .then(() => {
+            file.downloads = (file.downloads ?? 0) + 1;
+            count.textContent = ` (${sizeText(file.size)}) ${file.downloads}회 다운로드`;
+          })
+          .catch(() => {});
+      };
+      entry.append(link, count);
+      list.append(entry);
+    }
+    if (list.childElementCount) links.after(list);
+  }
   if (log.data.locked && log.data.guest) {
     // A guest's secret question opens with its password (qna/password.php).
     const form = document.createElement("form");
@@ -791,6 +823,7 @@ export async function logItem(log) {
           max: 2000,
         })),
         ...pictureEdits(current),
+        ...attachmentEdits(current),
         ...optionEdits(current),
         ...actionEdits(current),
       ],
@@ -811,8 +844,28 @@ export async function logItem(log) {
         pictureFile = null,
         pictureUrl = "",
         pictureRemove = false,
-        ...options
+        attachmentAdd = null,
+        ...rest
       }) => {
+        // basic/write.skin.php's 파일 삭제 boxes and a new 파일.
+        const options = Object.fromEntries(
+          Object.entries(rest).filter(([key]) => !key.startsWith("drop:")),
+        );
+        let attachments = (current.data.attachments ?? [])
+          .filter((file) => !rest[`drop:${file.url}`])
+          .map(({ url, name, size, type }) => ({ url, name, size, type }));
+        if (attachmentAdd) {
+          const stored = await uploadMedia(attachmentAdd);
+          attachments = [
+            ...attachments,
+            {
+              url: stored.url,
+              name: stored.name ?? attachmentAdd.name,
+              size: stored.size ?? attachmentAdd.size,
+              type: stored.contentType ?? attachmentAdd.type,
+            },
+          ];
+        }
         const links = [link1, link2].map((link) => link.trim()).filter(Boolean);
         // write.skin.php's edit: a new picture (UPLOAD or URL), or 로그 삭제
         // (bf_file_del); else the post keeps its own.
@@ -831,6 +884,9 @@ export async function logItem(log) {
             image,
             text,
             title,
+            ...(current.data.attachments || attachments.length
+              ? { attachments }
+              : {}),
             category,
             secret,
             ...(links.length || current.data.links?.length ? { links } : {}),
@@ -1060,6 +1116,37 @@ function pictureEdits(current): EditField[] {
     },
     ...(kind === "text" && current.data.image
       ? [{ name: "pictureRemove", label: "그림 삭제", type: "checkbox" }]
+      : []),
+  ];
+}
+/** A file's size as get_filesize shows it: 1.2M, 34.5K or 120. */
+function sizeText(size) {
+  const bytes = Number(size) || 0;
+  if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(1)}M`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)}K`;
+  return `${bytes}`;
+}
+/** A plain board's 첨부파일 in edit mode: each one's 삭제, and one to add. */
+function attachmentEdits(current): EditField[] {
+  const board = current.data.board ?? "default";
+  if (kindOf(board) !== "text") return [];
+  const files = current.data.attachments ?? [];
+  return [
+    ...files.map((file) => ({
+      name: `drop:${file.url}`,
+      label: `첨부파일 삭제: ${file.name}`,
+      type: "checkbox",
+    })),
+    ...(state.member && uploadCountOf(board) > 0
+      ? [
+          {
+            name: "attachmentAdd",
+            label: "첨부파일 추가",
+            type: "file",
+            accept:
+              ".pdf,.zip,.txt,.mp3,.ogg,.opus,.wav,image/*,application/pdf,application/zip,text/plain,audio/*",
+          },
+        ]
       : []),
   ];
 }
@@ -1325,6 +1412,22 @@ $("logForm").onsubmit = (event) => {
     const files = [];
     for (const more of chosen.slice(1))
       files.push((await uploadMedia(more)).url);
+    // 첨부파일: a plain board's files, counted with its pictures.
+    const attaching = guest
+      ? []
+      : [...($<HTMLInputElement>("logAttachments").files ?? [])];
+    if (attaching.length && chosen.length + attaching.length > most)
+      return say(`파일은 그림과 합쳐 ${most}개까지 올릴 수 있습니다.`);
+    const attachments = [];
+    for (const file of attaching) {
+      const stored = await uploadMedia(file);
+      attachments.push({
+        url: stored.url,
+        name: stored.name ?? file.name,
+        size: stored.size ?? file.size,
+        type: stored.contentType ?? file.type,
+      });
+    }
     const links = [
       $<HTMLInputElement>("logLink1").value.trim(),
       $<HTMLInputElement>("logLink2").value.trim(),
@@ -1371,6 +1474,7 @@ $("logForm").onsubmit = (event) => {
         ...($<HTMLInputElement>("logDice").checked ? { dice: true } : {}),
         ...(links.length ? { links } : {}),
         ...(files.length ? { files } : {}),
+        ...(attachments.length ? { attachments } : {}),
         ...options,
         ...(action === "combine" ? { action, materials } : {}),
         ...(action === "explore" ? { action } : {}),
@@ -1476,6 +1580,7 @@ export function configureBoard() {
   $<HTMLInputElement>("logImage").multiple = uploads > 1;
   $("logImageLabel").hidden = !pictures || uploads === 0;
   $("logImageUrlLabel").hidden = !pictures || uploads === 0;
+  $("logAttachmentsLabel").hidden = kind !== "text" || uploads === 0;
   $("logTitleLabel").hidden = !pictures;
   // A settlement names its category (정산 분류); a guest may ask in secret.
   $<HTMLSelectElement>("logCategory").required = kind === "settlement";

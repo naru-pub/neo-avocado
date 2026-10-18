@@ -69,12 +69,13 @@ name(ctx, args)`. Pages call them as `query("<area>/<module>:<name>", args)`
   0001 foundation, 0002 boards, 0003 characters, 0004 economy, 0005 mail,
   0006 search, 0007 board admins, 0008 post links (and pictures), 0009
   member blocks, 0010 recommenders, 0011 item details, 0012 stat order, 0013 secret comments, 0014 reply
-  posts, 0015 post hits.
+  posts, 0015 post hits,
+  0016 attachments.
   Applied migrations
   are never edited; a change is a new one. 0001–0005 started fresh,
   writing each area's tables once; 0006 fills its tables from the rows
   already there; 0007–0014 add columns
-  and 0015 a table (0011 files the personal items
+  and 0015–0016 tables (0011 files the personal items
   already made).
 - Names: snake_case, no prefix, never one of Naru's names above.
 - Keys: `id INTEGER PRIMARY KEY` for rows the site makes; a member's id is

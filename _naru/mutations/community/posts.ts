@@ -98,6 +98,49 @@ export interface PostInput {
   files?: string[];
   /** 답변 (bbs/write.php w=r): the post this one answers, on a new post. */
   replyTo?: string;
+  /** A plain board's 첨부파일: uploads, as media.upload answered them. */
+  attachments?: { url: string; name: string; size: number; type: string }[];
+}
+
+/** What Naru Media stores besides pictures, as a post's 첨부파일 may be. */
+const ATTACHMENT_TYPES = [
+  "image/avif",
+  "image/gif",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "audio/mpeg",
+  "audio/ogg",
+  "audio/opus",
+  "audio/wav",
+  "application/pdf",
+  "application/zip",
+  "text/plain",
+];
+/** A post's 첨부파일, each an upload's address, name, size and type. */
+function attachmentsOf(ctx: MutationCtx, value: unknown) {
+  if (value === null || value === undefined) return [];
+  if (!Array.isArray(value) || value.length > UPLOAD_LIMIT) invalid(ctx);
+  try {
+    return (value as unknown[]).map((entry) => {
+      const file = (entry ?? {}) as Record<string, unknown>;
+      const size = Number(file.size);
+      if (
+        !Number.isSafeInteger(size) ||
+        size < 0 ||
+        !ATTACHMENT_TYPES.includes(file.type as string)
+      )
+        throw new Error("Not an attachment.");
+      return {
+        url: imageUrl(file.url),
+        name: text(file.name, 200, true),
+        size,
+        type: file.type as string,
+      };
+    });
+  } catch {
+    return invalid(ctx);
+  }
 }
 
 /** G5_LINK_COUNT: a post's links. */
@@ -232,6 +275,24 @@ export async function write(
       ? filesOf(ctx, data.files)
       : parsed<string[]>(previous?.files, []);
   if (board.data.kind !== "text" && files.length) invalid(ctx);
+  // 첨부파일 (bf_file) on a plain board, counted with its pictures.
+  const attachments =
+    Object.hasOwn(data, "attachments") &&
+    JSON.stringify(data.attachments ?? []) !== (previous?.attachments ?? "[]")
+      ? attachmentsOf(ctx, data.attachments)
+      : parsed<any[]>(previous?.attachments, []);
+  if (board.data.kind !== "text" && attachments.length) invalid(ctx);
+  if (
+    attachments.length &&
+    JSON.stringify(attachments) !== (previous?.attachments ?? "[]") &&
+    (image ? 1 : 0) + files.length + attachments.length >
+      boardNumber(board, "uploadCount")
+  )
+    ctx.fail(
+      "INVALID_REQUEST",
+      `이 게시판은 파일을 ${boardNumber(board, "uploadCount")}개까지 올릴 수 있습니다.`,
+      { reason: "upload_count" },
+    );
   if (
     board.data.kind === "text" &&
     (image !== (before?.image ?? null) || files.length) &&
@@ -347,6 +408,7 @@ export async function write(
     called: JSON.stringify(calls.called),
     links: JSON.stringify(links),
     files: JSON.stringify(files),
+    attachments: JSON.stringify(attachments),
     updated_at: ctx.now,
   };
   let row: PostRow;
@@ -469,6 +531,28 @@ export async function hit(ctx: MutationCtx, { id }: { id?: string } = {}) {
   return { counted: true };
 }
 
+/**
+ * 다운로드 (bbs/download.php): one of a readable post's 첨부파일 was
+ * downloaded; its count goes up (bf_download + 1). Answers its address.
+ */
+export async function download(
+  ctx: MutationCtx,
+  { id, url }: { id?: string; url?: string } = {},
+) {
+  const { row } = await readablePost(ctx, id);
+  const file = parsed<any[]>(row.attachments, []).find(
+    (entry) => entry?.url === url,
+  );
+  if (!file)
+    ctx.fail("NOT_FOUND", "파일이 존재하지 않습니다.", {
+      reason: "no_file",
+    });
+  await ctx.sql`INSERT INTO attachment_downloads (post_id, url, downloads)
+    VALUES (${row.id}, ${file.url}, 1)
+    ON CONFLICT (post_id, url) DO UPDATE SET downloads = attachment_downloads.downloads + 1`;
+  return { url: file.url };
+}
+
 export async function remove(
   ctx: MutationCtx,
   args: { id?: string; guest?: GuestCredentials },
@@ -547,6 +631,7 @@ export async function remove(
   await ctx.sql`DELETE FROM posts_search WHERE rowid = ${previous.id}`;
   await ctx.sql`DELETE FROM post_tags WHERE post_id = ${previous.id}`;
   await ctx.sql`DELETE FROM post_hits WHERE post_id = ${previous.id}`;
+  await ctx.sql`DELETE FROM attachment_downloads WHERE post_id = ${previous.id}`;
   await ctx.sql`DELETE FROM calls WHERE post_id = ${previous.id}`;
   await ctx.sql`DELETE FROM favorites WHERE post = ${previous.id}`;
   await ctx.sql`DELETE FROM posts WHERE id = ${previous.id}`;
