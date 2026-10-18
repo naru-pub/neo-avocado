@@ -70,8 +70,22 @@ async function adminMenu(page, group, label) {
     await details.locator("summary").click();
   await details.locator("a", { hasText: label }).first().click();
 }
+/**
+ * enter.php's entrance: a visitor arriving at an open site's home clicks
+ * through it, once a browser session; elsewhere it does not show.
+ */
+async function pastEntrance(page) {
+  const enter = page.locator("#entranceEnter");
+  try {
+    await enter.waitFor({ state: "visible", timeout: 5000 });
+  } catch {
+    return;
+  }
+  await enter.click();
+}
 async function signInAs(page, name) {
   await page.goto(`${origin}/`);
+  await pastEntrance(page);
   await page.locator("#cardSignIn").click();
   await page.waitForURL(/members\/sign-in/);
   await page.locator("input[name=as]:not([type=hidden])").fill(name);
@@ -517,6 +531,7 @@ try {
   // A visitor posts on the public board, and edits with the password only.
   const guest = await person();
   await guest.goto(`${origin}/`);
+  await pastEntrance(guest);
   await menu(guest, "로그");
   await guest.waitForFunction(() =>
     [...document.querySelectorAll("#board option")].some(
@@ -677,6 +692,7 @@ try {
     );
   await siteOpen(true);
   await guest.goto(`${origin}/`);
+  await pastEntrance(guest);
 
   // On the real runtime: a member reads their own wallet and nobody else's;
   // a visitor reads nicknames and no wallet.
@@ -1060,6 +1076,7 @@ try {
   const paper = () =>
     night.evaluate(() => getComputedStyle(document.body).backgroundColor);
   await night.goto(`${origin}/`);
+  await pastEntrance(night);
   await night.locator("#homeView").waitFor();
   assert.equal(await night.locator("#schemeChoice").inputValue(), "");
   assert.equal(await paper(), "rgb(18, 18, 18)");

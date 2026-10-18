@@ -370,8 +370,9 @@ async function load({ more = false } = {}) {
     ["members", "history", "inventory", "items", "wallets"].includes(section);
   $("logKind").hidden = section !== "history";
   // An inventory copy has no memo of its own.
-  $<HTMLOptionElement>('#logField option[value="memo"]').hidden =
-    section !== "history";
+  document.querySelector<HTMLOptionElement>(
+    '#logField option[value="memo"]',
+  ).hidden = section !== "history";
   if (
     section === "inventory" &&
     $<HTMLSelectElement>("logField").value === "memo"
