@@ -4,7 +4,13 @@
 // starts from here, so a post reads the same everywhere. Posts and
 // comments keep the shape pages know ({ id, data }); an ID is its row's
 // number as a string.
-import { communityAccess, one, parsed, siteOpen } from "./access.js";
+import {
+  communityAccess,
+  communitySettings,
+  one,
+  parsed,
+  siteOpen,
+} from "./access.js";
 import type { Access, SqlCtx } from "./access.js";
 import { addHistory, saveWallet, walletOf } from "./members.js";
 import type { QueryCtx, SqlValue } from "./naru-types.js";
@@ -83,6 +89,8 @@ export const BOARD_COLUMNS = {
   pageRows: "page_rows",
   foldHeight: "fold_height",
   admin: "admin",
+  // 출력 순서 (bo_order).
+  order: "sort_order",
 } as const;
 const BOARD_FLAGS = new Set(["enabled", "anonymous"]);
 
@@ -109,7 +117,9 @@ const BOARD_SELECT = `SELECT boards.*, board_groups.members_only AS group_member
 /** Every board the owner made, in ID order. */
 export async function boardsOf(ctx: SqlCtx): Promise<Board[]> {
   return (
-    await ctx.sql<BoardRow>(`${BOARD_SELECT} ORDER BY boards.id`)
+    await ctx.sql<BoardRow>(
+      `${BOARD_SELECT} ORDER BY boards.sort_order, boards.id`,
+    )
   ).rows.map(boardOfRow);
 }
 
@@ -537,9 +547,21 @@ export function presentPost(
   {
     member = null,
     staff = false,
-  }: { member?: string | null; staff?: boolean } = {},
+    download = true,
+  }: { member?: string | null; staff?: boolean; download?: boolean } = {},
 ): Written {
   let data = row.data;
+  // Below the board's 다운로드 등급, a file is its name and size: its address
+  // is no reader's to have (bbs/download.php refuses them).
+  if (!download && Array.isArray(data.attachments) && data.attachments.length)
+    data = {
+      ...data,
+      attachments: data.attachments.map((file) => ({
+        ...file,
+        url: "",
+        locked: true,
+      })),
+    };
   if (data.anonymous === true && !staff && !(member && data.owner === member)) {
     data = { ...data, owner: null };
     for (const key of ["speaker", "character", "guest"]) delete data[key];
@@ -570,6 +592,7 @@ export const readerOf = (
 ) => ({
   member: ctx.member?.id ?? null,
   staff: isStaff(access, board),
+  download: downloadable(access, board ?? null),
 });
 
 /**
@@ -660,6 +683,28 @@ export async function readablePost(
     });
   return { access, row, board };
 }
+
+/**
+ * A board's points setting (글읽기 포인트, 다운로드 포인트), 0 when unset or
+ * while 포인트 사용 (cf_use_point) is off.
+ */
+export async function boardPoints(
+  ctx: SqlCtx,
+  board: Board,
+  key: "readReward" | "downloadPoint",
+): Promise<number> {
+  const value = board.data[key];
+  if (!Number.isSafeInteger(value) || !value) return 0;
+  return (await communitySettings(ctx)).usePoint === false ? 0 : value;
+}
+
+/** Whether `access` may download a board's files (bo_download_level). */
+export const downloadable = (access: Access, board: Board | null) =>
+  isStaff(access, board) ||
+  access.level >=
+    (Number.isInteger(board?.data.downloadLevel)
+      ? board.data.downloadLevel
+      : 1);
 
 /** Body limits: plain logs as before, HTML posts like content pages. */
 export const TEXT_LIMIT = 2000;
@@ -777,6 +822,7 @@ export async function payReward(
 ): Promise<number> {
   const paid = Number.isSafeInteger(reward) && (reward as number) > 0;
   if (!paid || !ctx.member) return 0;
+  if ((await communitySettings(ctx)).usePoint === false) return 0;
   const member = ctx.member.id;
   const balance = (await walletOf(ctx, member)).balance + (reward as number);
   if (!Number.isSafeInteger(balance))

@@ -17,7 +17,7 @@ const KINDS = {
 const FIELDS = {
   nick: "history.owner IN (SELECT member FROM profiles WHERE nick LIKE ? ESCAPE '\\' LIMIT 100)",
   character:
-    "history.character_id IN (SELECT CAST(id AS TEXT) FROM characters WHERE name LIKE ? ESCAPE '\\' LIMIT 100)",
+    "history.character_id IN (SELECT id FROM characters WHERE name LIKE ? ESCAPE '\\' LIMIT 100)",
   item: "history.item_id IN (SELECT id FROM items WHERE name LIKE ? ESCAPE '\\' LIMIT 100)",
   memo: "history.memo LIKE ? ESCAPE '\\'",
 };
@@ -71,7 +71,8 @@ export const list = ownerOnly(async function list(
   const { rows } = await ctx.sql<
     HistoryRow & { owner_nick: string | null; character_name: string | null }
   >(
-    `SELECT history.*, profiles.nick AS owner_nick, characters.name AS character_name
+    `SELECT history.*, profiles.nick AS owner_nick,
+       coalesce(characters.name, history.character_name) AS character_name
      FROM history
      LEFT JOIN profiles ON profiles.member = history.owner
      LEFT JOIN characters ON characters.id = history.character_id

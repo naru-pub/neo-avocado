@@ -19,6 +19,8 @@ import {
   TEXT_LIMIT,
   accessOf,
   boardOf,
+  boardPoints,
+  downloadable,
   isStaff,
   memoOf,
   payReward,
@@ -269,8 +271,15 @@ export async function write(
   const category = text(data.category ?? before?.category ?? "", 40);
   if (category && !(board.data.categories ?? []).includes(category))
     invalid(ctx);
-  // Boards with HTML on (bo_use_dhtml_editor) take sanitized-on-display HTML.
-  const format = before?.format ?? (board.data.html === true ? "html" : "text");
+  // Boards with HTML on (bo_use_dhtml_editor) take sanitized-on-display
+  // HTML, from members of its HTML 쓰기 등급 (bo_html_level) on.
+  const reaches = (level: unknown) =>
+    staff || access.level >= (Number.isInteger(level) ? (level as number) : 1);
+  const format =
+    before?.format ??
+    (board.data.html === true && reaches(board.data.htmlLevel)
+      ? "html"
+      : "text");
   let body = text(data.text ?? "", format === "html" ? HTML_LIMIT : TEXT_LIMIT);
   const image =
     data.image === before?.image
@@ -279,10 +288,19 @@ export async function write(
         ? imageUrl(data.image)
         : null;
   if (board.data.kind === "image" && !image) invalid(ctx);
-  // wr_link1 and wr_link2: up to two web addresses, shown as LINK.
+  // wr_link1 and wr_link2: up to two web addresses, shown as LINK, from
+  // the board's 링크 등급 (bo_link_level) on.
   const links = Object.hasOwn(data, "links")
     ? linksOf(ctx, data.links)
     : parsed<string[]>(previous?.links, []);
+  if (
+    links.length &&
+    JSON.stringify(links) !== (previous?.links ?? "[]") &&
+    !reaches(board.data.linkLevel)
+  )
+    ctx.fail("ACCESS_DENIED", "링크를 달 권한이 없습니다.", {
+      reason: "link_level",
+    });
   // bo_upload_count: a plain board's post takes that many pictures, the
   // first its image (0: none); a picture log takes its one picture.
   const files =
@@ -302,6 +320,16 @@ export async function write(
         )
       : parsed<any[]>(previous?.attachments, []);
   if (board.data.kind !== "text" && attachments.length) invalid(ctx);
+  // 업로드 등급 (bo_upload_level): who may add pictures and files.
+  if (
+    ((files.length && JSON.stringify(files) !== (previous?.files ?? "[]")) ||
+      (attachments.length &&
+        JSON.stringify(attachments) !== (previous?.attachments ?? "[]"))) &&
+    !reaches(board.data.uploadLevel)
+  )
+    ctx.fail("ACCESS_DENIED", "파일을 올릴 권한이 없습니다.", {
+      reason: "upload_level",
+    });
   // 파일 업로드 용량 (bo_upload_size): each new file within it.
   const limit = boardNumber(board, "uploadSize") * 1048576;
   if (
@@ -578,9 +606,7 @@ export async function hit(
   // 글읽기 포인트 (bbs/board.php:121-133): a member reading another's post
   // is paid it, or charged it when negative, once a post (insert_point's
   // rel_table, rel_id, rel_action); one short of the charge cannot read.
-  const points = Number.isSafeInteger(board.data.readReward)
-    ? board.data.readReward
-    : 0;
+  const points = await boardPoints(ctx, board, "readReward");
   const me = ctx.member?.id ?? null;
   if (
     points &&
@@ -652,8 +678,8 @@ export async function vote(
       `이미 ${kind === "good" ? "추천" : "비추천"} 하신 글입니다.`,
       { reason: "voted" },
     );
-  await ctx.sql`INSERT INTO post_votes (post_id, member, vote)
-    VALUES (${row.id}, ${me}, ${kind === "good" ? 1 : -1})`;
+  await ctx.sql`INSERT INTO post_votes (post_id, member, vote, created_at)
+    VALUES (${row.id}, ${me}, ${kind === "good" ? 1 : -1}, ${ctx.now})`;
   const { good, nogood } = await one<{ good: number; nogood: number }>(
     ctx,
     `SELECT coalesce(sum(vote = 1), 0) AS good, coalesce(sum(vote = -1), 0) AS nogood
@@ -687,7 +713,7 @@ export async function download(
   ctx: MutationCtx,
   { id, url }: { id?: string; url?: string } = {},
 ) {
-  const { row } = await readablePost(ctx, id);
+  const { row, access, board } = await readablePost(ctx, id);
   const file = parsed<any[]>(row.attachments, []).find(
     (entry) => entry?.url === url,
   );
@@ -695,6 +721,43 @@ export async function download(
     ctx.fail("NOT_FOUND", "파일이 존재하지 않습니다.", {
       reason: "no_file",
     });
+  // 다운로드 등급 (bo_download_level), and 다운로드 포인트
+  // (bo_download_point): paid or taken on a member's first download of the
+  // file, as download.php's insert_point with its po_rel_action.
+  if (!downloadable(access, board))
+    ctx.fail("ACCESS_DENIED", "다운로드 권한이 없습니다.", {
+      reason: "download_level",
+    });
+  const points = await boardPoints(ctx, board, "downloadPoint");
+  const member = ctx.member?.id;
+  if (points && member && !isStaff(access, board)) {
+    const paid = await one(
+      ctx,
+      `SELECT 1 FROM history WHERE owner = ? AND kind = 'download'
+         AND json_extract(details, '$.post') = ? AND json_extract(details, '$.file') = ?`,
+      [member, row.id, file.url],
+    );
+    if (!paid) {
+      const before = (await walletOf(ctx, member)).balance;
+      if (before + points < 0)
+        ctx.fail(
+          "CONFLICT",
+          "보유하신 포인트가 없거나 모자라서 다운로드할 수 없습니다.",
+          { reason: "not_enough" },
+        );
+      await saveWallet(ctx, member, before + points);
+      await addHistory(ctx, {
+        owner: member,
+        kind: "download",
+        at: ctx.now,
+        delta: points,
+        balance: before + points,
+        memo: `${board.data.name} ${row.number} 파일 다운로드`,
+        post: row.id,
+        file: file.url,
+      });
+    }
+  }
   await ctx.sql`INSERT INTO attachment_downloads (post_id, url, downloads)
     VALUES (${row.id}, ${file.url}, 1)
     ON CONFLICT (post_id, url) DO UPDATE SET downloads = attachment_downloads.downloads + 1`;
@@ -800,7 +863,7 @@ export async function favorite(ctx: MutationCtx, args: { id?: string }) {
     await ctx.sql`SELECT 1 FROM favorites WHERE member = ${member} AND post = ${row.id}`
   ).rows.length;
   if (marked) {
-    await ctx.sql`INSERT INTO favorites (member, post) VALUES (${member}, ${row.id})`;
+    await ctx.sql`INSERT INTO favorites (member, post, created_at) VALUES (${member}, ${row.id}, ${ctx.now})`;
     // The oldest go past the limit.
     await ctx.sql`DELETE FROM favorites WHERE member = ${member} AND id NOT IN (SELECT id FROM favorites WHERE member = ${member} ORDER BY id DESC LIMIT ${FAVORITE_LIMIT})`;
   } else

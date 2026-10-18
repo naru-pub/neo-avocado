@@ -92,6 +92,9 @@ export async function seen(
   const bump = (map: Record<string, number>, key: string) => {
     map[key] = (map[key] ?? 0) + 1;
   };
+  // A member is one visitor a day, however many visits their browser
+  // says it makes (the original's one row an IP a day).
+  if (ctx.member && counts.members[ctx.member.id]) return null;
   if (ctx.member) bump(counts.members, ctx.member.id);
   bump(counts.hours, hour);
   bump(counts.browsers, known("browser", browser));

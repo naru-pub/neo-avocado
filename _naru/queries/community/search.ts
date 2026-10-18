@@ -54,6 +54,8 @@ async function readable(ctx: QueryCtx, group: string) {
         (board) =>
           boardAllowed(board, access, "list") &&
           boardAllowed(board, access, "read") &&
+          // 전체 검색 사용 (bo_use_search): off, its posts are its own list's.
+          board.data.useSearch !== false &&
           (!group || board.data.group === group),
       )
       .map((board): [string, Board] => [board.id, board]),
@@ -145,17 +147,23 @@ export async function recent(
       : { text: "", values: [] as SqlValue[] };
   const postsBy = by("posts");
   const commentsBy = by("comments");
+  // The site's newest first, read along their times (one member's along
+  // theirs), so a page stops where it ends rather than sorting every post.
+  const postsFrom = author ? "posts" : "posts INDEXED BY posts_created";
+  const commentsFrom = author
+    ? "comments"
+    : "comments INDEXED BY comments_created";
   const parts: { text: string; values: SqlValue[] }[] = [];
   if (view !== "comments")
     parts.push({
       text: `SELECT 'post' AS kind, posts.id AS id, posts.created_at AS at
-        FROM posts WHERE ${visible.text} ${postsBy.text} AND posts.created_at >= ?`,
+        FROM ${postsFrom} WHERE ${visible.text} ${postsBy.text} AND posts.created_at >= ?`,
       values: [...visible.values, ...postsBy.values, since],
     });
   if (view !== "posts")
     parts.push({
       text: `SELECT 'comment' AS kind, comments.id AS id, comments.created_at AS at
-        FROM comments JOIN posts ON posts.id = comments.post_id
+        FROM ${commentsFrom} JOIN posts ON posts.id = comments.post_id
         WHERE ${visible.text} ${commentsBy.text} AND comments.created_at >= ?`,
       values: [...visible.values, ...commentsBy.values, since],
     });
@@ -163,8 +171,9 @@ export async function recent(
   const values = parts.flatMap((part) => part.values);
   const { total } = await one<{ total: number }>(
     ctx,
-    `SELECT count(*) AS total FROM (${union})`,
-    values,
+    // At most the 1,000 pages a list goes to.
+    `SELECT count(*) AS total FROM (SELECT 1 FROM (${union}) LIMIT ?)`,
+    [...values, 1000 * size],
   );
   const { rows: listed } = await ctx.sql<{
     kind: "post" | "comment";

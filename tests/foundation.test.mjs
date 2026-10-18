@@ -212,7 +212,7 @@ test("membership answers level, roles, warnings and adult; staff and groups are 
   );
   await site.mutate("community/membership:join", { nick: "앨리스" }, M1);
   site.run(
-    "UPDATE members SET warnings = 2, warning_note = '도배', adult = 1, level = 11",
+    "UPDATE members SET warnings = 2, warning_note = '도배', adult = 1, level = 2",
   );
   site.setRoles("m-1", ["staff", "group-writers", "other"]);
   const status = await site.query("community/membership:membership", null, M1);
@@ -235,6 +235,7 @@ test("membership answers level, roles, warnings and adult; staff and groups are 
       acceptMessages: true,
       commentAlerts: true,
       mainCharacter: null,
+      createdAt: new Date(site.now).toISOString(),
       favorites: [],
     },
   });
@@ -262,14 +263,21 @@ test("visits record where members are and count each Korean day, bounded", async
     device: "PC",
     domain: "twitter.com",
   });
-  await seen({
-    where: "로그",
-    visit: true,
-    browser: "<script>",
-    os: "x".repeat(500),
-  });
+  // A member is one visitor a day: their second visit counts nothing.
+  await seen({ where: "로그", visit: true, browser: "Firefox" });
+  await site.mutate("community/membership:join", { nick: "밥" }, M2);
+  await seen(
+    {
+      where: "로그",
+      visit: true,
+      browser: "<script>",
+      os: "x".repeat(500),
+    },
+    M2,
+  );
   assert.deepEqual(site.rows("SELECT * FROM presence"), [
     { member: "m-1", place: "로그", at: Date.parse("2030-01-01T15:30:00Z") },
+    { member: "m-2", place: "로그", at: Date.parse("2030-01-01T15:30:00Z") },
   ]);
   // 15:30 UTC is 00:30 the next day in Korea.
   const day = () => {
@@ -286,7 +294,7 @@ test("visits record where members are and count each Korean day, bounded", async
     return row;
   };
   assert.equal(day().total, 2);
-  assert.deepEqual(day().members, { "m-1": 2 });
+  assert.deepEqual(day().members, { "m-1": 1, "m-2": 1 });
   assert.deepEqual(day().hours, { 0: 2 });
   assert.deepEqual(day().browsers, { Chrome: 1, 기타: 1 });
   assert.deepEqual(day().os, { macOS: 1, 기타: 1 });
@@ -294,7 +302,10 @@ test("visits record where members are and count each Korean day, bounded", async
   assert.deepEqual(day().domains, { "twitter.com": 1 });
   // Moving between pages says where a member is, and counts nothing.
   await seen({ where: "마이페이지" });
-  assert.equal(site.rows("SELECT place FROM presence")[0].place, "마이페이지");
+  assert.equal(
+    site.rows("SELECT place FROM presence WHERE member = 'm-1'")[0].place,
+    "마이페이지",
+  );
   assert.equal(day().total, 2);
   // A visitor counts as a guest and is not listed as here.
   await seen({ visit: true }, {});
@@ -302,7 +313,10 @@ test("visits record where members are and count each Korean day, bounded", async
   assert.equal(day().guests, 1);
   assert.deepEqual(
     (await site.query("community/presence:online", null, M1)).members,
-    [{ nick: "앨리스", where: "마이페이지", at: site.now }],
+    [
+      { nick: "밥", where: "로그", at: site.now },
+      { nick: "앨리스", where: "마이페이지", at: site.now },
+    ],
   );
   // Who is here is for members (and the owner), not visitors.
   assert.equal(
@@ -725,7 +739,7 @@ test("nicknames are read by ID or found by name, and a closed site shows visitor
     M2,
   );
   site.run(
-    "INSERT INTO profiles (member, nick, deleted_at) VALUES ('m-3', '지운이', 1)",
+    "INSERT INTO profiles (member, nick, deleted_at, joined_at) VALUES ('m-3', '지운이', 1, 0)",
   );
   assert.deepEqual(
     await site.query("community/profiles:nicks", {
@@ -780,6 +794,7 @@ test("a member edits their own nickname and preferences, within the owner's rule
     acceptMessages: false,
     commentAlerts: true,
     mainCharacter: "hero",
+    createdAt: new Date(site.now).toISOString(),
     favorites: [],
   });
   for (const bad of [
@@ -914,7 +929,7 @@ test("디자인's 로그 card and 원글 작성자 styles, and the writer's 접�
 test("names are suggested to members as they type: nicknames, and approved characters", async () => {
   const site = await testSite();
   await site.mutate("community/membership:join", { nick: "앨리스" }, M1);
-  await site.mutate("community/membership:join", { nick: "앨_리" }, M2);
+  await site.mutate("community/membership:join", { nick: "앨가리" }, M2);
   site.run(
     "INSERT INTO characters (id, owner, name, state, created_at) VALUES (1, 'm-1', '아보 카도', 'approved', 0), (2, 'm-2', '아보 씨앗', 'editing', 0)",
   );
@@ -930,13 +945,12 @@ test("names are suggested to members as they type: nicknames, and approved chara
       .query("community/profiles:suggest", { kind, text }, M2)
       .then(({ names }) => names);
   assert.deepEqual(await named("member", "앨"), [
-    { name: "앨_리", detail: null },
+    { name: "앨가리", detail: null },
     { name: "앨리스", detail: "아보 카도" },
   ]);
   // LIKE's own characters are only themselves.
-  assert.deepEqual(await named("member", "_"), [
-    { name: "앨_리", detail: null },
-  ]);
+  // LIKE's own characters are only themselves.
+  assert.deepEqual(await named("member", "_"), []);
   assert.deepEqual(await named("character", "아보"), [
     { name: "아보 카도", detail: "앨리스" },
   ]);

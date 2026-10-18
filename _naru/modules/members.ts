@@ -15,6 +15,8 @@ export interface Profile {
     commentAlerts: boolean;
     callsSeenAt?: number;
     mainCharacter?: string | null;
+    /** 가입일 (mb_datetime), an ISO time. */
+    createdAt?: string;
     /** 출생년도 (mb_birth), when given. */
     birthYear?: number;
     deleted?: boolean;
@@ -29,8 +31,9 @@ export interface ProfileRow {
   accept_messages: number;
   comment_alerts: number;
   calls_seen_at: number | null;
-  main_character: string | null;
+  main_character: number | string | null;
   deleted_at: number | null;
+  joined_at?: number | null;
   birth_year?: number | null;
 }
 
@@ -44,7 +47,12 @@ export function profileOfRow(row: ProfileRow | null): Profile | null {
       acceptMessages: row.accept_messages !== 0,
       commentAlerts: row.comment_alerts !== 0,
       ...(row.calls_seen_at !== null ? { callsSeenAt: row.calls_seen_at } : {}),
-      mainCharacter: row.main_character ?? null,
+      mainCharacter:
+        row.main_character === null ? null : String(row.main_character),
+      // 가입일 (mb_datetime).
+      ...(row.joined_at
+        ? { createdAt: new Date(row.joined_at).toISOString() }
+        : {}),
       ...(row.birth_year ? { birthYear: row.birth_year } : {}),
       ...(row.deleted_at !== null ? { deleted: true } : {}),
     },
@@ -88,6 +96,14 @@ export async function profileByNick(
 }
 
 /** Refuses a nickname another member has (the profiles table keeps it unique). */
+/**
+ * A nickname as valid_mb_nick allows (lib/register.lib.php): Hangul,
+ * letters and digits.
+ */
+export const nickValid = (nick: string) =>
+  /^[0-9A-Za-z가-힣]{1,20}$/.test(nick);
+
+/** Fails when another member has `nick`, whatever its case. */
 export async function nickTaken(
   ctx: SqlCtx & Pick<QueryCtx, "fail">,
   nick: string,
@@ -171,7 +187,11 @@ const HISTORY_COLUMNS = {
   item: "item_id",
   inventory: "inventory_id",
   character: "character_id",
+  characterName: "character_name",
+  entry: "entry_id",
 } as const;
+/** History columns naming rows by number, read back as the strings pages use. */
+const NUMBERED = new Set(["inventory", "character"]);
 
 /** Adds a history row; what has no column of its own goes in details. */
 export async function addHistory(
@@ -179,19 +199,32 @@ export async function addHistory(
   entry: Record<string, any>,
 ): Promise<number> {
   const columns: string[] = [];
+  const places: string[] = [];
   const values: SqlValue[] = [];
   const details = {};
   for (const [key, value] of Object.entries(entry)) {
     if (value === undefined) continue;
     if (Object.hasOwn(HISTORY_COLUMNS, key)) {
       columns.push(HISTORY_COLUMNS[key]);
+      places.push("?");
       values.push(value);
     } else details[key] = value;
   }
+  // The character's name as it was (avo_exp.ch_name), for after it is gone.
+  if (
+    entry.character !== undefined &&
+    entry.character !== null &&
+    entry.characterName === undefined
+  ) {
+    columns.push("character_name");
+    places.push("(SELECT name FROM characters WHERE id = ?)");
+    values.push(entry.character);
+  }
   columns.push("details");
+  places.push("?");
   values.push(JSON.stringify(details));
   const { rows } = await ctx.sql<{ id: number }>(
-    `INSERT INTO history (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")}) RETURNING id`,
+    `INSERT INTO history (${columns.join(", ")}) VALUES (${places.join(", ")}) RETURNING id`,
     values,
   );
   return rows[0].id;
@@ -207,7 +240,7 @@ export function historyOfRow(row: HistoryRow) {
   const data: Record<string, any> = parsed(row.details, {});
   for (const [key, column] of Object.entries(HISTORY_COLUMNS))
     if (row[column] !== null && row[column] !== undefined)
-      data[key] = row[column];
+      data[key] = NUMBERED.has(key) ? String(row[column]) : row[column];
   return { id: String(row.id), data };
 }
 

@@ -1858,3 +1858,9 @@ img.side-icon {
   width: 8em;
   vertical-align: middle;
 }
+
+/* 인기글 (bo_hot): the list's icon_hot. */
+.log-title .hot {
+  color: #d33;
+  font-size: 0.85em;
+}

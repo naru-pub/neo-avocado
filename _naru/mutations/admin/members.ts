@@ -72,18 +72,20 @@ export const deleteMember = ownerOnly(async function deleteMember(
   { id }: { id?: string } = {},
 ) {
   if (typeof id !== "string" || !id) invalid(ctx);
-  const profile = await one<{ deleted_at: number | null }>(
+  const profile = await one(ctx, "SELECT 1 FROM profiles WHERE member = ?", [
+    id,
+  ]);
+  const record = await one<{ deleted_at: number | null }>(
     ctx,
-    "SELECT deleted_at FROM profiles WHERE member = ?",
+    "SELECT deleted_at FROM members WHERE member = ?",
     [id],
   );
-  const record = await one(ctx, "SELECT 1 FROM members WHERE member = ?", [id]);
   if (!profile && !record)
     ctx.fail("NOT_FOUND", "회원자료가 존재하지 않습니다.", {
       reason: "document_not_found",
     });
   // 이미 삭제된 회원은 제외.
-  if (profile?.deleted_at) return { id, deleted: false };
+  if (record?.deleted_at) return { id, deleted: false };
   // The 추천인 포인트 their recommender got goes back, down to nothing.
   const recommended = await one<{
     recommender: string | null;
@@ -113,11 +115,13 @@ export const deleteMember = ownerOnly(async function deleteMember(
     }
   }
   const day = kstDay(ctx.now).replace(/-/g, "");
-  await ctx.sql`INSERT INTO members (member, level, note) VALUES (${id}, 1, ${`${day} 삭제함`})
-    ON CONFLICT (member) DO UPDATE SET level = 1,
+  await ctx.sql`INSERT INTO members (member, level, note, deleted_at) VALUES (${id}, 1, ${`${day} 삭제함`}, ${ctx.now})
+    ON CONFLICT (member) DO UPDATE SET level = 1, deleted_at = excluded.deleted_at,
       note = ${`${day} 삭제함`} || CASE WHEN members.note = '' THEN '' ELSE char(10) || members.note END`;
   await ctx.sql`UPDATE profiles SET deleted_at = ${ctx.now}, main_character = NULL WHERE member = ${id}`;
-  await ctx.sql`DELETE FROM history WHERE owner = ${id}`;
+  // Their money's history goes, as avo_point's rows do; what their
+  // characters earned and bought stays with the characters.
+  await ctx.sql`DELETE FROM history WHERE owner = ${id} AND delta IS NOT NULL AND character_id IS NULL`;
   await ctx.sql`DELETE FROM wallets WHERE member = ${id}`;
   await ctx.sql`DELETE FROM messages WHERE recipient = ${id}`;
   await ctx.sql`DELETE FROM messages WHERE sender = ${id}`;

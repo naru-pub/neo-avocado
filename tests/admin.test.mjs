@@ -39,7 +39,7 @@ const update = (site, section, id, values) =>
   mutate(site, `${section}:save`, { id, values });
 const profile = (site, member, nick, main = null) =>
   site.run(
-    "INSERT INTO profiles (member, nick, main_character) VALUES (?, ?, ?)",
+    "INSERT INTO profiles (member, nick, main_character, joined_at) VALUES (?, ?, ?, 0)",
     member,
     nick,
     main,
@@ -213,6 +213,16 @@ test("boards and groups are saved as their forms check them, and members see the
       name: "자유",
       description: "<b>안내</b>",
       kind: "text",
+      order: 0,
+      device: "both",
+      linkLevel: 1,
+      uploadLevel: 1,
+      downloadLevel: 1,
+      htmlLevel: 1,
+      useSearch: true,
+      subjectLen: 60,
+      hot: 100,
+      downloadPoint: 0,
       enabled: true,
       group: "g",
       listLevel: 1,
@@ -745,7 +755,7 @@ test("a character's record is saved at its version, with an experience change in
       row.memo,
       row.actor,
     ]),
-    [["m-1", "exp", hero, 30, 30, "이벤트", "site-owner"]],
+    [["m-1", "exp", Number(hero), 30, 30, "이벤트", "site-owner"]],
   );
   // Opened at an older version: refused. Over budget: refused, nothing kept.
   assert.equal(
@@ -1156,7 +1166,7 @@ test("활동량 관리 reads a community of any size to its end, 100 members a p
   const site = await testSite();
   const members = 1250;
   const insertMany = site.db.prepare(
-    "INSERT INTO profiles (member, nick) VALUES (?, ?)",
+    "INSERT INTO profiles (member, nick, joined_at) VALUES (?, ?, 0)",
   );
   for (let n = 0; n < members; n += 1)
     insertMany.run(`m-${n}`, `회원${String(n).padStart(4, "0")}`);
@@ -1237,7 +1247,7 @@ test("the history reads newest first, and the grants' log by its actor", async (
 test("the history is searched as point_list, exp_list and order_list search, and names its member and character", async () => {
   const site = await testSite();
   profile(site, "m-1", "하나");
-  profile(site, "m-2", "둘_");
+  profile(site, "m-2", "둘둘");
   const hero = character(site, { name: "용사" });
   site.run(
     `INSERT INTO history (owner, kind, at, delta, exp_delta, memo, item_id, character_id) VALUES
@@ -1260,7 +1270,7 @@ test("the history is searched as point_list, exp_list and order_list search, and
     "daily",
   ]);
   // LIKE's own characters are only themselves.
-  assert.deepEqual(await kinds({ field: "nick", text: "_" }), ["buy"]);
+  assert.deepEqual(await kinds({ field: "nick", text: "_" }), []);
   assert.deepEqual(await kinds({ field: "character", text: "용" }), ["exp"]);
   assert.deepEqual(await kinds({ field: "item", text: "케이" }), ["buy"]);
   assert.deepEqual(await kinds({ field: "memo", text: "퀘스트" }), ["exp"]);
@@ -1281,8 +1291,8 @@ test("the history is searched as point_list, exp_list and order_list search, and
       (row) => row.ownerNick,
     );
   assert.deepEqual(await held({ field: "character", text: "용사" }), ["하나"]);
-  assert.deepEqual(await held({ field: "item", text: "사탕" }), ["둘_"]);
-  assert.deepEqual(await held({ field: "nick", text: "둘" }), ["둘_"]);
+  assert.deepEqual(await held({ field: "item", text: "사탕" }), ["둘둘"]);
+  assert.deepEqual(await held({ field: "nick", text: "둘" }), ["둘둘"]);
 });
 
 test("deleting history entries takes back what they moved, as exp_list_delete and point_list_delete do", async () => {
@@ -2070,7 +2080,9 @@ test("회원관리 counts the blocked and the left, blocks from a day, and delet
   site.run(
     "INSERT INTO messages (sender, recipient, body, sent_at) VALUES ('m-1', 'm-2', 'a', 0), ('m-2', 'm-1', 'b', 0), ('m-2', 'm-3', 'c', 0)",
   );
-  site.run("INSERT INTO favorites (member, post) VALUES ('m-1', 1)");
+  site.run(
+    "INSERT INTO favorites (member, post, created_at) VALUES ('m-1', 1, 0)",
+  );
   site.run(
     "INSERT INTO boards (id, name, admin) VALUES ('free', '자유', 'm-1')",
   );
@@ -2235,12 +2247,10 @@ test("the item list is found by 아이템 기능 and by name or description, as 
 });
 
 test("아이템 분류 files items as 일반, 개인 or 출석, the list by one, and 상세이미지 shows in their detail", async () => {
-  const site = await testSite({ pending: "0011" });
-  // Personal items made before the migration are filed as 개인 by it.
+  const site = await testSite();
   site.run(
-    "INSERT INTO items (id, name, personal) VALUES ('old-personal', '옛 개인', 1), ('old', '옛', 0)",
+    "INSERT INTO items (id, name, personal, category) VALUES ('old-personal', '옛 개인', 1, 'personal'), ('old', '옛', 0, 'general')",
   );
-  site.migrate();
   await create(site, "items", "daily", {
     name: "출석 보상",
     category: "attendance",
@@ -2276,4 +2286,154 @@ test("아이템 분류 files items as 일반, 개인 or 출석, the list by one,
   const item = shop.items.find((row) => row.id === "daily");
   assert.equal(item.data.detailImage, "https://media.example/big.png");
   assert.equal(item.data.category, "attendance");
+});
+
+test("a backup's parts name every column of their tables, and only those", async () => {
+  const site = await testSite();
+  const { BACKUP } = await import("../dist/_naru/modules/backup.js");
+  for (const [category, { parts }] of Object.entries(BACKUP))
+    for (const part of parts)
+      assert.deepEqual(
+        [...part.columns].sort(),
+        site
+          .rows("SELECT name FROM pragma_table_info(?)", part.table)
+          .map((row) => row.name)
+          .sort(),
+        `${category}: ${part.table}`,
+      );
+});
+
+test("a deleted character's number is never given to another", async () => {
+  const site = await testSite();
+  const first = character(site);
+  site.run("DELETE FROM characters WHERE id = ?", first);
+  assert.ok(Number(character(site)) > Number(first));
+});
+
+test("deleting an item takes its copies, listings, draws and recipes with it", async () => {
+  const site = await testSite();
+  site.run(
+    "INSERT INTO items (id, name) VALUES ('gem', '보석'), ('ticket', '뽑기권'), ('cake', '케이크')",
+  );
+  site.run(
+    "INSERT INTO inventory (owner, item_id, name) VALUES ('m-1', 'gem', '보석'), ('m-1', 'cake', '케이크')",
+  );
+  site.run("INSERT INTO shop_entries (id, item_id) VALUES ('e1', 'gem')");
+  site.run(
+    "INSERT INTO gacha (id, source, item_id) VALUES ('g1', NULL, 'gem'), ('g2', 'ticket', 'cake'), ('g3', 'gem', 'cake')",
+  );
+  site.run("INSERT INTO explore (id, item_id) VALUES ('x1', 'gem')");
+  site.run(
+    "INSERT INTO recipes (id, item_id) VALUES ('makes', 'gem'), ('needs', 'cake'), ('other', 'cake')",
+  );
+  site.run(
+    "INSERT INTO recipe_ingredients (recipe_id, item_id, count) VALUES ('makes', 'cake', 1), ('needs', 'gem', 2), ('other', 'cake', 1)",
+  );
+  await mutate(site, "items:remove", { id: "gem" });
+  const ids = (sql) => site.rows(sql).map((row) => row.id);
+  assert.deepEqual(ids("SELECT item_id AS id FROM inventory"), ["cake"]);
+  assert.deepEqual(ids("SELECT id FROM shop_entries"), []);
+  assert.deepEqual(ids("SELECT id FROM gacha ORDER BY id"), ["g2"]);
+  assert.deepEqual(ids("SELECT id FROM explore"), []);
+  assert.deepEqual(ids("SELECT id FROM recipes"), ["other"]);
+  assert.deepEqual(ids("SELECT recipe_id AS id FROM recipe_ingredients"), [
+    "other",
+  ]);
+});
+
+test("a board group with boards stays; one deleted takes its members' group role", async () => {
+  const site = await testSite();
+  site.run(
+    "INSERT INTO board_groups (id, name, members_only) VALUES ('g', '비밀', 1)",
+  );
+  site.run(
+    "INSERT INTO boards (id, name, group_id) VALUES ('b', '게시판', 'g')",
+  );
+  site.setRoles("m-1", ["group-g", "staff"]);
+  assert.equal(
+    await refusal(mutate(site, "board_groups:remove", { id: "g" })),
+    "group_has_boards",
+  );
+  site.run("DELETE FROM boards");
+  await mutate(site, "board_groups:remove", { id: "g" });
+  assert.deepEqual(site.roles("m-1"), ["staff"]);
+});
+
+test("renaming a 소속 or 종족 carries over to its characters, quests and restrictions", async () => {
+  const site = await testSite();
+  await create(site, "sides", "light", { name: "빛" });
+  const hero = character(site, { side: "빛" });
+  site.run("INSERT INTO quests (id, name, side) VALUES ('q', '퀘스트', '빛')");
+  site.run(
+    `INSERT INTO items (id, name, requirements, use_requirements) VALUES ('gem', '보석', '{"sides":["빛","물"]}', '{"sides":["빛"]}')`,
+  );
+  site.run(
+    `INSERT INTO shop_entries (id, item_id, requirements) VALUES ('e', 'gem', '{"sides":["빛"]}')`,
+  );
+  await update(site, "sides", "light", { name: "어둠" });
+  assert.equal(
+    site.rows("SELECT side FROM characters WHERE id = ?", hero)[0].side,
+    "어둠",
+  );
+  assert.equal(site.rows("SELECT side FROM quests")[0].side, "어둠");
+  const [item] = site.rows("SELECT * FROM items");
+  assert.deepEqual(JSON.parse(item.requirements).sides, ["어둠", "물"]);
+  assert.deepEqual(JSON.parse(item.use_requirements).sides, ["어둠"]);
+  assert.deepEqual(
+    JSON.parse(
+      site.rows("SELECT requirements FROM shop_entries")[0].requirements,
+    ).sides,
+    ["어둠"],
+  );
+});
+
+test("menus nest two levels: a parent is a top-level menu", async () => {
+  const site = await testSite();
+  await create(site, "menus", "a", { name: "가", link: "tab:members" });
+  await create(site, "menus", "b", {
+    name: "나",
+    link: "tab:members",
+    parent: "a",
+  });
+  assert.equal(
+    await refusal(
+      create(site, "menus", "c", {
+        name: "다",
+        link: "tab:members",
+        parent: "b",
+      }),
+    ),
+    "invalid_input",
+  );
+  await create(site, "menus", "d", { name: "라", link: "tab:members" });
+  assert.equal(
+    await refusal(update(site, "menus", "a", { parent: "d" })),
+    "invalid_input",
+  );
+});
+
+test("a deleted member stays deleted, and their characters keep their history", async () => {
+  const site = await testSite();
+  const hero = character(site);
+  site.run("INSERT INTO members (member, level) VALUES ('m-1', 2)");
+  site.run(
+    "INSERT INTO history (owner, kind, at, delta, balance) VALUES ('m-1', 'daily', 0, 5, 5)",
+  );
+  site.run(
+    "INSERT INTO history (owner, kind, at, character_id, exp_delta, exp) VALUES ('m-1', 'exp', 0, ?, 10, 10)",
+    hero,
+  );
+  await mutate(site, "members:deleteMember", { id: "m-1" });
+  assert.deepEqual(
+    site.rows("SELECT kind FROM history").map((row) => row.kind),
+    ["exp"],
+  );
+  assert.ok(site.rows("SELECT deleted_at FROM members")[0].deleted_at);
+  // With no profile, they cannot join again either.
+  assert.equal(
+    await refusal(
+      site.mutate("community/membership:join", { nick: "다시" }, M1),
+    ),
+    "deleted",
+  );
 });

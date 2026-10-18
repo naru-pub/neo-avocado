@@ -34,6 +34,7 @@ export const BACKUP: Record<string, { label: string; parts: BackupPart[] }> = {
           "enabled",
           "mobile",
           "new_window",
+          "created_at",
         ],
       },
       {
@@ -163,6 +164,8 @@ function HISTORY_COLUMNS() {
     "item_id",
     "inventory_id",
     "character_id",
+    "character_name",
+    "entry_id",
     "details",
   ];
 }

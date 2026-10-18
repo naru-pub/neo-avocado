@@ -40,7 +40,7 @@ export const list = ownerOnly(async function list(
   if (field === "level" && needle && !/^(?:[1-9]|10)$/.test(needle))
     invalid(ctx);
   const { rows } = await ctx.sql(
-    `SELECT members.*, profiles.nick, profiles.deleted_at, presence.at AS last_seen,
+    `SELECT members.*, profiles.nick, presence.at AS last_seen,
        (SELECT nick FROM profiles AS named WHERE named.member = members.recommender) AS recommender_nick,
        (SELECT json_group_array(json_object('id', CAST(id AS TEXT), 'name', name))
         FROM (SELECT id, name FROM characters WHERE characters.owner = members.member

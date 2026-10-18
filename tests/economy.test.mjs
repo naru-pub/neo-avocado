@@ -47,7 +47,7 @@ function insert(site, table, row) {
   return String(row.id ?? lastInsertRowid);
 }
 const profile = (site, member, nick) =>
-  insert(site, "profiles", { member, nick });
+  insert(site, "profiles", { member, nick, joined_at: 0 });
 const wallet = (site, member, balance) =>
   site.run(
     "INSERT INTO wallets (member, balance) VALUES (?, ?) ON CONFLICT (member) DO UPDATE SET balance = excluded.balance",
@@ -192,6 +192,15 @@ test("character-linked purchases, exchanges and limits use official state and pr
     ["sword"],
   );
   assert.equal(characterOf(site, hero).exp, 10);
+  // The experience spent is in the character's experience history too.
+  assert.deepEqual(
+    site
+      .rows(
+        "SELECT exp_delta, exp, character_name FROM history WHERE kind = 'exp'",
+      )
+      .map((row) => [row.exp_delta, row.exp, row.character_name]),
+    [[-10, 10, "Hero"]],
+  );
   assert.equal(characterOf(site, hero).active_title, null);
   assert.equal(count(site, "character_titles"), 0);
   assert.deepEqual(JSON.parse(characterOf(site, hero).purchases), {
@@ -457,7 +466,7 @@ test("a profile ticket opens the whole sheet of an approved character once while
     site
       .rows("SELECT * FROM history WHERE kind = 'use'")
       .map((entry) => [entry.item_id, entry.character_id, entry.details]),
-    [["profile", old, JSON.stringify({ effect: "profile" })]],
+    [["profile", Number(old), JSON.stringify({ effect: "profile" })]],
   );
   assert.equal(await refusal(save(ticket)), "invalid_ticket");
   // A lasting ticket (it_use_ever) stays.
@@ -751,7 +760,7 @@ test("buying checks the item, its stock and the balance before taking anything",
       entry.delta,
       entry.balance,
     ],
-    ["m-1", "sword", hero, -80, 20],
+    ["m-1", "sword", Number(hero), -80, 20],
   );
 });
 
@@ -980,7 +989,7 @@ test("the owner grants money and experience to one or all, and ranks add their b
     rows.slice(0, 2).map((row) => row.balance),
     [10, 15],
   );
-  assert.equal(rows[3].character_id, hero);
+  assert.equal(rows[3].character_id, Number(hero));
   assert.equal(rows[3].exp, 120);
 });
 
@@ -1052,9 +1061,9 @@ test("money to everyone leaves out level-1 members, and items go to one or every
         row.memo,
       ]),
     [
-      ["m-1", a, "gem", 30, "보석", "선물"],
-      ["m-1", a, "gem", 15, "보석", "선물"],
-      ["m-2", b, "gem", 15, "보석", "선물"],
+      ["m-1", Number(a), "gem", 30, "보석", "선물"],
+      ["m-1", Number(a), "gem", 15, "보석", "선물"],
+      ["m-2", Number(b), "gem", 15, "보석", "선물"],
     ],
   );
 });

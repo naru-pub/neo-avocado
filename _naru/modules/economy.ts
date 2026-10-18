@@ -408,6 +408,9 @@ export function offerData(row: {
   };
 }
 
+/** The most copies an inventory lists: a call reads at most 500,000 rows. */
+const INVENTORY_LIMIT = 20_000;
+
 /**
  * A member's held copies, oldest first: one character's, those of no
  * character (`character` null), or all of them (`all`).
@@ -418,12 +421,20 @@ export async function inventoryOf(
   { character = null, all = false }: { character?: unknown; all?: boolean },
 ): Promise<Owned[]> {
   const key = characterKey(character);
-  const { rows } = all
-    ? await ctx.sql<InventoryRow>`SELECT * FROM inventory WHERE owner = ${member} ORDER BY id LIMIT 1000`
-    : key === null
-      ? await ctx.sql<InventoryRow>`SELECT * FROM inventory WHERE owner = ${member} AND character_id IS NULL ORDER BY id LIMIT 1000`
-      : await ctx.sql<InventoryRow>`SELECT * FROM inventory WHERE owner = ${member} AND character_id = ${key} ORDER BY id LIMIT 1000`;
-  return rows.map(ownedOf);
+  // Every copy, a statement's 1,000 at a time (the original's list has no
+  // cap), up to INVENTORY_LIMIT.
+  const held: InventoryRow[] = [];
+  for (let after = 0; held.length < INVENTORY_LIMIT;) {
+    const { rows } = all
+      ? await ctx.sql<InventoryRow>`SELECT * FROM inventory WHERE owner = ${member} AND id > ${after} ORDER BY id LIMIT 1000`
+      : key === null
+        ? await ctx.sql<InventoryRow>`SELECT * FROM inventory WHERE owner = ${member} AND character_id IS NULL AND id > ${after} ORDER BY id LIMIT 1000`
+        : await ctx.sql<InventoryRow>`SELECT * FROM inventory WHERE owner = ${member} AND character_id = ${key} AND id > ${after} ORDER BY id LIMIT 1000`;
+    held.push(...rows);
+    if (rows.length < 1000) break;
+    after = rows.at(-1).id;
+  }
+  return held.slice(0, INVENTORY_LIMIT).map(ownedOf);
 }
 
 /**

@@ -17,12 +17,8 @@ page shows the message. `tests/function-modules.test.mjs` checks that every
 reference names an export and every export is called. Shared modules cannot
 be called directly.
 
-The data is the site's own tables, which `migrations/` make: the foundation
-(`0001`), the boards (`0002`), characters (`0003`), the economy (`0004`),
-mail (`0005`) and search (`0006`), then columns added since (`0007`–`0024`:
-board admins, post links, member blocks, recommenders, item details, stat
-order, secret comments, reply posts, post hits, attachments, shop entries, comment replies, link hits, birth years, owner options,
-chick and votes, popups and polls, field sizes). There are no collections, rules or site functions. Nothing is
+The data is the site's own tables, which `migrations/0001_schema.sql` makes.
+There are no collections, rules or site functions. Nothing is
 pushed to pages: they subscribe to `community/inbox:status` (unread 쪽지 and
 calls) and `community/posts:latest`, and Naru answers again when a mutation
 writes a table those read.

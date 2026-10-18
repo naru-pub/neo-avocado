@@ -54,10 +54,9 @@ export const run = ownerOnly(async function run(ctx: MutationCtx) {
     // 탈퇴일 more than that many days ago, not deleted already.
     const before = kstDay(ctx.now - leaveDays * DAY);
     const { rows } = await ctx.sql<{ member: string }>`SELECT members.member
-      FROM members LEFT JOIN profiles ON profiles.member = members.member
+      FROM members
       WHERE members.left_on IS NOT NULL AND members.left_on < ${before}
-        AND profiles.deleted_at IS NULL
-        AND members.note NOT GLOB '[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]*삭제함*'
+        AND members.deleted_at IS NULL
       ORDER BY members.left_on LIMIT ${MEMBERS_A_CALL + 1}`;
     for (const row of rows.slice(0, MEMBERS_A_CALL)) {
       const result = await deleteMember(ctx, { id: row.member });

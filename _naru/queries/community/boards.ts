@@ -25,7 +25,7 @@ export async function boards(ctx: QueryCtx) {
       id: string;
       name: string;
       image: string;
-    }>`SELECT * FROM emoticons ORDER BY id`,
+    }>`SELECT * FROM emoticons ORDER BY created_at, id`,
   ]);
   return {
     boards: (await boardsOf(ctx)).filter((board) =>

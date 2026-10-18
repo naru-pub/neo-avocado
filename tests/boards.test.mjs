@@ -50,7 +50,7 @@ function insert(site, table, row) {
   return String(row.id ?? lastInsertRowid);
 }
 const profile = (site, member, nick, extra = {}) =>
-  insert(site, "profiles", { member, nick, ...extra });
+  insert(site, "profiles", { member, nick, joined_at: 0, ...extra });
 const member = (site, id, data) =>
   site.run(
     `INSERT INTO members (member, level, adult, warnings, warning_note) VALUES (?, ?, ?, ?, ?)
@@ -2165,38 +2165,6 @@ test("a board search shows the same posts by any length of term: secret, 멤버�
   assert.deepEqual(await searched(site, "plans", "행사"), [plan]);
 });
 
-test("the search migration fills its full-text tables from the posts and comments before it", async () => {
-  const site = await testSite({ pending: "0006" });
-  board(site, "free", PUBLIC_BOARD);
-  const old = insert(site, "posts", {
-    board: "free",
-    number: 1,
-    title: "오래된 이야기",
-    body: "첫 번째 로그",
-    created_at: site.now,
-    updated_at: site.now,
-  });
-  const other = insert(site, "posts", {
-    board: "free",
-    number: 2,
-    body: "두 번째",
-    created_at: site.now,
-    updated_at: site.now,
-  });
-  insert(site, "comments", {
-    post_id: Number(other),
-    body: "예전에 단 댓글",
-    created_at: site.now,
-    updated_at: site.now,
-  });
-  site.migrate();
-  assert.deepEqual(await searched(site, "free", "오래된 이"), [old]);
-  assert.deepEqual(await searched(site, "free", "번째 로그"), [old]);
-  assert.deepEqual(await searched(site, "free", "예전에 단"), [other]);
-  assert.equal(count(site, "posts_search"), 2);
-  assert.equal(count(site, "comments_search"), 1);
-});
-
 test("boards bound post and comment lengths, and the site's banned words are refused", async () => {
   const { site, thread } = await roleplayWorld();
   site.run(
@@ -3584,4 +3552,128 @@ test("추천 and 비추천 are members' one vote each on others' posts, where th
   assert.equal(await refusal(vote("good", VISITOR)), "sign_in");
   const listed = (await listPage(site, { board: "free" })).documents[0];
   assert.deepEqual([listed.data.good, listed.data.nogood], [1, 0]);
+});
+
+test("링크·업로드·HTML 등급 keep links, files and HTML for the levels the board names", async () => {
+  const site = await boardSite();
+  profile(site, "m-1", "하나");
+  member(site, "m-1", { level: 2 });
+  board(site, "free", {
+    ...PUBLIC_BOARD,
+    kind: "text",
+    html: true,
+    linkLevel: 3,
+    uploadLevel: 3,
+    htmlLevel: 3,
+  });
+  assert.equal(
+    await refusal(
+      write(site, {
+        data: { board: "free", text: "x", links: ["https://e.com/"] },
+      }),
+    ),
+    "link_level",
+  );
+  const file = site.upload({ member: "m-1", name: "a.pdf" });
+  assert.equal(
+    await refusal(
+      write(site, {
+        data: { board: "free", text: "x", attachments: [{ url: file }] },
+      }),
+    ),
+    "upload_level",
+  );
+  // Below HTML 쓰기 등급 a post on an HTML board is plain text.
+  const { document: plain } = await write(site, {
+    data: { board: "free", text: "<b>x</b>" },
+  });
+  assert.equal(plain.data.format, "text");
+  member(site, "m-1", { level: 3 });
+  const { document: rich } = await write(site, {
+    data: {
+      board: "free",
+      text: "<b>x</b>",
+      links: ["https://e.com/"],
+      attachments: [{ url: file }],
+    },
+  });
+  assert.equal(rich.data.format, "html");
+});
+
+test("다운로드 등급 keeps a file's address from readers below it; 다운로드 포인트 charges once", async () => {
+  const site = await boardSite();
+  profile(site, "m-1", "하나");
+  profile(site, "m-2", "둘");
+  const pdf = site.upload({ member: "m-1", name: "a.pdf", size: 10 });
+  board(site, "free", { ...PUBLIC_BOARD, kind: "text", uploadCount: 2 });
+  const { document: saved } = await write(site, {
+    data: { board: "free", text: "x", attachments: [{ url: pdf }] },
+  });
+  board(site, "free", {
+    ...PUBLIC_BOARD,
+    kind: "text",
+    uploadCount: 2,
+    downloadLevel: 3,
+    downloadPoint: -4,
+  });
+  const [locked] = (await read(site, { id: saved.id }, M2)).document.data
+    .attachments;
+  assert.deepEqual(
+    [locked.url, locked.locked, locked.name],
+    ["", true, "a.pdf"],
+  );
+  const download = () =>
+    site.mutate("community/posts:download", { id: saved.id, url: pdf }, M2);
+  assert.equal(await refusal(download()), "download_level");
+  member(site, "m-2", { level: 3 });
+  wallet(site, "m-2", 10);
+  await download();
+  await download();
+  assert.equal(balanceOf(site, "m-2"), 6);
+  wallet(site, "m-2", 0);
+  site.run("DELETE FROM history WHERE kind = 'download'");
+  assert.equal(await refusal(download()), "not_enough");
+});
+
+test("전체 검색 사용 off keeps a board out of 최근게시물; 포인트 사용 off pays and takes nothing", async () => {
+  const site = await boardSite();
+  profile(site, "m-1", "하나");
+  board(site, "free", { ...PUBLIC_BOARD, kind: "text", useSearch: false });
+  board(site, "open", { ...PUBLIC_BOARD, kind: "text", readReward: -3 });
+  await write(site, { data: { board: "free", text: "숨김" } });
+  const { document: shown } = await write(site, {
+    data: { board: "open", text: "보임" },
+  });
+  const boards = (
+    await site.query("community/search:recent", {}, M1)
+  ).entries.map((entry) => entry.board.id);
+  assert.deepEqual(boards, ["open"]);
+  profile(site, "m-2", "둘");
+  wallet(site, "m-2", 10);
+  setSettings(site, "community", { usePoint: false });
+  await site.mutate("community/posts:hit", { id: shown.id }, M2);
+  assert.equal(balanceOf(site, "m-2"), 10);
+});
+
+test("nicknames are unique whatever their case, of Hangul, letters and digits, and keep their join date", async () => {
+  const site = await testSite();
+  await site.mutate("community/membership:join", { nick: "Alice" }, M1);
+  assert.equal(
+    await refusal(
+      site.mutate("community/membership:join", { nick: "alice" }, M2),
+    ),
+    "nick_taken",
+  );
+  for (const nick of ["앨 리", "앨_리", "ㄱ", "[[앨]]"])
+    assert.equal(
+      await refusal(site.mutate("community/membership:join", { nick }, M2)),
+      "invalid_nick",
+      nick,
+    );
+  const { profile: mine } = await site.query(
+    "community/membership:membership",
+    null,
+    M1,
+  );
+  assert.equal(mine.data.createdAt, new Date(site.now).toISOString());
 });

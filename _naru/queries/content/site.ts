@@ -117,10 +117,13 @@ export async function site(ctx: QueryCtx) {
     // mmb_counter: the owner's HTML, which the page sanitizes as posts.
     counter: short(saved.counter, 2000),
   };
+  // What is shown now, by its schedule's Korean local times, before any
+  // limit; scheduled() then checks each to the minute.
+  const local = new Date(ctx.now + 9 * 3600 * 1000).toISOString().slice(0, 16);
   const readable = (row: { enabled: number; level: number }) =>
     row.enabled !== 0 && levelAllows(access, row.level);
   const menus = (
-    await ctx.sql<MenuRow>`SELECT * FROM menus ORDER BY sort_order, id LIMIT 100`
+    await ctx.sql<MenuRow>`SELECT * FROM menus ORDER BY sort_order, created_at, id LIMIT 100`
   ).rows
     .filter((row) => readable(row) && target(row.link))
     .map((row) => ({
@@ -132,7 +135,10 @@ export async function site(ctx: QueryCtx) {
       mobile: row.mobile !== 0,
     }));
   const banners = (
-    await ctx.sql<BannerRow>`SELECT * FROM banners ORDER BY sort_order, id LIMIT 50`
+    await ctx.sql<BannerRow>`SELECT * FROM banners
+      WHERE (coalesce(starts_at, '') = '' OR starts_at <= ${local})
+        AND (coalesce(ends_at, '') = '' OR ends_at > ${local})
+      ORDER BY sort_order, created_at, id LIMIT 50`
   ).rows
     .filter(
       (row) =>
@@ -176,7 +182,10 @@ export async function site(ctx: QueryCtx) {
         top_px: number;
         width_px: number;
         height_px: number;
-      }>`SELECT * FROM popups WHERE enabled != 0 ORDER BY id LIMIT 20`
+      }>`SELECT * FROM popups WHERE enabled != 0
+        AND (coalesce(starts_at, '') = '' OR starts_at <= ${local})
+        AND (coalesce(ends_at, '') = '' OR ends_at > ${local})
+        ORDER BY created_at, id LIMIT 20`
     ).rows
       .filter((row) =>
         scheduled({ startsAt: row.starts_at, endsAt: row.ends_at }, ctx.now),

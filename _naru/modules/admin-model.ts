@@ -188,6 +188,25 @@ export const models: Record<string, Model> = {
         ],
       },
       { key: "enabled", label: "운영 중", type: "checkbox", default: true },
+      // bo_order: the boards' order in lists and pickers.
+      {
+        key: "order",
+        label: "출력 순서 (작은 숫자가 먼저)",
+        type: "number",
+        default: 0,
+      },
+      // bo_device: where the board shows, within its group's.
+      {
+        key: "device",
+        label: "접속기기 (게시판이 보이는 기기)",
+        type: "choice",
+        default: "both",
+        options: [
+          ["both", "PC와 모바일"],
+          ["pc", "PC 전용"],
+          ["mobile", "모바일 전용"],
+        ],
+      },
       {
         key: "group",
         label: "게시판 그룹",
@@ -206,6 +225,31 @@ export const models: Record<string, Model> = {
       { key: "readLevel", label: "본문 읽기 등급", type: "number", default: 2 },
       { key: "writeLevel", label: "글쓰기 등급", type: "number", default: 2 },
       { key: "commentLevel", label: "댓글 등급", type: "number", default: 2 },
+      // bo_link_level, bo_upload_level, bo_download_level, bo_html_level.
+      {
+        key: "linkLevel",
+        label: "링크 등급 (링크를 달 수 있는 등급)",
+        type: "number",
+        default: 1,
+      },
+      {
+        key: "uploadLevel",
+        label: "업로드 등급 (그림·첨부파일을 올릴 수 있는 등급)",
+        type: "number",
+        default: 1,
+      },
+      {
+        key: "downloadLevel",
+        label: "다운로드 등급 (첨부파일을 받을 수 있는 등급)",
+        type: "number",
+        default: 1,
+      },
+      {
+        key: "htmlLevel",
+        label: "HTML 쓰기 등급 (HTML 본문 허용일 때)",
+        type: "number",
+        default: 1,
+      },
       // bo_reply_level and bo_reply_order: 답변글 on a plain board.
       {
         key: "replyLevel",
@@ -240,6 +284,13 @@ export const models: Record<string, Model> = {
         label:
           "RSS 보이기 사용 (손님이 목록·본문을 읽는 게시판만, 주소 /rss/게시판ID)",
         type: "checkbox",
+      },
+      // bo_use_search: 최근게시물 and 전체검색 take the board's posts.
+      {
+        key: "useSearch",
+        label: "전체 검색 사용 (최근게시물과 전체검색에 이 게시판의 글을 보임)",
+        type: "checkbox",
+        default: true,
       },
       // bo_use_noname: members may post and comment as 익명.
       { key: "anonymous", label: "익명 사용", type: "checkbox" },
@@ -290,6 +341,20 @@ export const models: Record<string, Model> = {
         label: "새글 아이콘 (글을 쓴 뒤 N을 표시할 시간, 0이면 표시 안 함)",
         type: "number",
         default: 24,
+      },
+      // bo_subject_len, bo_hot: a list's titles cut to so many characters,
+      // and 인기글 marked from so many views.
+      {
+        key: "subjectLen",
+        label: "제목 길이 (목록에서 이만큼 넘으면 줄임, 0이면 줄이지 않음)",
+        type: "number",
+        default: 60,
+      },
+      {
+        key: "hot",
+        label: "인기글 (조회수가 이만큼 되면 아이콘 표시, 0이면 표시 안 함)",
+        type: "number",
+        default: 100,
       },
       // bo_use_list_content: a plain board's list with its posts' text.
       {
@@ -371,6 +436,14 @@ export const models: Record<string, Model> = {
         // alone, once a post; a member short of a charge cannot open it.
         label:
           "글읽기 포인트 (글을 따로 열 때 한 번, 음수면 차감, 모자라면 읽을 수 없음)",
+        type: "signed",
+        default: 0,
+      },
+      // bo_download_point: paid, or taken when negative, on a member's first
+      // download of a file.
+      {
+        key: "downloadPoint",
+        label: "다운로드 포인트 (파일마다 처음 받을 때 한 번, 음수면 차감)",
         type: "signed",
         default: 0,
       },
@@ -1239,6 +1312,15 @@ export const models: Record<string, Model> = {
       // 화폐 (adm/config_form.php:137, 353): cf_login_point and
       // cf_register_point, both installed at 0 (install/install_db.php).
       { type: "heading", label: "화폐" },
+      // cf_use_point: off, nothing the site pays or charges moves money
+      // (insert_point does nothing); the shop keeps its prices.
+      {
+        key: "usePoint",
+        label:
+          "포인트 사용 (끄면 가입·로그인·글·댓글·읽기·다운로드·추천·쪽지로 화폐가 오가지 않음)",
+        type: "checkbox",
+        default: true,
+      },
       {
         key: "loginReward",
         label: "로그인 시 획득 (1일 1회, 한국 시간 기준)",
@@ -2331,10 +2413,20 @@ export function buildRecord(section, values, previous, references) {
       ["listLevel", "readLevel", "writeLevel", "commentLevel"].some(
         (key) => data[key] < 1 || data[key] > 10,
       ) ||
-      (data.replyLevel !== undefined &&
-        (data.replyLevel < 1 || data.replyLevel > 10))
+      [
+        "replyLevel",
+        "linkLevel",
+        "uploadLevel",
+        "downloadLevel",
+        "htmlLevel",
+      ].some(
+        (key) => data[key] !== undefined && (data[key] < 1 || data[key] > 10),
+      )
     )
       throw new Error("게시판 등급은 1~10입니다.");
+    if (data.subjectLen > 255) throw new Error("제목 길이는 255자 이하입니다.");
+    if (!["both", "pc", "mobile"].includes(data.device ?? "both"))
+      throw new Error("접속기기를 확인하세요.");
     if (
       data.categories.length > 20 ||
       data.categories.some((name) => name.length > 40)

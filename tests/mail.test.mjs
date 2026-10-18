@@ -29,9 +29,10 @@ const setSettings = (site, value) =>
   );
 const profile = (site, member, extra = {}) =>
   site.run(
-    "INSERT INTO profiles (member, nick, accept_messages) VALUES (?, ?, ?)",
+    "INSERT INTO profiles (member, nick, accept_messages, joined_at) VALUES (?, ?, ?, 0)",
     member,
-    extra.nick ?? member,
+    // A nickname is Hangul, letters and digits: m-1's is m1.
+    extra.nick ?? member.replace(/-/g, ""),
     extra.acceptMessages === false ? 0 : 1,
   );
 const wallet = (site, member, balance) =>
@@ -404,9 +405,9 @@ test("the newest unread 쪽지 and the newest new call come with the tabs, for t
   site.now += 1000;
   const { ids } = await send(site, ["m-2"], "둘째 쪽지", M3);
   // mb_memo_call: who sent the newest one, and which it is.
-  assert.deepEqual((await inbox(M2)).memo, { id: ids[0], nick: "m-3" });
+  assert.deepEqual((await inbox(M2)).memo, { id: ids[0], nick: "m3" });
   await site.mutate("community/messages:readMessage", { id: ids[0] }, M2);
-  assert.equal((await inbox(M2)).memo.nick, "m-1");
+  assert.equal((await inbox(M2)).memo.nick, "m1");
   site.run(
     "INSERT INTO calls (recipient, sender, nick, kind, board, post_id, comment_id, at) VALUES ('m-2', 'm-1', '아보', 'call', 'free', 7, 9, ?), ('m-2', 'm-1', '아보', 'comment', 'free', 8, NULL, ?)",
     site.now - 10,

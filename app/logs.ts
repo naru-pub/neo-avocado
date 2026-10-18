@@ -170,6 +170,11 @@ function showCategories() {
  * plain text); "본문 보기" reads the whole post.
  */
 function previewOf(log) {
+  // 제목 길이 (bo_subject_len): a list's titles cut short (cut_str's …).
+  const most = boardSetting(log.data.board, "subjectLen", 60);
+  const title = log.data.title ?? "";
+  if (most > 0 && title.length > most)
+    log = { ...log, data: { ...log.data, title: `${title.slice(0, most)}…` } };
   const raw = log.data.text ?? "";
   if (raw.length <= 150) return log;
   const text = log.data.format === "html" ? htmlText(raw) : raw;
@@ -637,6 +642,15 @@ export async function logItem(log) {
     const list = document.createElement("ul");
     list.className = "log-attachments";
     for (const file of log.data.attachments) {
+      // Below the board's 다운로드 등급: its name, and no address.
+      if (file?.locked) {
+        list.append(
+          Object.assign(document.createElement("li"), {
+            textContent: `${file.name} (${sizeText(file.size)}) · 다운로드 권한이 없습니다`,
+          }),
+        );
+        continue;
+      }
       if (typeof file?.url !== "string" || !file.url.startsWith("https://"))
         continue;
       const entry = document.createElement("li");
@@ -749,6 +763,15 @@ export async function logItem(log) {
   item.querySelector(".log-title").textContent =
     `${log.data.writing ? "[작성 중] " : ""}${log.data.settlement ? `[${log.data.settlement.state}] ` : ""}${log.data.secret ? "🔒 " : ""}${log.data.title ?? ""}${log.data.category ? ` · ${log.data.category}` : ""}`;
   if (log.data.writing) item.classList.add("writing");
+  // 인기글 (bo_hot): from so many views, the list's icon_hot.
+  const hot = boardSetting(log.data.board, "hot", 100);
+  if (hot > 0 && typeof log.data.hits === "number" && log.data.hits >= hot)
+    item.querySelector(".log-title").append(
+      Object.assign(document.createElement("span"), {
+        className: "hot",
+        textContent: " 인기",
+      }),
+    );
   // 추천 and 비추천 (bbs/good.php), where the board takes them.
   const voteBoard = state.boards.find(
     (row) => row.id === (log.data.board ?? "default"),
@@ -1697,8 +1720,12 @@ export async function loadBoards() {
   } = await query("community/boards:boards");
   // gr_device (G5_IS_MOBILE): a group's boards for PC or mobile only.
   const mobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+  // bo_device the same way, a board's own within its group's.
   state.boards = boards.filter(
-    (row) => !row.data.device || row.data.device === (mobile ? "mobile" : "pc"),
+    (row) =>
+      !row.data.device ||
+      row.data.device === "both" ||
+      row.data.device === (mobile ? "mobile" : "pc"),
   );
   state.groups = listed;
   state.emoticons = emoticons;
@@ -1779,7 +1806,15 @@ export function configureBoard() {
   $<HTMLInputElement>("logImage").multiple = uploads > 1;
   $("logImageLabel").hidden = !pictures || uploads === 0;
   $("logImageUrlLabel").hidden = !pictures || uploads === 0;
-  $("logAttachmentsLabel").hidden = kind !== "text" || uploads === 0;
+  // 업로드 등급 and 링크 등급 (bo_upload_level, bo_link_level).
+  const reaches = (key) =>
+    boardStaff() ||
+    state.owner ||
+    state.level >= boardSetting(state.board, key, 1);
+  $("logAttachmentsLabel").hidden =
+    kind !== "text" || uploads === 0 || !reaches("uploadLevel");
+  for (const id of ["logLink1", "logLink2"])
+    $(id).closest("label").hidden = !reaches("linkLevel");
   // 리스트에서 파일 사용 (bo_use_list_file): off, files show on a post alone.
   $("logs").classList.toggle(
     "no-list-file",

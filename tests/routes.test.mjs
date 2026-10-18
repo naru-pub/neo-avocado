@@ -426,7 +426,7 @@ test("a content page's preview: its title, at a visitor's level", async () => {
 
 test("a board's RSS feed lists what a visitor reads, while it is on and the board is public", async () => {
   const site = await testSite();
-  insert(site, "profiles", { member: "m-1", nick: "하나" });
+  insert(site, "profiles", { member: "m-1", nick: "하나", joined_at: 0 });
   insert(site, "board_groups", { id: "g", name: "모임" });
   board(site, "free", {
     name: "자유 & 잡담",

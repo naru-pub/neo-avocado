@@ -29,7 +29,7 @@ const setSettings = (site, key, value) =>
   );
 const profile = (site, member, nick, main = null) =>
   site.run(
-    "INSERT INTO profiles (member, nick, main_character) VALUES (?, ?, ?)",
+    "INSERT INTO profiles (member, nick, main_character, joined_at) VALUES (?, ?, ?, 0)",
     member,
     nick,
     main,
@@ -449,8 +449,10 @@ test("a member's first character is their 대표, with its 두상·흉상·전�
   };
   const first = await save(site, { data });
   const main = () =>
-    site.rows("SELECT main_character FROM profiles WHERE member = 'm-1'")[0]
-      .main_character;
+    String(
+      site.rows("SELECT main_character FROM profiles WHERE member = 'm-1'")[0]
+        .main_character,
+    );
   assert.equal(main(), first.document.id);
   assert.deepEqual(
     ["image", "head", "body"].map((key) => first.document.data[key]),
@@ -635,14 +637,18 @@ test("the owner registers a character for a member named by nickname", async () 
   assert.equal(row(site, document.id).state, "approved");
   // Their first 대표: it becomes their main character, as ch_id is set.
   assert.equal(
-    site.rows("SELECT main_character FROM profiles WHERE member = 'm-2'")[0]
-      .main_character,
+    String(
+      site.rows("SELECT main_character FROM profiles WHERE member = 'm-2'")[0]
+        .main_character,
+    ),
     document.id,
   );
   await save(site, { nick: "아보", data }, OWNER);
   assert.equal(
-    site.rows("SELECT main_character FROM profiles WHERE member = 'm-1'")[0]
-      .main_character,
+    String(
+      site.rows("SELECT main_character FROM profiles WHERE member = 'm-1'")[0]
+        .main_character,
+    ),
     hero,
   );
   // Members still meet the switches.
@@ -695,7 +701,7 @@ test("deleting a character takes what character_delete.php removes, in one call"
     assert.equal(site.rows(`SELECT * FROM ${table}`).length, 0, table);
   // The oldest remaining one becomes the 대표 (extend/character.lib.php:5-12).
   assert.equal(
-    site.rows("SELECT main_character FROM profiles")[0].main_character,
+    String(site.rows("SELECT main_character FROM profiles")[0].main_character),
     elder,
   );
   assert.ok(row(site, rival));
@@ -761,7 +767,7 @@ test("the owner moves a character to another member, with what it keeps", async 
     site.rows("SELECT member, main_character FROM profiles ORDER BY member"),
     [
       { member: "m-1", main_character: null },
-      { member: "m-2", main_character: rival },
+      { member: "m-2", main_character: Number(rival) },
     ],
   );
   // The new owner uses it; the former one no longer can.
@@ -794,7 +800,7 @@ test("a member without a 대표 is given the moved character as theirs", async (
     site.rows("SELECT member, main_character FROM profiles ORDER BY member"),
     [
       { member: "m-1", main_character: null },
-      { member: "m-2", main_character: hero },
+      { member: "m-2", main_character: Number(hero) },
     ],
   );
 });
@@ -1287,8 +1293,10 @@ test("선택삭제 puts a character away, out of every list and use, until the o
   assert.equal(row(site, hero).state, "deleted");
   // The member's 대표 moves to what they still have (ch_id cleared).
   assert.equal(
-    site.rows("SELECT main_character FROM profiles WHERE member = 'm-1'")[0]
-      .main_character,
+    String(
+      site.rows("SELECT main_character FROM profiles WHERE member = 'm-1'")[0]
+        .main_character,
+    ),
     other,
   );
   const ids = (result) => result.documents.map((entry) => entry.id);
@@ -1346,8 +1354,10 @@ test("선택삭제 puts a character away, out of every list and use, until the o
   await review("approved");
   assert.equal(row(site, hero).state, "approved");
   assert.equal(
-    site.rows("SELECT main_character FROM profiles WHERE member = 'm-1'")[0]
-      .main_character,
+    String(
+      site.rows("SELECT main_character FROM profiles WHERE member = 'm-1'")[0]
+        .main_character,
+    ),
     hero,
   );
   // 선택제거 deletes it for good.

@@ -169,9 +169,7 @@ export async function communityAccess(
     deleted_at: number | null;
   }>(
     ctx,
-    `SELECT level, left_on, blocked_on,
-       (SELECT deleted_at FROM profiles WHERE profiles.member = members.member) AS deleted_at
-     FROM members WHERE member = ?`,
+    "SELECT level, left_on, blocked_on, deleted_at FROM members WHERE member = ?",
     [id],
   );
   // A member the owner deleted (adm/member_delete.php) is a guest for good.
@@ -279,6 +277,8 @@ export function restrictedFor(named: Names, verb: string) {
 
 /** A whole, non-negative amount the owner set in 커뮤니티 설정, else 0. */
 export function amountOf(settings: Record<string, any>, key: string): number {
+  // 포인트 사용 (cf_use_point) off: insert_point pays and takes nothing.
+  if (settings.usePoint === false) return 0;
   const value = settings[key];
   return Number.isSafeInteger(value) && value > 0 ? value : 0;
 }

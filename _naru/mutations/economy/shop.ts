@@ -206,8 +206,19 @@ export async function buy(
     inventory: owned.id,
     delta: -debit,
     balance,
-    expDelta: requirements.consumeExp ? -expPrice : 0,
+    entry,
+    ...(requirements.consumeExp && expPrice ? { expDelta: -expPrice } : {}),
   });
+  // 경험치 차감 (shop/_ajax.shop_update.php's insert_exp): the character's
+  // experience history has it too, with the total it left.
+  if (requirements.consumeExp && expPrice)
+    await record(ctx, "exp", {
+      character,
+      expDelta: -expPrice,
+      exp: next.exp,
+      memo: `${listing.data.name} 구매`,
+      actor: "shop",
+    });
   return { balance, owned };
 }
 

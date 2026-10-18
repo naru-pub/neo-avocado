@@ -56,6 +56,8 @@ interface Table {
   extra?: string;
   /** The key is a row number the table makes (inventory). */
   numbered?: boolean;
+  /** Its rows keep when they were made (created_at), the order of a tie. */
+  stamped?: boolean;
   /** What a read selects besides the row's columns. */
   select?: string;
   /** Fields made from the row beyond its columns. */
@@ -70,7 +72,6 @@ const table = (
 
 /** The sections kept one row each in a table of their own, by section. */
 export const TABLES: Record<string, Table> = {
-  // The foundation's (0001_foundation.sql).
   members: table(
     "members",
     [
@@ -104,43 +105,55 @@ export const TABLES: Record<string, Table> = {
     ["headerImage", "header_image", "text", null],
     ["footerImage", "footer_image", "text", null],
   ]),
-  menus: table("menus", [
-    ["name", "name", "text", ""],
-    ["link", "link", "text", ""],
-    ["parent", "parent", "text", null],
-    ["order", "sort_order", "int", 0],
-    ["level", "level", "int", 1],
-    ["enabled", "enabled", "bool", 1],
-    ["mobile", "mobile", "bool", 1],
-    ["newWindow", "new_window", "bool", 0],
-  ]),
-  banners: table("banners", [
-    ["place", "place", "text", "main"],
-    ["image", "image", "text", ""],
-    ["mobileImage", "mobile_image", "text", null],
-    ["alt", "alt", "text", ""],
-    ["url", "url", "text", null],
-    ["newWindow", "new_window", "bool", 0],
-    ["startsAt", "starts_at", "text", null],
-    ["endsAt", "ends_at", "text", null],
-    ["order", "sort_order", "int", 0],
-    ["level", "level", "int", 1],
-    ["enabled", "enabled", "bool", 1],
-  ]),
-  // 팝업레이어 and 설문조사 (0023_popups_polls.sql).
-  popups: table("popups", [
-    ["subject", "subject", "text", ""],
-    ["content", "content", "text", ""],
-    ["device", "device", "text", "both"],
-    ["startsAt", "starts_at", "text", null],
-    ["endsAt", "ends_at", "text", null],
-    ["disableHours", "disable_hours", "int", 24],
-    ["left", "left_px", "int", 10],
-    ["top", "top_px", "int", 10],
-    ["width", "width_px", "int", 450],
-    ["height", "height_px", "int", 500],
-    ["enabled", "enabled", "bool", 1],
-  ]),
+  menus: table(
+    "menus",
+    [
+      ["name", "name", "text", ""],
+      ["link", "link", "text", ""],
+      ["parent", "parent", "text", null],
+      ["order", "sort_order", "int", 0],
+      ["level", "level", "int", 1],
+      ["enabled", "enabled", "bool", 1],
+      ["mobile", "mobile", "bool", 1],
+      ["newWindow", "new_window", "bool", 0],
+    ],
+    { stamped: true },
+  ),
+  banners: table(
+    "banners",
+    [
+      ["place", "place", "text", "main"],
+      ["image", "image", "text", ""],
+      ["mobileImage", "mobile_image", "text", null],
+      ["alt", "alt", "text", ""],
+      ["url", "url", "text", null],
+      ["newWindow", "new_window", "bool", 0],
+      ["startsAt", "starts_at", "text", null],
+      ["endsAt", "ends_at", "text", null],
+      ["order", "sort_order", "int", 0],
+      ["level", "level", "int", 1],
+      ["enabled", "enabled", "bool", 1],
+    ],
+    { stamped: true },
+  ),
+  // 팝업레이어 and 설문조사.
+  popups: table(
+    "popups",
+    [
+      ["subject", "subject", "text", ""],
+      ["content", "content", "text", ""],
+      ["device", "device", "text", "both"],
+      ["startsAt", "starts_at", "text", null],
+      ["endsAt", "ends_at", "text", null],
+      ["disableHours", "disable_hours", "int", 24],
+      ["left", "left_px", "int", 10],
+      ["top", "top_px", "int", 10],
+      ["width", "width_px", "int", 450],
+      ["height", "height_px", "int", 500],
+      ["enabled", "enabled", "bool", 1],
+    ],
+    { stamped: true },
+  ),
   polls: table("polls", [
     ["subject", "subject", "text", ""],
     ["options", "options", "text", ""],
@@ -158,7 +171,6 @@ export const TABLES: Record<string, Table> = {
     ["endsAt", "ends_at", "text", null],
     ["images", "images", "json", "[]"],
   ]),
-  // The boards' (0002_boards.sql).
   boards: table(
     "boards",
     [
@@ -182,6 +194,8 @@ export const TABLES: Record<string, Table> = {
       ["pageRows", "page_rows", "int", 15],
       ["foldHeight", "fold_height", "int", 600],
       ["admin", "admin", "text", null],
+      // 출력 순서 (bo_order): the boards' order, before their IDs.
+      ["order", "sort_order", "int", 0],
     ],
     { extra: "options" },
   ),
@@ -192,11 +206,14 @@ export const TABLES: Record<string, Table> = {
     ["order", "sort_order", "int", 0],
     ["device", "device", "text", "both"],
   ]),
-  emoticons: table("emoticons", [
-    ["name", "name", "text", ""],
-    ["image", "image", "text", ""],
-  ]),
-  // The characters' (0003_characters.sql).
+  emoticons: table(
+    "emoticons",
+    [
+      ["name", "name", "text", ""],
+      ["image", "image", "text", ""],
+    ],
+    { stamped: true },
+  ),
   sides: table("sides", [
     ["name", "name", "text", ""],
     ["image", "image", "text", null],
@@ -246,7 +263,6 @@ export const TABLES: Record<string, Table> = {
     ["exp", "exp", "int", 0],
     ["bonusPoints", "bonus_points", "int", 0],
   ]),
-  // The economy's (0004_economy.sql).
   items: table("items", [
     ["name", "name", "text", ""],
     ["description", "description", "text", ""],
@@ -274,7 +290,7 @@ export const TABLES: Record<string, Table> = {
     ["detailImage", "detail_image", "text", null],
     ["itemType", "item_type", "text", ""],
   ]),
-  // 상점 진열 (0017_shop_entries.sql): an item's further sales.
+  // 상점 진열: an item's further sales.
   shop_entries: table("shop_entries", [
     ["item", "item_id", "text", ""],
     ["enabled", "enabled", "bool", 1],
@@ -751,12 +767,15 @@ export async function writeRow(
         [...values, key],
       )
     ).rows[0];
+  // A stamped row keeps the time it was first written.
+  const made = t.stamped ? ["created_at"] : [];
   return (
     await ctx.sql(
-      `INSERT INTO ${t.table} (${t.key}, ${columns.join(", ")}) VALUES (?, ${columns.map(() => "?").join(", ")})
+      `INSERT INTO ${t.table} (${[t.key, ...made, ...columns].join(", ")})
+       VALUES (${[key, ...made, ...columns].map(() => "?").join(", ")})
        ON CONFLICT (${t.key}) DO UPDATE SET ${columns.map((column) => `${column} = excluded.${column}`).join(", ")}
        RETURNING *`,
-      [key, ...values],
+      [key, ...made.map(() => ctx.now), ...values],
     )
   ).rows[0];
 }
@@ -785,8 +804,39 @@ export async function saveRecord(
     values,
     current: before ? recordOf(t, before) : null,
   });
+  // 메뉴: two levels, as me_code's are; a parent is a top-level menu, and
+  // a menu with its own under it stays at the top.
+  if (section === "menus" && record.data.parent) {
+    const parent = await one<{ parent: string | null }>(
+      ctx,
+      "SELECT parent FROM menus WHERE id = ?",
+      [record.data.parent],
+    );
+    if (
+      !parent ||
+      parent.parent ||
+      (await one(ctx, "SELECT 1 FROM menus WHERE parent = ?", [id]))
+    )
+      ctx.fail(
+        "INVALID_REQUEST",
+        "상위 메뉴는 하위 메뉴가 없는 최상위 메뉴여야 합니다.",
+        {
+          reason: "invalid_input",
+        },
+      );
+  }
+  // 설문조사: made at the call's time.
+  if (section === "polls" && !before) record.data.createdAt = ctx.now;
   const saved = await writeRow(ctx, t, key, record.data);
   if (section === "recipes") await saveIngredients(ctx, record);
+  // 소속 and 종족 are kept by name: a rename carries over to what has it.
+  if ((section === "sides" || section === "classes") && before)
+    await renameChoice(
+      ctx,
+      section === "sides" ? "side" : "class",
+      String(before.name ?? ""),
+      String(saved.name ?? ""),
+    );
   return recordOf(t, (await rowById(ctx, t, String(saved[t.key]))) ?? saved);
 }
 
@@ -800,7 +850,54 @@ async function saveIngredients(
     await ctx.sql`INSERT INTO recipe_ingredients (recipe_id, item_id, count) VALUES (${id}, ${entry.item}, ${entry.count})`;
 }
 
-/** Deletes one of a section's records; one already gone is fine. */
+/**
+ * A 소속's or 종족's new name, on the characters, quests and shop and use
+ * restrictions that had the old one.
+ */
+async function renameChoice(
+  ctx: MutationCtx,
+  field: "side" | "class",
+  from: string,
+  to: string,
+) {
+  if (!from || from === to) return;
+  await ctx.sql(`UPDATE characters SET ${field} = ? WHERE ${field} = ?`, [
+    to,
+    from,
+  ]);
+  if (field === "side")
+    await ctx.sql`UPDATE quests SET side = ${to} WHERE side = ${from}`;
+  const key = field === "side" ? "sides" : "classes";
+  for (const [table, columns] of [
+    ["items", ["requirements", "use_requirements"]],
+    ["shop_entries", ["requirements"]],
+  ] as const)
+    for (const column of columns) {
+      const { rows } = await ctx.sql<{ id: string; value: string }>(
+        `SELECT id, ${column} AS value FROM ${table}
+         WHERE EXISTS (SELECT 1 FROM json_each(${table}.${column}, '$.${key}') WHERE value = ?)`,
+        [from],
+      );
+      for (const row of rows) {
+        const value = parsed<Record<string, any>>(row.value, {});
+        value[key] = (value[key] as string[]).map((name) =>
+          name === from ? to : name,
+        );
+        await ctx.sql(`UPDATE ${table} SET ${column} = ? WHERE id = ?`, [
+          JSON.stringify(value),
+          row.id,
+        ]);
+      }
+    }
+}
+
+/**
+ * Deletes one of a section's records; one already gone is fine. An item
+ * takes its copies, listings, draws and the recipes that make or need it
+ * with it (adm/item_list_update.php); a board group still holding boards
+ * is kept (boardgroup_list_update.php), and one deleted takes its members'
+ * group-<id> roles.
+ */
 export async function removeRecord(
   ctx: MutationCtx,
   section: string,
@@ -811,6 +908,35 @@ export async function removeRecord(
   if (key === null) invalid(ctx);
   if (section === "recipes")
     await ctx.sql`DELETE FROM recipe_ingredients WHERE recipe_id = ${key}`;
+  if (section === "items") {
+    await ctx.sql`DELETE FROM inventory WHERE item_id = ${key}`;
+    await ctx.sql`DELETE FROM shop_entries WHERE item_id = ${key}`;
+    await ctx.sql`DELETE FROM gacha WHERE item_id = ${key} OR source = ${key}`;
+    await ctx.sql`DELETE FROM explore WHERE item_id = ${key}`;
+    const { rows: recipes } = await ctx.sql<{ id: string }>`
+      SELECT id FROM recipes WHERE item_id = ${key}
+      UNION SELECT recipe_id FROM recipe_ingredients WHERE item_id = ${key}`;
+    const gone = JSON.stringify(recipes.map((row) => row.id));
+    await ctx.sql`DELETE FROM recipe_ingredients WHERE recipe_id IN (SELECT value FROM json_each(${gone}))`;
+    await ctx.sql`DELETE FROM recipes WHERE id IN (SELECT value FROM json_each(${gone}))`;
+  }
+  if (section === "board_groups") {
+    if (await one(ctx, "SELECT 1 FROM boards WHERE group_id = ?", [key]))
+      ctx.fail(
+        "CONFLICT",
+        "이 그룹에 속한 게시판이 있으므로 삭제할 수 없습니다.",
+        { reason: "group_has_boards" },
+      );
+    const { rows } = await ctx.sql<{ member: string }>`
+      SELECT member FROM _naru_member_roles WHERE role = ${`${GROUP_ROLE}${key}`}`;
+    for (const { member } of rows) {
+      const roles = (await ctx.rolesOf([member]))[member] ?? [];
+      await ctx.setRoles(
+        member,
+        roles.filter((role) => role !== `${GROUP_ROLE}${key}`),
+      );
+    }
+  }
   await ctx.sql(`DELETE FROM ${t.table} WHERE ${t.key} = ?`, [key]);
   return null;
 }
