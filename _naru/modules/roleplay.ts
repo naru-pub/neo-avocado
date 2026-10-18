@@ -247,11 +247,10 @@ export async function explore(ctx: Ctx, speaker: Speaker | null) {
     ctx.fail("INVALID_REQUEST", "캐릭터를 확인해 주세요.", {
       reason: "no_character",
     });
-  const limit = amount(
-    (await communitySettings(ctx)).exploreLimit ?? 0,
-    "Explore limit",
-  );
-  if (!limit)
+  const settings = await communitySettings(ctx);
+  const limit = amount(settings.exploreLimit ?? 0, "Explore limit");
+  // 탐색사용 and 탐색 수행 가능 (cf_4, cf_6), both on (community.config.php:10).
+  if (!limit || settings.exploring === false || settings.exploreOpen === false)
     ctx.fail("CONFLICT", "지금은 탐색할 수 없습니다.", {
       reason: "explore_closed",
     });

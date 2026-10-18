@@ -521,6 +521,13 @@ test("exploration is limited per character per Korean day and drops configured i
       }),
     );
   assert.equal(await refusal(explore()), "explore_closed");
+  // 탐색사용 without 탐색 수행 가능 (cf_4, cf_6): set up, not yet open.
+  setSettings(site, "community", {
+    exploreLimit: 2,
+    exploring: true,
+    exploreOpen: false,
+  });
+  assert.equal(await refusal(explore()), "explore_closed");
   setSettings(site, "community", { exploreLimit: 2 });
   insert(site, "items", {
     id: "herb",

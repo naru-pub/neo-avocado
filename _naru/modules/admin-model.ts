@@ -1107,6 +1107,25 @@ export const models: Record<string, Model> = {
         default: true,
         newDefault: false,
       },
+      // cf_4 탐색사용 and cf_6 탐색 수행 가능 (extend/community.config.php:10):
+      // exploration needs both, so the owner may set it up before members
+      // can explore. Off as the original installs them; a site saved
+      // before keeps exploring by its daily count alone.
+      {
+        key: "exploring",
+        label: "탐색 사용",
+        type: "checkbox",
+        default: true,
+        newDefault: false,
+      },
+      {
+        key: "exploreOpen",
+        label:
+          "탐색 수행 가능 (끄면 탐색을 준비만 하고 회원은 아직 탐색할 수 없음)",
+        type: "checkbox",
+        default: true,
+        newDefault: false,
+      },
       {
         key: "exploreLimit",
         label: "캐릭터별 하루 탐색 횟수 (0: 탐색 끄기, 한국 시간 기준)",
