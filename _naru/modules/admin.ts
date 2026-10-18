@@ -8,6 +8,7 @@ import {
   GROUP_ROLE,
   STAFF,
   accessOfRoles,
+  containing,
   one,
   parsed,
   requireOwner,
@@ -407,13 +408,32 @@ export const pageOf = <T>(rows: T[], offset: number) => ({
 export async function listRecords(
   ctx: QueryCtx,
   section: string,
-  { after = null }: { after?: string | null } = {},
+  {
+    after = null,
+    search = "",
+  }: { after?: string | null; search?: string } = {},
 ) {
   const t = tableOf(ctx, section);
   const offset = offsetOf(ctx, after);
+  if (typeof search !== "string" || search.length > 40) invalid(ctx);
+  // The lists' 검색 (board_list.php's bo_table and bo_subject, quest_list's
+  // title, boardgroup_list's gr_id and gr_subject…): the ID or name holding it.
+  const named = [
+    t.key,
+    ...t.columns
+      .filter(
+        ([field, , kind]) =>
+          kind === "text" && ["name", "title", "label", "alt"].includes(field),
+      )
+      .map(([, column]) => column),
+  ];
+  const term = search.trim();
+  const where = term
+    ? ` WHERE (${named.map((column) => `CAST(${column} AS TEXT) LIKE ? ESCAPE '\\'`).join(" OR ")})`
+    : "";
   const { rows } = await ctx.sql(
-    `${selectOf(t)} ORDER BY ${t.key} LIMIT ? OFFSET ?`,
-    [PAGE + 1, offset],
+    `${selectOf(t)}${where} ORDER BY ${t.key} LIMIT ? OFFSET ?`,
+    [...(term ? named.map(() => containing(term)) : []), PAGE + 1, offset],
   );
   return pageOf(
     rows.map((row) => recordOf(t, row)),

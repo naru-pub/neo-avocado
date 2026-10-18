@@ -281,6 +281,8 @@ async function openAddress() {
   routing = true;
   try {
     if (name && Object.hasOwn(models, name)) {
+      // A search is the section's it was made in.
+      if (name !== section) $<HTMLInputElement>("recordText").value = "";
       section = name;
     }
     renderNav();
@@ -333,6 +335,7 @@ async function load({ more = false } = {}) {
     $("memberTools").hidden = true;
     $("itemCategoryLabel").hidden = true;
     $("logSearch").hidden = true;
+    $("recordSearch").hidden = true;
     const row = await owner.query(CALLS[section].get, { section });
     if (requestedSection === section) await openForm(row);
     return;
@@ -347,6 +350,7 @@ async function load({ more = false } = {}) {
     $("memberTools").hidden = true;
     $("itemCategoryLabel").hidden = true;
     $("logSearch").hidden = true;
+    $("recordSearch").hidden = true;
     return model.report === "visits"
       ? visitsView()
       : model.report === "grants"
@@ -361,6 +365,9 @@ async function load({ more = false } = {}) {
   $("memberTools").hidden = section !== "members";
   $("itemCategoryLabel").hidden = section !== "items";
   $("logSearch").hidden = !["history", "inventory"].includes(section);
+  $("recordSearch").hidden =
+    Boolean(model.holdings || model.review) ||
+    ["members", "history", "inventory", "items", "wallets"].includes(section);
   $("logKind").hidden = section !== "history";
   // An inventory copy has no memo of its own.
   $<HTMLOptionElement>('#logField option[value="memo"]').hidden =
@@ -414,7 +421,11 @@ async function load({ more = false } = {}) {
       effect: $<HTMLSelectElement>("itemEffect").value,
       search: $<HTMLInputElement>("itemSearch").value,
     });
-  else page = await owner.query(CALLS[section].list, { after });
+  else
+    page = await owner.query(CALLS[section].list, {
+      after,
+      search: $<HTMLInputElement>("recordText").value,
+    });
   if (requestedSection !== section || !owner) return;
   if (!more) $("adminRows").replaceChildren();
   if (section === "members" && page.counts)
@@ -1856,6 +1867,10 @@ $("logSearch").onsubmit = (event) => {
   run(() => load());
 };
 $("logKind").onchange = () => run(() => load());
+$("recordSearch").onsubmit = (event) => {
+  event.preventDefault();
+  run(() => load());
+};
 $("memberFind").onclick = () => run(() => load());
 $("memberSearch").onkeydown = (event) => {
   if (event.key === "Enter") {

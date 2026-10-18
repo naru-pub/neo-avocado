@@ -147,6 +147,18 @@
           />
           <button type="submit">검색</button>
         </form>
+        <!-- The other lists' 검색: an entry's ID or name (board_list.php,
+             boardgroup_list.php, quest_list.php…). -->
+        <form id="recordSearch" hidden>
+          <input
+            id="recordText"
+            type="search"
+            maxlength="40"
+            aria-label="ID·이름 검색"
+            placeholder="ID·이름"
+          />
+          <button type="submit">검색</button>
+        </form>
         <!-- adm/member_list.php's 총회원수, 차단 and 탈퇴. -->
         <p id="memberCounts" hidden></p>
         <button id="adminNew" type="button">새로 등록</button>

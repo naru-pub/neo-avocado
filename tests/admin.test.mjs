@@ -1492,6 +1492,23 @@ test("게시판 복사 with 구조와 데이터 keeps its 답변글 under their 
   );
 });
 
+test("the other lists are searched by an entry's ID or name, as board_list and quest_list", async () => {
+  const site = await testSite();
+  await create(site, "boards", "free", { name: "자유게시판" });
+  await create(site, "boards", "notice", { name: "공지" });
+  await create(site, "boards", "log_100", { name: "100% 로그" });
+  const ids = async (search) =>
+    (await query(site, "boards:list", { search })).documents.map(
+      (row) => row.id,
+    );
+  assert.deepEqual(await ids(""), ["free", "log_100", "notice"]);
+  assert.deepEqual(await ids("자유"), ["free"]);
+  assert.deepEqual(await ids("notice"), ["notice"]);
+  // LIKE's own characters are only themselves.
+  assert.deepEqual(await ids("%"), ["log_100"]);
+  assert.deepEqual(await ids("_1"), ["log_100"]);
+});
+
 test("the forms' pick lists come in one read", async () => {
   const site = await testSite();
   profile(site, "m-1", "하나");
