@@ -2,7 +2,12 @@
 // posts and comments on every board the reader may read, and 전체검색
 // (bbs/search.php), a search of them all. Visitors read what level 1 may
 // while the site is open (사이트공개).
-import { communitySettings, containing, one } from "../../modules/access.js";
+import {
+  communitySettings,
+  containing,
+  kstDay,
+  one,
+} from "../../modules/access.js";
 import type { Access } from "../../modules/access.js";
 import {
   FULL_TEXT_MIN,
@@ -105,7 +110,14 @@ export async function recent(
     page > 1000
   )
     invalid(ctx);
-  const size = newRows(await communitySettings(ctx));
+  const settings = await communitySettings(ctx);
+  const size = newRows(settings);
+  // 최근게시물 기간 (cf_new_del): from the Korean day that many days ago.
+  const days = Number.isSafeInteger(settings.newDays) ? settings.newDays : 0;
+  const since =
+    days > 0
+      ? Date.parse(`${kstDay(ctx.now - days * 86_400_000)}T00:00:00+09:00`)
+      : 0;
   const { access, boards, viewer, staffIds, visible } = await readable(
     ctx,
     group,
@@ -135,15 +147,15 @@ export async function recent(
   if (view !== "comments")
     parts.push({
       text: `SELECT 'post' AS kind, posts.id AS id, posts.created_at AS at
-        FROM posts WHERE ${visible.text} ${postsBy.text}`,
-      values: [...visible.values, ...postsBy.values],
+        FROM posts WHERE ${visible.text} ${postsBy.text} AND posts.created_at >= ?`,
+      values: [...visible.values, ...postsBy.values, since],
     });
   if (view !== "posts")
     parts.push({
       text: `SELECT 'comment' AS kind, comments.id AS id, comments.created_at AS at
         FROM comments JOIN posts ON posts.id = comments.post_id
-        WHERE ${visible.text} ${commentsBy.text}`,
-      values: [...visible.values, ...commentsBy.values],
+        WHERE ${visible.text} ${commentsBy.text} AND comments.created_at >= ?`,
+      values: [...visible.values, ...commentsBy.values, since],
     });
   const union = parts.map((part) => part.text).join(" UNION ALL ");
   const values = parts.flatMap((part) => part.values);

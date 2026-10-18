@@ -1120,6 +1120,17 @@ export const models: Record<string, Model> = {
         type: "number",
         default: 15,
       },
+      // cf_new_del 최근게시물 삭제 (installed at 30): bbs/db_table.optimize.php
+      // deletes older entries; here 최근게시물 leaves them out, and the
+      // posts stay. A site saved before shows them all.
+      {
+        key: "newDays",
+        label:
+          "최근게시물 기간 (일, 이보다 지난 글·댓글은 최근게시물에 보이지 않음, 0이면 모두)",
+        type: "number",
+        default: 0,
+        newDefault: 30,
+      },
       {
         key: "writePages",
         label: "페이지 표시 수 (번호로 넘기는 목록의 페이지 링크 수)",

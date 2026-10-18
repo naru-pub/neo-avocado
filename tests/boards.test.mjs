@@ -2863,3 +2863,34 @@ test("a board lists by 제목, 글쓴이 or 분류명; a 익명 post's writer so
   assert.deepEqual(await order("name asc"), [four, two, one, three]);
   assert.deepEqual(await order("category desc"), [two, three, one, four]);
 });
+
+test("최근게시물 leaves out what is older than its 기간 (cf_new_del), by Korean day", async () => {
+  // 2030-01-31 12:00 in Korea.
+  const site = await testSite({ now: Date.parse("2030-01-31T03:00:00Z") });
+  board(site, "free", PUBLIC_BOARD);
+  profile(site, "m-1", "아보");
+  const day = (iso) => Date.parse(iso);
+  const old = post(site, {
+    board: "free",
+    owner: "m-1",
+    created_at: day("2029-12-31T14:59:00Z"), // 12-31 23:59 KST
+  });
+  const kept = post(site, {
+    board: "free",
+    owner: "m-1",
+    created_at: day("2029-12-31T15:00:00Z"), // 01-01 00:00 KST
+  });
+  comment(site, {
+    post_id: Number(old),
+    owner: "m-1",
+    body: "옛 댓글",
+    created_at: day("2029-12-01T00:00:00Z"),
+  });
+  const ids = async () =>
+    (await site.query("community/search:recent", {}, M1)).entries.map(
+      (entry) => entry.kind + (entry.comment?.id ?? entry.post.id),
+    );
+  assert.equal((await ids()).length, 3);
+  setSettings(site, "community", { newDays: 30 });
+  assert.deepEqual(await ids(), [`post${kept}`]);
+});
