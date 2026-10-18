@@ -32,6 +32,12 @@ with owner-only access.
   would remove them.
 - **A boolean column comes back as 0 or 1.** Booleans bind as 1 and 0 but
   read back as numbers, so every row is mapped by hand.
+- **App notifications pile up and outlive what they tell of.** Five comments
+  on one post are five notifications in the Naru app, and reading the 쪽지
+  or opening 알림 on the site leaves them there. A key that replaces the
+  earlier notification of the same post, and a way to withdraw one, would
+  let them follow the site's own 알림. `modules/push.ts` also cuts titles
+  and bodies, which Naru now does itself; that can go once it is deployed.
 
 ## What worked well
 
