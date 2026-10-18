@@ -22,6 +22,7 @@ export async function loadSite() {
   state.siteOpen = site.open !== false;
   state.names = { ...NAME_DEFAULTS, ...site.names };
   state.adminIcon = site.adminIcon ?? null;
+  state.sideIcons = site.sideIcons ?? {};
   if (Array.isArray(site.images)) state.images = site.images;
   if (site.nameField) {
     state.nameField = site.nameField;

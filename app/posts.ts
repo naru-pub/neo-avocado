@@ -131,6 +131,18 @@ export async function speakerLabel(row) {
     title.append(speaker.title);
     fragment.append(title, " ");
   }
+  // view_comment.skin.php:50: its 소속's icon (get_side_icon).
+  const sideIcon = speaker.side ? state.sideIcons?.[speaker.side] : null;
+  if (sideIcon?.startsWith("https://"))
+    fragment.append(
+      Object.assign(document.createElement("img"), {
+        className: "side-icon",
+        src: sideIcon,
+        alt: speaker.side,
+        title: speaker.side,
+      }),
+      " ",
+    );
   // view_comment.skin.php:38-60: the character's name opens its page.
   const name = document.createElement(speaker.character ? "a" : "span");
   name.className = "speaker-name";

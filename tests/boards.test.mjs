@@ -3359,3 +3359,27 @@ test("a post's comments page on in thread order, past fifty", async () => {
   );
   assert.equal(second.nextCursor, null);
 });
+
+test("a writer's character carries its 소속, whose icon every reader's frame names", async () => {
+  const site = await boardSite();
+  profile(site, "m-1", "하나");
+  insert(site, "characters", {
+    owner: "m-1",
+    name: "Hero",
+    side: "숲",
+    state: "approved",
+    created_at: site.now,
+  });
+  insert(site, "sides", {
+    id: "forest",
+    name: "숲",
+    image: "https://e.com/f.png",
+  });
+  insert(site, "sides", { id: "city", name: "도시", image: "javascript:x" });
+  const { document: saved } = await write(site, {
+    data: { image: "https://e.com/a.png", text: "x", character: "1" },
+  });
+  assert.equal(saved.data.speaker.side, "숲");
+  const { sideIcons } = await site.query("content/site:site");
+  assert.deepEqual(sideIcons, { 숲: "https://e.com/f.png" });
+});

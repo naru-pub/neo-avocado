@@ -41,6 +41,8 @@ export interface Speaker {
   title: string | null;
   titleImage: string | null;
   portrait: string | null;
+  /** Its 소속 then, whose icon shows beside it (get_side_icon). */
+  side?: string;
 }
 
 /** A member a text calls with [[nick]]. */
@@ -99,6 +101,7 @@ export async function speakerOf(
     titleImage: https(title?.image),
     // The 두상: an outfit dresses the 전신 only (member/viewer.php:76).
     portrait: https(character.image),
+    ...(character.side ? { side: character.side } : {}),
   };
 }
 

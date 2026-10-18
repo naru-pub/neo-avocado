@@ -159,6 +159,15 @@ export async function site(ctx: QueryCtx) {
     bgm: backgroundMusic(settings.bgm),
     // 쪽지·호출 알림음: the arrival popups' chime, off unless the owner wants it.
     alarmSound: settings.alarmSound === true,
+    // 소속 icons (get_side_icon), by name, beside a writer's character.
+    sideIcons: Object.fromEntries(
+      (
+        await ctx.sql<{ name: string; image: string | null }>`
+          SELECT name, image FROM sides WHERE image IS NOT NULL LIMIT 100`
+      ).rows
+        .filter((row) => https(row.image))
+        .map((row) => [row.name, row.image]),
+    ),
     // 관리자 아이콘 (ico_admin): the site owner's mark on their comments.
     adminIcon: https(settings.adminIcon),
     // 조합(레시피)사용 (cf_5): whether a post offers 조합.

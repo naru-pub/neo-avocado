@@ -1805,3 +1805,8 @@ dialog.entrance::backdrop {
   content: "↳ ";
   color: var(--muted);
 }
+/* get_side_icon: a writer's 소속, a line high. */
+img.side-icon {
+  height: 1.2em;
+  vertical-align: middle;
+}

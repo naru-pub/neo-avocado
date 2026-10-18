@@ -49,6 +49,8 @@ const initialState = {
   ownerMarks: { prefix: "▶", suffix: "◀" },
   // 관리자 아이콘: the owner's picture for the site owner's comments.
   adminIcon: null,
+  // 소속 icons by name (get_side_icon).
+  sideIcons: {},
   // 커뮤니티 설정's 쪽지·호출 알림음: the arrival popups may chime.
   alarmSound: false,
   // 조합(레시피)사용: whether a post offers 조합.
