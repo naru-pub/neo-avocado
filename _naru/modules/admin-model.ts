@@ -865,6 +865,8 @@ export const models: Record<string, Model> = {
       // st_min, st_help (adm/status_list.php).
       { key: "min", label: "최소값", type: "number", default: 0 },
       { key: "help", label: "도움말 (배분할 때 보임)", max: 200 },
+      // st_order: the order stats are shown in, lowest first.
+      { key: "order", label: "순서 (작은 수부터)", type: "number", default: 0 },
     ],
   },
   levels: {

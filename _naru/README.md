@@ -19,8 +19,9 @@ be called directly.
 
 The data is the site's own tables, which `migrations/` make: the foundation
 (`0001`), the boards (`0002`), characters (`0003`), the economy (`0004`),
-mail (`0005`) and search (`0006`), then columns added since (`0007`–`0011`:
-board admins, post links, member blocks, recommenders, item details). There are no collections, rules or site functions. Nothing is
+mail (`0005`) and search (`0006`), then columns added since (`0007`–`0012`:
+board admins, post links, member blocks, recommenders, item details, stat
+order). There are no collections, rules or site functions. Nothing is
 pushed to pages: they subscribe to `community/inbox:status` (unread 쪽지 and
 calls) and `community/posts:latest`, and Naru answers again when a mutation
 writes a table those read.

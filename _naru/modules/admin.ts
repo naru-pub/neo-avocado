@@ -212,6 +212,7 @@ export const TABLES: Record<string, Table> = {
     ["max", "max", "int", 999],
     ["min", "min", "int", 0],
     ["help", "help", "text", ""],
+    ["order", "sort_order", "int", 0],
   ]),
   levels: table("levels", [
     ["name", "name", "text", ""],

@@ -826,7 +826,9 @@ export async function statDefinitions(ctx: SqlCtx): Promise<StatDefinition[]> {
     max: number;
     min: number;
     help: string;
-  }>("SELECT * FROM stats ORDER BY id");
+  }>(
+    "SELECT id, name, initial, max, min, help FROM stats ORDER BY sort_order, id",
+  );
   if (rows.length > MAX_STATS)
     throw new Error(`At most ${MAX_STATS} stats may be configured.`);
   return rows.map(({ id, ...data }) => ({ id, data }));

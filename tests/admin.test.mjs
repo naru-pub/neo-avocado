@@ -1436,6 +1436,23 @@ test("회원 관리 finds members by 권한 and 추천인, lists their character
   );
 });
 
+test("stats show in their 순서 (st_order), then by ID", async () => {
+  const site = await testSite();
+  await create(site, "stat_config", "atk", { name: "공격", order: 2 });
+  await create(site, "stat_config", "hp", { name: "HP", order: 1 });
+  await create(site, "stat_config", "def", { name: "방어", order: 2 });
+  const hero = character(site, { name: "용사", state: "approved" });
+  const { definitions } = await site.query(
+    "characters/progression:characterStatus",
+    { character: hero },
+    M1,
+  );
+  assert.deepEqual(
+    definitions.map((row) => row.id),
+    ["hp", "atk", "def"],
+  );
+});
+
 test("the forms' pick lists come in one read", async () => {
   const site = await testSite();
   profile(site, "m-1", "하나");
