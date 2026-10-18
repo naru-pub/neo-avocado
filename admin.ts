@@ -137,6 +137,12 @@ const CALLS: Record<
     save: "admin/items:save",
     remove: "admin/items:remove",
   },
+  shop_entries: {
+    list: "admin/shop_entries:list",
+    get: "admin/shop_entries:get",
+    save: "admin/shop_entries:save",
+    remove: "admin/shop_entries:remove",
+  },
   gacha: {
     list: "admin/gacha:list",
     get: "admin/gacha:get",
@@ -544,6 +550,10 @@ async function load({ more = false } = {}) {
     }
     if (section === "wallets")
       li.append(`${moneyText(itemNames, row.data.balance)} `);
+    if (section === "shop_entries")
+      li.append(
+        `· ${row.data.item} · ${row.data.shopCategory || "첫 분류"} · ${moneyText(itemNames, row.data.price ?? 0)}${row.data.enabled === false ? " · 진열 안 함" : ""} `,
+      );
     if (section === "inventory")
       li.append(
         `${row.ownerNick ?? row.data.owner} · ${row.characterName ?? "회원 인벤토리"} `,

@@ -53,6 +53,15 @@ async function loadShop() {
   $("balance").textContent = amountText(balance);
   state.itemCatalog.clear();
   for (const item of shop.items) state.itemCatalog.set(item.id, item);
+  // 상점 진열: each further sale as its item, on the entry's terms.
+  shopOffers = (shop.offers ?? []).flatMap((offer) => {
+    const item = state.itemCatalog.get(offer.item);
+    if (!item) return [];
+    const data = { ...item.data, ...offer.data, hidden: false };
+    if (offer.data.stock === undefined) delete data.stock;
+    if (offer.data.display === undefined) delete data.display;
+    return [{ id: item.id, entry: offer.id, data }];
+  });
   showCategory();
   showInventory(shop.inventory);
   showRecipes(shop.recipes);
@@ -147,9 +156,10 @@ function forCharacter(item) {
   );
 }
 /** The shop's items of the chosen category, from what has been read. */
+let shopOffers = [];
 function showCategory(number = 1) {
   const first = state.shopCategories?.[0];
-  const shown = [...state.itemCatalog.values()].filter(
+  const shown = [...state.itemCatalog.values(), ...shopOffers].filter(
     (item) =>
       !item.data.hidden &&
       onDisplay(item.data.display, Date.now()) &&
@@ -161,7 +171,8 @@ function showCategory(number = 1) {
     (a, b) =>
       (a.data.order ?? 0) - (b.data.order ?? 0) ||
       String(a.data.name ?? "").localeCompare(String(b.data.name ?? "")) ||
-      (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+      (a.id < b.id ? -1 : a.id > b.id ? 1 : 0) ||
+      String(a.entry ?? "").localeCompare(String(b.entry ?? "")),
   );
   // Ten to a page (shop/index.php's page_rows).
   const pages = Math.ceil(shown.length / SHOP_PAGE);
@@ -317,6 +328,7 @@ function showShopDetail(item) {
         "economy/shop:buy",
         {
           item: item.id,
+          ...(item.entry ? { entry: item.entry } : {}),
           character: state.shopCharacter.id,
           ...(materials.length ? { materials } : {}),
         },

@@ -346,6 +346,7 @@ export async function visibleItems(
 ): Promise<Item[]> {
   const { rows } = await ctx.sql<ItemRow>(
     `SELECT * FROM items WHERE hidden = 0
+       OR id IN (SELECT item_id FROM shop_entries WHERE enabled != 0)
        OR id IN (SELECT item_id FROM inventory WHERE owner = ?)
        OR id IN (SELECT item_id FROM recipes WHERE hidden = 0)
        OR id IN (SELECT recipe_ingredients.item_id FROM recipes
@@ -355,6 +356,54 @@ export async function visibleItems(
     [member],
   );
   return rows.map(itemOf);
+}
+
+/**
+ * 상점 진열 (avo_shop): the items' further sales on display, each its
+ * entry's ID, its item's and what it sells it for, in its order.
+ */
+export async function shopOffers(ctx: SqlCtx) {
+  const { rows } = await ctx.sql<{
+    id: string;
+    item_id: string;
+    shop_category: string;
+    shop_talk: string;
+    display: string | null;
+    price: number;
+    stock: number | null;
+    sort_order: number;
+    requirements: string;
+  }>(
+    `SELECT shop_entries.* FROM shop_entries
+     JOIN items ON items.id = shop_entries.item_id
+     WHERE shop_entries.enabled != 0
+     ORDER BY shop_entries.sort_order, shop_entries.id LIMIT 500`,
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    item: row.item_id,
+    data: offerData(row),
+  }));
+}
+/** What an entry sells its item for, as an item's own shop fields read. */
+export function offerData(row: {
+  shop_category: string;
+  shop_talk: string;
+  display: string | null;
+  price: number;
+  stock: number | null;
+  sort_order: number;
+  requirements: string;
+}) {
+  return {
+    shopCategory: row.shop_category,
+    shopTalk: row.shop_talk,
+    price: row.price,
+    order: row.sort_order,
+    requirements: parsed(row.requirements, {}),
+    ...(row.display !== null ? { display: parsed(row.display, {}) } : {}),
+    ...(row.stock !== null ? { stock: row.stock } : {}),
+  };
 }
 
 /**

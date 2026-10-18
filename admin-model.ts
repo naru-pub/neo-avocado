@@ -44,6 +44,7 @@ export const menu = [
     label: "아이템 관리",
     sections: [
       "items",
+      "shop_entries",
       "inventory",
       "gacha",
       "explore",

@@ -1184,3 +1184,58 @@ test("the shop and inventory read what the member may see, in one call", async (
     "no_character",
   );
 });
+
+test("상점 진열 sells an item again on its own terms: its price, stock, category and 구매 한도", async () => {
+  const site = await testSite();
+  profile(site, "m-1", "하나");
+  const hero = character(site, { state: "approved" });
+  wallet(site, "m-1", 100);
+  // Hidden from the shop itself, sold through two entries.
+  item(site, "cake", { name: "케이크", price: 50, hidden: 1 });
+  insert(site, "shop_entries", {
+    id: "cake-event",
+    item_id: "cake",
+    shop_category: "이벤트",
+    price: 10,
+    stock: 1,
+    requirements: { limit: 1 },
+  });
+  insert(site, "shop_entries", {
+    id: "cake-off",
+    item_id: "cake",
+    enabled: 0,
+    price: 1,
+  });
+  const shop = await site.query("economy/shop:shop", {}, M1);
+  assert.deepEqual(
+    shop.offers.map((offer) => [offer.id, offer.item, offer.data.price]),
+    [["cake-event", "cake", 10]],
+  );
+  // The hidden item is read for its entry's sake.
+  assert.ok(shop.items.some((row) => row.id === "cake"));
+  const buy = (args) =>
+    site.mutate("economy/shop:buy", { character: hero, ...args }, M1);
+  assert.equal(await refusal(buy({ item: "cake" })), "no_item");
+  assert.equal(
+    await refusal(buy({ item: "cake", entry: "cake-off" })),
+    "no_item",
+  );
+  const bought = await buy({ item: "cake", entry: "cake-event" });
+  assert.equal(bought.balance, 90);
+  assert.equal(bought.owned.data.item, "cake");
+  assert.equal(
+    site.rows("SELECT stock FROM shop_entries WHERE id = 'cake-event'")[0]
+      .stock,
+    0,
+  );
+  assert.equal(
+    await refusal(buy({ item: "cake", entry: "cake-event" })),
+    "sold_out",
+  );
+  // The entry's 구매 한도 is its own.
+  site.run("UPDATE shop_entries SET stock = NULL WHERE id = 'cake-event'");
+  assert.equal(
+    await refusal(buy({ item: "cake", entry: "cake-event" })),
+    "purchase_limit",
+  );
+});

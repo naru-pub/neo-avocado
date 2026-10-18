@@ -247,6 +247,18 @@ export const TABLES: Record<string, Table> = {
     ["category", "category", "text", "general"],
     ["detailImage", "detail_image", "text", null],
   ]),
+  // 상점 진열 (0017_shop_entries.sql): an item's further sales.
+  shop_entries: table("shop_entries", [
+    ["item", "item_id", "text", ""],
+    ["enabled", "enabled", "bool", 1],
+    ["shopCategory", "shop_category", "text", ""],
+    ["shopTalk", "shop_talk", "text", ""],
+    ["display", "display", "json", null],
+    ["price", "price", "int", 0],
+    ["stock", "stock", "int", null],
+    ["order", "sort_order", "int", 0],
+    ["requirements", "requirements", "json", "{}"],
+  ]),
   // A grant's 지급 사유 (memo), and a gift's sender and memo, are its gift JSON.
   inventory: table(
     "inventory",
@@ -550,6 +562,7 @@ export async function catalogues(
 /** The catalogues each section's checks pick from. */
 const NEEDS: Record<string, string[]> = {
   items: ["stats", "titles", "items"],
+  shop_entries: ["stats", "titles", "items"],
   recipes: ["items", "recipes"],
   gacha: ["items"],
   explore: ["items"],

@@ -1607,6 +1607,39 @@ test("a board group's 접근회원 are listed, added and removed by nickname, ke
   );
 });
 
+test("상점 진열 entries are saved with the items form's shop fields, for an item that exists", async () => {
+  const site = await testSite();
+  await create(site, "items", "cake", { name: "케이크", price: 50 });
+  const saved = await create(site, "shop_entries", "cake-event", {
+    item: "cake",
+    shopCategory: "이벤트",
+    price: 10,
+    stock: "3",
+    "requirements.limit": "1",
+    "display.fromHour": "9",
+  });
+  assert.equal(saved.data.item, "cake");
+  assert.equal(saved.data.price, 10);
+  assert.equal(saved.data.stock, 3);
+  assert.equal(saved.data.requirements.limit, 1);
+  assert.equal(saved.data.display.fromHour, 9);
+  assert.equal(
+    await refusedWith(
+      create(site, "shop_entries", "x", { item: "nothing", price: 1 }),
+    ),
+    "아이템을(를) 선택하세요.",
+  );
+  assert.equal(
+    await refusedWith(
+      create(site, "shop_entries", "y", {
+        item: "cake",
+        "display.fromHour": "30",
+      }),
+    ),
+    "진열 시각은 0~23시로 입력하세요.",
+  );
+});
+
 test("the forms' pick lists come in one read", async () => {
   const site = await testSite();
   profile(site, "m-1", "하나");

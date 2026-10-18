@@ -1328,6 +1328,24 @@ export const models: Record<string, Model> = {
     ],
   },
 };
+// 상점 진열 (adm/shop_list.php, shop_form.php): another sale of an item,
+// with the items form's own shop fields.
+models.shop_entries = {
+  label: "상점 진열",
+  help: "아이템 정의의 상점 설정 밖에, 같은 아이템을 다른 분류나 다른 가격·재고·기간·조건으로 더 진열합니다. 원본의 상점 관리처럼 진열마다 구매 한도와 재고를 따로 셉니다.",
+  fields: [
+    { key: "item", label: "아이템", type: "item", required: true },
+    { key: "enabled", label: "진열 중", type: "checkbox", default: true },
+    ...models.items.fields.filter(
+      (field) =>
+        ["shopTalk", "shopCategory", "price", "stock", "order"].includes(
+          field.key,
+        ) ||
+        field.key?.startsWith("display.") ||
+        field.key?.startsWith("requirements."),
+    ),
+  ],
+};
 const schedule = [
   {
     key: "startsAt",
@@ -2204,7 +2222,7 @@ export function buildRecord(section, values, previous, references) {
     references.stats.length >= 20
   )
     throw new Error("능력치는 최대 20개입니다.");
-  if (section === "items" && data.display) {
+  if ((section === "items" || section === "shop_entries") && data.display) {
     const { fromHour, untilHour, weekdays } = data.display;
     for (const hour of [fromHour, untilHour])
       if (

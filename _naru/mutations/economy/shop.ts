@@ -5,6 +5,7 @@ import {
   amount,
   lacking,
   names,
+  one,
   restrictedFor,
   signedIn,
 } from "../../modules/access.js";
@@ -13,6 +14,7 @@ import {
   draw,
   give,
   itemById,
+  offerData,
   ownedItems,
   pay,
   record,
@@ -36,12 +38,34 @@ import type { MutationCtx } from "../../modules/naru-types.js";
  */
 export async function buy(
   ctx: MutationCtx,
-  args: { item?: string; character?: string | null; materials?: string[] },
+  args: {
+    item?: string;
+    entry?: string;
+    character?: string | null;
+    materials?: string[];
+  },
 ) {
   signedIn(ctx);
-  const { item, character = null, materials = [] } = args ?? {};
-  const listing = await itemById(ctx, item);
-  if (!listing || listing.data.hidden)
+  const { item, entry, character = null, materials = [] } = args ?? {};
+  let listing = await itemById(ctx, item);
+  // 상점 진열 (avo_shop): an entry sells its item on its own terms, and
+  // counts its own stock and 구매 한도.
+  let limitKey = listing?.id;
+  if (entry !== undefined) {
+    const row = await one<any>(
+      ctx,
+      "SELECT * FROM shop_entries WHERE id = ? AND enabled != 0",
+      [entry],
+    );
+    if (!listing || !row || row.item_id !== listing.id)
+      ctx.fail("NOT_FOUND", "없는 아이템입니다.", { reason: "no_item" });
+    listing = { ...listing, data: { ...listing.data, ...offerData(row) } };
+    delete listing.data.hidden;
+    if (row.stock === null) delete listing.data.stock;
+    if (row.display === null) delete listing.data.display;
+    limitKey = `entry:${row.id}`;
+  } else if (listing?.data.hidden) listing = null;
+  if (!listing)
     ctx.fail("NOT_FOUND", "없는 아이템입니다.", { reason: "no_item" });
   if (!onDisplay(listing.data.display, ctx.now))
     ctx.fail("CONFLICT", "지금은 진열 기간이 아닙니다.", {
@@ -105,7 +129,7 @@ export async function buy(
   // Limits count the character's purchases (_ajax.shop_update.php:89).
   const counts = { ...progression.data.purchases };
   const previous = amount(
-    Object.hasOwn(counts, listing.id) ? counts[listing.id] : 0,
+    Object.hasOwn(counts, limitKey) ? counts[limitKey] : 0,
     "Purchase count",
   );
   if (
@@ -117,7 +141,7 @@ export async function buy(
     });
   if (previous === Number.MAX_SAFE_INTEGER)
     throw new Error("Purchase count overflow.");
-  Object.defineProperty(counts, listing.id, {
+  Object.defineProperty(counts, limitKey, {
     value: previous + 1,
     enumerable: true,
     configurable: true,
@@ -172,7 +196,9 @@ export async function buy(
     supplied.filter((row) => needed.get(row.data.item).consume),
   );
   if (typeof stock === "number")
-    await ctx.sql`UPDATE items SET stock = stock - 1 WHERE id = ${listing.id}`;
+    await (entry !== undefined
+      ? ctx.sql`UPDATE shop_entries SET stock = stock - 1 WHERE id = ${entry}`
+      : ctx.sql`UPDATE items SET stock = stock - 1 WHERE id = ${listing.id}`);
   const owned = await give(ctx, listing, "shop", character);
   await record(ctx, "buy", {
     character,

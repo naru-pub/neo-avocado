@@ -5,6 +5,7 @@ import { signedIn } from "../../modules/access.js";
 import {
   inventoryOf,
   openRecipes,
+  shopOffers,
   visibleItems,
 } from "../../modules/economy.js";
 import { ownCharacter } from "../../modules/characters.js";
@@ -27,6 +28,8 @@ export async function shop(
     });
   return {
     items: await visibleItems(ctx, me),
+    // 상점 진열: further sales of items, which may be hidden ones.
+    offers: await shopOffers(ctx),
     recipes: await openRecipes(ctx),
     inventory: await inventoryOf(ctx, me, { character }),
   };
