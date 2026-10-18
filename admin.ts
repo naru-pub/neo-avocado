@@ -432,7 +432,6 @@ async function load({ more = false } = {}) {
     $("memberTools").hidden = true;
     $("itemCategoryLabel").hidden = true;
     $("logSearch").hidden = true;
-    $("quickTools").hidden = !Object.hasOwn(QUICK, section);
     $("recordSearch").hidden = true;
     $("quickTools").hidden = true;
     const row = await owner.query(CALLS[section].get, { section });
@@ -465,6 +464,7 @@ async function load({ more = false } = {}) {
   $("memberTools").hidden = section !== "members";
   $("itemCategoryLabel").hidden = section !== "items";
   $("logSearch").hidden = !["history", "inventory"].includes(section);
+  $("quickTools").hidden = !Object.hasOwn(QUICK, section);
   $("recordSearch").hidden =
     Boolean(model.holdings || model.review) ||
     ["members", "history", "inventory", "items", "wallets"].includes(section);

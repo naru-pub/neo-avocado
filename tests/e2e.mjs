@@ -830,6 +830,54 @@ try {
   await owner.waitForURL(/\/admin\/#\/visits/);
   await owner.locator("#adminReport table.report").waitFor();
 
+  // The smaller lists edit in place (선택수정), a board group lists its
+  // 접근회원, and 상점 진열 is a section of its own.
+  await owner.evaluate(async () => {
+    const { createNaru } =
+      await import("https://sdk.naru.pub/sdk/1.1.0/naru.js");
+    const admin = await createNaru().auth.session();
+    await admin.mutate("admin/levels:save", {
+      id: "rank-e2e",
+      values: { name: "새싹", exp: 5, bonusPoints: 1 },
+      create: true,
+    });
+    await admin.mutate("admin/board_groups:save", {
+      id: "e2e-group",
+      values: { name: "시험 그룹" },
+      create: true,
+    });
+  });
+  await owner.goto(`${origin}/admin/#/levels`);
+  const rank = owner.locator("#adminRows li", { hasText: "rank-e2e" });
+  await rank.locator('input[data-key="name"]').fill("새순");
+  await owner.locator("#quickSave").click();
+  await owner.waitForFunction(() =>
+    /수정했습니다/.test(document.querySelector("#adminStatus").textContent),
+  );
+  assert.equal(
+    await owner.evaluate(async () => {
+      const { createNaru } =
+        await import("https://sdk.naru.pub/sdk/1.1.0/naru.js");
+      const admin = await createNaru().auth.session();
+      return (await admin.query("admin/levels:get", { id: "rank-e2e" })).data
+        .name;
+    }),
+    "새순",
+  );
+  await owner.goto(`${origin}/admin/#/board_groups`);
+  await owner
+    .locator("#adminRows li", { hasText: "시험 그룹" })
+    .locator("button", { hasText: "접근회원" })
+    .click();
+  await owner
+    .locator(".group-members [role=status]", {
+      hasText: "접근회원 0명",
+    })
+    .waitFor();
+  await owner.goto(`${origin}/admin/#/shop_entries`);
+  await owner.locator("#adminNew").waitFor();
+  assert.equal(await owner.locator("#adminNew").isVisible(), true);
+
   // Reviewing an application shows what the member wrote, with a link to
   // the character's page on the site.
   await owner.goto(`${origin}/admin/#/character_review`);
