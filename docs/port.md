@@ -71,12 +71,12 @@ name(ctx, args)`. Pages call them as `query("<area>/<module>:<name>", args)`
   member blocks, 0010 recommenders, 0011 item details, 0012 stat order, 0013 secret comments, 0014 reply
   posts, 0015 post hits,
   0016 attachments, 0017 shop entries, 0018 comment replies, 0019 link hits, 0020 birth
-  year, 0021 owner options, 0022 chick and votes.
+  year, 0021 owner options, 0022 chick and votes, 0023 popups and polls, 0024 field size.
   Applied migrations
   are never edited; a change is a new one. 0001–0005 started fresh,
   writing each area's tables once; 0006 fills its tables from the rows
   already there; 0007–0014 add columns
-  and 0015–0022 columns and
+  and 0015–0024 columns and
   tables (0011 files the personal items
   already made).
 - Names: snake_case, no prefix, never one of Naru's names above.
