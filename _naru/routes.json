@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "include": [
+    "/",
+    "/home",
+    "/members",
+    "/applicants",
+    "/characters",
+    "/couples",
+    "/quests",
+    "/calls",
+    "/online",
+    "/new",
+    "/character/*",
+    "/post/*",
+    "/logs",
+    "/logs/*",
+    "/messages",
+    "/messages/*",
+    "/content",
+    "/content/*",
+    "/shop",
+    "/shop/*",
+    "/search",
+    "/search/*",
+    "/mypage",
+    "/mypage/*",
+    "/rss/*"
+  ]
+}

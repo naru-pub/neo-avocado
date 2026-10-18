@@ -18,7 +18,7 @@
 // and the 3-second statement time.
 import { DatabaseSync } from "node:sqlite";
 import { readdir, readFile } from "node:fs/promises";
-import { join, sep } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const dist = fileURLToPath(new URL("../dist/_naru/", import.meta.url));
@@ -144,74 +144,37 @@ export function sqlOf(db, kind = "mutation") {
   };
 }
 
-/** The site's routes in dist/: routes/posts/_id.js is "posts/_id". */
-export async function routes() {
-  const root = join(dist, "routes");
-  const entries = await readdir(root, { recursive: true }).catch(() => []);
-  return entries
-    .filter((name) => name.endsWith(".js"))
-    .map((name) => name.split(sep).join("/").replace(/\.js$/, ""))
-    .sort();
+/** The site's _naru/routes.json in dist/, or none. */
+export async function routeRules() {
+  try {
+    const { include = [], exclude = [] } = JSON.parse(
+      await readFile(join(dist, "routes.json"), "utf8"),
+    );
+    return { include, exclude };
+  } catch {
+    return { include: [], exclude: [] };
+  }
 }
 
-/** Whether a route's segment takes the rest of the path (`_...name`). */
-const isRest = (part) => /^_\.\.\.[A-Za-z0-9_]+$/.test(part);
+/** Whether `rule` takes `pathname`: `*` is anything, slashes too. */
+function takes(rule, pathname) {
+  const pattern = rule
+    .split("*")
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join(".*");
+  return new RegExp(`^${pattern}$`, "s").test(pathname);
+}
 
 /**
- * The route answering `pathname`, as Naru matches them (control-plane's
- * site-functions/routes.ts): segments that start with _ take any one
- * segment, one that starts with _... (last, never first) the rest of the
- * path as a list, a directory's index answers it, and from the first
- * segment on a fixed segment wins over _name, and _name over _...name.
+ * Whether Naru runs routes.js for `pathname`, as it reads routes.json
+ * (control-plane's site-functions/routes.ts, Cloudflare's _routes.json):
+ * included, and not excluded.
  */
-export function matchRoute(names, pathname) {
-  let segments;
-  try {
-    segments = pathname
-      .split("/")
-      .filter(Boolean)
-      .map((segment) => decodeURIComponent(segment));
-  } catch {
-    return null;
-  }
-  const candidates = pathname.endsWith("/")
-    ? [[...segments, "index"]]
-    : [segments, [...segments, "index"]];
-  let best = null;
-  for (const route of names) {
-    const pattern = route.split("/");
-    const rest = isRest(pattern.at(-1) ?? "");
-    const fixed = rest ? pattern.slice(0, -1) : pattern;
-    for (const wanted of rest ? [segments] : candidates) {
-      if (rest ? wanted.length < fixed.length : fixed.length !== wanted.length)
-        continue;
-      const params = {};
-      let score = "";
-      const matches = fixed.every((part, index) => {
-        if (part === wanted[index]) {
-          score += "2";
-          return true;
-        }
-        if (
-          part.startsWith("_") &&
-          part.length > 1 &&
-          wanted[index] !== "index"
-        ) {
-          params[part.slice(1)] = wanted[index];
-          score += "1";
-          return true;
-        }
-        return false;
-      });
-      if (!matches) continue;
-      if (rest) {
-        params[pattern.at(-1).slice(4)] = wanted.slice(fixed.length);
-        score += "0";
-      }
-      if (!best || score > best.score) best = { route, params, score };
-    }
-  }
-  return best && { route: best.route, params: best.params };
+export function routed(rules, pathname) {
+  return (
+    !rules.exclude.some((rule) => takes(rule, pathname)) &&
+    rules.include.some((rule) => takes(rule, pathname))
+  );
 }
 
 /**
@@ -291,17 +254,14 @@ export async function testSite({
     query: (name, args = null, who = {}) => call("query", name, args, who),
     mutate: (name, args = null, who = {}) => call("mutation", name, args, who),
     /**
-     * What Naru answers `path` with: the route matching it run as a
-     * visitor's query (null when none does, and the path is a file's).
+     * What Naru answers `path` with: routes.js run as a visitor's query,
+     * where routes.json routes the path (null where not: it is a file's).
      */
     async route(path, query = {}, origin) {
-      const match = matchRoute(await routes(), path);
-      if (!match) return null;
-      const url = pathToFileURL(join(dist, "routes", `${match.route}.js`)).href;
+      if (!routed(await routeRules(), path)) return null;
+      const url = pathToFileURL(join(dist, "routes.js")).href;
       const render = (await import(url)).default;
-      const input = JSON.parse(
-        JSON.stringify({ path, origin, params: match.params, query }),
-      );
+      const input = JSON.parse(JSON.stringify({ path, origin, query }));
       return JSON.parse(
         JSON.stringify((await render(context("query", {}), input)) ?? null),
       );

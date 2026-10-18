@@ -27,13 +27,16 @@ import { MAIN_PAGE, readablePage } from "./content.js";
 import type { QueryCtx } from "./naru-types.js";
 import { placeOf, whole, type Place } from "./places.js";
 
-/** What Naru hands a route: the path asked, its parameters and query. */
+/**
+ * What Naru hands a route (routes.ts): the path asked, the address it was
+ * asked on and its query; `params` is what places.ts read of the path.
+ */
 export interface RouteInput {
   path?: string;
   /** The address the page was asked on (Naru's), such as https://x.naru.pub. */
   origin?: string;
-  params?: Record<string, string>;
   query?: Record<string, string>;
+  params?: Record<string, string>;
 }
 
 /** What a page's preview shows; what it leaves out is the site's own. */
@@ -312,7 +315,7 @@ export const content: Page = async (ctx, { id }, access) => {
 };
 
 /** Each page's preview by what its address names (places.ts); none: the site's own. */
-const PREVIEWS: Record<Place["kind"], Page | undefined> = {
+const PREVIEWS: Record<Exclude<Place["kind"], "rss">, Page | undefined> = {
   index: undefined,
   home: undefined,
   members: named("멤버목록"),
@@ -345,7 +348,7 @@ const PREVIEWS: Record<Place["kind"], Page | undefined> = {
  */
 export async function page(ctx: QueryCtx, input: RouteInput) {
   const place = placeOf(input?.path ?? "/");
-  if (!place) return NOT_FOUND;
+  if (!place || place.kind === "rss") return NOT_FOUND;
   return await route(PREVIEWS[place.kind])(ctx, {
     ...input,
     params: place as unknown as Record<string, string>,

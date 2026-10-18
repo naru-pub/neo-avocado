@@ -13,6 +13,7 @@
 //   /messages[/<id>], /content[/<id>], /shop[/<분류>], /search[/<words>]
 //   /character/<id>
 //   /mypage[/logs|exp|favorites|money]
+//   /rss/<board>                        a board's RSS feed (no page's)
 
 /** Pages whose address is their name alone. */
 export const SINGLE = [
@@ -50,7 +51,8 @@ export type Place =
   | { kind: "content"; id?: string }
   | { kind: "shop"; category?: string }
   | { kind: "search"; text?: string }
-  | { kind: "mypage"; tab?: (typeof MYPAGE_TABS)[number] };
+  | { kind: "mypage"; tab?: (typeof MYPAGE_TABS)[number] }
+  | { kind: "rss"; board: string };
 
 /** A whole positive number, as an address writes one. */
 export const whole = (value: unknown): value is string =>
@@ -97,6 +99,8 @@ export function placeOf(path: string): Place | null {
       return n <= 1 ? { kind, category: first } : null;
     case "search":
       return n <= 1 ? { kind, text: first } : null;
+    case "rss":
+      return n === 1 ? { kind, board: first } : null;
     case "mypage":
       if (n === 0) return { kind };
       return n === 1 && (MYPAGE_TABS as readonly string[]).includes(first)

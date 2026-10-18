@@ -10,7 +10,7 @@ Decisions: production data starts fresh (nothing is moved); AvocadoEdition's
 member level 1–10 stays a number in neo-avocado's own `members` table; staff
 (moderators) and members-only groups are Naru roles (`staff`,
 `group-<name>`). Pages have path URLs (`/logs/free/12`), each served by a
-route in `_naru/routes/` with its link preview; old `#/` URLs are not
+route (`_naru/routes.json`) with its link preview; old `#/` URLs are not
 redirected.
 
 ## What Naru gives queries and mutations
@@ -61,16 +61,15 @@ name(ctx, args)`. Pages call them as `query("<area>/<module>:<name>", args)`
 - There is no `notify`/`broadcast`: pages subscribe to a query, and Naru
   re-runs it when a mutation writes a table it read.
 - Uploads are unchanged (`media.upload`); store the URL in a TEXT column.
-- `_naru/routes/<path>.ts` answers that path (a segment `_name` is a
-  parameter, `_...name` the rest of the path, `index` the directory): its
-  default export runs as a visitor's query and answers
-  `{ file: "index.html", head, cache }`. One file covers a section
-  (`logs/_...rest.ts` every board address), and every route is
-  `modules/previews.ts`'s `page`: `modules/places.ts` reads what the
-  address names, as the page's router (`app/router.ts`) does, and the
-  preview tags come from what a visitor may read, by the same checks the
-  queries make. An address under a section that names nothing is 404, as
-  are paths no route or file answers.
+- `_naru/routes.json` lists the paths Naru answers before the page loads,
+  in Cloudflare Pages' `_routes.json` form (`/logs` and `/logs/*` for a
+  section), and `_naru/routes.ts`'s default export answers each as a
+  visitor's query: `{ file: "index.html", head, cache }`, or a board's RSS
+  feed. `modules/places.ts` reads what the path names, as the page's router
+  (`app/router.ts`) does, and `modules/previews.ts`'s `page` makes the
+  preview tags from what a visitor may read, by the same checks the queries
+  make. A listed path that names nothing is 404, as are paths that are
+  neither listed nor a file.
 
 ## Tables
 

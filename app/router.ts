@@ -159,7 +159,9 @@ document.addEventListener("click", (event) => {
   if (url.origin !== location.origin) return;
   if (url.hash || url.search) return;
   const path = url.pathname;
-  if (!placeOf(path)) return;
+  // A feed (/rss/<board>) is no page: the browser opens it.
+  const place = placeOf(path);
+  if (!place || place.kind === "rss") return;
   event.preventDefault();
   navigate(path);
 });
