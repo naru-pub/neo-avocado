@@ -3133,3 +3133,46 @@ test("복사 copies a post with its comments and 조회수 to a board the modera
   assert.match(moved.data.text, /자유에서 이동 됨\]$/);
   assert.equal(moved.data.number, 2);
 });
+
+test("윗글 and 아래글 are the posts above and below in the list's order, of those the reader may list", async () => {
+  const site = await boardSite();
+  board(site, "free", { ...PUBLIC_BOARD, kind: "text" });
+  profile(site, "m-1", "하나");
+  const say = async (title, replyTo) =>
+    (
+      await write(site, {
+        data: {
+          board: "free",
+          title,
+          text: title,
+          ...(replyTo ? { replyTo } : {}),
+        },
+      })
+    ).document.id;
+  const one = await say("1");
+  const two = await say("2");
+  const reply = await say("Re: 1", one);
+  const three = post(site, {
+    board: "free",
+    owner: "m-2",
+    title: "비밀",
+    secret: 1,
+  });
+  const four = await say("4");
+  // The list: 4, (비밀), 2, 1, Re: 1.
+  const near = async (id, who = M1) => {
+    const { previous, next } = await site.query(
+      "community/posts:neighbors",
+      { id },
+      who,
+    );
+    return [previous?.title ?? null, next?.title ?? null];
+  };
+  assert.deepEqual(await near(two), ["4", "1"]);
+  assert.deepEqual(await near(one), ["2", "Re: 1"]);
+  assert.deepEqual(await near(reply), ["1", null]);
+  assert.deepEqual(await near(four), [null, "2"]);
+  // Its writer sees their secret post between them.
+  assert.deepEqual(await near(two, M2), ["비밀", "1"]);
+  assert.equal(three.length > 0, true);
+});

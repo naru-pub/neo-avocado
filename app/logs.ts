@@ -213,6 +213,7 @@ export async function openPost(id, { comment = null, log = null } = {}) {
   countView(post.id);
   const item = await logItem(post);
   $("logFocus").replaceChildren(item);
+  await showNeighbors(post);
   $("logFocusPanel").hidden = false;
   pageTitle(
     post.data.title ||
@@ -1231,6 +1232,31 @@ async function commentItem(comment, log) {
     item.append(" ", remove);
   }
   return item;
+}
+/** 윗글 and 아래글 (view.skin.php) under a plain board's post shown alone. */
+async function showNeighbors(post) {
+  const nav = $("logNeighbors");
+  nav.replaceChildren();
+  nav.hidden = true;
+  if (kindOf(post.data.board) !== "text") return;
+  const { previous, next } = await query("community/posts:neighbors", {
+    id: post.id,
+  });
+  for (const [label, found] of [
+    ["윗글", previous],
+    ["아래글", next],
+  ]) {
+    if (!found) continue;
+    const link = document.createElement("a");
+    link.href = `/post/${encodeURIComponent(found.id)}`;
+    link.textContent = `${label}: ${found.title || `${found.number}번 글`}`;
+    link.onclick = (event) => {
+      event.preventDefault();
+      run(() => openPost(found.id));
+    };
+    nav.append(link);
+  }
+  nav.hidden = !nav.childElementCount;
 }
 /**
  * 조회수: a post opened on its own counts once until the browser closes

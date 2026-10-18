@@ -191,6 +191,48 @@ export async function post(
   return { document: shown(ctx, access, postOf(row), board) };
 }
 
+/**
+ * 윗글 and 아래글 (bbs/view.php:26-58): the posts above and below `id` in
+ * its board's list order (wr_num, wr_reply: each thread newest first, its
+ * replies in place), of those the reader may list, with their titles.
+ */
+export async function neighbors(ctx: QueryCtx, args: { id?: string }) {
+  const access = await accessOf(ctx);
+  const row = await postRow(ctx, args?.id);
+  const board = row ? await boardOf(ctx, row.board) : null;
+  if (
+    !row ||
+    !boardAllowed(board, access, "list") ||
+    !boardAllowed(board, access, "read") ||
+    !secretReadable(row, access, ctx.member?.id, board)
+  )
+    return { previous: null, next: null };
+  const viewer = ctx.member?.id ?? null;
+  const secret = secretClause(access, viewer, "posts", board);
+  // A visitor is not told a 멤버공개 post's title.
+  const shown = `posts.board = ? AND posts.id != ? AND ${secret.text}${
+    viewer || isStaff(access, board) ? "" : " AND posts.members_only = 0"
+  }`;
+  const root = row.thread ?? row.id;
+  const key = "coalesce(posts.thread, posts.id)";
+  const near = async (above: boolean) =>
+    await one<{ id: number; title: string; number: number }>(
+      ctx,
+      `SELECT id, title, number FROM posts WHERE ${shown}
+       AND (${key} ${above ? ">" : "<"} ? OR (${key} = ? AND posts.reply_path ${above ? "<" : ">"} ?))
+       ORDER BY ${key} ${above ? "ASC" : "DESC"}, posts.reply_path ${above ? "DESC" : "ASC"}
+       LIMIT 1`,
+      [board.id, row.id, ...secret.values, root, root, row.reply_path],
+    );
+  const brief = (
+    found: { id: number; title: string; number: number } | null,
+  ) =>
+    found
+      ? { id: String(found.id), title: found.title, number: found.number }
+      : null;
+  return { previous: brief(await near(true)), next: brief(await near(false)) };
+}
+
 /** A search's results a page. */
 const SEARCH_PAGE = 20;
 /** Where a search's cursor turns from posts to comments. */
