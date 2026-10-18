@@ -1,5 +1,5 @@
 // The member's own history: what moved their money, items or experience.
-import { signedIn } from "../../modules/access.js";
+import { signedIn, invalid } from "../../modules/access.js";
 import { historyPage } from "../../modules/members.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
 
@@ -20,9 +20,7 @@ export async function history(
     (after !== null && typeof after !== "string") ||
     (kind !== null && (typeof kind !== "string" || kind.length > 20))
   )
-    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-      reason: "invalid_input",
-    });
+    invalid(ctx);
   return await historyPage(
     ctx,
     { owner: me, ...(kind ? { kind } : {}) },

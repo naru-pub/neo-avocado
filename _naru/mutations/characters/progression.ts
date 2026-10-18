@@ -1,5 +1,5 @@
 // A member's own character's stats and shown title.
-import { amount } from "../../modules/access.js";
+import { amount, invalid } from "../../modules/access.js";
 import {
   characterState,
   checkRevision,
@@ -31,18 +31,14 @@ export async function allocateStats(
     Array.isArray(allocation) ||
     typeof allocation !== "object"
   )
-    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-      reason: "invalid_input",
-    });
+    invalid(ctx);
   const state = await characterState(ctx, character);
   checkRevision(ctx, state.existing, revision);
   if (
     Object.keys(allocation).length !== state.definitions.length ||
     state.definitions.some((row) => !Object.hasOwn(allocation, row.id))
   )
-    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-      reason: "invalid_input",
-    });
+    invalid(ctx);
   const stats = {};
   let spent = 0;
   for (const definition of state.definitions) {
@@ -58,10 +54,7 @@ export async function allocateStats(
         { reason: "approved_stats" },
       );
     const max = definition.data.initial + count;
-    if (!Number.isSafeInteger(max) || max > definition.data.max)
-      ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-        reason: "invalid_input",
-      });
+    if (!Number.isSafeInteger(max) || max > definition.data.max) invalid(ctx);
     // st_min: a stat starts no lower than the owner's minimum.
     if (max < definition.data.min)
       ctx.fail(

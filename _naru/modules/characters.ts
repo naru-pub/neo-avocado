@@ -18,6 +18,7 @@ import {
   parsed,
   siteOpen,
   text,
+  invalid,
 } from "./access.js";
 import type { SqlCtx } from "./access.js";
 import { profileByNick, profileOf, setMainCharacter } from "./members.js";
@@ -451,10 +452,7 @@ export async function memberSheet(
     ? previous.type
     : "main";
   const type = owner ? (data.type ?? kept) : kept;
-  if (!CHARACTER_TYPES.includes(type))
-    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-      reason: "invalid_input",
-    });
+  if (!CHARACTER_TYPES.includes(type)) invalid(ctx);
   const prior = previous?.state ?? null;
   const state = owner
     ? (data.state ?? prior ?? "editing")
@@ -466,9 +464,7 @@ export async function memberSheet(
       ? !CHARACTER_STATES.includes(state)
       : prior !== "approved" && !["editing", "submitted"].includes(state)
   )
-    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-      reason: "invalid_input",
-    });
+    invalid(ctx);
   if (
     !owner &&
     state === "submitted" &&
@@ -680,10 +676,7 @@ export async function saveSheet(
 ): Promise<{ row: CharacterRow; catalogue: FieldDefinition[] }> {
   if (!ctx.member && !ctx.owner)
     ctx.fail("ACCESS_DENIED", "권한이 없습니다.", { reason: "access_denied" });
-  if (id !== null && typeof id !== "string")
-    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-      reason: "invalid_input",
-    });
+  if (id !== null && typeof id !== "string") invalid(ctx);
   const previous = id === null ? null : await characterRow(ctx, id);
   if (id !== null && !previous)
     ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {
@@ -700,10 +693,7 @@ export async function saveSheet(
     });
   if (previous) checkRevision(ctx, previous, revision);
   await checkPeriod(ctx, previous, opened);
-  if (!data || typeof data !== "object")
-    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-      reason: "invalid_input",
-    });
+  if (!data || typeof data !== "object") invalid(ctx);
   // A new character from the admin belongs to the member it names (mb_id).
   const member = ctx.owner && !previous ? await memberByNick(ctx, nick) : null;
   const sheet = await memberSheet(ctx, previous, data);

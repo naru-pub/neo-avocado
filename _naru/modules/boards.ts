@@ -414,6 +414,46 @@ export function postOf(row: PostRow): Written {
 
 /** Digits a reply's path takes a level; and how deep replies go (wr_reply's 10). */
 export const REPLY_DIGITS = 3;
+
+/**
+ * Where a reply goes under `parent` (wr_reply, wr_comment_reply): its
+ * thread, the parent's own or the parent, and its path, the parent's and
+ * its place among the parent's replies, the later below or (`above`,
+ * bo_reply_order 0) above. Refused past `depth` levels or 999 replies.
+ */
+export async function replyPlace(
+  ctx: SqlCtx & Pick<QueryCtx, "fail">,
+  table: "posts" | "comments",
+  parent: { id: number; thread: number | null; reply_path: string },
+  depth: number,
+  above = false,
+): Promise<{ thread: number; replyPath: string }> {
+  if (parent.reply_path.length / REPLY_DIGITS >= depth)
+    ctx.fail("INVALID_REQUEST", "더 이상 답변하실 수 없습니다.", {
+      reason: "reply_depth",
+    });
+  const thread = parent.thread ?? parent.id;
+  const { n } = await one<{ n: number }>(
+    ctx,
+    `SELECT count(*) AS n FROM ${table} WHERE thread = ?
+     AND length(reply_path) = ? AND substr(reply_path, 1, ?) = ?`,
+    [
+      thread,
+      parent.reply_path.length + REPLY_DIGITS,
+      parent.reply_path.length,
+      parent.reply_path,
+    ],
+  );
+  if (n >= 999)
+    ctx.fail("INVALID_REQUEST", "더 이상 답변하실 수 없습니다.", {
+      reason: "reply_count",
+    });
+  const place = above ? 998 - n : n + 1;
+  return {
+    thread,
+    replyPath: parent.reply_path + String(place).padStart(REPLY_DIGITS, "0"),
+  };
+}
 export const REPLY_DEPTH = 10;
 
 /** A comment row as its document, whole. */

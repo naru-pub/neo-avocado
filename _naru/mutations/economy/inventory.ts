@@ -1,6 +1,6 @@
 // What a member does with what they hold (inventory/): selling, gifts,
 // crafting, moving a copy between their characters, and using an item.
-import { amount, lacking, signedIn } from "../../modules/access.js";
+import { amount, lacking, signedIn, invalid } from "../../modules/access.js";
 import {
   draw,
   give,
@@ -91,10 +91,7 @@ export async function gift(
     ctx.fail("INVALID_REQUEST", "받는 회원을 확인해 주세요.", {
       reason: "no_recipient",
     });
-  if (typeof memo !== "string" || memo.length > 500)
-    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-      reason: "invalid_input",
-    });
+  if (typeof memo !== "string" || memo.length > 500) invalid(ctx);
   const item = await itemById(ctx, owned.data.item);
   if (!item || item.data.giftable === false)
     ctx.fail("CONFLICT", "선물할 수 없는 아이템입니다.", {

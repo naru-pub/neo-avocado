@@ -8,49 +8,27 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { testSite } from "./sql-ctx.mjs";
+import {
+  M1,
+  M2,
+  M3,
+  OWNER,
+  VISITOR,
+  refusal,
+  reasonOf,
+  setSettings,
+  insert,
+  profile,
+  wallet,
+  balanceOf,
+  count,
+} from "./helpers.mjs";
 
 /** What the tabs say of community/inbox:status. */
 const tabs = ({ messages, calls }) => ({ messages, calls });
 
-const M1 = { member: "m-1" };
-const M2 = { member: "m-2" };
-const M3 = { member: "m-3" };
-const OWNER = { owner: true };
-const VISITOR = {};
 const P = "neo_avocado_";
 
-/** The reason a call refused with (its ctx.fail details), its code, or null. */
-const refusal = (call) =>
-  call.then(
-    () => null,
-    (error) => {
-      if (error.details?.reason) return error.details.reason;
-      if (error.code) return error.code;
-      throw error;
-    },
-  );
-/** "ok", or the reason a call refused with. */
-const reasonOf = async (call) => (await refusal(call)) ?? "ok";
-const setSettings = (site, key, value) =>
-  site.run(
-    "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
-    key,
-    JSON.stringify(value),
-  );
-/** A row made directly, objects as JSON; answers its key as a string. */
-function insert(site, table, row) {
-  const values = Object.values(row).map((value) =>
-    value !== null && typeof value === "object" ? JSON.stringify(value) : value,
-  );
-  const columns = Object.keys(row);
-  const { lastInsertRowid } = site.run(
-    `INSERT INTO ${table} (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`,
-    ...values,
-  );
-  return String(row.id ?? lastInsertRowid);
-}
-const profile = (site, member, nick, extra = {}) =>
-  insert(site, "profiles", { member, nick, joined_at: 0, ...extra });
 const member = (site, id, data) =>
   site.run(
     `INSERT INTO members (member, level, adult, warnings, warning_note) VALUES (?, ?, ?, ?, ?)
@@ -63,15 +41,6 @@ const member = (site, id, data) =>
     data.warningNote ?? "",
   );
 const moderator = (site, id) => site.setRoles(id, ["staff"]);
-const wallet = (site, id, balance) =>
-  site.run(
-    "INSERT INTO wallets (member, balance) VALUES (?, ?) ON CONFLICT (member) DO UPDATE SET balance = excluded.balance",
-    id,
-    balance,
-  );
-const balanceOf = (site, id) =>
-  site.rows("SELECT balance FROM wallets WHERE member = ?", id)[0]?.balance;
-
 /** A board the owner made: the admin's fields, the rest as options. */
 function board(site, id, data = {}) {
   const {
@@ -202,8 +171,6 @@ const indexed = (site, table, text) =>
     )
     .map((row) => String(row.id))
     .sort();
-const count = (site, table) =>
-  site.rows(`SELECT count(*) AS n FROM ${table}`)[0].n;
 const callsTo = (site, id) =>
   site.rows("SELECT * FROM calls WHERE recipient = ? ORDER BY id", id);
 /** Runs `action` with the host's roll fixed at `roll`. */
@@ -2375,8 +2342,8 @@ test("a board's 게시판 관리자 and its group's 그룹 관리자 moderate it
   assert.equal(
     (
       await site.mutate(
-        "admin/board_groups:save",
-        { id: "club", values: { admin: "" } },
+        "admin/records:save",
+        { section: "board_groups", id: "club", values: { admin: "" } },
         OWNER,
       )
     ).data.admin,

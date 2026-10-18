@@ -1,9 +1,8 @@
 // 회원 잔액 (adm/point_list.php's balances): each member's money and the day
-// of their last login reward, by member, with their nickname; and one.
+// of their last login reward, by member, with their nickname.
 import {
   PAGE,
   TABLES,
-  getRecord,
   offsetOf,
   pageOf,
   recordOf,
@@ -27,7 +26,3 @@ export const list = ownerOnly(async function list(
     offset,
   );
 });
-
-export const get = ownerOnly((ctx: QueryCtx, args: { id?: string }) =>
-  getRecord(ctx, "wallets", args),
-);

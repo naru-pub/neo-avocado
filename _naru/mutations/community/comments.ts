@@ -1,10 +1,10 @@
 // Comments under posts. Visitors comment where the board lets level 1, as
 // guests with a name and password.
-import { one, parsed, text } from "../../modules/access.js";
+import { one, parsed, text, invalid } from "../../modules/access.js";
 import {
   COMMENT_LIMIT,
   COMMENT_REPLY_DEPTH,
-  REPLY_DIGITS,
+  replyPlace,
   commentRow,
   boardOf,
   commentOf,
@@ -52,11 +52,6 @@ export interface CommentInput {
   /** 답변 (basic/view_comment.skin.php): the comment a new one answers. */
   replyTo?: string;
 }
-
-const invalid = (ctx: MutationCtx) =>
-  ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-    reason: "invalid_input",
-  });
 
 /**
  * Writes a new comment (no `id`, with `data.logId`) or edits one. A new
@@ -163,27 +158,12 @@ export async function write(
       const parent = await commentRow(ctx, data.replyTo);
       if (!parent || parent.post_id !== post.id || board.data.kind !== "text")
         invalid(ctx);
-      if (parent.reply_path.length / REPLY_DIGITS >= COMMENT_REPLY_DEPTH)
-        ctx.fail("INVALID_REQUEST", "더 이상 답변하실 수 없습니다.", {
-          reason: "reply_depth",
-        });
-      thread = parent.thread ?? parent.id;
-      const { n } = await one<{ n: number }>(
+      ({ thread, replyPath } = await replyPlace(
         ctx,
-        `SELECT count(*) AS n FROM comments WHERE thread = ?
-         AND length(reply_path) = ? AND substr(reply_path, 1, ?) = ?`,
-        [
-          thread,
-          parent.reply_path.length + REPLY_DIGITS,
-          parent.reply_path.length,
-          parent.reply_path,
-        ],
-      );
-      if (n >= 999)
-        ctx.fail("INVALID_REQUEST", "더 이상 답변하실 수 없습니다.", {
-          reason: "reply_count",
-        });
-      replyPath = parent.reply_path + String(n + 1).padStart(REPLY_DIGITS, "0");
+        "comments",
+        parent,
+        COMMENT_REPLY_DEPTH,
+      ));
     }
     speaker = await speakerOf(ctx, data.character);
     const actions = [];

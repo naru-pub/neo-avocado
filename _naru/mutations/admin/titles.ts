@@ -1,20 +1,10 @@
-// 타이틀 (adm/title_list.php): the owner saves and deletes titles, and gives
-// one to characters or takes it back (title_has_list.php), each in one call.
-import { invalid, saveRecord } from "../../modules/admin.js";
+// 타이틀 (adm/title_list.php): the owner deletes titles, and gives one to
+// characters or takes it back (title_has_list.php), each in one call;
+// saving one is admin/records'.
+import { invalid } from "../../modules/admin.js";
 import { one, ownerOnly } from "../../modules/access.js";
 import { characterKey } from "../../modules/characters.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
-
-export const save = ownerOnly(
-  (
-    ctx: MutationCtx,
-    args: {
-      id?: string;
-      values?: Record<string, unknown>;
-      create?: boolean;
-    },
-  ) => saveRecord(ctx, "titles", args),
-);
 
 /** The characters holding or showing a title. */
 const HOLDERS = `SELECT id FROM characters WHERE active_title = ?

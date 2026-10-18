@@ -1,33 +1,7 @@
-// 기타 항목명 설정 (adm/community_form.php): the owner's names for money,
-// experience, rank, 소속 and 종족. The same defaults as the server's
-// NAME_DEFAULTS in _naru/modules/shared.js.
-
-export const NAME_DEFAULTS = Object.freeze({
-  moneyName: "아보",
-  moneyUnit: "아보",
-  expName: "경험치",
-  expUnit: "",
-  rankName: "랭킹",
-  sideTitle: "소속",
-  classTitle: "종족",
-});
-
-/** The owner's names, one for each of NAME_DEFAULTS. */
-export type Names = Record<keyof typeof NAME_DEFAULTS, string>;
-
-/** The names in stored settings, defaults for what the owner left unset. */
-export function namesOf(settings = {}): Names {
-  const names = {} as Names;
-  for (const [key, fallback] of Object.entries(NAME_DEFAULTS)) {
-    const value = settings?.[key];
-    names[key] =
-      typeof value === "string" &&
-      (value.trim() || ["expUnit", "sideTitle", "classTitle"].includes(key))
-        ? value.trim().slice(0, 20)
-        : fallback;
-  }
-  return names;
-}
+// The owner's names for money, experience, rank, 소속 and 종족, as the
+// site's code reads them (_naru/modules/names.ts), and how pages write
+// amounts in them.
+export { NAME_DEFAULTS, namesOf, type Names } from "../_naru/modules/names.js";
 
 /** 1,000, as the original's number_format. */
 export function amountText(amount) {

@@ -3,7 +3,7 @@
 // password, 관심로그, 로그내역, and a board's newest post for the page's
 // 새 글 notice. Visitors read the boards open to level 1 while the site is
 // open (사이트공개).
-import { containing, one } from "../../modules/access.js";
+import { containing, one, invalid } from "../../modules/access.js";
 import type { Access } from "../../modules/access.js";
 import {
   FULL_TEXT_MIN,
@@ -34,11 +34,6 @@ import {
   sortOf,
 } from "../../modules/board-options.js";
 import type { QueryCtx, SqlValue } from "../../modules/naru-types.js";
-
-const invalid = (ctx: QueryCtx) =>
-  ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-    reason: "invalid_input",
-  });
 
 /** The board, if the caller may list and read it; else ACCESS_DENIED. */
 async function readableBoard(ctx: QueryCtx, id: unknown) {

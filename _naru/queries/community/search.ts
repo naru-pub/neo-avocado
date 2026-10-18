@@ -7,6 +7,7 @@ import {
   containing,
   kstDay,
   one,
+  invalid,
 } from "../../modules/access.js";
 import type { Access } from "../../modules/access.js";
 import {
@@ -33,11 +34,6 @@ import type {
   Written,
 } from "../../modules/boards.js";
 import type { QueryCtx, SqlValue } from "../../modules/naru-types.js";
-
-const invalid = (ctx: QueryCtx): never =>
-  ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-    reason: "invalid_input",
-  });
 
 /**
  * The boards the reader may list and read (of a 그룹, when one is named),

@@ -1,11 +1,10 @@
 // 아이템·상점 (adm/item_list.php, shop_list.php): the owner's list, a page at
 // a time, of one 아이템 분류 (it_category) or all, of one 아이템 기능
 // (it_type: a use effect, or none) or all, its name or description holding
-// a search (sfl, stx), and one entry.
+// a search (sfl, stx); one entry is admin/records'.
 import {
   PAGE,
   TABLES,
-  getRecord,
   invalid,
   offsetOf,
   pageOf,
@@ -67,7 +66,3 @@ export const list = ownerOnly(async function list(
     offset,
   );
 });
-
-export const get = ownerOnly((ctx: QueryCtx, args: { id?: string }) =>
-  getRecord(ctx, "items", args),
-);

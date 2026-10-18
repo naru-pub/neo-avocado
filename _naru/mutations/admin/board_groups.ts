@@ -1,28 +1,8 @@
-// 게시판 그룹 (adm/boardgroup_list.php): the owner saves an entry, checked as its form checks it
-// (modules/admin-model.ts), and deletes one.
-import {
-  invalid,
-  removeRecord,
-  saveRecord,
-  setRolesOf,
-} from "../../modules/admin.js";
+// 게시판 그룹's 접근회원 (adm/boardgroupmember_update.php); saving and deleting
+// a group are admin/records'.
+import { invalid, setRolesOf } from "../../modules/admin.js";
 import { GROUP_ROLE, one, ownerOnly } from "../../modules/access.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
-
-export const save = ownerOnly(
-  (
-    ctx: MutationCtx,
-    args: {
-      id?: string;
-      values?: Record<string, unknown>;
-      create?: boolean;
-    },
-  ) => saveRecord(ctx, "board_groups", args),
-);
-
-export const remove = ownerOnly((ctx: MutationCtx, args: { id?: string }) =>
-  removeRecord(ctx, "board_groups", args),
-);
 
 /**
  * boardgroupmember_update.php: gives a member, named by nickname, the

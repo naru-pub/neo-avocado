@@ -7,42 +7,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { testSite } from "./sql-ctx.mjs";
+import {
+  M1,
+  M2,
+  M3,
+  refusal,
+  setSettings,
+  profile,
+  wallet,
+  balanceOf,
+} from "./helpers.mjs";
 
-const M1 = { member: "m-1" };
-const M2 = { member: "m-2" };
-const M3 = { member: "m-3" };
-
-/** The reason a call refused with (its ctx.fail details), its code, or null. */
-const refusal = (call) =>
-  call.then(
-    () => null,
-    (error) => {
-      if (error.details?.reason) return error.details.reason;
-      if (error.code) return error.code;
-      throw error;
-    },
-  );
-const setSettings = (site, value) =>
-  site.run(
-    "INSERT INTO settings (key, value) VALUES ('community', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
-    JSON.stringify(value),
-  );
-const profile = (site, member, extra = {}) =>
-  site.run(
-    "INSERT INTO profiles (member, nick, accept_messages, joined_at) VALUES (?, ?, ?, 0)",
-    member,
-    // A nickname is Hangul, letters and digits: m-1's is m1.
-    extra.nick ?? member.replace(/-/g, ""),
-    extra.acceptMessages === false ? 0 : 1,
-  );
-const wallet = (site, member, balance) =>
-  site.run(
-    "INSERT INTO wallets (member, balance) VALUES (?, ?)",
-    member,
-    balance,
-  );
-const balanceOf = (site, member) =>
-  site.rows("SELECT balance FROM wallets WHERE member = ?", member)[0]?.balance;
 const messages = (site) => site.rows("SELECT * FROM messages ORDER BY id");
 const send = (site, recipients, body, who = M1) =>
   site.mutate("community/messages:sendMessage", { recipients, body }, who);
@@ -66,9 +41,9 @@ async function people(...ids) {
 
 test("a 쪽지 goes to members who take them, pays its cost for each, and tells them", async () => {
   const site = await people("m-1", "m-2", "m-3");
-  profile(site, "closed", { acceptMessages: false });
+  profile(site, "closed", undefined, { accept_messages: 0 });
   wallet(site, "m-1", 10);
-  setSettings(site, { messageCost: 2 });
+  setSettings(site, "community", { messageCost: 2 });
   // Each refusal leaves nothing written and nothing paid.
   for (const [recipients, reason] of [
     [["m-2", "closed"], "no_recipient"],
@@ -118,7 +93,7 @@ test("a 쪽지 goes to members who take them, pays its cost for each, and tells 
     calls: false,
   });
   // Not enough money: nothing sent.
-  setSettings(site, { messageCost: 4 });
+  setSettings(site, "community", { messageCost: 4 });
   assert.equal(
     await refusal(send(site, ["m-2", "m-3"], "again")),
     "not_enough",
@@ -130,7 +105,7 @@ test("a member sends so many a day, counted from the Korean midnight, and a gift
   const site = await people("m-1", "m-2", "m-3", "m-4");
   // 23:30 in Korea.
   site.now = Date.parse("2030-01-01T14:30:00Z");
-  setSettings(site, { messageDailyLimit: 3 });
+  setSettings(site, "community", { messageDailyLimit: 3 });
   await send(site, ["m-2", "m-3"], "hi");
   // A gift's note the same day does not count.
   site.run(
@@ -148,9 +123,9 @@ test("a member sends so many a day, counted from the Korean midnight, and a gift
   site.now = Date.parse("2030-01-01T15:00:00Z");
   await send(site, ["m-2", "m-3", "m-4"], "new day");
   // 0 lifts the limit; none set is 100.
-  setSettings(site, { messageDailyLimit: 0 });
+  setSettings(site, "community", { messageDailyLimit: 0 });
   await send(site, ["m-2"], "no limit");
-  setSettings(site, {});
+  setSettings(site, "community", {});
   await send(site, ["m-3"], "default");
 });
 
@@ -304,7 +279,7 @@ test("a 쪽지함 of many correspondents pages by five, grouped over every messa
 
 test("a conversation shows both sides oldest first, pages back by fifty, and opening it reads them all", async () => {
   const site = await people("m-1", "m-2", "m-3");
-  setSettings(site, { messageDailyLimit: 0 });
+  setSettings(site, "community", { messageDailyLimit: 0 });
   await send(site, ["m-2"], "안녕");
   await send(site, ["m-3"], "다른 사람");
   for (let n = 0; n < 120; n++) {

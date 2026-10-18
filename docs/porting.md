@@ -78,8 +78,9 @@ server kept.
   for a board's newest post), and Naru answers again when a mutation writes a
   table it read.
 - **The owner's admin**: `admin/` calls `_naru/queries/admin/` and
-  `_naru/mutations/admin/`, one module per section, each refusing anyone but
-  the owner. Saves are checked with the forms' own rules
+  `_naru/mutations/admin/`: `admin/records` for every section's plain
+  calls, and a module of its own where a section does more, each refusing
+  anyone but the owner. Saves are checked with the forms' own rules
   (`_naru/modules/admin-model.js`); a balance and its history, a character's
   record and its experience history, and title grants are single mutations;
   the reports count with SQL.

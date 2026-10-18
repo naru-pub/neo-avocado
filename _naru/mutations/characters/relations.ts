@@ -1,4 +1,4 @@
-import { amount, imageUrl, text } from "../../modules/access.js";
+import { amount, imageUrl, text, invalid } from "../../modules/access.js";
 import {
   characterKey,
   characterRow,
@@ -55,10 +55,7 @@ export async function relation(
     ctx.fail("INVALID_REQUEST", "캐릭터를 확인해 주세요.", {
       reason: "no_character",
     });
-  if (!Number.isInteger(affinity) || affinity < 0 || affinity > 5)
-    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-      reason: "invalid_input",
-    });
+  if (!Number.isInteger(affinity) || affinity < 0 || affinity > 5) invalid(ctx);
   amount(order, "Relation order");
   const links = text(link ?? "", 2000)
     .split(/\r?\n/)

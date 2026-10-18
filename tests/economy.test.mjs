@@ -9,60 +9,25 @@ import assert from "node:assert/strict";
 import { testSite } from "./sql-ctx.mjs";
 import { onDisplay } from "../dist/_naru/modules/display.js";
 import { GACHA_COST } from "../dist/_naru/modules/economy.js";
+import {
+  M1,
+  M2,
+  OWNER,
+  refusal,
+  setSettings,
+  insert,
+  profile,
+  character,
+  wallet,
+  balanceOf,
+  count,
+} from "./helpers.mjs";
 
 /** What the tabs say of community/inbox:status. */
 const tabs = ({ messages, calls }) => ({ messages, calls });
 
-const M1 = { member: "m-1" };
-const M2 = { member: "m-2" };
-const OWNER = { owner: true };
 const P = "neo_avocado_";
 
-/** The reason a call refused with (its ctx.fail details), its code, or null. */
-const refusal = (call) =>
-  call.then(
-    () => null,
-    (error) => {
-      if (error.details?.reason) return error.details.reason;
-      if (error.code) return error.code;
-      throw error;
-    },
-  );
-const setSettings = (site, key, value) =>
-  site.run(
-    "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
-    key,
-    JSON.stringify(value),
-  );
-/** A row made directly, objects as JSON; answers its key as a string. */
-function insert(site, table, row) {
-  const values = Object.values(row).map((value) =>
-    value !== null && typeof value === "object" ? JSON.stringify(value) : value,
-  );
-  const columns = Object.keys(row);
-  const { lastInsertRowid } = site.run(
-    `INSERT INTO ${table} (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`,
-    ...values,
-  );
-  return String(row.id ?? lastInsertRowid);
-}
-const profile = (site, member, nick) =>
-  insert(site, "profiles", { member, nick, joined_at: 0 });
-const wallet = (site, member, balance) =>
-  site.run(
-    "INSERT INTO wallets (member, balance) VALUES (?, ?) ON CONFLICT (member) DO UPDATE SET balance = excluded.balance",
-    member,
-    balance,
-  );
-const balanceOf = (site, member) =>
-  site.rows("SELECT balance FROM wallets WHERE member = ?", member)[0]?.balance;
-const character = (site, data = {}) =>
-  insert(site, "characters", {
-    owner: "m-1",
-    name: "Hero",
-    created_at: site.now,
-    ...data,
-  });
 const characterOf = (site, id) =>
   site.rows("SELECT * FROM characters WHERE id = ?", Number(id))[0];
 const item = (site, id, data = {}) =>
@@ -72,8 +37,6 @@ const own = (site, data) =>
   insert(site, "inventory", { owner: "m-1", name: data.item_id, ...data });
 const held = (site, id) =>
   site.rows("SELECT * FROM inventory WHERE id = ?", Number(id))[0];
-const count = (site, table) =>
-  site.rows(`SELECT count(*) AS n FROM ${table}`)[0].n;
 function recipe(site, id, data, ingredients) {
   insert(site, "recipes", { id, name: id, ...data });
   for (const [item_id, n] of ingredients)

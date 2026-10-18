@@ -3,7 +3,7 @@
 // reader may see, the owner's lists and fields to fill, and what a
 // character's page shows beside its sheet. Visitors read them while the
 // site is open (사이트공개).
-import { containing, one, signedIn } from "../../modules/access.js";
+import { containing, one, signedIn, invalid } from "../../modules/access.js";
 import {
   characterRow,
   characterState,
@@ -103,9 +103,7 @@ export async function list(
     typeof text !== "string" ||
     text.length > 40
   )
-    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-      reason: "invalid_input",
-    });
+    invalid(ctx);
   // member/ready.php's arcode search: a 공개 profile field holding `text`.
   const searched: SqlValue[] = [];
   let where = ` WHERE ${filter ? FILTERS[filter] : LIVE}`;
@@ -113,10 +111,7 @@ export async function list(
     const definition = (await fieldCatalogue(ctx)).find(
       (row) => row.code === field && row.visibility === "public",
     );
-    if (!definition)
-      ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-        reason: "invalid_input",
-      });
+    if (!definition) invalid(ctx);
     where += ` AND json_extract(fields, ?) LIKE ? ESCAPE '\\'`;
     searched.push(`$."${definition.code}"`, containing(text.trim()));
   }
@@ -182,9 +177,7 @@ export async function named(
 ) {
   await viewable(ctx);
   if (typeof name !== "string" || !name.trim() || name.length > 40)
-    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-      reason: "invalid_input",
-    });
+    invalid(ctx);
   const row = await one<CharacterRow>(
     ctx,
     `SELECT * FROM characters WHERE name = ? AND ${approved ? "state = 'approved'" : LIVE} ORDER BY id LIMIT 1`,

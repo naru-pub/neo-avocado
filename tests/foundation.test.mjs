@@ -5,27 +5,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sqlOf, testSite } from "./sql-ctx.mjs";
+import { M1, M2, OWNER, refusal, setSettings } from "./helpers.mjs";
 
-const M1 = { member: "m-1" };
-const M2 = { member: "m-2" };
-const OWNER = { owner: true };
-
-/** The reason a call refused with (its ctx.fail details), its code, or null. */
-const refusal = (call) =>
-  call.then(
-    () => null,
-    (error) => {
-      if (error.details?.reason) return error.details.reason;
-      if (error.code) return error.code;
-      throw error;
-    },
-  );
-const setSettings = (site, key, value) =>
-  site.run(
-    "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
-    key,
-    JSON.stringify(value),
-  );
 const wallet = (site, member) =>
   site.rows(
     "SELECT balance, last_daily FROM wallets WHERE member = ?",

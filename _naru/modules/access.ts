@@ -226,35 +226,9 @@ export async function reservedNick(
     .some((word) => word.trim() && word.trim().toLowerCase() === wanted);
 }
 
-/**
- * The owner's names (기타 항목명 설정: cf_money, cf_money_pice, cf_exp_name,
- * cf_exp_pice, cf_rank_name, cf_side_title, cf_class_title), the template's
- * own until changed. An empty 소속 or 종족 title hides it, as in the original.
- * names.js keeps the same defaults for the pages.
- */
-export const NAME_DEFAULTS = Object.freeze({
-  moneyName: "아보",
-  moneyUnit: "아보",
-  expName: "경험치",
-  expUnit: "",
-  rankName: "랭킹",
-  sideTitle: "소속",
-  classTitle: "종족",
-});
-/** The owner's names, by the keys of NAME_DEFAULTS. */
-export type Names = { [K in keyof typeof NAME_DEFAULTS]: string };
-export function namesOf(settings: Record<string, any> = {}): Names {
-  const names = {} as Names;
-  for (const [key, fallback] of Object.entries(NAME_DEFAULTS)) {
-    const value = settings?.[key];
-    names[key] =
-      typeof value === "string" &&
-      (value.trim() || ["expUnit", "sideTitle", "classTitle"].includes(key))
-        ? value.trim().slice(0, 20)
-        : fallback;
-  }
-  return names;
-}
+// The owner's names (names.ts), shared with the pages.
+export { NAME_DEFAULTS, namesOf, type Names } from "./names.js";
+import { namesOf, type Names } from "./names.js";
 export async function names(ctx: SqlCtx): Promise<Names> {
   return namesOf(await communitySettings(ctx));
 }
@@ -273,6 +247,13 @@ export async function lacking(ctx: SqlCtx, key: keyof Names) {
 export function restrictedFor(named: Names, verb: string) {
   const kinds = [named.sideTitle, named.classTitle].filter(Boolean);
   return `이 캐릭터의 ${kinds.join("·") || "조건"}으로는 ${verb} 수 없습니다.`;
+}
+
+/** Refuses a call whose input is not what it takes (INVALID_REQUEST). */
+export function invalid(ctx: Pick<QueryCtx, "fail">): never {
+  return ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
+    reason: "invalid_input",
+  });
 }
 
 /** A whole, non-negative amount the owner set in 커뮤니티 설정, else 0. */

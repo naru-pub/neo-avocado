@@ -10,12 +10,13 @@ import {
   parsed,
   signedIn,
   text,
+  invalid,
 } from "../../modules/access.js";
 import {
   HTML_LIMIT,
   POST_SELECT,
   REPLY_DEPTH,
-  REPLY_DIGITS,
+  replyPlace,
   TEXT_LIMIT,
   accessOf,
   boardOf,
@@ -167,11 +168,6 @@ async function attachmentsOf(
 const LINK_COUNT = 2;
 /** The most pictures a board may let a post take. */
 const UPLOAD_LIMIT = 10;
-
-const invalid = (ctx: MutationCtx) =>
-  ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-    reason: "invalid_input",
-  });
 
 /** A post's links as sent: at most two http(s) addresses, blanks dropped. */
 function linksOf(ctx: MutationCtx, value: unknown): string[] {
@@ -512,28 +508,13 @@ export async function write(
       )
         invalid(ctx);
       requireBoard(ctx, board, access, "reply");
-      if (parent.reply_path.length / REPLY_DIGITS >= REPLY_DEPTH)
-        ctx.fail("INVALID_REQUEST", "더 이상 답변하실 수 없습니다.", {
-          reason: "reply_depth",
-        });
-      thread = parent.thread ?? parent.id;
-      const { n } = await one<{ n: number }>(
+      ({ thread, replyPath } = await replyPlace(
         ctx,
-        `SELECT count(*) AS n FROM posts WHERE thread = ?
-         AND length(reply_path) = ? AND substr(reply_path, 1, ?) = ?`,
-        [
-          thread,
-          parent.reply_path.length + REPLY_DIGITS,
-          parent.reply_path.length,
-          parent.reply_path,
-        ],
-      );
-      if (n >= 999)
-        ctx.fail("INVALID_REQUEST", "더 이상 답변하실 수 없습니다.", {
-          reason: "reply_count",
-        });
-      const place = String(board.data.replyOrder) === "0" ? 998 - n : n + 1;
-      replyPath = parent.reply_path + String(place).padStart(REPLY_DIGITS, "0");
+        "posts",
+        parent,
+        REPLY_DEPTH,
+        String(board.data.replyOrder) === "0",
+      ));
     }
     // 글쓰기 포인트 (bo_write_point), for members; a delete takes it back.
     const reward = guest

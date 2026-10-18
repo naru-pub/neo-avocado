@@ -6,53 +6,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { testSite } from "./sql-ctx.mjs";
+import {
+  M1,
+  M2,
+  OWNER,
+  refusal,
+  setSettings,
+  profile,
+  character,
+} from "./helpers.mjs";
 
-const M1 = { member: "m-1" };
-const M2 = { member: "m-2" };
-const OWNER = { owner: true };
-
-/** The reason a call refused with (its ctx.fail details), its code, or null. */
-const refusal = (call) =>
-  call.then(
-    () => null,
-    (error) => {
-      if (error.details?.reason) return error.details.reason;
-      if (error.code) return error.code;
-      throw error;
-    },
-  );
-const setSettings = (site, key, value) =>
-  site.run(
-    "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
-    key,
-    JSON.stringify(value),
-  );
-const profile = (site, member, nick, main = null) =>
-  site.run(
-    "INSERT INTO profiles (member, nick, main_character, joined_at) VALUES (?, ?, ?, 0)",
-    member,
-    nick,
-    main,
-  );
-/** A character row made directly; answers its ID as pages know it. */
-function character(site, data = {}) {
-  const row = {
-    owner: "m-1",
-    name: "Hero",
-    created_at: site.now,
-    ...data,
-  };
-  if (row.fields && typeof row.fields !== "string")
-    row.fields = JSON.stringify(row.fields);
-  if (row.stats && typeof row.stats !== "string")
-    row.stats = JSON.stringify(row.stats);
-  const columns = Object.keys(row);
-  const { lastInsertRowid } = site.run(
-    `INSERT INTO characters (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`,
-    ...Object.values(row),
-  );
-  return String(lastInsertRowid);
-}
 const define = (site, code, data = {}) =>
   site.run(
     "INSERT INTO character_fields (id, label, type, options, visibility, required, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)",

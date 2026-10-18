@@ -1,5 +1,5 @@
 // 화폐관리 (mypage/money/): the member's own money ledger.
-import { signedIn } from "../../modules/access.js";
+import { signedIn, invalid } from "../../modules/access.js";
 import { historyPage } from "../../modules/members.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
 
@@ -19,8 +19,6 @@ export async function ledger(
     size < 1 ||
     size > 20
   )
-    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-      reason: "invalid_input",
-    });
+    invalid(ctx);
   return await historyPage(ctx, { owner: me }, { size, after, money: true });
 }

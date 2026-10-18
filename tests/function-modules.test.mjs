@@ -25,6 +25,21 @@ for (const page of pages) {
     references.add(reference);
 }
 
+// The admin's section calls, which admin.js makes from
+// modules/admin-calls.js rather than writes out.
+const calls = await import(
+  new URL("../dist/_naru/modules/admin-calls.js", import.meta.url).href
+);
+for (const section of [
+  ...Object.keys(calls.RECORD_CALLS),
+  ...Object.keys(calls.OWN_CALLS),
+  ...calls.SETTINGS_SECTIONS,
+])
+  for (const call of ["list", "get", "save", "remove"]) {
+    const name = calls.adminCall(section, call);
+    if (name) references.add(name);
+  }
+
 /** Each module of a folder (functions, queries, mutations), by area. */
 async function modulesOf(folder) {
   const found = [];

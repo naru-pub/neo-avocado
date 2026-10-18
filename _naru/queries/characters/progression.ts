@@ -1,7 +1,7 @@
 // The character viewer (member/viewer.php): a character's official record
 // and its experience history, open to visitors while the site is
 // (사이트공개).
-import { communitySettings } from "../../modules/access.js";
+import { communitySettings, invalid } from "../../modules/access.js";
 import {
   characterRow,
   characterState,
@@ -38,9 +38,7 @@ export async function characterSheet(
     size < 1 ||
     size > 50
   )
-    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-      reason: "invalid_input",
-    });
+    invalid(ctx);
   const row = await characterRow(ctx, character);
   if (!row)
     ctx.fail("NOT_FOUND", "캐릭터를 확인해 주세요.", {

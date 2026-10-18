@@ -10,7 +10,7 @@ import {
   stateChanged,
 } from "../../modules/characters.js";
 import type { CharacterRow } from "../../modules/characters.js";
-import { ownerOnly } from "../../modules/access.js";
+import { ownerOnly, invalid } from "../../modules/access.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
 /**
@@ -43,20 +43,12 @@ export const reviewCharacter = ownerOnly(async function reviewCharacter(
       reason: "no_character",
     });
   checkRevision(ctx, row, revision);
-  if (state !== undefined && !CHARACTER_STATES.includes(state))
-    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-      reason: "invalid_input",
-    });
-  if (type !== undefined && !CHARACTER_TYPES.includes(type))
-    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-      reason: "invalid_input",
-    });
+  if (state !== undefined && !CHARACTER_STATES.includes(state)) invalid(ctx);
+  if (type !== undefined && !CHARACTER_TYPES.includes(type)) invalid(ctx);
   const values: Record<string, string> = fieldsOf(row);
   if (fields !== undefined) {
     if (!fields || typeof fields !== "object" || Array.isArray(fields))
-      ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-        reason: "invalid_input",
-      });
+      invalid(ctx);
     const admin = new Map(
       (await fieldCatalogue(ctx))
         .filter((definition) => definition.visibility === "admin")
@@ -65,9 +57,7 @@ export const reviewCharacter = ownerOnly(async function reviewCharacter(
     for (const [code, value] of Object.entries(fields)) {
       const definition = admin.get(code);
       if (!definition || typeof value !== "string" || value.length > 2000)
-        ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-          reason: "invalid_input",
-        });
+        invalid(ctx);
       if (value.trim()) values[code] = value.trim();
       else delete values[code];
     }

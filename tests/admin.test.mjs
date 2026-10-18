@@ -8,52 +8,24 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readdir } from "node:fs/promises";
 import { testSite } from "./sql-ctx.mjs";
+import {
+  M1,
+  OWNER,
+  refusal,
+  refusedWith,
+  profile,
+  character,
+  adminQuery,
+  adminMutate,
+} from "./helpers.mjs";
 
-const M1 = { member: "m-1" };
-const OWNER = { owner: true };
-
-/** The reason a call refused with (its ctx.fail details), its code, or null. */
-const refusal = (call) =>
-  call.then(
-    () => null,
-    (error) => {
-      if (error.details?.reason) return error.details.reason;
-      if (error.code) return error.code;
-      throw error;
-    },
-  );
-/** A call's refusal message, or null. */
-const refusedWith = (call) =>
-  call.then(
-    () => null,
-    (error) => error.message,
-  );
-const query = (site, name, args = {}) =>
-  site.query(`admin/${name}`, args, OWNER);
-const mutate = (site, name, args = {}) =>
-  site.mutate(`admin/${name}`, args, OWNER);
+const query = (site, name, args = {}) => adminQuery(site, name, args);
+const mutate = (site, name, args = {}) => adminMutate(site, name, args);
 /** Saves a new entry of a section from its form's values. */
 const create = (site, section, id, values) =>
   mutate(site, `${section}:save`, { id, values, create: true });
 const update = (site, section, id, values) =>
   mutate(site, `${section}:save`, { id, values });
-const profile = (site, member, nick, main = null) =>
-  site.run(
-    "INSERT INTO profiles (member, nick, main_character, joined_at) VALUES (?, ?, ?, 0)",
-    member,
-    nick,
-    main,
-  );
-/** A character row made directly; answers its ID as pages know it. */
-function character(site, data = {}) {
-  const row = { owner: "m-1", name: "Hero", created_at: site.now, ...data };
-  const columns = Object.keys(row);
-  const { lastInsertRowid } = site.run(
-    `INSERT INTO characters (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`,
-    ...Object.values(row),
-  );
-  return String(lastInsertRowid);
-}
 const history = (site) => site.rows("SELECT * FROM history ORDER BY id");
 
 /**
@@ -93,7 +65,7 @@ test("every admin query and mutation is ownerOnly's, and refuses members, modera
   site.setRoles("m-2", ["staff"]);
   const queries = await adminCalls("queries");
   const mutations = await adminCalls("mutations");
-  assert.ok(queries.length > 20 && mutations.length > 20);
+  assert.ok(queries.length > 10 && mutations.length > 10);
   // Made by ownerOnly (modules/access.ts), so the check comes first.
   for (const [call, fn] of [...queries, ...mutations])
     assert.equal(fn.ownerOnly, true, call);
@@ -1085,7 +1057,7 @@ test("a report sums every day in its range, past a statement's 1,000 rows, and c
 test("activity counts each member's posts and comments on a board in a Korean date range", async () => {
   const site = await testSite();
   const main = character(site, { owner: "a", name: "초록" });
-  profile(site, "a", "가", main);
+  profile(site, "a", "가", { main_character: main });
   profile(site, "b", "나");
   site.run(
     "INSERT INTO members (member, warnings, warning_note) VALUES ('b', 2, '도배')",
@@ -2436,4 +2408,32 @@ test("a deleted member stays deleted, and their characters keep their history", 
     ),
     "deleted",
   );
+});
+
+test("admin/records answers only the calls a section leaves to it", async () => {
+  const site = await testSite();
+  for (const [section, call] of [
+    ["members", "save"],
+    ["boards", "save"],
+    ["history", "list"],
+    ["settings", "get"],
+    ["nope", "list"],
+  ])
+    assert.equal(
+      await refusal(
+        (call === "save" ? site.mutate : site.query)(
+          `admin/records:${call}`,
+          { section, id: "x", values: {} },
+          OWNER,
+        ),
+      ),
+      "invalid_input",
+      `${section}:${call}`,
+    );
+  await mutate(site, "sides:save", {
+    id: "s",
+    values: { name: "빛" },
+    create: true,
+  });
+  assert.equal((await query(site, "sides:get", { id: "s" })).data.name, "빛");
 });

@@ -10,6 +10,7 @@ import {
 } from "../../modules/boards.js";
 import type { CommentRow } from "../../modules/boards.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
+import { invalid } from "../../modules/access.js";
 
 /** Comments a page reads at a time. */
 const COMMENT_PAGE = 50;
@@ -30,9 +31,7 @@ export async function list(
   const [root, path = ""] = String(after ?? "0").split(":");
   const cursor = Number(root);
   if (!Number.isSafeInteger(cursor) || cursor < 0 || !/^(?:\d{3})*$/.test(path))
-    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-      reason: "invalid_input",
-    });
+    invalid(ctx);
   const access = await accessOf(ctx);
   const post = await postRow(ctx, id);
   const board = post ? await boardOf(ctx, post.board) : null;

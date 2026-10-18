@@ -1,6 +1,6 @@
 // A member changes their own nickname and preferences (프로필 수정); the
 // rest of the profile is kept by the community's own code.
-import { reservedNick, signedIn } from "../../modules/access.js";
+import { reservedNick, signedIn, invalid } from "../../modules/access.js";
 import { birthYearValid, nickTaken, profileOf } from "../../modules/members.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
@@ -33,9 +33,7 @@ export async function update(
     typeof commentAlerts !== "boolean" ||
     !birthYearValid(birthYear)
   )
-    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-      reason: "invalid_input",
-    });
+    invalid(ctx);
   // A new nickname may not be a reserved word (cf_prohibit_id); one taken
   // before the owner reserved it may stay.
   if (nick !== before.data.nick) {

@@ -4,6 +4,7 @@ import {
   communitySettings,
   ownerOnly,
   text,
+  invalid,
 } from "../../modules/access.js";
 import { itemById } from "../../modules/economy.js";
 import type { Item } from "../../modules/economy.js";
@@ -74,9 +75,7 @@ export const grant = ownerOnly(async function grant(
     !Number.isSafeInteger(value) ||
     value === 0
   )
-    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-      reason: "invalid_input",
-    });
+    invalid(ctx);
   const note = text(memo ?? "", 200);
   if (kind === "item")
     return await grantItem(ctx, item, target, name, value, note);

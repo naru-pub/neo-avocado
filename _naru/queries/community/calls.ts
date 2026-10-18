@@ -1,6 +1,6 @@
 // 알림 (ajax/board_call.php): the member's calls ([[nick]]) and comment
 // notices, and whether any is new.
-import { signedIn } from "../../modules/access.js";
+import { signedIn, invalid } from "../../modules/access.js";
 import {
   accessOf,
   boardOf,
@@ -45,9 +45,7 @@ export async function callHistory(
     size > 20 ||
     (after !== null && cursor === null)
   )
-    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-      reason: "invalid_input",
-    });
+    invalid(ctx);
   const seen = (await profileOf(ctx, member))?.data.callsSeenAt ?? 0;
   const { rows } = await ctx.sql<CallRow>(
     `SELECT * FROM calls WHERE recipient = ?${cursor === null ? "" : " AND id < ?"}

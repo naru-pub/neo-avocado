@@ -1,10 +1,9 @@
 // 아이템 지급·보유 현황 (adm/inventory_list.php): every copy members and their
 // characters hold, a page at a time, each with its owner's nickname and its
-// character's name, and one copy.
+// character's name.
 import {
   PAGE,
   TABLES,
-  getRecord,
   invalid,
   offsetOf,
   pageOf,
@@ -56,7 +55,3 @@ export const list = ownerOnly(async function list(
     offset,
   );
 });
-
-export const get = ownerOnly((ctx: QueryCtx, args: { id?: string }) =>
-  getRecord(ctx, "inventory", args),
-);

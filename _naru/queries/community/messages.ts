@@ -1,6 +1,6 @@
 // 쪽지함 (mypage/memo/index.php) and a conversation (memo_view.php): the
 // member's own mail, as each side's box shows it.
-import { signedIn } from "../../modules/access.js";
+import { signedIn, invalid } from "../../modules/access.js";
 import { messageOf } from "../../modules/mail.js";
 import type { MessageRow } from "../../modules/mail.js";
 import { rowKey } from "../../modules/boards.js";
@@ -43,11 +43,6 @@ async function mainCharacters(ctx: QueryCtx, members: string[]) {
     ]),
   );
 }
-
-const invalid = (ctx: QueryCtx) =>
-  ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-    reason: "invalid_input",
-  });
 
 /**
  * Every message in the member's two boxes, as (id, partner, unread): what

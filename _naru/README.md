@@ -23,10 +23,11 @@ pushed to pages: they subscribe to `community/inbox:status` (unread 쪽지 and
 calls) and `community/posts:latest`, and Naru answers again when a mutation
 writes a table those read.
 
-`admin/` is the owner's: one module per section of the admin page
-(`admin/boards`, `admin/members`, `admin/items`, …) with `list`, `get`,
-`save` and `remove` where the section has them, each refusing anyone but
-the owner. A save takes the form's values and checks them with the
+`admin/` is the owner's: `admin/records` lists, reads, saves and deletes
+any section's entries where the section does nothing of its own
+(`modules/admin-calls.js` says which), and a module of its own answers the
+rest (`admin/members`, `admin/boards:save`, `admin/history`, …), each
+refusing anyone but the owner. A save takes the form's values and checks them with the
 section's model (`modules/admin-model.js`, which the page draws its forms
 from), so the forms' rules hold whoever calls; values left out keep the
 record's own. Changes that go together are one mutation: a balance and its

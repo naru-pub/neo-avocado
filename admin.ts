@@ -16,6 +16,13 @@ import {
   type Names,
 } from "./app/names.js";
 import { imageSlotsOf } from "./_naru/modules/images.js";
+import {
+  OWN_CALLS,
+  RECORD_CALLS,
+  SETTINGS_SECTIONS,
+  adminCall,
+  type AdminCall,
+} from "./_naru/modules/admin-calls.js";
 import type { NaruClient } from "https://sdk.naru.pub/sdk/1.1.0/naru.js";
 const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
   document.getElementById(id) as T;
@@ -130,6 +137,7 @@ $("quickSave").onclick = () =>
         values[input.dataset.key] =
           input.type === "checkbox" ? input.checked : input.value;
       await owner.mutate(CALLS[section].save, {
+        section,
         id: pick.dataset.quick,
         values,
       });
@@ -159,172 +167,30 @@ const HISTORY_KINDS = {
   read: "글읽기",
   board: "글·댓글 보상",
 };
+/**
+ * Each section's calls (modules/admin-calls.ts): its own module's, a
+ * settings form's, or admin/records', which every call names its section
+ * for.
+ */
 const CALLS: Record<
   string,
-  { list?: string; get?: string; save?: string; remove?: string }
-> = {
-  content: {
-    list: "admin/content:list",
-    get: "admin/content:get",
-    save: "admin/content:save",
-    remove: "admin/content:remove",
-  },
-  menus: {
-    list: "admin/menus:list",
-    get: "admin/menus:get",
-    save: "admin/menus:save",
-    remove: "admin/menus:remove",
-  },
-  banners: {
-    list: "admin/banners:list",
-    get: "admin/banners:get",
-    save: "admin/banners:save",
-    remove: "admin/banners:remove",
-  },
-  quests: {
-    list: "admin/quests:list",
-    get: "admin/quests:get",
-    save: "admin/quests:save",
-    remove: "admin/quests:remove",
-  },
-  emoticons: {
-    list: "admin/emoticons:list",
-    get: "admin/emoticons:get",
-    save: "admin/emoticons:save",
-    remove: "admin/emoticons:remove",
-  },
-  boards: {
-    list: "admin/boards:list",
-    get: "admin/boards:get",
-    save: "admin/boards:save",
-    remove: "admin/boards:remove",
-  },
-  board_groups: {
-    list: "admin/board_groups:list",
-    get: "admin/board_groups:get",
-    save: "admin/board_groups:save",
-    remove: "admin/board_groups:remove",
-  },
-  members: {
-    list: "admin/members:list",
-    get: "admin/members:get",
-    save: "admin/members:save",
-    remove: "admin/members:remove",
-  },
-  wallets: {
-    list: "admin/wallets:list",
-    get: "admin/wallets:get",
-    save: "admin/wallets:save",
-  },
-  inventory: {
-    list: "admin/inventory:list",
-    get: "admin/inventory:get",
-    save: "admin/inventory:save",
-    remove: "admin/inventory:remove",
-  },
-  history: { list: "admin/history:list", remove: "admin/history:remove" },
-  items: {
-    list: "admin/items:list",
-    get: "admin/items:get",
-    save: "admin/items:save",
-    remove: "admin/items:remove",
-  },
-  popups: {
-    list: "admin/popups:list",
-    get: "admin/popups:get",
-    save: "admin/popups:save",
-    remove: "admin/popups:remove",
-  },
-  polls: {
-    list: "admin/polls:list",
-    get: "admin/polls:get",
-    save: "admin/polls:save",
-    remove: "admin/polls:remove",
-  },
-  shop_entries: {
-    list: "admin/shop_entries:list",
-    get: "admin/shop_entries:get",
-    save: "admin/shop_entries:save",
-    remove: "admin/shop_entries:remove",
-  },
-  gacha: {
-    list: "admin/gacha:list",
-    get: "admin/gacha:get",
-    save: "admin/gacha:save",
-    remove: "admin/gacha:remove",
-  },
-  recipes: {
-    list: "admin/recipes:list",
-    get: "admin/recipes:get",
-    save: "admin/recipes:save",
-    remove: "admin/recipes:remove",
-  },
-  explore: {
-    list: "admin/explore:list",
-    get: "admin/explore:get",
-    save: "admin/explore:save",
-    remove: "admin/explore:remove",
-  },
-  sides: {
-    list: "admin/sides:list",
-    get: "admin/sides:get",
-    save: "admin/sides:save",
-    remove: "admin/sides:remove",
-  },
-  classes: {
-    list: "admin/classes:list",
-    get: "admin/classes:get",
-    save: "admin/classes:save",
-    remove: "admin/classes:remove",
-  },
-  couples: {
-    list: "admin/couples:list",
-    get: "admin/couples:get",
-    save: "admin/couples:save",
-    remove: "admin/couples:remove",
-  },
-  titles: {
-    list: "admin/titles:list",
-    get: "admin/titles:get",
-    save: "admin/titles:save",
-    remove: "admin/titles:remove",
-  },
-  character_fields: {
-    list: "admin/character_fields:list",
-    get: "admin/character_fields:get",
-    save: "admin/character_fields:save",
-    remove: "admin/character_fields:remove",
-  },
-  character_state: {
-    list: "admin/character_state:list",
-    get: "admin/character_state:get",
-    save: "admin/character_state:save",
-  },
-  stat_config: {
-    list: "admin/stat_config:list",
-    get: "admin/stat_config:get",
-    save: "admin/stat_config:save",
-    remove: "admin/stat_config:remove",
-  },
-  levels: {
-    list: "admin/levels:list",
-    get: "admin/levels:get",
-    save: "admin/levels:save",
-    remove: "admin/levels:remove",
-  },
-  // One form each, kept as the site's settings.
-  settings: { get: "admin/settings:get", save: "admin/settings:save" },
-  design: { get: "admin/settings:get", save: "admin/settings:save" },
-  character_images: {
-    get: "admin/settings:get",
-    save: "admin/settings:save",
-  },
-  character_review: {
-    list: "admin/character_review:list",
-    get: "admin/character_review:get",
-  },
-  title_holdings: { list: "admin/title_holdings:list" },
-};
+  Partial<Record<AdminCall, string>>
+> = Object.fromEntries(
+  [
+    ...new Set([
+      ...Object.keys(RECORD_CALLS),
+      ...Object.keys(OWN_CALLS),
+      ...SETTINGS_SECTIONS,
+    ]),
+  ].map((section) => [
+    section,
+    Object.fromEntries(
+      (["list", "get", "save", "remove"] as const)
+        .map((call) => [call, adminCall(section, call)])
+        .filter(([, name]) => name),
+    ),
+  ]),
+);
 /** What the forms pick from, read again whenever one opens. */
 async function loadReferences() {
   references = await owner.query("admin/references:references");
@@ -407,7 +273,7 @@ async function openAddress() {
     const open = model.review ? openCharacterForm : openForm;
     if (entry === "new") return open();
     if (!CALLS[section]?.get) return;
-    const row = await owner.query(CALLS[section].get, { id: entry });
+    const row = await owner.query(CALLS[section].get, { section, id: entry });
     if (!row) {
       $("adminStatus").textContent = "자료를 찾을 수 없습니다.";
       return;
@@ -498,12 +364,14 @@ async function load({ more = false } = {}) {
   if (model.holdings)
     // 타이틀 보유·착용 현황, found by character or title.
     page = await owner.query(CALLS[section].list, {
+      section,
       search: $<HTMLInputElement>("holdingsSearch").value,
       after,
     });
   else if (section === "members")
     // 회원 관리 (adm/member_list.php): every member, found by nickname.
     page = await owner.query(CALLS[section].list, {
+      section,
       search: $<HTMLInputElement>("memberSearch").value,
       field: $<HTMLSelectElement>("memberField").value,
       after,
@@ -512,6 +380,7 @@ async function load({ more = false } = {}) {
     // Searched, filtered and counted by the server, as the original's list
     // does in SQL (adm/character_list.php:107-140).
     page = await owner.query(CALLS[section].list, {
+      section,
       field: $<HTMLSelectElement>("reviewField").value,
       text: $<HTMLInputElement>("reviewSearch").value,
       state: review.state,
@@ -523,6 +392,7 @@ async function load({ more = false } = {}) {
     reviewFilters(page);
   } else if (section === "history" || section === "inventory")
     page = await owner.query(CALLS[section].list, {
+      section,
       after,
       field: $<HTMLSelectElement>("logField").value,
       text: $<HTMLInputElement>("logText").value,
@@ -532,6 +402,7 @@ async function load({ more = false } = {}) {
     });
   else if (section === "items")
     page = await owner.query(CALLS[section].list, {
+      section,
       after,
       category: $<HTMLSelectElement>("itemCategory").value,
       effect: $<HTMLSelectElement>("itemEffect").value,
@@ -539,6 +410,7 @@ async function load({ more = false } = {}) {
     });
   else
     page = await owner.query(CALLS[section].list, {
+      section,
       after,
       search: $<HTMLInputElement>("recordText").value,
     });
@@ -688,6 +560,7 @@ async function load({ more = false } = {}) {
         // Its uploads stay; Naru's media library marks them 참조 없음 once no
         // row of the site's tables names them.
         const removed = await owner.mutate(CALLS[section].remove, {
+          section,
           id: row.id,
         });
         // A title goes from the characters holding it too.
@@ -1357,7 +1230,10 @@ function boardRow(row) {
   remove.onclick = () =>
     run(async () => {
       if (!confirm("이 게시판을 삭제할까요? 글은 남습니다.")) return;
-      await owner.mutate(CALLS.boards.remove, { id: row.id });
+      await owner.mutate(CALLS.boards.remove, {
+        section: "boards",
+        id: row.id,
+      });
       await load();
     });
   const copy = document.createElement("button");
@@ -1462,7 +1338,7 @@ $("boardsRemove").onclick = () =>
     let removed = 0;
     try {
       for (const id of chosen) {
-        await owner.mutate(CALLS.boards.remove, { id });
+        await owner.mutate(CALLS.boards.remove, { section: "boards", id });
         removed++;
       }
     } finally {
@@ -1851,6 +1727,7 @@ $("adminForm").onsubmit = async (event) => {
     selected = models[section].fixedId
       ? await owner.mutate(CALLS[section].save, { section, values })
       : await owner.mutate(CALLS[section].save, {
+          section,
           id: values.id,
           values,
           create: !selected,

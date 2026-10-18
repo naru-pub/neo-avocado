@@ -2,7 +2,7 @@
 // (adm/visit_list.php and its breakdowns). A browser counts once a Korean
 // day, as the original's visit cookie does; a member also reports where they
 // are as they move between pages. Nothing polls.
-import { kstDay, one, parsed } from "../../modules/access.js";
+import { kstDay, one, parsed, invalid } from "../../modules/access.js";
 import { loginReward } from "../../modules/members.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
@@ -57,10 +57,7 @@ export async function seen(
     domain?: string;
   } = {},
 ) {
-  if (typeof where !== "string" || where.length > 40)
-    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-      reason: "invalid_input",
-    });
+  if (typeof where !== "string" || where.length > 40) invalid(ctx);
   const joined = ctx.member
     ? Boolean(
         await one(ctx, "SELECT 1 FROM profiles WHERE member = ?", [

@@ -491,6 +491,39 @@ export async function record(
   await addHistory(ctx, { owner, kind, at: ctx.now, ...details });
 }
 
+/**
+ * Fails the call unless the character's own 소속 and 종족 (ch_side,
+ * ch_class) are among those `requirements` lists, where it lists any: a
+ * shop's (구매할, shop/_ajax.shop_update.php:108-115) or an item's use's
+ * (사용할).
+ */
+export async function requireSideAndClass(
+  ctx: EconomyCtx,
+  requirements: { sides?: unknown; classes?: unknown },
+  sheet: { side: string; class: string },
+  verb: "구매할" | "사용할",
+) {
+  for (const [key, field] of [
+    ["sides", "side"],
+    ["classes", "class"],
+  ] as const) {
+    const allowed = requirements[key];
+    if (
+      allowed !== undefined &&
+      (!Array.isArray(allowed) ||
+        allowed.some((value) => typeof value !== "string"))
+    )
+      throw new Error("소속 and 종족 restrictions must be lists of names.");
+    if (
+      (allowed as string[] | undefined)?.length &&
+      !(allowed as string[]).includes(sheet[field])
+    )
+      ctx.fail("CONFLICT", restrictedFor(await names(ctx), verb), {
+        reason: "restricted_character",
+      });
+  }
+}
+
 /** Fails the call unless `character` meets the item's use requirements. */
 export async function requireUsable(
   ctx: EconomyCtx,
@@ -516,25 +549,7 @@ export async function requireUsable(
     ctx.fail("CONFLICT", "승인된 캐릭터만 할 수 있습니다.", {
       reason: "not_approved",
     });
-  for (const [key, field] of [
-    ["sides", "side"],
-    ["classes", "class"],
-  ] as const) {
-    if (
-      requirements[key] !== undefined &&
-      (!Array.isArray(requirements[key]) ||
-        requirements[key].some((value) => typeof value !== "string"))
-    )
-      throw new Error("Use restrictions must be lists of identifiers.");
-    if (
-      requirements[key]?.length &&
-      // The sheet's own 소속 and 종족 (ch_side, ch_class).
-      !requirements[key].includes(sheet[field])
-    )
-      ctx.fail("CONFLICT", restrictedFor(await names(ctx), "사용할"), {
-        reason: "restricted_character",
-      });
-  }
+  await requireSideAndClass(ctx, requirements, sheet, "사용할");
   if (official.exp < amount(requirements.exp ?? 0, "Use experience"))
     ctx.fail("CONFLICT", await lacking(ctx, "expName"), {
       reason: "not_enough_exp",

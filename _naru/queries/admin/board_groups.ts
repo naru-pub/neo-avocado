@@ -1,16 +1,8 @@
-// 게시판 그룹 (adm/boardgroup_list.php): the owner's list, a page at a time, and one entry.
-import { getRecord, invalid, listRecords } from "../../modules/admin.js";
+// 게시판 그룹's 접근회원 (adm/boardgroupmember_list.php); the groups' list and
+// one group are admin/records'.
+import { invalid } from "../../modules/admin.js";
 import { GROUP_ROLE, ownerOnly } from "../../modules/access.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
-
-export const list = ownerOnly(
-  (ctx: QueryCtx, args: { after?: string | null }) =>
-    listRecords(ctx, "board_groups", args),
-);
-
-export const get = ownerOnly((ctx: QueryCtx, args: { id?: string }) =>
-  getRecord(ctx, "board_groups", args),
-);
 
 /** Members a page of 접근회원 lists. */
 const PAGE = 100;

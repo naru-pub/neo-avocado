@@ -12,16 +12,14 @@ import {
   one,
   parsed,
   requireOwner,
+  invalid,
 } from "./access.js";
 import { characterKey } from "./characters.js";
+import { RECORD_CALLS, type AdminCall } from "./admin-calls.js";
 import type { MutationCtx, QueryCtx, SqlValue } from "./naru-types.js";
 
 /** Refuses input no form sends. */
-export function invalid(ctx: QueryCtx): never {
-  return ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-    reason: "invalid_input",
-  });
-}
+export { invalid };
 
 /** A save made from a row someone else changed or removed meanwhile. */
 export function conflict(ctx: QueryCtx): never {
@@ -341,6 +339,21 @@ export const TABLES: Record<string, Table> = {
     ["weight", "weight", "num", 1],
   ]),
 };
+
+/** `section`, if it answers `call` here; refused otherwise. */
+export function recordSection(
+  ctx: QueryCtx,
+  section: unknown,
+  call: AdminCall,
+): string {
+  if (
+    typeof section !== "string" ||
+    !Object.hasOwn(RECORD_CALLS, section) ||
+    !RECORD_CALLS[section].includes(call)
+  )
+    invalid(ctx);
+  return section as string;
+}
 
 /** The settings sections, one JSON row each, by section: their row's key. */
 export const SETTINGS: Record<string, string> = {
@@ -919,6 +932,11 @@ export async function removeRecord(
     const gone = JSON.stringify(recipes.map((row) => row.id));
     await ctx.sql`DELETE FROM recipe_ingredients WHERE recipe_id IN (SELECT value FROM json_each(${gone}))`;
     await ctx.sql`DELETE FROM recipes WHERE id IN (SELECT value FROM json_each(${gone}))`;
+  }
+  // poll_delete.php: its votes and 기타의견 go with it.
+  if (section === "polls") {
+    await ctx.sql`DELETE FROM poll_votes WHERE poll_id = ${key}`;
+    await ctx.sql`DELETE FROM poll_comments WHERE poll_id = ${key}`;
   }
   if (section === "board_groups") {
     if (await one(ctx, "SELECT 1 FROM boards WHERE group_id = ?", [key]))

@@ -108,9 +108,12 @@ name(ctx, args)`. Pages call them as `query("<area>/<module>:<name>", args)`
   `_naru/collections.json`, and pages use no `collection()`, `call()` or
   `batch()`; `tests/admin-model.test.mjs` checks no page or server code
   names a collection.
-- The owner's admin (`admin/`) is `_naru/queries/admin/<section>` and
-  `_naru/mutations/admin/<section>`: `list`, `get`, `save` and `remove`
-  where the section has them, each made by `ownerOnly(fn)`
+- The owner's admin (`admin/`) calls each section's `list`, `get`, `save`
+  and `remove` where it has them: `admin/records:<call>` with `{ section }`
+  for those `modules/admin-calls.ts` lists as plain (the shared code in
+  `modules/admin.ts` does them), and `_naru/queries/admin/<section>` and
+  `_naru/mutations/admin/<section>` for what a section does itself. Each
+  is made by `ownerOnly(fn)`
   (`modules/access.ts`), which refuses anyone but the owner before `fn`
   runs; so are the owner's calls outside admin/ (`economy/grants:grant`,
   `characters/review:reviewCharacter`, `characters/sheet:move`).

@@ -8,6 +8,7 @@ import {
   lacking,
   signedIn,
   text,
+  invalid,
 } from "../../modules/access.js";
 import { pay, record, wallet } from "../../modules/economy.js";
 import { messageOf, ownMessage } from "../../modules/mail.js";
@@ -16,11 +17,6 @@ import type { MutationCtx } from "../../modules/naru-types.js";
 
 /** Messages a member may send a day unless the owner sets another number. */
 const MESSAGE_DAILY_LIMIT = 100;
-
-const invalid = (ctx: MutationCtx) =>
-  ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-    reason: "invalid_input",
-  });
 
 /**
  * Sends one message to each of 1–20 members, who must take 쪽지, paying

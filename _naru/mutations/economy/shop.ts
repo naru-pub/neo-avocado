@@ -18,6 +18,7 @@ import {
   ownedItems,
   pay,
   record,
+  requireSideAndClass,
   spend,
   wallet,
 } from "../../modules/economy.js";
@@ -94,25 +95,8 @@ export async function buy(
       reason: "not_enough",
     });
   const requirements = listing.data.requirements ?? {};
-  // A character has one 소속 and 종족, the member's pick on its sheet
-  // (ch_side, ch_class; shop/_ajax.shop_update.php:108-115).
-  for (const [key, field] of [
-    ["sides", "side"],
-    ["classes", "class"],
-  ] as const) {
-    if (
-      requirements[key] !== undefined &&
-      (!Array.isArray(requirements[key]) ||
-        requirements[key].some((value) => typeof value !== "string"))
-    )
-      throw new Error(
-        "Shop character restrictions must be lists of identifiers.",
-      );
-    if (requirements[key]?.length && !requirements[key].includes(buyer[field]))
-      ctx.fail("CONFLICT", restrictedFor(await names(ctx), "구매할"), {
-        reason: "restricted_character",
-      });
-  }
+  // A character has one 소속 and 종족, the member's pick on its sheet.
+  await requireSideAndClass(ctx, requirements, buyer, "구매할");
   const expPrice = amount(requirements.exp ?? 0, "Required experience");
   if (expPrice && progression.data.exp < expPrice)
     ctx.fail("CONFLICT", await lacking(ctx, "expName"), {

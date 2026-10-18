@@ -6,6 +6,7 @@ import type { Access } from "./access.js";
 import { accessOf, boardOf, commentRow, isStaff, postRow } from "./boards.js";
 import type { CommentRow, PostRow } from "./boards.js";
 import type { GuestCredentials, MutationCtx } from "./naru-types.js";
+import { invalid } from "./access.js";
 
 /** A guest writer: the name they post under and their password's hash. */
 export interface GuestWriter {
@@ -55,9 +56,7 @@ export async function startWrite<T extends "post" | "comment">(
   guest: GuestWriter | null;
 }> {
   if (id !== null && typeof id !== "string" && typeof id !== "number")
-    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-      reason: "invalid_input",
-    });
+    invalid(ctx);
   const access = await accessOf(ctx);
   const previous = (
     id === null
@@ -95,9 +94,7 @@ export async function startWrite<T extends "post" | "comment">(
     } else {
       const name = given?.name;
       if (typeof name !== "string" || !name.trim() || name.length > 20)
-        ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-          reason: "invalid_input",
-        });
+        invalid(ctx);
       guest = { name: name.trim(), hash: await ctx.passwords.hash(password) };
     }
   } else if (

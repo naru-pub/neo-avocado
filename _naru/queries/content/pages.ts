@@ -1,6 +1,6 @@
 // 내용 페이지 (bbs/content.php): the owner's pages the reader's level may
 // see. Pages whose read level is 1 are public, as GnuBoard's guest level.
-import { communityAccess } from "../../modules/access.js";
+import { communityAccess, invalid } from "../../modules/access.js";
 import { MAIN_PAGE, readablePage } from "../../modules/content.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
 
@@ -19,10 +19,7 @@ export async function contentPage(
   ctx: QueryCtx,
   { id, mobile = false }: { id?: string; mobile?: boolean } = {},
 ) {
-  if (typeof id !== "string")
-    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-      reason: "invalid_input",
-    });
+  if (typeof id !== "string") invalid(ctx);
   const row = await readablePage(ctx, id);
   if (!row)
     ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {

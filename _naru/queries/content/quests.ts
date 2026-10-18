@@ -1,6 +1,6 @@
 // 퀘스트 (quest/index.php): the owner's image quests while they run; the
 // reference defines no claim or reward.
-import { parsed, scheduled } from "../../modules/access.js";
+import { parsed, scheduled, invalid } from "../../modules/access.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
 
 interface QuestRow {
@@ -29,9 +29,7 @@ export async function quests(
     !["", "daily", "weekly"].includes(type) ||
     (after !== null && typeof after !== "string")
   )
-    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-      reason: "invalid_input",
-    });
+    invalid(ctx);
   const { rows } = await ctx.sql<QuestRow>`
     SELECT * FROM quests
     WHERE (${type} = '' OR type = ${type}) AND id > ${after ?? ""}

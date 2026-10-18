@@ -1,12 +1,12 @@
-// 게시판 (adm/board_list.php, board_form.php): the owner saves an entry, checked as its form checks it
-// (modules/admin-model.ts), deletes one, and copies one (board_copy.php).
+// 게시판 (adm/board_list.php, board_form.php): the owner saves an entry,
+// checked as its form checks it (modules/admin-model.ts), with 그룹적용 and
+// 전체적용, and copies one (board_copy.php); deleting is admin/records'.
 import {
   TABLES,
   conflict,
   dataOf,
   invalid,
   recordOf,
-  removeRecord,
   rowById,
   saveRecord,
   writeRow,
@@ -78,10 +78,6 @@ export const save = ownerOnly(async function save(
   }
   return { ...saved, applied: others.length };
 });
-
-export const remove = ownerOnly((ctx: MutationCtx, args: { id?: string }) =>
-  removeRecord(ctx, "boards", args),
-);
 
 /**
  * 게시판 복사 (adm/board_copy_update.php): a new board `target` named `name`

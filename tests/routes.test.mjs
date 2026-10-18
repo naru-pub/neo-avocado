@@ -8,25 +8,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { testSite } from "./sql-ctx.mjs";
+import { setSettings, insert, character } from "./helpers.mjs";
 
-const setSettings = (site, key, value) =>
-  site.run(
-    "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
-    key,
-    JSON.stringify(value),
-  );
-/** A row made directly, objects as JSON; answers its key as a string. */
-function insert(site, table, row) {
-  const values = Object.values(row).map((value) =>
-    value !== null && typeof value === "object" ? JSON.stringify(value) : value,
-  );
-  const columns = Object.keys(row);
-  const { lastInsertRowid } = site.run(
-    `INSERT INTO ${table} (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`,
-    ...values,
-  );
-  return String(row.id ?? lastInsertRowid);
-}
 /** A board open to visitors (level 1) unless `data` says otherwise. */
 const board = (site, id, { options = {}, ...data } = {}) =>
   insert(site, "boards", {
@@ -52,14 +35,6 @@ const post = (site, data = {}) =>
     updated_at: site.now,
     ...data,
   });
-const character = (site, data = {}) =>
-  insert(site, "characters", {
-    owner: "m-1",
-    name: "Hero",
-    created_at: site.now,
-    ...data,
-  });
-
 /** A route's head as its tags: title, canonical, and each meta's content. */
 function tags(answer) {
   assert.equal(answer.file, "index.html");

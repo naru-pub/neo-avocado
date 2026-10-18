@@ -1,7 +1,12 @@
 // Members' nicknames, as posts and lists show who wrote them, and the
 // member's own profile. Visitors read nicknames only while the site is open
 // (사이트공개); a deleted profile shows none.
-import { containing, siteOpen, signedIn } from "../../modules/access.js";
+import {
+  containing,
+  siteOpen,
+  signedIn,
+  invalid,
+} from "../../modules/access.js";
 import { profileOf } from "../../modules/members.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
 
@@ -18,9 +23,7 @@ export async function nicks(ctx: QueryCtx, { ids }: { ids?: string[] } = {}) {
     ids.length > MAX_IDS ||
     ids.some((id) => typeof id !== "string")
   )
-    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-      reason: "invalid_input",
-    });
+    invalid(ctx);
   const wanted = [...new Set(ids)];
   if (!wanted.length || !(await readable(ctx))) return { nicks: {} };
   const { rows } = await ctx.sql<{ member: string; nick: string }>(
@@ -42,9 +45,7 @@ export async function find(
     nicks.length > 20 ||
     nicks.some((nick) => typeof nick !== "string" || nick.length > 20)
   )
-    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-      reason: "invalid_input",
-    });
+    invalid(ctx);
   const wanted = [...new Set(nicks)];
   if (!wanted.length || !(await readable(ctx))) return { profiles: [] };
   const { rows } = await ctx.sql<{
@@ -87,9 +88,7 @@ export async function suggest(
     typeof text !== "string" ||
     text.length > 40
   )
-    ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-      reason: "invalid_input",
-    });
+    invalid(ctx);
   const term = text.trim();
   if (!term) return { names: [] };
   if (kind === "member") {

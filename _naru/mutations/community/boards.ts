@@ -1,7 +1,7 @@
 // The staff's tools on a board: notices, moves and copies (GnuBoard's
 // bo_notice and bbs/move.php), for moderators and the board's own 게시판·그룹
 // 관리자.
-import { one } from "../../modules/access.js";
+import { one, invalid } from "../../modules/access.js";
 import type { Access } from "../../modules/access.js";
 import {
   COMMENT_COPY_COLUMNS,
@@ -18,11 +18,6 @@ import {
 import { profileOf } from "../../modules/members.js";
 import type { PostRow } from "../../modules/boards.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
-
-const invalid = (ctx: MutationCtx) =>
-  ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
-    reason: "invalid_input",
-  });
 
 /**
  * Where a moderator may move or copy `row` (bbs/move.php's list): a board

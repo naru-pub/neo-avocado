@@ -162,7 +162,8 @@ try {
       ],
       ["art", { label: "전신", type: "image", visibility: "public", order: 3 }],
     ])
-      await admin.mutate("admin/character_fields:save", {
+      await admin.mutate("admin/records:save", {
+        section: "character_fields",
         id: code,
         values,
         create: true,
@@ -189,8 +190,12 @@ try {
     const { createNaru } =
       await import("https://sdk.naru.pub/sdk/1.1.0/naru.js");
     const admin = await createNaru().auth.session();
-    return (await admin.query("admin/emoticons:get", { id: "smile" })).data
-      .image;
+    return (
+      await admin.query("admin/records:get", {
+        section: "emoticons",
+        id: "smile",
+      })
+    ).data.image;
   });
   assert.match(smile, /^https:\/\/media\.naru\.pub\/1\//);
   assert.equal(
@@ -363,7 +368,8 @@ try {
         fields: {},
       },
     });
-    await admin.mutate("admin/couples:save", {
+    await admin.mutate("admin/records:save", {
+      section: "couples",
       id: "pair",
       values: {
         first: characters[0].id,
@@ -378,7 +384,8 @@ try {
       values: { shopCategories: "일반, 이벤트", shopGreeting: "어서 오세요" },
     });
     // A new item starts hidden, as the form's does: this one is on sale.
-    await admin.mutate("admin/items:save", {
+    await admin.mutate("admin/records:save", {
+      section: "items",
       id: "cake",
       values: {
         name: "케이크",
@@ -836,12 +843,14 @@ try {
     const { createNaru } =
       await import("https://sdk.naru.pub/sdk/1.1.0/naru.js");
     const admin = await createNaru().auth.session();
-    await admin.mutate("admin/levels:save", {
+    await admin.mutate("admin/records:save", {
+      section: "levels",
       id: "rank-e2e",
       values: { name: "새싹", exp: 5, bonusPoints: 1 },
       create: true,
     });
-    await admin.mutate("admin/board_groups:save", {
+    await admin.mutate("admin/records:save", {
+      section: "board_groups",
       id: "e2e-group",
       values: { name: "시험 그룹" },
       create: true,
@@ -859,8 +868,12 @@ try {
       const { createNaru } =
         await import("https://sdk.naru.pub/sdk/1.1.0/naru.js");
       const admin = await createNaru().auth.session();
-      return (await admin.query("admin/levels:get", { id: "rank-e2e" })).data
-        .name;
+      return (
+        await admin.query("admin/records:get", {
+          section: "levels",
+          id: "rank-e2e",
+        })
+      ).data.name;
     }),
     "새순",
   );
