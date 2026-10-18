@@ -38,6 +38,7 @@ export async function loadSite() {
   state.combining = site.recipes !== false;
   if (site.paging) state.paging = { ...state.paging, ...site.paging };
   state.counter = design.enabled ? (design.counter ?? "") : "";
+  state.ownerMarks = design.ownerMarks ?? { prefix: "▶", suffix: "◀" };
   document.body.classList.toggle(
     "no-header",
     design.enabled && design.useHeader === false,

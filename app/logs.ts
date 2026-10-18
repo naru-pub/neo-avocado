@@ -967,6 +967,12 @@ async function commentItem(comment, log) {
       }),
     );
   author.append(await speakerLabel(comment));
+  // 「작성자」 원글 작성자's 접두문자 and 접미문자 (view_comment.skin.php:93-96).
+  if (item.classList.contains("owner")) {
+    const { prefix = "", suffix = "" } = state.ownerMarks ?? {};
+    if (prefix) author.prepend(`${prefix} `);
+    if (suffix) author.append(` ${suffix}`);
+  }
   item.append(author, " ");
   if (comment.data.dice) {
     const dice = document.createElement("span");

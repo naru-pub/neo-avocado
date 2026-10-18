@@ -2646,7 +2646,10 @@ test("a board lists by 분류, shows its HTML notice and new-post text, and mark
   for (let n = 0; n < 4; n += 1) await settle();
   const [mine, staff] = post.querySelectorAll(".comment");
   assert.equal(mine.classList.contains("owner"), true);
+  // 「작성자」 원글 작성자's 접두·접미문자, the original's ▶ and ◀.
+  assert.match(mine.querySelector(".author").textContent, /^▶ .+ ◀$/);
   assert.equal(staff.classList.contains("owner"), false);
+  assert.doesNotMatch(staff.querySelector(".author").textContent, /▶|◀/);
   assert.equal(staff.querySelector(".admin-mark").textContent, "관리자");
 });
 

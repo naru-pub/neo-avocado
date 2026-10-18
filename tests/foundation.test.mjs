@@ -483,6 +483,7 @@ test("the site frame shows only safe design values and menus/banners a reader ma
     useHeader: true,
     menuPosition: "left",
     css: ":root:has(body.site.designed) {\n  --menu-width: 200px;\n  --menu-height: 50px;\n}\n",
+    ownerMarks: { prefix: "▶", suffix: "◀" },
     counter: "",
   });
   assert.deepEqual(
@@ -875,4 +876,37 @@ test("a new member starts at 회원가입시 권한, 2 until the owner sets it",
     site.rows("SELECT level FROM members WHERE member = 'm-2'")[0].level,
     4,
   );
+});
+
+test("디자인's 로그 card and 원글 작성자 styles, and the writer's 접두·접미문자 with or without design", async () => {
+  const site = await testSite();
+  // A fresh site shows the original's ▶ and ◀, design or not.
+  let { design } = await site.query("content/site:site");
+  assert.deepEqual(design.ownerMarks, { prefix: "▶", suffix: "◀" });
+  setSettings(site, "design", {
+    enabled: true,
+    styles: {
+      logItem: {
+        background: "#111111",
+        margin: 30,
+        borderColor: "#333333",
+        borderStyle: "solid",
+        borderWidth: 2,
+        borderSides: ["bottom"],
+      },
+      ownerName: { color: "#29c7c9", size: 13, prefix: "★", suffix: "" },
+    },
+  });
+  ({ design } = await site.query("content/site:site"));
+  assert.match(
+    design.css,
+    /body\.site\.designed #logs > \.log \{\n  background-color: #111111;\n  border-bottom-color: #333333;\n  border-bottom-style: solid;\n  border-bottom-width: 2px;\n  margin-bottom: 30px !important;\n\}/,
+  );
+  assert.match(
+    design.css,
+    /body\.site\.designed \.comment\.owner > \.author \{\n  color: #29c7c9;\n  font-size: 13px;\n\}/,
+  );
+  // The marks are text for the page, never CSS; a cleared one stays blank.
+  assert.doesNotMatch(design.css, /★/);
+  assert.deepEqual(design.ownerMarks, { prefix: "★", suffix: "" });
 });

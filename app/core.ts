@@ -44,6 +44,8 @@ const initialState = {
   viewer: viewerOf(),
   // 디자인's 접속자 카운터 (mmb_counter): HTML shown above picture boards.
   counter: "",
+  // 「작성자」 원글 작성자's 접두문자 and 접미문자, around the log writer's name.
+  ownerMarks: { prefix: "▶", suffix: "◀" },
   // 커뮤니티 설정's 쪽지·호출 알림음: the arrival popups may chime.
   alarmSound: false,
   // 조합(레시피)사용: whether a post offers 조합.

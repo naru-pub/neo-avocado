@@ -17,7 +17,7 @@ import {
   backgroundMusic,
   readablePage,
 } from "../../modules/content.js";
-import { designCss, designLayout } from "../../modules/design.js";
+import { designCss, designLayout, ownerMarks } from "../../modules/design.js";
 import { imageSlotsOf, viewerOf } from "../../modules/images.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
 
@@ -111,6 +111,8 @@ export async function site(ctx: QueryCtx) {
     useHeader: designLayout(saved).useHeader,
     menuPosition: designLayout(saved).menuPosition,
     css: designCss(saved),
+    // 「작성자」 원글 작성자's 접두문자 and 접미문자, which the page writes as text.
+    ownerMarks: ownerMarks(saved),
     // mmb_counter: the owner's HTML, which the page sanitizes as posts.
     counter: short(saved.counter, 2000),
   };

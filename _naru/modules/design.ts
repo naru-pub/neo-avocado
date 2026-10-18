@@ -72,6 +72,8 @@ export const BOXES = {
   formBody: { label: "양식 : 내용" },
   notice: { label: "공지사항" },
   logList: { label: "리스트영역" },
+  // mmb_list_item: each log, its picture and comments (#log_list .item).
+  logItem: { label: "로그 (이미지 + 코멘트)", margin: true },
   logImage: { label: "이미지" },
   comments: { label: "코멘트" },
   comment: { label: "개별코멘트", margin: true },
@@ -88,6 +90,8 @@ export const PANELS = { input: "입력폼", box: "기본박스" } as const;
 /** The mmb skin's text parts: 색상 (and 폰트크기). */
 export const TEXTS = {
   author: { label: "「작성자」", size: true },
+  // mmb_owner_name: the log's own writer commenting (p.owner).
+  ownerName: { label: "「작성자」 원글 작성자", size: true },
   date: { label: "「날짜」", size: true },
   link: { label: "「외부링크」", size: false },
   call: { label: "「멤버호출」", size: false },
@@ -95,6 +99,18 @@ export const TEXTS = {
   hashTag: { label: "「해시태그」", size: false },
 } as const;
 const CORNERS = ["topLeft", "topRight", "bottomRight", "bottomLeft"] as const;
+
+/**
+ * mmb_owner_name's 접두문자 and 접미문자 (cs_etc_2, cs_etc_3), text the page
+ * puts around the log writer's name on their own comments, design or not
+ * (list.skin.php:20-23 reads them either way). The original installs ▶ and ◀.
+ */
+export function ownerMarks(saved: Record<string, any> = {}) {
+  const owner = saved?.styles?.ownerName ?? {};
+  const mark = (value: unknown, installed: string) =>
+    typeof value === "string" ? value.trim().slice(0, 20) : installed;
+  return { prefix: mark(owner.prefix, "▶"), suffix: mark(owner.suffix, "◀") };
+}
 
 /** What a design's styles are, every value checked; what is not set is left out. */
 export function designStyles(saved: Record<string, any> = {}) {
@@ -260,6 +276,7 @@ const PARTS: Record<string, string[]> = {
   // The mmb skin: .board-notice, #log_list, .ui-pic, .ui-comment, .item-comment.
   notice: ["#boardDescription"],
   logList: ["#logs"],
+  logItem: ["#logs > .log"],
   logImage: [".log .log-picture"],
   comments: [".log .log-discussion"],
   comment: [".comment"],
@@ -277,6 +294,7 @@ const PARTS: Record<string, string[]> = {
     "select",
   ],
   author: [".comment .author", ".log-discussion > .meta .author"],
+  ownerName: [".comment.owner > .author"],
   date: [".comment time", ".log-discussion > .meta time"],
   link: [".other-site-link"],
   call: [".member-call"],
@@ -320,6 +338,7 @@ export function designCss(saved: Record<string, any> = {}): string {
     "formBody",
     "notice",
     "logList",
+    "logItem",
     "logImage",
     "comments",
     "comment",
@@ -327,9 +346,8 @@ export function designCss(saved: Record<string, any> = {}): string {
   ])
     css += rule(PARTS[key], [
       ...box(s[key]),
-      key === "comment" &&
-        s.comment?.margin !== undefined &&
-        `margin-bottom: ${s.comment.margin}px !important`,
+      s[key]?.margin !== undefined &&
+        `margin-bottom: ${s[key].margin}px !important`,
     ]);
   if (s.subMenu) {
     css += rule(
@@ -388,7 +406,15 @@ export function designCss(saved: Record<string, any> = {}): string {
       ["input::placeholder", "textarea::placeholder"],
       [`color: ${s.input.color}`],
     );
-  for (const key of ["author", "date", "link", "call", "logLink", "hashTag"])
+  for (const key of [
+    "author",
+    "ownerName",
+    "date",
+    "link",
+    "call",
+    "logLink",
+    "hashTag",
+  ])
     css += rule(PARTS[key], text(s[key]));
   if (s.menuText) {
     css += rule([".site-menu a"], text(s.menuText));
