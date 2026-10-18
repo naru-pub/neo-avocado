@@ -40,9 +40,10 @@ history, a title given to or taken from many characters. The reports
 회원 관리 are queries that search, filter and count in SQL.
 
 `routes/` serves the pages' addresses (`/logs/free/12`, `/character/3`, …):
-each file answers the path it is named for (`_board` is a parameter,
-`index` the directory) with index.html and that page's link preview
-(`modules/previews.js`), read as a visitor reads it.
+each file answers the path it is named for (`_id` is a parameter,
+`_...rest` the rest of the path, `index` the directory) with index.html and
+that page's link preview (`modules/previews.js`), read as a visitor reads it.
+What an address names is `modules/places.js`, which the page reads too.
 
 Deploy the entire site together through GitHub or a template install. If
 editing individual files, save shared dependencies first. Naru validates and

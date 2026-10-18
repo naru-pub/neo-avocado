@@ -1,4 +1,2 @@
-// /applicants: 신청자목록.
-import { named, route } from "../modules/previews.js";
-
-export default route(named("신청자목록"));
+// /applicants: 신청자목록. What an address names is read in places.ts.
+export { page as default } from "../modules/previews.js";

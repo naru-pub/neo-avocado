@@ -154,10 +154,15 @@ export async function routes() {
     .sort();
 }
 
+/** Whether a route's segment takes the rest of the path (`_...name`). */
+const isRest = (part) => /^_\.\.\.[A-Za-z0-9_]+$/.test(part);
+
 /**
  * The route answering `pathname`, as Naru matches them (control-plane's
  * site-functions/routes.ts): segments that start with _ take any one
- * segment, fixed segments win, and a directory's index answers it.
+ * segment, one that starts with _... (last, never first) the rest of the
+ * path as a list, a directory's index answers it, and from the first
+ * segment on a fixed segment wins over _name, and _name over _...name.
  */
 export function matchRoute(names, pathname) {
   let segments;
@@ -173,15 +178,18 @@ export function matchRoute(names, pathname) {
     ? [[...segments, "index"]]
     : [segments, [...segments, "index"]];
   let best = null;
-  for (const wanted of candidates)
-    for (const route of names) {
-      const pattern = route.split("/");
-      if (pattern.length !== wanted.length) continue;
+  for (const route of names) {
+    const pattern = route.split("/");
+    const rest = isRest(pattern.at(-1) ?? "");
+    const fixed = rest ? pattern.slice(0, -1) : pattern;
+    for (const wanted of rest ? [segments] : candidates) {
+      if (rest ? wanted.length < fixed.length : fixed.length !== wanted.length)
+        continue;
       const params = {};
       let score = "";
-      const matches = pattern.every((part, index) => {
+      const matches = fixed.every((part, index) => {
         if (part === wanted[index]) {
-          score += "1";
+          score += "2";
           return true;
         }
         if (
@@ -190,14 +198,19 @@ export function matchRoute(names, pathname) {
           wanted[index] !== "index"
         ) {
           params[part.slice(1)] = wanted[index];
-          score += "0";
+          score += "1";
           return true;
         }
         return false;
       });
-      if (matches && (!best || score > best.score))
-        best = { route, params, score };
+      if (!matches) continue;
+      if (rest) {
+        params[pattern.at(-1).slice(4)] = wanted.slice(fixed.length);
+        score += "0";
+      }
+      if (!best || score > best.score) best = { route, params, score };
     }
+  }
   return best && { route: best.route, params: best.params };
 }
 

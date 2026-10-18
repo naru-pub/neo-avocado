@@ -1,4 +1,2 @@
-// /: the home, as the site shows itself.
-import { route } from "../modules/previews.js";
-
-export default route();
+// /: the home. What an address names is read in places.ts.
+export { page as default } from "../modules/previews.js";

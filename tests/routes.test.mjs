@@ -136,7 +136,7 @@ test("the home and the views are index.html with the site's preview, from 디자
   // Paths no page has are no route's: Naru serves them as files, or 404.
   for (const path of [
     "/nope",
-    "/mypage/nope",
+    "/members/x",
     "/character",
     "/post",
     "/app.js",
@@ -144,6 +144,15 @@ test("the home and the views are index.html with the site's preview, from 디자
     "/style.css",
   ])
     assert.equal(await site.route(path), null, path);
+  // Under a page's address, one it does not know is 404.
+  for (const path of [
+    "/mypage/nope",
+    "/shop/a/b",
+    "/logs/free/tag",
+    "/logs/free/from/x",
+    "/post/1/comment",
+  ])
+    assert.deepEqual(await site.route(path), NOT_FOUND, path);
 
   // The owner's name, description, picture (else the logo) and address.
   setSettings(site, "design", {
@@ -477,4 +486,34 @@ test("a board's RSS feed lists what a visitor reads, while it is on and the boar
     assert.equal((await site.route(path)).status, 404, path);
   setSettings(site, "community", { siteOpen: false });
   assert.equal((await site.route("/rss/free")).status, 404);
+});
+
+test("an address names the same place for the page and for Naru's routes", async () => {
+  const { placeOf } = await import("../dist/_naru/modules/places.js");
+  for (const [path, place] of [
+    ["/", { kind: "index" }],
+    ["/members", { kind: "members" }],
+    ["/post/7/comment/9", { kind: "post", id: "7", comment: "9" }],
+    ["/logs", { kind: "logs" }],
+    ["/logs/free/12", { kind: "log", board: "free", number: "12" }],
+    ["/logs/free/page/2", { kind: "board", board: "free", page: "2" }],
+    [
+      "/logs/free/category/%EC%9E%A1%EB%8B%B4/page/3",
+      { kind: "board", board: "free", category: "잡담", page: "3" },
+    ],
+    ["/logs/free/tag/a", { kind: "board", board: "free", tag: "a" }],
+    ["/logs/free/from/40", { kind: "board", board: "free", from: "40" }],
+    ["/messages", { kind: "messages", id: undefined }],
+    ["/mypage/exp", { kind: "mypage", tab: "exp" }],
+  ])
+    assert.deepEqual(placeOf(path), place, path);
+  for (const path of [
+    "/nope",
+    "/members/x",
+    "/logs/free/page/0",
+    "/logs/free/abc",
+    "/mypage/nope",
+    "/character",
+  ])
+    assert.equal(placeOf(path), null, path);
 });

@@ -1,4 +1,2 @@
-// /character/<id>: a character.
-import { character, route } from "../../modules/previews.js";
-
-export default route(character);
+// /character/<id>: a character. What an address names is read in places.ts.
+export { page as default } from "../../modules/previews.js";

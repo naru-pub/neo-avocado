@@ -25,6 +25,7 @@ import type { Board, PostRow } from "./boards.js";
 import { characterKey, characterRow } from "./characters.js";
 import { MAIN_PAGE, readablePage } from "./content.js";
 import type { QueryCtx } from "./naru-types.js";
+import { placeOf, whole, type Place } from "./places.js";
 
 /** What Naru hands a route: the path asked, its parameters and query. */
 export interface RouteInput {
@@ -203,10 +204,6 @@ export const named =
   (title: string): Page =>
   async () => ({ title });
 
-/** A whole positive number, as an address writes one. */
-const whole = (value: unknown) =>
-  typeof value === "string" && /^[1-9]\d{0,14}$/.test(value);
-
 /**
  * A post's preview, if a visitor may read it whole (posts:post): its board's
  * read level, not secret nor 멤버공개, and not 19금 either, whose picture is
@@ -313,3 +310,44 @@ export const content: Page = async (ctx, { id }, access) => {
   if (!row) return null;
   return { title: row.name, image: https(row.header_image) };
 };
+
+/** Each page's preview by what its address names (places.ts); none: the site's own. */
+const PREVIEWS: Record<Place["kind"], Page | undefined> = {
+  index: undefined,
+  home: undefined,
+  members: named("멤버목록"),
+  applicants: named("신청자목록"),
+  characters: named("캐릭터"),
+  couples: named("커플목록"),
+  quests: named("퀘스트"),
+  calls: named("알림"),
+  online: named("현재접속자"),
+  new: named("최근게시물"),
+  post,
+  logs: named("로그"),
+  board,
+  log: numbered,
+  messages: named("쪽지"),
+  character,
+  content: (ctx, params, access) =>
+    params.id === undefined
+      ? named("안내")(ctx, params, access)
+      : content(ctx, params, access),
+  shop: named("상점"),
+  search: named("전체검색"),
+  mypage: named("마이페이지"),
+};
+
+/**
+ * The route of every page: index.html with the preview of what its address
+ * names (places.ts, as the page reads it), or 404 for an address that names
+ * nothing.
+ */
+export async function page(ctx: QueryCtx, input: RouteInput) {
+  const place = placeOf(input?.path ?? "/");
+  if (!place) return NOT_FOUND;
+  return await route(PREVIEWS[place.kind])(ctx, {
+    ...input,
+    params: place as unknown as Record<string, string>,
+  });
+}

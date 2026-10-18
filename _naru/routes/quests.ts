@@ -1,4 +1,2 @@
-// /quests: 퀘스트.
-import { named, route } from "../modules/previews.js";
-
-export default route(named("퀘스트"));
+// /quests: 퀘스트. What an address names is read in places.ts.
+export { page as default } from "../modules/previews.js";

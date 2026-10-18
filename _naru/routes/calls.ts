@@ -1,4 +1,2 @@
-// /calls: a member's 알림.
-import { named, route } from "../modules/previews.js";
-
-export default route(named("알림"));
+// /calls: 알림. What an address names is read in places.ts.
+export { page as default } from "../modules/previews.js";

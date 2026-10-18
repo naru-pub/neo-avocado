@@ -24,130 +24,97 @@ import { showRecent, showSearch } from "./across.js";
 import { follow } from "./site.js";
 import { openCharacter } from "./characters.js";
 import { showShopCategory } from "./shop.js";
-
-/**
- * The pages addresses name by their first part, as Naru serves them
- * (_naru/routes/): "" is the home, and any other is a view's tab.
- */
-export const PAGES = new Set([
-  "",
-  "home",
-  "post",
-  "logs",
-  "messages",
-  "character",
-  "content",
-  "shop",
-  "mypage",
-  "members",
-  "applicants",
-  "characters",
-  "couples",
-  "quests",
-  "calls",
-  "online",
-  "new",
-  "search",
-]);
-
-/** The address's parts: "/logs/free/12" → ["logs", "free", "12"]. */
-export function parts(path) {
-  return path
-    .replace(/^\/+/, "")
-    .replace(/(^|\/)index\.html$/, "")
-    .split("/")
-    .filter(Boolean)
-    .map((part) => {
-      try {
-        return decodeURIComponent(part);
-      } catch {
-        return part;
-      }
-    });
-}
+import { placeOf, type Place } from "../_naru/modules/places.js";
 
 export function openRoute(path = location.pathname) {
   showingAddress(location.pathname);
-  const [kind = "", first, second] = parts(path);
+  const place = placeOf(path);
   return opening(async () => {
     // A closed site (사이트공개 off) shows a visitor the sign-in card only,
     // whatever the address (extend/community.config.php's check_site_auth).
-    if (!kind || (!state.member && state.siteOpen === false))
+    // An address that names no page (Naru answers it 404) opens the home.
+    if (
+      !place ||
+      place.kind === "index" ||
+      (!state.member && state.siteOpen === false)
+    )
       return showTab("home");
-    if (kind === "post" && first) {
-      // /post/<id>, or /post/<id>/comment/<id>.
-      const [, , , comment] = parts(path);
-      return openPost(first, {
-        comment: second === "comment" ? comment : null,
-      });
+    switch (place.kind) {
+      case "post":
+        return openPost(place.id, { comment: place.comment ?? null });
+      case "logs":
+      case "board":
+      case "log":
+        return openLogs(place);
+      case "messages":
+        if (place.id === undefined) break;
+        if (!state.member) return say("회원 로그인 후 이용할 수 있습니다.");
+        $("tabMessages").click();
+        return openMessage(place.id);
+      // 최근게시물 and 전체검색 (bbs/new.php, search.php), at /search/<words>.
+      case "new":
+        return showRecent();
+      case "search":
+        return showSearch(place.text ?? null);
+      // The character viewer (member/viewer.php), open to visitors too.
+      case "character":
+        return openCharacter(place.id);
+      case "content":
+        if (place.id === undefined) break;
+        return follow(`content:${place.id}`);
+      case "shop":
+        if (!state.member) return say("회원 로그인 후 이용할 수 있습니다.");
+        // Chosen before the shop reads its categories, and shown if it has.
+        if (place.category) showShopCategory(place.category);
+        $("tabShop").click();
+        return;
+      case "mypage":
+        if (!state.member) return say("회원 로그인 후 이용할 수 있습니다.");
+        return $(MYPAGE_TAB_IDS[place.tab ?? ""]).click();
     }
-    if (kind === "logs") {
-      $("tabLogs").click();
-      const [, , , third] = parts(path);
-      if (first && first !== state.board) {
-        // A board made since the page read its list: read it again, once.
-        if (!state.boards.some((row) => row.id === first)) await loadBoards();
-        if (!state.boards.some((row) => row.id === first))
-          return say("권한이 없습니다.");
-        state.board = first;
-        $<HTMLSelectElement>("board").value = first;
-        configureBoard();
-      }
-      state.tag = second === "tag" ? third : null;
-      state.upTo =
-        second === "from" && Number.isSafeInteger(Number(third))
-          ? Number(third)
-          : null;
-      state.search = second === "search" ? third : null;
-      // /logs/free/category/잡담, and its pages (…/category/잡담/page/2).
-      const [, , , , fourth, fifth] = parts(path);
-      state.category = second === "category" ? third : null;
-      $<HTMLInputElement>("searchText").value = state.search ?? "";
-      // The readable form of a post's address: board and number.
-      if (second && Number.isSafeInteger(Number(second))) {
-        await loadLogs();
-        return openLogNumber(Number(second));
-      }
-      $("logFocus").replaceChildren();
-      $("logFocusPanel").hidden = true;
-      const page =
-        second === "page" ? third : fourth === "page" ? fifth : undefined;
-      return loadLogs({ page: Math.max(1, Number(page) || 1) });
-    }
-    if (kind === "messages" && first) {
-      if (!state.member) return say("회원 로그인 후 이용할 수 있습니다.");
-      $("tabMessages").click();
-      return openMessage(first);
-    }
-    // 최근게시물 and 전체검색 (bbs/new.php, search.php), at /search/<words>.
-    if (kind === "new") return showRecent();
-    if (kind === "search") return showSearch(first ?? null);
-    // The character viewer (member/viewer.php), open to visitors too.
-    if (kind === "character" && first) return openCharacter(first);
-    if (kind === "content" && first) return follow(`content:${first}`);
-    if (kind === "shop") {
-      if (!state.member) return say("회원 로그인 후 이용할 수 있습니다.");
-      // Chosen before the shop reads its categories, and shown if it has.
-      if (first) showShopCategory(first);
-      $("tabShop").click();
-      return;
-    }
-    if (kind === "mypage") {
-      if (!state.member) return say("회원 로그인 후 이용할 수 있습니다.");
-      const tab =
-        first === "logs"
-          ? "myLogsTab"
-          : first === "exp"
-            ? "myExpTab"
-            : first === "favorites"
-              ? "myFavoritesTab"
-              : first === "money"
-                ? "myMoneyTab"
-                : "tabMypage";
-      return $(tab).click();
-    }
-    return follow(`tab:${kind}`);
+    return follow(`tab:${place.kind}`);
   });
+}
+
+/** 마이페이지's tab buttons, by the address's tab ("": the page itself). */
+const MYPAGE_TAB_IDS = {
+  "": "tabMypage",
+  logs: "myLogsTab",
+  exp: "myExpTab",
+  favorites: "myFavoritesTab",
+  money: "myMoneyTab",
+};
+
+/** /logs and a board's lists, or one of its posts by number. */
+async function openLogs(
+  place: Extract<Place, { kind: "logs" | "board" | "log" }>,
+) {
+  $("tabLogs").click();
+  const board = place.kind === "logs" ? undefined : place.board;
+  if (board && board !== state.board) {
+    // A board made since the page read its list: read it again, once.
+    if (!state.boards.some((row) => row.id === board)) await loadBoards();
+    if (!state.boards.some((row) => row.id === board))
+      return say("권한이 없습니다.");
+    state.board = board;
+    $<HTMLSelectElement>("board").value = board;
+    configureBoard();
+  }
+  const list = place.kind === "board" ? place : null;
+  state.tag = list?.tag ?? null;
+  state.upTo = list?.from ? Number(list.from) : null;
+  state.search = list?.search ?? null;
+  // /logs/free/category/잡담, and its pages (…/category/잡담/page/2).
+  state.category = list?.category ?? null;
+  $<HTMLInputElement>("searchText").value = state.search ?? "";
+  // The readable form of a post's address: board and number.
+  if (place.kind === "log") {
+    await loadLogs();
+    return openLogNumber(Number(place.number));
+  }
+  $("logFocus").replaceChildren();
+  $("logFocusPanel").hidden = true;
+  return loadLogs({ page: Math.max(1, Number(list?.page) || 1) });
 }
 
 /** The address changed: back or forward. A move within the page (#top) opens nothing. */
@@ -192,7 +159,7 @@ document.addEventListener("click", (event) => {
   if (url.origin !== location.origin) return;
   if (url.hash || url.search) return;
   const path = url.pathname;
-  if (!PAGES.has(parts(path)[0] ?? "")) return;
+  if (!placeOf(path)) return;
   event.preventDefault();
   navigate(path);
 });

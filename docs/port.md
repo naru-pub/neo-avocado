@@ -62,11 +62,15 @@ name(ctx, args)`. Pages call them as `query("<area>/<module>:<name>", args)`
   re-runs it when a mutation writes a table it read.
 - Uploads are unchanged (`media.upload`); store the URL in a TEXT column.
 - `_naru/routes/<path>.ts` answers that path (a segment `_name` is a
-  parameter, `index` the directory): its default export runs as a
-  visitor's query and answers `{ file: "index.html", head, cache }`.
-  `modules/previews.ts` makes every route: the page's preview tags, from
-  what a visitor may read, by the same checks the queries make. Paths no
-  route answers are files, else 404.
+  parameter, `_...name` the rest of the path, `index` the directory): its
+  default export runs as a visitor's query and answers
+  `{ file: "index.html", head, cache }`. One file covers a section
+  (`logs/_...rest.ts` every board address), and every route is
+  `modules/previews.ts`'s `page`: `modules/places.ts` reads what the
+  address names, as the page's router (`app/router.ts`) does, and the
+  preview tags come from what a visitor may read, by the same checks the
+  queries make. An address under a section that names nothing is 404, as
+  are paths no route or file answers.
 
 ## Tables
 

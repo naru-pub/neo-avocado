@@ -1,4 +1,2 @@
-// /characters: every character.
-import { named, route } from "../modules/previews.js";
-
-export default route(named("캐릭터"));
+// /characters: 캐릭터. What an address names is read in places.ts.
+export { page as default } from "../modules/previews.js";
