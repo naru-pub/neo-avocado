@@ -136,6 +136,18 @@ export const copy = ownerOnly(async function copy(
   // Each copy is its original's number on the new board.
   const pairs = `FROM posts AS old JOIN posts AS copied
     ON copied.board = ? AND copied.number = old.number WHERE old.board = ?`;
+  // A copied reply's thread is its first post's copy (wr_num, wr_reply).
+  await ctx.sql(
+    `WITH roots AS MATERIALIZED (
+       SELECT old.number AS number, root_copy.id AS thread
+       FROM posts AS old
+       JOIN posts AS root_old ON root_old.id = old.thread
+       JOIN posts AS root_copy ON root_copy.board = ? AND root_copy.number = root_old.number
+       WHERE old.board = ? AND old.thread IS NOT NULL)
+     UPDATE posts SET thread = (SELECT thread FROM roots WHERE roots.number = posts.number)
+     WHERE board = ? AND reply_path != ''`,
+    [target, source.id, target],
+  );
   await ctx.sql(
     `INSERT INTO post_tags (post_id, tag)
      SELECT copied.id, post_tags.tag ${pairs.replace("WHERE", "JOIN post_tags ON post_tags.post_id = old.id WHERE")}`,

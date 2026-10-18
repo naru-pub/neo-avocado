@@ -206,6 +206,23 @@ export const models: Record<string, Model> = {
       { key: "readLevel", label: "본문 읽기 등급", type: "number", default: 2 },
       { key: "writeLevel", label: "글쓰기 등급", type: "number", default: 2 },
       { key: "commentLevel", label: "댓글 등급", type: "number", default: 2 },
+      // bo_reply_level and bo_reply_order: 답변글 on a plain board.
+      {
+        key: "replyLevel",
+        label: "글답변 등급 (일반 글 게시판)",
+        type: "number",
+        default: 2,
+      },
+      {
+        key: "replyOrder",
+        label: "답변 달기",
+        type: "choice",
+        default: "1",
+        options: [
+          ["1", "나중에 쓴 답변 아래로 달기 (기본)"],
+          ["0", "나중에 쓴 답변 위로 달기"],
+        ],
+      },
       { key: "categories", label: "분류 (쉼표로 구분)", type: "tokens" },
       {
         key: "html",
@@ -2064,7 +2081,9 @@ export function buildRecord(section, values, previous, references) {
     if (
       ["listLevel", "readLevel", "writeLevel", "commentLevel"].some(
         (key) => data[key] < 1 || data[key] > 10,
-      )
+      ) ||
+      (data.replyLevel !== undefined &&
+        (data.replyLevel < 1 || data.replyLevel > 10))
     )
       throw new Error("게시판 등급은 1~10입니다.");
     if (

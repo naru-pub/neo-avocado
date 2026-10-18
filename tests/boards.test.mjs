@@ -2967,3 +2967,83 @@ test("a secret comment is read by the staff and the two writers alone, and found
     "guest_secret",
   );
 });
+
+test("답변글 sit under what they answer, at 글답변 권한, and keep a post with replies", async () => {
+  const site = await boardSite();
+  board(site, "free", { ...PUBLIC_BOARD, kind: "text", replyLevel: 2 });
+  profile(site, "m-1", "하나");
+  profile(site, "m-2", "둘");
+  const say = async (title, replyTo, who = M1) =>
+    (
+      await write(
+        site,
+        {
+          data: {
+            board: "free",
+            title,
+            text: title,
+            ...(replyTo ? { replyTo } : {}),
+          },
+        },
+        who,
+      )
+    ).document;
+  const first = await say("첫 글");
+  const second = await say("둘째 글");
+  const r1 = await say("Re: 첫 글", first.id, M2);
+  const r2 = await say("Re: 첫 글 (2)", first.id);
+  const r11 = await say("Re: Re: 첫 글", r1.id);
+  assert.equal(r11.data.depth, 2);
+  assert.equal(r11.data.thread, first.id);
+  const titles = async () =>
+    (await listPage(site, { board: "free" })).documents.map(
+      (row) => row.data.title,
+    );
+  // wr_num, wr_reply: the newest thread first, each reply under its parent.
+  assert.deepEqual(await titles(), [
+    "둘째 글",
+    "첫 글",
+    "Re: 첫 글",
+    "Re: Re: 첫 글",
+    "Re: 첫 글 (2)",
+  ]);
+  // 나중에 쓴 답변 위로 달기 (bo_reply_order 0).
+  board(site, "free", {
+    ...PUBLIC_BOARD,
+    kind: "text",
+    replyLevel: 2,
+    replyOrder: "0",
+  });
+  await say("Re: 둘째 글", second.id);
+  await say("Re: 둘째 글 (2)", second.id);
+  assert.deepEqual((await titles()).slice(0, 3), [
+    "둘째 글",
+    "Re: 둘째 글 (2)",
+    "Re: 둘째 글",
+  ]);
+  // A post with replies stays, but for the staff.
+  assert.equal(
+    await refusal(site.mutate("community/posts:remove", { id: first.id }, M1)),
+    "has_replies",
+  );
+  assert.equal(
+    await reasonOf(site.mutate("community/posts:remove", { id: r2.id }, M1)),
+    "ok",
+  );
+  // 글답변 권한 above the member's level refuses; picture boards have none.
+  board(site, "free", { ...PUBLIC_BOARD, kind: "text", replyLevel: 9 });
+  assert.equal(await refusal(say("Re", first.id)), "access_denied");
+  const picture = post(site, { owner: "m-1", image: "https://e.com/a.png" });
+  assert.equal(
+    await refusal(
+      write(site, {
+        data: {
+          image: "https://e.com/b.png",
+          text: "x",
+          replyTo: picture,
+        },
+      }),
+    ),
+    "invalid_input",
+  );
+});

@@ -498,6 +498,11 @@
         </fieldset>
         <form id="logForm" class="card">
           <h2>로그 올리기</h2>
+          <!-- bbs/write.php?w=r: the post being answered. -->
+          <p id="logReplying" hidden>
+            <span id="logReplyingTitle"></span>
+            <button id="cancelReply" type="button">답변 취소</button>
+          </p>
           <label id="logImageLabel" class="member-only">
             그림
             <input id="logImage" type="file" accept="image/*" />
@@ -789,6 +794,7 @@
             <button class="edit" type="button" hidden>수정</button>
             <button class="pin" type="button" hidden>공지</button>
             <button class="move" type="button" hidden>이동</button>
+            <button class="reply" type="button" hidden>답변</button>
             <button class="fav" type="button" aria-pressed="false" hidden>
               관심
             </button>

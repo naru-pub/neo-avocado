@@ -67,8 +67,14 @@ export async function moderatePost(
       )
     ).next;
   }
+  // A post moved to another board stands alone there: not a 답변글 of a
+  // thread it left.
+  const alone = target !== row.board;
   await ctx.sql`UPDATE posts SET notice = ${pinned}, board = ${target}, number = ${number},
-    category = ${category}, version = version + 1 WHERE id = ${row.id}`;
+    category = ${category},
+    thread = CASE WHEN ${alone} THEN NULL ELSE thread END,
+    reply_path = CASE WHEN ${alone} THEN '' ELSE reply_path END,
+    version = version + 1 WHERE id = ${row.id}`;
   return {
     document: postOf(
       (await ctx.sql<PostRow>(`${POST_SELECT} WHERE id = ?`, [row.id])).rows[0],

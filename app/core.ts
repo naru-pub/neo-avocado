@@ -70,6 +70,8 @@ const initialState = {
   tag: null,
   // 로그번호: the list from this log number down.
   upTo: null,
+  // 답변: the post the log form answers.
+  replyTo: null,
   // The board list's 분류 (sca), while one is chosen.
   category: null,
   // The board search (skins' 검색), while it is shown.

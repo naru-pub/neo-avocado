@@ -219,6 +219,8 @@ test("boards and groups are saved as their forms check them, and members see the
       readLevel: 1,
       writeLevel: 1,
       commentLevel: 1,
+      replyLevel: 2,
+      replyOrder: "1",
       categories: ["잡담", "질문"],
       html: true,
       actions: false,
@@ -1450,6 +1452,41 @@ test("stats show in their 순서 (st_order), then by ID", async () => {
   assert.deepEqual(
     definitions.map((row) => row.id),
     ["hp", "atk", "def"],
+  );
+});
+
+test("게시판 복사 with 구조와 데이터 keeps its 답변글 under their copied posts, and secret comments secret", async () => {
+  const site = await testSite();
+  await create(site, "boards", "free", { name: "자유", kind: "text" });
+  const { lastInsertRowid: root } = site.run(
+    "INSERT INTO posts (board, number, title, created_at, updated_at) VALUES ('free', 1, '첫 글', 0, 0)",
+  );
+  site.run(
+    "INSERT INTO posts (board, number, title, thread, reply_path, created_at, updated_at) VALUES ('free', 2, 'Re', ?, '001', 0, 0)",
+    root,
+  );
+  site.run(
+    "INSERT INTO comments (post_id, body, secret, created_at, updated_at) VALUES (?, '비밀', 1, 0, 0)",
+    root,
+  );
+  await mutate(site, "boards:copy", {
+    id: "free",
+    target: "copy",
+    name: "복사",
+    data: true,
+  });
+  const [first, reply] = site.rows(
+    "SELECT id, thread, reply_path FROM posts WHERE board = 'copy' ORDER BY number",
+  );
+  assert.deepEqual(reply, {
+    id: reply.id,
+    thread: first.id,
+    reply_path: "001",
+  });
+  assert.equal(
+    site.rows("SELECT secret FROM comments WHERE post_id = ?", first.id)[0]
+      .secret,
+    1,
   );
 });
 

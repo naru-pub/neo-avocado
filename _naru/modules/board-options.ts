@@ -37,7 +37,8 @@ export const BOARD_DEFAULTS = Object.freeze({
 const WRITER_NAME =
   "CASE WHEN posts.anonymous != 0 THEN '' ELSE coalesce(posts.guest_name, (SELECT nick FROM profiles WHERE profiles.member = posts.owner), '') END";
 export const SORTS: Record<string, string> = {
-  "": "posts.id DESC",
+  // wr_num, wr_reply: each thread newest first, its replies in their place.
+  "": "coalesce(posts.thread, posts.id) DESC, posts.reply_path ASC",
   "datetime asc": "posts.id ASC",
   "datetime desc": "posts.created_at DESC, posts.id DESC",
   // wr_last: the post's or its newest comment's time.

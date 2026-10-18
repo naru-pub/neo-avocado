@@ -3007,3 +3007,32 @@ test("최근게시물 and 전체검색 have their own addresses, read across the
     "[로그] 바다",
   );
 });
+
+test("답변 opens the log form on a plain board's post, and the post it writes answers it", async () => {
+  const database = fakeDatabase({
+    [PROFILES]: [me],
+    neo_avocado_boards: [
+      { id: "default", data: { ...DEFAULT_BOARD.data, kind: "text" } },
+    ],
+    [LOGS]: [
+      {
+        id: "first",
+        data: { title: "질문 있어요", text: "본문" },
+        createdBy: "other-member",
+      },
+    ],
+  });
+  const { $, settle, submit } = await page(database);
+  for (let n = 0; n < 4; n += 1) await settle();
+  const reply = $("logs").querySelector('.log[data-id="first"] .reply');
+  assert.equal(reply.hidden, false);
+  reply.onclick();
+  assert.equal($("logReplying").hidden, false);
+  assert.equal($("logTitle").value, "Re: 질문 있어요");
+  $("logText").value = "답입니다";
+  submit($("logForm"));
+  for (let n = 0; n < 4; n += 1) await settle();
+  const added = database.calls.find((call) => call.method === "add");
+  assert.equal(added.data.replyTo, "first");
+  assert.equal($("logReplying").hidden, true);
+});

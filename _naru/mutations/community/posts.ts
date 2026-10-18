@@ -14,6 +14,8 @@ import {
 import {
   HTML_LIMIT,
   POST_SELECT,
+  REPLY_DEPTH,
+  REPLY_DIGITS,
   TEXT_LIMIT,
   accessOf,
   boardOf,
@@ -22,6 +24,7 @@ import {
   payReward,
   plainText,
   postOf,
+  postReadable,
   postRow,
   readablePost,
   requireBoard,
@@ -93,6 +96,8 @@ export interface PostInput {
   links?: string[];
   /** A plain board's pictures after the first (bo_upload_count). */
   files?: string[];
+  /** 답변 (bbs/write.php w=r): the post this one answers, on a new post. */
+  replyTo?: string;
 }
 
 /** G5_LINK_COUNT: a post's links. */
@@ -361,6 +366,45 @@ export async function write(
       "SELECT coalesce(max(number), 0) + 1 AS next FROM posts WHERE board = ?",
       [boardId],
     );
+    // 답변 (write.php w=r, write_update.php:150-175): on a plain board, at
+    // 글답변 권한, to a post the writer may read, ten replies deep at most.
+    // Its path is its parent's and its place among them: the later below
+    // (bo_reply_order 1, as installed) or above (0).
+    let thread: number | null = null;
+    let replyPath = "";
+    if (data.replyTo !== undefined) {
+      const parent = await postRow(ctx, data.replyTo);
+      if (
+        !parent ||
+        parent.board !== boardId ||
+        board.data.kind !== "text" ||
+        !(await postReadable(ctx, parent, access, ctx.member?.id, board))
+      )
+        invalid(ctx);
+      requireBoard(ctx, board, access, "reply");
+      if (parent.reply_path.length / REPLY_DIGITS >= REPLY_DEPTH)
+        ctx.fail("INVALID_REQUEST", "더 이상 답변하실 수 없습니다.", {
+          reason: "reply_depth",
+        });
+      thread = parent.thread ?? parent.id;
+      const { n } = await one<{ n: number }>(
+        ctx,
+        `SELECT count(*) AS n FROM posts WHERE thread = ?
+         AND length(reply_path) = ? AND substr(reply_path, 1, ?) = ?`,
+        [
+          thread,
+          parent.reply_path.length + REPLY_DIGITS,
+          parent.reply_path.length,
+          parent.reply_path,
+        ],
+      );
+      if (n >= 999)
+        ctx.fail("INVALID_REQUEST", "더 이상 답변하실 수 없습니다.", {
+          reason: "reply_count",
+        });
+      const place = String(board.data.replyOrder) === "0" ? 998 - n : n + 1;
+      replyPath = parent.reply_path + String(place).padStart(REPLY_DIGITS, "0");
+    }
     // 글쓰기 포인트 (bo_write_point), for members; a delete takes it back.
     const reward = guest
       ? 0
@@ -379,6 +423,8 @@ export async function write(
       guest_name: guest?.name ?? null,
       guest_hash: guest?.hash ?? null,
       created_at: ctx.now,
+      thread,
+      reply_path: replyPath,
     });
     row = (
       await ctx.sql<PostRow>(
@@ -438,6 +484,27 @@ export async function remove(
     ctx.fail("CONFLICT", "탐색·조합을 기록한 글은 지울 수 없습니다.", {
       reason: "acted",
     });
+  // 이 글과 관련된 답변글이 존재하므로 삭제 할 수 없습니다 (bbs/delete.php:46),
+  // but for the staff, whose deleting leaves the replies in their place.
+  if (
+    !staff &&
+    (await one(
+      ctx,
+      `SELECT 1 FROM posts WHERE thread = ? AND length(reply_path) > ?
+       AND substr(reply_path, 1, ?) = ? LIMIT 1`,
+      [
+        previous.thread ?? previous.id,
+        previous.reply_path.length,
+        previous.reply_path.length,
+        previous.reply_path,
+      ],
+    ))
+  )
+    ctx.fail(
+      "CONFLICT",
+      "이 글과 관련된 답변글이 존재하므로 삭제 할 수 없습니다.",
+      { reason: "has_replies" },
+    );
   // 글쓰기 포인트 goes back (bbs/delete.php:78), then each commenter's
   // 댓글쓰기 포인트, theirs together, down to nothing.
   await takeBackReward(ctx, previous, memoOf(board, previous.number, "글삭제"));

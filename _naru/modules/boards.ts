@@ -122,7 +122,7 @@ export async function boardOf(ctx: SqlCtx, id: unknown): Promise<Board | null> {
 }
 
 /** What a board's levels govern: listing, reading, posting, commenting. */
-export type BoardAction = "list" | "read" | "write" | "comment";
+export type BoardAction = "list" | "read" | "write" | "comment" | "reply";
 
 export function boardAllowed(
   board: Board | null,
@@ -192,6 +192,9 @@ export interface PostRow {
   /** wr_link1 and wr_link2, and a plain board's further pictures: JSON lists. */
   links: string;
   files: string;
+  /** 답변글: the thread's first post, and the reply's place in it. */
+  thread: number | null;
+  reply_path: string;
   tags?: string | null;
   comment_count?: number;
 }
@@ -229,6 +232,7 @@ export const POST_COPY_COLUMNS = [
   "version",
   "links",
   "files",
+  "reply_path",
 ] as const;
 /** A comment's columns a copy keeps: all but its id, its post and its reward. */
 export const COMMENT_COPY_COLUMNS = [
@@ -243,6 +247,7 @@ export const COMMENT_COPY_COLUMNS = [
   "called",
   "admin",
   "settlement",
+  "secret",
   "guest_name",
   "guest_hash",
   "created_at",
@@ -344,8 +349,19 @@ export function postOf(row: PostRow): Written {
       ? { settlement: parsed(row.settlement, null) }
       : {}),
     ...(row.tags !== undefined ? { tags: list(row.tags) } : {}),
+    // 답변글: how deep a reply is (wr_reply's length), and what it answers.
+    ...(row.reply_path
+      ? {
+          depth: row.reply_path.length / REPLY_DIGITS,
+          thread: String(row.thread),
+        }
+      : {}),
   });
 }
+
+/** Digits a reply's path takes a level; and how deep replies go (wr_reply's 10). */
+export const REPLY_DIGITS = 3;
+export const REPLY_DEPTH = 10;
 
 /** A comment row as its document, whole. */
 export function commentOf(row: CommentRow): Written {

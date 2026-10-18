@@ -636,6 +636,21 @@ export async function logItem(log) {
   item.querySelector(".log-title").textContent =
     `${log.data.settlement ? `[${log.data.settlement.state}] ` : ""}${log.data.secret ? "🔒 " : ""}${log.data.title ?? ""}${log.data.category ? ` · ${log.data.category}` : ""}`;
   if (log.data.settlement) item.classList.add("settled");
+  // 답변글 (wr_reply): under what they answer, a step in for each level.
+  if (log.data.depth) {
+    item.classList.add("reply-post");
+    item.style.setProperty("--depth", String(Math.min(log.data.depth, 10)));
+  }
+  // 답변 (view.skin.php:113) on a plain board, at 글답변 권한.
+  const reply = item.querySelector<HTMLButtonElement>(".reply");
+  reply.hidden =
+    kindOf(log.data.board) !== "text" ||
+    Boolean(log.data.locked) ||
+    (log.data.depth ?? 0) >= 10 ||
+    (!boardStaff(log.data.board) &&
+      !state.owner &&
+      state.level < boardSetting(log.data.board, "replyLevel", 2));
+  reply.onclick = () => startReply(log);
   item.querySelector(".author").replaceChildren(await speakerLabel(log));
   item.querySelector("time").textContent = formatTime(log.createdAt);
   const remove = item.querySelector<HTMLButtonElement>(".delete");
@@ -1191,6 +1206,26 @@ async function commentItem(comment, log) {
   }
   return item;
 }
+/** Opens the log form to answer `log` (bbs/write.php?w=r), titled Re:. */
+function startReply(log) {
+  state.replyTo = log.id;
+  $("logReplying").hidden = false;
+  $("logReplyingTitle").textContent =
+    `답변: ${log.data.title || `${log.data.number ?? ""}번 글`}`;
+  const title = $<HTMLInputElement>("logTitle");
+  if (!title.value.trim()) title.value = `Re: ${log.data.title ?? ""}`.trim();
+  $("logForm").scrollIntoView?.();
+  $<HTMLTextAreaElement>("logText").focus();
+}
+function endReply() {
+  state.replyTo = null;
+  $("logReplying").hidden = true;
+}
+$("cancelReply").onclick = () => {
+  if ($<HTMLInputElement>("logTitle").value.startsWith("Re:"))
+    $<HTMLInputElement>("logTitle").value = "";
+  endReply();
+};
 $("tabLogs").onclick = () =>
   run(async () => {
     showTab("logs");
@@ -1274,9 +1309,11 @@ $("logForm").onsubmit = (event) => {
         ...(action === "combine" ? { action, materials } : {}),
         ...(action === "explore" ? { action } : {}),
         ...(used ? { item: used } : {}),
+        ...(state.replyTo ? { replyTo: state.replyTo } : {}),
       },
       ...(guest ? { guest } : {}),
     });
+    endReply();
     if (action || used) forgetInventory();
     state.ownPosts.add(log.id);
     if (state.newPost === log.id) showNewPost(null);

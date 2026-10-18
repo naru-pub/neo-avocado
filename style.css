@@ -1708,3 +1708,10 @@ img.admin-icon {
   color: var(--muted);
   font-style: italic;
 }
+/* 답변글: a step in for each level, as the basic skin indents wr_reply. */
+#logs > .log.reply-post {
+  margin-left: calc(var(--depth, 1) * 16px);
+}
+#logs > .log.reply-post .log-title::before {
+  content: "↳ ";
+}
