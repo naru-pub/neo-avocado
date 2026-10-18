@@ -8,25 +8,24 @@ membership, function-written documents without authors, the document
 quota, a local emulator), is answered by the new design or by naru-dev and
 is not repeated. Each item below is something the port works around; the
 workaround is named so it can go when Naru grows the feature. Items 1–3 are
-resolved; how is said in each.
+resolved; how is said in each. Items 1 and 2 are moot since 2026-10-18:
+Naru removed its query-plan rule, and stops a statement after 3 seconds
+instead.
 
-## 1. JSON in a row cannot be opened by SQL (resolved)
+## 1. JSON in a row cannot be opened by SQL (moot)
 
-A day's visit counts keep their hourly, browser, OS, device and referrer
-breakdowns as JSON maps. Naru's plan rule now lets a table-valued function
-over the current row's own column (`json_each(visits.hours)`) through, so
-`admin/visits:report` sums the maps, and counts the different members, in
-SQL over every day in the range instead of reading at most 1,000 days and
-summing them in code.
+Naru's plan rule refused `json_each(visits.hours)` over a row's column until
+it was taught otherwise, and is now gone. `admin/visits:report` sums the
+day's JSON maps, and counts the different members, in SQL over every day in
+the range.
 
-## 2. An ordered aggregate in a correlated subquery (resolved)
+## 2. An ordered aggregate in a correlated subquery (moot)
 
-A scan of a subquery's own result (`SCAN (subquery-1)` beside its
-`CO-ROUTINE`) no longer counts as a table scan inside a correlated subquery;
-the subquery's own steps are still checked. The admin's record view lists a
-character's titles in the order given again, with `json_group_array` over
+The plan rule refused a scan of a subquery's own result inside a correlated
+subquery until it was taught otherwise, and is now gone. The admin's record
+view lists a character's titles in order with `json_group_array` over
 `(SELECT title_id FROM character_titles WHERE character_id = characters.id
-ORDER BY id)`. This needs the naru-pub release with that rule.
+ORDER BY id)`.
 
 ## 3. One statement's limits (resolved)
 

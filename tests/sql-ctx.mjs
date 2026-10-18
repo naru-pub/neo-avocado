@@ -11,12 +11,10 @@
 // (text, values) forms, booleans bound as 1 and 0, { rows, changes };
 // queries only read; a mutation is one transaction, kept only if it
 // returns; ctx.fail's coded error; roles; guest passwords (hashed here as a
-// plain marker, not a real hash); Naru's plan rule (`checkPlan`, synced into
-// tests/naru-plan.mjs by scripts/sync-naru-plan.mjs) and a statement's limits
-// (100 bound values, 1,000 rows). What it does not:
-// Naru's checks on names, and a call's limits.
+// plain marker, not a real hash); a statement's limits (100 bound values,
+// 1,000 rows). What it does not: Naru's checks on names, a call's limits,
+// and the 3-second statement time.
 import { DatabaseSync } from "node:sqlite";
-import { checkPlan } from "./naru-plan.mjs";
 import { readdir, readFile } from "node:fs/promises";
 import { join, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -96,9 +94,6 @@ export function sqlOf(db, kind = "mutation") {
         new Error("Invalid SQL: at most 100 values are bound."),
       );
     try {
-      checkPlan(
-        db.prepare(`EXPLAIN QUERY PLAN ${statement}`).all(...bound.map(bind)),
-      );
       const prepared = db.prepare(statement);
       const params = bound.map(bind);
       if (!writes || /\bRETURNING\b/i.test(statement)) {
@@ -306,5 +301,3 @@ export async function testSite({
   }
   return site;
 }
-
-export { checkPlan };

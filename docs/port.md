@@ -37,10 +37,10 @@ name(ctx, args)`. Pages call them as `query("<area>/<module>:<name>", args)`
   `WITH RECURSIVE`, and Naru's own table names (`meta`, `collections`,
   `documents`, `media_refs`, `rate_limits`, `usage`, anything `_naru*`,
   `sqlite_*`).
-- **Plan rule**: in one statement only the first table may be read in full;
-  every other table must be reached by equality on an indexed column or
-  key, and a correlated subquery may not scan. So index every column you
-  join or look up by, and avoid `a.x > b.y` joins.
+- Speed: Naru no longer checks a statement's plan (it stops any statement
+  step after 3 seconds, and pauses one stopped 3 times a minute), but the
+  advice still holds: read one table in full at most, reach every other by
+  equality on an indexed column or key, and avoid `a.x > b.y` joins.
 - Limits: a statement returns at most 1,000 rows and 1 MiB; a call makes at
   most 100 statements and reads at most 500,000 rows; a query answers up to
   1 MiB. There is no per-write budget any more: a mutation is one
