@@ -105,8 +105,7 @@ export async function join(
     // 회원가입시 권한 (cf_register_level, register_form_update.php:219).
     const level = Number(settings.registerLevel ?? 2);
     await ctx.sql`INSERT INTO members (member, level, requested_at, agreed_at, recommender) VALUES (${member}, ${Number.isInteger(level) && level >= 1 && level <= 9 ? level : 2}, ${ctx.now}, ${rules ? ctx.now : null}, ${recommender})`;
-  }
-  else if (recommender)
+  } else if (recommender)
     await ctx.sql`UPDATE members SET recommender = ${recommender} WHERE member = ${member}`;
   else if (rules)
     await ctx.sql`UPDATE members SET agreed_at = ${ctx.now} WHERE member = ${member}`;
