@@ -1,7 +1,7 @@
 // Boards, logs and comments: reading, writing, tags and emoticons.
 
-import { emoticonContent } from "../emoticons.js";
-import { sanitizedFragment } from "../content-renderer.js";
+import { emoticonContent } from "../shared/emoticons.js";
+import { sanitizedFragment } from "../shared/content-renderer.js";
 import {
   $,
   boardStaff,

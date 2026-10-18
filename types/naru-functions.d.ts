@@ -5,7 +5,7 @@
  * create. For type checking only; nothing here exists at run time.
  *
  * ```ts
- * import type { Query, Mutation } from "./functions.d.ts";
+ * import type { Query, Mutation } from "../site/_naru/modules/functions.d.ts";
  * export const posts: Query<{ board: string }> = async (ctx, { board }) =>
  *   (await ctx.sql`SELECT id, title FROM posts WHERE board = ${board}`).rows;
  * ```

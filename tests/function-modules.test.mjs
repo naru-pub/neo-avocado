@@ -7,8 +7,7 @@ import { readdir, readFile } from "node:fs/promises";
 // name a function a module exports, and every callable export must be one
 // the pages call.
 const pages = [
-  "app.js",
-  "admin.js",
+  "admin/main.js",
   ...(await readdir(new URL("../dist/app", import.meta.url))).map(
     (file) => `app/${file}`,
   ),

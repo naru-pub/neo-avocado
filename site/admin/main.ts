@@ -1,5 +1,5 @@
-import { config } from "./config.js";
-import { VISIT_BREAKDOWNS, koreanDay } from "./admin-reports.js";
+import { config } from "../shared/config.js";
+import { VISIT_BREAKDOWNS, koreanDay } from "./reports.js";
 import {
   models,
   fieldValue,
@@ -7,22 +7,22 @@ import {
   memberSummary,
   menu,
   sectionLabel,
-} from "./admin-model.js";
+} from "./forms.js";
 import {
   NAME_DEFAULTS,
   moneyText,
   namesOf,
   rename,
   type Names,
-} from "./app/names.js";
-import { imageSlotsOf } from "./_naru/modules/images.js";
+} from "../app/names.js";
+import { imageSlotsOf } from "../_naru/modules/images.js";
 import {
   OWN_CALLS,
   RECORD_CALLS,
   SETTINGS_SECTIONS,
   adminCall,
   type AdminCall,
-} from "./_naru/modules/admin-calls.js";
+} from "../_naru/modules/admin-calls.js";
 import type { NaruClient } from "https://sdk.naru.pub/sdk/1.1.0/naru.js";
 const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
   document.getElementById(id) as T;

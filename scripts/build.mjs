@@ -1,6 +1,6 @@
-// Builds the site Naru publishes into dist/: each TypeScript file compiled
-// to JavaScript at the same path, beside the pages, styles, vendored
-// libraries and the _naru folder's other files as they are.
+// Builds the site Naru publishes, site/, into dist/: each TypeScript file
+// compiled to JavaScript at the same path, beside the pages, styles,
+// vendored libraries and the _naru folder's other files as they are.
 import ts from "typescript";
 import { format } from "prettier";
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -8,29 +8,15 @@ import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
+// What Naru publishes is site/; the rest is the repository's.
+const site = join(root, "site");
 const out = join(root, "dist");
-// What stays in the repository: tooling, tests and sources' own settings.
-const SKIP = new Set([
-  ".git",
-  ".github",
-  "dist",
-  "node_modules",
-  "scripts",
-  "tests",
-  "package.json",
-  "package-lock.json",
-  "tsconfig.json",
-  ".prettierrc",
-  ".prettierignore",
-  ".gitignore",
-]);
 
 async function build(directory) {
-  for (const entry of await readdir(join(root, directory), {
+  for (const entry of await readdir(join(site, directory), {
     withFileTypes: true,
   })) {
     const path = join(directory, entry.name);
-    if (!directory && SKIP.has(entry.name)) continue;
     if (entry.isDirectory()) {
       await build(path);
       continue;
@@ -41,7 +27,7 @@ async function build(directory) {
     if (entry.name.endsWith(".ts")) {
       // Types removed and nothing else: comments and layout stay, so the
       // published files read as the sources do.
-      const source = await readFile(join(root, path), "utf8");
+      const source = await readFile(join(site, path), "utf8");
       const { outputText } = ts.transpileModule(source, {
         fileName: path,
         compilerOptions: {
@@ -58,11 +44,14 @@ async function build(directory) {
       );
     } else if (!/\.[^./]+$/.test(entry.name))
       // Naru serves files by extension: LICENSE and the like go as .txt.
-      await cp(join(root, path), `${target}.txt`);
-    else await cp(join(root, path), target);
+      await cp(join(site, path), `${target}.txt`);
+    else await cp(join(site, path), target);
   }
 }
 
 await rm(out, { recursive: true, force: true });
 await build("");
+// The license goes with the code it covers (GPL-3.0), as LICENSE.txt: Naru
+// serves files by extension.
+await cp(join(root, "LICENSE"), join(out, "LICENSE.txt"));
 console.log(`built ${relative(process.cwd(), out) || out}`);

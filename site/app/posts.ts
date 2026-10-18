@@ -1,6 +1,6 @@
 // How a post or comment is shown: its text, dice and the character it speaks as.
 
-import { emoticonContent } from "../emoticons.js";
+import { emoticonContent } from "../shared/emoticons.js";
 import { nickOf, ownCharacters, query, run, state } from "./core.js";
 import { openLogNumber, searchTag } from "./logs.js";
 import { openCharacter } from "./characters.js";

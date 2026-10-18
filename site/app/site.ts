@@ -4,7 +4,7 @@ import { $, addressOf, run, say, showTab, state, query } from "./core.js";
 import { configureBoard, loadLogs } from "./logs.js";
 import { loadContentBody, loadContentPages } from "./content.js";
 import { NAME_DEFAULTS } from "./names.js";
-import { renderContent } from "../content-renderer.js";
+import { renderContent } from "../shared/content-renderer.js";
 import { showRecent, showSearch } from "./across.js";
 import { loadPoll, showPopups } from "./polls.js";
 

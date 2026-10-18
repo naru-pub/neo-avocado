@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
-import { emoticonParts, emoticonContent } from "../dist/emoticons.js";
+import { emoticonParts, emoticonContent } from "../dist/shared/emoticons.js";
 const definitions = [
   { id: "a", data: { name: ":smile:", image: "https://example.com/a.png" } },
   { id: "b", data: { name: ":smile:big", image: "https://example.com/b.png" } },

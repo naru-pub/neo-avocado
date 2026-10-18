@@ -7,7 +7,7 @@ import {
   formValues,
   models,
   memberSummary,
-} from "../dist/admin-model.js";
+} from "../dist/admin/forms.js";
 const references = {
   profiles: [
     { id: "member-a", data: { nick: "A" } },
@@ -455,7 +455,7 @@ test("profile field definitions validate codes and options; explore misses store
 });
 
 test("the admin menu has every section once, in the original's groups and names", async () => {
-  const { menu, sectionLabel } = await import("../dist/admin-model.js");
+  const { menu, sectionLabel } = await import("../dist/admin/forms.js");
   const { NAME_DEFAULTS } = await import("../dist/app/names.js");
   const listed = menu.flatMap((group) => group.sections);
   assert.deepEqual([...listed].sort(), Object.keys(models).sort());
@@ -585,7 +585,7 @@ test("회원 관리 shows each member's level, role, warnings, leaving and last 
 
 test("no page or server code names a collection: the site declares none", async () => {
   const { readdir, readFile } = await import("node:fs/promises");
-  const files = ["app.js", "admin.js", "admin-model.js", "admin-reports.js"];
+  const files = ["admin/main.js", "admin/forms.js", "admin/reports.js"];
   for (const name of await readdir(new URL("../dist/app", import.meta.url)))
     files.push(`app/${name}`);
   for (const dir of ["modules", "queries", "mutations"])

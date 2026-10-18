@@ -1,6 +1,6 @@
 // Quests and the site's own pages.
 
-import { renderContent } from "../content-renderer.js";
+import { renderContent } from "../shared/content-renderer.js";
 import { $, pageTitle, query, route, run, showTab, state } from "./core.js";
 
 let questCursor = null;

@@ -1,6 +1,6 @@
 // 설문조사 (poll.skin.php, poll_result.php, poll_etc_update.php) and the
 // 팝업레이어 (bbs/newwin.inc.php), on the main page.
-import { sanitizedFragment } from "../content-renderer.js";
+import { sanitizedFragment } from "../shared/content-renderer.js";
 import { $, formatTime, mutate, query, run, say, state } from "./core.js";
 
 let current = null;

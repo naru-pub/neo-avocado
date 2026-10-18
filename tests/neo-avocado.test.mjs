@@ -732,7 +732,7 @@ async function page(database, { url = "https://neo-avocado.naru.pub/" } = {}) {
       );
     return modules.get(url.href);
   };
-  const app = await load(new URL("app.js", root));
+  const app = await load(new URL("app/main.js", root));
   await app.link((specifier, referencing) =>
     load(new URL(specifier, referencing.identifier)),
   );

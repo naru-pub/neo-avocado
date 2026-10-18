@@ -116,7 +116,7 @@ test("the home and the views are index.html with the site's preview, from 디자
     "/post",
     "/app.js",
     "/admin/",
-    "/style.css",
+    "/styles/style.css",
   ])
     assert.equal(await site.route(path), null, path);
   // Under a page's address, one it does not know is 404.

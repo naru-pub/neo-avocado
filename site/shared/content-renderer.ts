@@ -1,4 +1,4 @@
-import createDOMPurify from "./vendor/purify.es.mjs";
+import createDOMPurify from "../vendor/purify.es.mjs";
 const sanitizers = new WeakMap();
 /** Sanitized HTML as a fragment: no scripts, forms or page-global style/id/name. */
 export function sanitizedFragment(document, html) {

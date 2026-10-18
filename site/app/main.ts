@@ -7,7 +7,7 @@
 // This file signs the visitor or member in and starts the page; each part of
 // the community lives in app/ (core.js is what they share).
 
-import { config } from "./config.js";
+import { config } from "../shared/config.js";
 import {
   $,
   clearPrivateViews,
@@ -24,28 +24,28 @@ import {
   showTab,
   state,
   standing,
-} from "./app/core.js";
-import { listen } from "./app/live.js";
-import { loadSite } from "./app/site.js";
-import { loadBoards, loadLogs } from "./app/logs.js";
-import { loadCharacters } from "./app/characters.js";
-import "./app/shop.js";
-import "./app/messages.js";
-import "./app/calls.js";
-import "./app/content.js";
-import { createCharacter } from "./app/mypage.js";
-import "./app/couples.js";
-import { openRoute } from "./app/router.js";
+} from "./core.js";
+import { listen } from "./live.js";
+import { loadSite } from "./site.js";
+import { loadBoards, loadLogs } from "./logs.js";
+import { loadCharacters } from "./characters.js";
+import "./shop.js";
+import "./messages.js";
+import "./calls.js";
+import "./content.js";
+import { createCharacter } from "./mypage.js";
+import "./couples.js";
+import { openRoute } from "./router.js";
 
 /** The address the page was opened at, before anything is shown. */
 const arrivedAt = location.pathname;
 /** Whether the address the page opened at names a board, which reads its own list. */
 const arrivesAtList = () =>
   !movedSinceOpening() && /^\/logs(\/|$)/.test(arrivedAt);
-import "./app/online.js";
-import "./app/across.js";
+import "./online.js";
+import "./across.js";
 
-export { diceOf } from "./app/posts.js";
+export { diceOf } from "./posts.js";
 
 async function connect() {
   const { createNaru } = await import("https://sdk.naru.pub/sdk/1.1.0/naru.js");
