@@ -20,6 +20,7 @@ import {
   saveWallet,
   walletOf,
 } from "../../modules/members.js";
+import { birthYearValid } from "../../modules/members.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
 /**
@@ -37,7 +38,10 @@ export async function join(
     commentAlerts = true,
     agreed = false,
     recommender: recommended = "",
+    birthYear,
   }: {
+    /** 출생년도 (mb_birth), which a member may leave out. */
+    birthYear?: number | null;
     nick?: string;
     acceptMessages?: boolean;
     commentAlerts?: boolean;
@@ -59,6 +63,10 @@ export async function join(
       reason: "left",
     });
   const name = text(nick, 20, true);
+  if (!birthYearValid(birthYear))
+    ctx.fail("INVALID_REQUEST", "출생년도를 확인해 주세요.", {
+      reason: "invalid_input",
+    });
   if (await reservedNick(ctx, name))
     ctx.fail(
       "INVALID_REQUEST",
@@ -96,9 +104,10 @@ export async function join(
     recommender = named.id;
   }
   await ctx.sql`
-    INSERT INTO profiles (member, nick, accept_messages, comment_alerts)
-    VALUES (${member}, ${name}, ${acceptMessages !== false}, ${commentAlerts !== false})
+    INSERT INTO profiles (member, nick, accept_messages, comment_alerts, birth_year)
+    VALUES (${member}, ${name}, ${acceptMessages !== false}, ${commentAlerts !== false}, ${birthYear ?? null})
     ON CONFLICT (member) DO UPDATE SET nick = excluded.nick,
+      birth_year = coalesce(excluded.birth_year, profiles.birth_year),
       accept_messages = excluded.accept_messages,
       comment_alerts = excluded.comment_alerts`;
   if (!(await one(ctx, "SELECT 1 FROM members WHERE member = ?", [member]))) {

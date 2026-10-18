@@ -15,6 +15,8 @@ export interface Profile {
     commentAlerts: boolean;
     callsSeenAt?: number;
     mainCharacter?: string | null;
+    /** 출생년도 (mb_birth), when given. */
+    birthYear?: number;
     deleted?: boolean;
     /** The member's own 관심 posts, newest first, when asked for. */
     favorites?: string[];
@@ -29,6 +31,7 @@ export interface ProfileRow {
   calls_seen_at: number | null;
   main_character: string | null;
   deleted_at: number | null;
+  birth_year?: number | null;
 }
 
 export function profileOfRow(row: ProfileRow | null): Profile | null {
@@ -42,10 +45,19 @@ export function profileOfRow(row: ProfileRow | null): Profile | null {
       commentAlerts: row.comment_alerts !== 0,
       ...(row.calls_seen_at !== null ? { callsSeenAt: row.calls_seen_at } : {}),
       mainCharacter: row.main_character ?? null,
+      ...(row.birth_year ? { birthYear: row.birth_year } : {}),
       ...(row.deleted_at !== null ? { deleted: true } : {}),
     },
   };
 }
+
+/** 출생년도 (mb_birth): a year from 1900 to 2100, or none. */
+export const birthYearValid = (value: unknown) =>
+  value === undefined ||
+  value === null ||
+  (Number.isInteger(value) &&
+    (value as number) >= 1900 &&
+    (value as number) <= 2100);
 
 /** A member's profile, or null before they join. */
 export async function profileOf(

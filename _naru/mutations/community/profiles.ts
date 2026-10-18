@@ -1,7 +1,7 @@
 // A member changes their own nickname and preferences (프로필 수정); the
 // rest of the profile is kept by the community's own code.
 import { reservedNick, signedIn } from "../../modules/access.js";
-import { nickTaken, profileOf } from "../../modules/members.js";
+import { birthYearValid, nickTaken, profileOf } from "../../modules/members.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
 export async function update(
@@ -10,7 +10,13 @@ export async function update(
     nick,
     acceptMessages,
     commentAlerts,
-  }: { nick?: string; acceptMessages?: boolean; commentAlerts?: boolean } = {},
+    birthYear,
+  }: {
+    nick?: string;
+    acceptMessages?: boolean;
+    commentAlerts?: boolean;
+    birthYear?: number | null;
+  } = {},
 ) {
   const member = signedIn(ctx);
   const before = await profileOf(ctx, member);
@@ -24,7 +30,8 @@ export async function update(
     nick !== nick.trim() ||
     nick.length > 20 ||
     typeof acceptMessages !== "boolean" ||
-    typeof commentAlerts !== "boolean"
+    typeof commentAlerts !== "boolean" ||
+    !birthYearValid(birthYear)
   )
     ctx.fail("INVALID_REQUEST", "입력 내용을 확인해 주세요.", {
       reason: "invalid_input",
@@ -42,7 +49,8 @@ export async function update(
   }
   await ctx.sql`
     UPDATE profiles SET nick = ${nick}, accept_messages = ${acceptMessages},
-      comment_alerts = ${commentAlerts}
+      comment_alerts = ${commentAlerts},
+      birth_year = ${birthYear === undefined ? (before.data.birthYear ?? null) : birthYear}
     WHERE member = ${member}`;
   return { profile: await profileOf(ctx, member, { favorites: true }) };
 }

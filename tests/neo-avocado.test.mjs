@@ -840,7 +840,12 @@ test("profile edits go through profiles:update, character edits use their origin
   assert.deepEqual(
     database.calls.find((call) => call.name === "community/profiles:update")
       .args,
-    { nick: "새 이름", acceptMessages: true, commentAlerts: true },
+    {
+      nick: "새 이름",
+      acceptMessages: true,
+      commentAlerts: true,
+      birthYear: null,
+    },
   );
   assert.equal(database.store.get(PROFILES)[0].data.mainCharacter, "character");
   $("tabCharacters").onclick();

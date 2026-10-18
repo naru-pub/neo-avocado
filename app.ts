@@ -76,8 +76,15 @@ $("editProfile").onclick = () => {
         type: "checkbox",
         value: profile.data.commentAlerts !== false,
       },
+      {
+        name: "birthYear",
+        label: "출생년도 (빈칸: 알리지 않음)",
+        type: "number",
+        value: profile.data.birthYear ?? "",
+        min: 1900,
+      },
     ],
-    async ({ nick, acceptMessages, commentAlerts }) => {
+    async ({ nick, acceptMessages, commentAlerts, birthYear }) => {
       if (!nick) throw new Error("닉네임을 입력해 주세요.");
       if (nick !== profile.data.nick && reserved(await memberSettings(), nick))
         throw new Error(RESERVED);
@@ -86,6 +93,7 @@ $("editProfile").onclick = () => {
         nick,
         acceptMessages,
         commentAlerts,
+        birthYear: birthYear ? Number(birthYear) : null,
       });
       state.nicks.set(state.member.id, Promise.resolve(nick));
       show(saved);
@@ -255,8 +263,10 @@ $("profileForm").onsubmit = (event) => {
     const nick = $<HTMLInputElement>("nick").value.trim();
     if (!nick) return;
     // 회원 번호를 ID로 쓰는 문서는 그 회원만 만들 수 있다.
+    const birthYear = $<HTMLInputElement>("birthYear").value.trim();
     const joined = await mutate("community/membership:join", {
       nick,
+      ...(birthYear ? { birthYear: Number(birthYear) } : {}),
       // The boxes shown are required, so the form is sent only once ticked.
       agreed: !$("stipulationBox").hidden || !$("characterNoticeBox").hidden,
       ...(!$("recommenderLabel").hidden &&

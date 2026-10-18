@@ -967,3 +967,26 @@ test("프로필 양식's 이름 is named and explained as the owner says (ad_tex
     help: "풀네임",
   });
 });
+
+test("출생년도 is given on joining or later, shown on 계정정보, and checked", async () => {
+  const site = await testSite();
+  await site.mutate(
+    "community/membership:join",
+    { nick: "앨리스", birthYear: 1999 },
+    M1,
+  );
+  const own = async () =>
+    (await site.query("community/profiles:own", {}, M1)).profile.data;
+  assert.equal((await own()).birthYear, 1999);
+  const update = (birthYear) =>
+    site.mutate(
+      "community/profiles:update",
+      { nick: "앨리스", acceptMessages: true, commentAlerts: true, birthYear },
+      M1,
+    );
+  await update(2001);
+  assert.equal((await own()).birthYear, 2001);
+  await update(null);
+  assert.equal((await own()).birthYear, undefined);
+  assert.equal(await refusal(update(1800)), "invalid_input");
+});

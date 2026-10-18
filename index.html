@@ -116,6 +116,12 @@
           <input id="nick" name="nick" maxlength="20" required />
         </label>
         <!-- mb_recommend, while 추천인제도 사용 is on. -->
+        <!-- register_form.skin.php's 출생년도 (mb_birth); here a member may
+             leave it blank. -->
+        <label
+          >출생년도 (선택)
+          <input id="birthYear" type="number" min="1900" max="2100" step="1"
+        /></label>
         <label id="recommenderLabel" hidden>
           추천인 닉네임 (빈칸 가능)
           <input id="recommender" maxlength="20" />
@@ -272,6 +278,9 @@
         <dl class="account-info">
           <dt>닉네임</dt>
           <dd id="myNick"></dd>
+          <!-- mypage/index.php:22's ( 1999 년생 ). -->
+          <dt id="myBirthTerm" hidden>출생년도</dt>
+          <dd id="myBirth" hidden></dd>
           <dt>쪽지 받기</dt>
           <dd id="myAcceptMessages"></dd>
           <dt>댓글 알림</dt>

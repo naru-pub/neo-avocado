@@ -26,6 +26,10 @@ import { openCharacterForm } from "./characters.js";
 async function loadMyPage() {
   const profile = state.profile;
   $("myNick").textContent = profile?.data.nick ?? "";
+  $("myBirth").textContent = profile?.data.birthYear
+    ? `${profile.data.birthYear} 년생`
+    : "";
+  $("myBirth").hidden = $("myBirthTerm").hidden = !profile?.data.birthYear;
   $("myAcceptMessages").textContent =
     profile?.data.acceptMessages === false ? "받지 않음" : "받음";
   $("myCommentAlerts").textContent =
