@@ -23,6 +23,13 @@ export async function loadSite() {
   state.names = { ...NAME_DEFAULTS, ...site.names };
   state.adminIcon = site.adminIcon ?? null;
   if (Array.isArray(site.images)) state.images = site.images;
+  if (site.nameField) {
+    state.nameField = site.nameField;
+    // The new character form's name, as the owner names it.
+    $("characterNameLabel").firstChild.textContent = `${site.nameField.label} `;
+    $("characterNameHelp").textContent = site.nameField.help;
+    $("characterNameHelp").hidden = !site.nameField.help;
+  }
   if (site.viewer) state.viewer = { ...state.viewer, ...site.viewer };
   applyItemNames(state.names);
   const root = document.documentElement.style;

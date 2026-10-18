@@ -18,7 +18,7 @@ import {
   readablePage,
 } from "../../modules/content.js";
 import { designCss, designLayout, ownerMarks } from "../../modules/design.js";
-import { imageSlotsOf, viewerOf } from "../../modules/images.js";
+import { imageSlotsOf, nameFieldOf, viewerOf } from "../../modules/images.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
 
 const COLORS = ["accent", "muted", "paper", "ink", "line", "surface"];
@@ -169,6 +169,8 @@ export async function site(ctx: QueryCtx) {
     names: namesOf(settings),
     // 프로필 양식 관리's 두상·흉상·전신: which the sheet asks for and shows.
     images: imageSlotsOf(profile),
+    // ...the name's own label and help (ad_text_name, ad_help_name)...
+    nameField: nameFieldOf(profile),
     // ...and what a character's page shows (ad_use_exp, _rank, _status…).
     viewer: viewerOf(profile),
     // 메인화면 구성 (adm/viewer_form.php): a content page site_main the

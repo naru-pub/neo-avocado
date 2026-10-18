@@ -462,7 +462,9 @@ export async function editCharacter(
   const fields: EditField[] = [
     {
       name: "name",
-      label: "이름",
+      label: state.nameField.help
+        ? `${state.nameField.label} (${state.nameField.help})`
+        : state.nameField.label,
       value: current.data.name,
       required: true,
       max: 40,

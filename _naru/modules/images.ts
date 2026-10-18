@@ -34,6 +34,24 @@ export function imageSlotsOf(profile: Record<string, any> | null = {}) {
 }
 
 /**
+ * The character's name on the sheet (ad_text_name, ad_help_name): always
+ * asked for (ad_use_name is a hidden 1), named and explained as the owner
+ * says, "이름" until then.
+ */
+export function nameFieldOf(profile: Record<string, any> | null = {}) {
+  return {
+    label:
+      (typeof profile?.nameLabel === "string" &&
+        profile.nameLabel.trim().slice(0, 20)) ||
+      "이름",
+    help:
+      typeof profile?.nameHelp === "string"
+        ? profile.nameHelp.slice(0, 200)
+        : "",
+  };
+}
+
+/**
  * What a character's page shows (adm/character_article_list.php's ad_use_exp,
  * ad_use_rank, ad_use_status, ad_use_title, ad_use_closet), from the same
  * settings row. On from the start, as this template has always shown them.

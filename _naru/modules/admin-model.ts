@@ -964,6 +964,10 @@ export const models: Record<string, Model> = {
       },
       { key: "bodyLabel", label: "항목 이름", default: "전신", max: 20 },
       { key: "bodyHelp", label: "도움말", max: 200 },
+      // ad_text_name, ad_help_name: the name is always asked for.
+      { type: "heading", label: "이름" },
+      { key: "nameLabel", label: "항목 이름", default: "이름", max: 20 },
+      { key: "nameHelp", label: "도움말", max: 200 },
       // ad_use_exp, ad_use_rank, ad_use_status, ad_use_title, ad_use_closet.
       { type: "heading", label: "캐릭터 보기" },
       {

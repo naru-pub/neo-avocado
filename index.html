@@ -300,10 +300,10 @@
         </p>
         <form id="characterForm" class="card" hidden>
           <h3>신규 캐릭터 등록</h3>
-          <label>
-            이름
-            <input id="characterName" maxlength="40" required />
+          <label id="characterNameLabel"
+            >이름 <input id="characterName" maxlength="40" required />
           </label>
+          <p id="characterNameHelp" class="hint" hidden></p>
           <label data-name-shown="sideTitle">
             <span data-name="sideTitle">소속</span>
             <input id="characterSide" maxlength="40" />

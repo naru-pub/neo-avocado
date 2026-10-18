@@ -40,6 +40,7 @@ const initialState = {
   names: NAME_DEFAULTS,
   // 캐릭터 이미지 항목: the 두상, 흉상 and 전신 the owner uses.
   images: imageSlotsOf(),
+  nameField: { label: "이름", help: "" },
   // What a character's page shows (ad_use_exp, _rank, _status, _title…).
   viewer: viewerOf(),
   // 디자인's 접속자 카운터 (mmb_counter): HTML shown above picture boards.

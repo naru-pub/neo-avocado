@@ -954,3 +954,16 @@ test("관리자 아이콘 reaches every reader's frame, when it is plain HTTPS",
     "https://media.example/a.png",
   );
 });
+
+test("프로필 양식's 이름 is named and explained as the owner says (ad_text_name, ad_help_name)", async () => {
+  const site = await testSite();
+  assert.deepEqual((await site.query("content/site:site")).nameField, {
+    label: "이름",
+    help: "",
+  });
+  setSettings(site, "profile", { nameLabel: "캐릭터명", nameHelp: "풀네임" });
+  assert.deepEqual((await site.query("content/site:site")).nameField, {
+    label: "캐릭터명",
+    help: "풀네임",
+  });
+});
