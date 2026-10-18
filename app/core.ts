@@ -46,6 +46,8 @@ const initialState = {
   counter: "",
   // 「작성자」 원글 작성자's 접두문자 and 접미문자, around the log writer's name.
   ownerMarks: { prefix: "▶", suffix: "◀" },
+  // 관리자 아이콘: the owner's picture for the site owner's comments.
+  adminIcon: null,
   // 커뮤니티 설정's 쪽지·호출 알림음: the arrival popups may chime.
   alarmSound: false,
   // 조합(레시피)사용: whether a post offers 조합.

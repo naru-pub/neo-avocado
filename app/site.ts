@@ -21,6 +21,7 @@ export async function loadSite() {
   const { design } = site;
   state.siteOpen = site.open !== false;
   state.names = { ...NAME_DEFAULTS, ...site.names };
+  state.adminIcon = site.adminIcon ?? null;
   if (Array.isArray(site.images)) state.images = site.images;
   if (site.viewer) state.viewer = { ...state.viewer, ...site.viewer };
   applyItemNames(state.names);

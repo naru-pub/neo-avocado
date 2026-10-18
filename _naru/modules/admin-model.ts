@@ -988,6 +988,16 @@ export const models: Record<string, Model> = {
         label: "배경음악 (유튜브 재생목록·영상 주소, 빈칸: 끄기)",
         max: 300,
       },
+      // 관리자 아이콘 (admin_icon_file, adm/config_form.php:100): shown on the
+      // site owner's comments in place of the 관리자 mark.
+      {
+        key: "adminIcon",
+        label:
+          "관리자 아이콘 (운영자의 댓글에 보이는 그림, 빈칸: '관리자' 글자)",
+        type: "url",
+        image: true,
+        max: 2000,
+      },
       // adm/config_form.php's 회원가입 설정: what a new member agrees to
       // (cf_stipulation, cf_privacy) and the nicknames no one may take
       // (cf_prohibit_id, the original's list until changed).

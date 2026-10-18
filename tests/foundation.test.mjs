@@ -942,3 +942,15 @@ test("names are suggested to members as they type: nicknames, and approved chara
   ]);
   assert.deepEqual(await named("character", " "), []);
 });
+
+test("관리자 아이콘 reaches every reader's frame, when it is plain HTTPS", async () => {
+  const site = await testSite();
+  assert.equal((await site.query("content/site:site")).adminIcon, null);
+  setSettings(site, "community", { adminIcon: "javascript:alert(1)" });
+  assert.equal((await site.query("content/site:site")).adminIcon, null);
+  setSettings(site, "community", { adminIcon: "https://media.example/a.png" });
+  assert.equal(
+    (await site.query("content/site:site")).adminIcon,
+    "https://media.example/a.png",
+  );
+});

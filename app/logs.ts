@@ -1033,12 +1033,19 @@ async function commentItem(comment, log) {
   const author = document.createElement("strong");
   author.className = "author";
   // The site owner's mark (view_comment.skin.php:38's ico_admin).
+  // 관리자 아이콘 (ico_admin) in its place, where the owner set one.
   if (comment.data.admin === true && !comment.data.anonymous)
     author.append(
-      Object.assign(document.createElement("span"), {
-        className: "admin-mark",
-        textContent: "관리자",
-      }),
+      state.adminIcon
+        ? Object.assign(document.createElement("img"), {
+            className: "admin-mark admin-icon",
+            src: state.adminIcon,
+            alt: "관리자",
+          })
+        : Object.assign(document.createElement("span"), {
+            className: "admin-mark",
+            textContent: "관리자",
+          }),
     );
   author.append(await speakerLabel(comment));
   // 「작성자」 원글 작성자's 접두문자 and 접미문자 (view_comment.skin.php:93-96).

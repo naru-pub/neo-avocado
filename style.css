@@ -1697,3 +1697,9 @@ a.send-memo:hover {
   grid-template-columns: repeat(auto-fill, minmax(14em, 1fr));
   gap: 4px 12px;
 }
+/* 관리자 아이콘 (ico_admin): the owner's picture, a line's height. */
+img.admin-icon {
+  height: 1.4em;
+  padding: 0;
+  vertical-align: middle;
+}

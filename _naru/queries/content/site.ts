@@ -159,6 +159,8 @@ export async function site(ctx: QueryCtx) {
     bgm: backgroundMusic(settings.bgm),
     // 쪽지·호출 알림음: the arrival popups' chime, off unless the owner wants it.
     alarmSound: settings.alarmSound === true,
+    // 관리자 아이콘 (ico_admin): the site owner's mark on their comments.
+    adminIcon: https(settings.adminIcon),
     // 조합(레시피)사용 (cf_5): whether a post offers 조합.
     recipes: settings.recipes !== false,
     // 한페이지당 라인수, 페이지 표시 수 and 새창 링크.
