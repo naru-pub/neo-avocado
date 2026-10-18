@@ -51,7 +51,7 @@ export async function send(
     await sendNote(
       ctx,
       recipient,
-      `${from?.data.nick ?? ""}님이 ${sent.toLocaleString("ko-KR")}${named.moneyUnit ? ` ${named.moneyUnit}` : ""} 보냈습니다.`,
+      `${from?.data.nick ?? ""}님이 ${String(sent).replace(/\B(?=(\d{3})+$)/g, ",")}${named.moneyUnit ? ` ${named.moneyUnit}` : ""} 보냈습니다.`,
       { kind: "money", amount: sent },
     );
   await record(ctx, "moneySent", {

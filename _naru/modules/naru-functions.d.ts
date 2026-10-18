@@ -10,6 +10,20 @@
  *   (await ctx.sql`SELECT id, title FROM posts WHERE board = ${board}`).rows;
  * ```
  *
+ * The code runs in QuickJS, not a browser or Node. Its globals are the
+ * language's own (Object, Array, JSON, Math, Date, RegExp, Map, Set, WeakMap,
+ * WeakSet, WeakRef, Promise, Proxy, Reflect, Symbol, BigInt, Iterator,
+ * ArrayBuffer, DataView, the typed arrays, the Error types, the URI
+ * functions, parseInt and the like) and: URL and URLSearchParams, as
+ * browsers have them; structuredClone, for primitives, plain objects and
+ * arrays, Date, RegExp, Map, Set, ArrayBuffer and Uint8Array (anything else
+ * throws a DataCloneError); Math.random; Date.now, the server's clock (prefer
+ * `ctx.now`; local time is the server's, so use UTC methods);
+ * performance.now, queueMicrotask and DOMException. There is no Intl
+ * (toLocaleString formats as English), TextEncoder, TextDecoder, atob, btoa,
+ * crypto, console, fetch, setTimeout or other timers, WebAssembly, require or
+ * process, whatever your editor's lib types say.
+ *
  * Written by hand beside the generated naru.d.ts, whose `Json` this repeats
  * so this file stands on its own.
  * @packageDocumentation
@@ -77,12 +91,25 @@ export interface QueryCtx {
    * binds every interpolated value as a parameter; given text and values,
    * it runs a query builder's compiled statement. SELECT, INSERT, UPDATE and
    * DELETE run; a query only reads. Naru's own tables, pragmas, triggers,
-   * transactions and recursion are refused, and so is a statement whose
-   * plan would read a whole table once for every row of another: join on an
-   * indexed column. It returns at most 1,000 rows and 1 MiB, BLOB columns
-   * as Uint8Arrays, and counts as one database operation. A value a UNIQUE column
-   * already holds fails the call with CONFLICT, `details.unique` naming the
-   * column; any other mistake SQLite refuses, with its message.
+   * transactions and recursion are refused. A statement is stopped once
+   * SQLite works on one step of it for 3 seconds; one stopped 3 times within
+   * a minute is paused for 5 minutes. It binds at most 100 values, returns at most 1,000 rows and 1 MiB, BLOB columns as
+   * Uint8Arrays, and counts as one database operation; a call's statements
+   * read at most 500,000 rows. A value a UNIQUE column already holds fails
+   * the call with CONFLICT, `details.unique` naming the column; any other
+   * mistake SQLite refuses, with its message.
+   *
+   * To stay fast, read a table whole at most once and reach every other
+   * table by key (join on an indexed column):
+   *
+   * - A list as one value: `WHERE id IN (SELECT value FROM json_each(?))`,
+   *   bound as `JSON.stringify(ids)`.
+   * - A row's JSON column: `FROM visits, json_each(visits.hours) j`.
+   * - An ordered aggregate per row: `(SELECT json_group_array(title) FROM
+   *   (SELECT title FROM titles WHERE ch = c.id ORDER BY ord))`, with an
+   *   index on `titles (ch, ord)`.
+   * - Past 1,000 rows: `WHERE id > ? ORDER BY id LIMIT 1000`, then again
+   *   after the last `id`.
    */
   sql<Row = Record<string, SqlValue>>(
     strings: TemplateStringsArray,

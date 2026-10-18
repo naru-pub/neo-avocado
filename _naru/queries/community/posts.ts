@@ -377,9 +377,10 @@ export async function mine(ctx: QueryCtx) {
   const boards = [...(await readableBoards(ctx, access)).keys()];
   if (!boards.length) return { documents: [] };
   const { rows } = await ctx.sql<PostRow>(
-    `${POST_SELECT} WHERE owner = ? AND board IN (${boards.map(() => "?").join(", ")})
+    `${POST_SELECT} WHERE owner = ?
+     AND board IN (SELECT value FROM json_each(?))
      ORDER BY id DESC LIMIT 30`,
-    [ctx.member.id, ...boards],
+    [ctx.member.id, JSON.stringify(boards)],
   );
   return { documents: rows.map((row) => excerpt(postOf(row))) };
 }
