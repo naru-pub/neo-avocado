@@ -590,6 +590,12 @@
           <button type="submit">올리기</button>
         </form>
         <form id="boardSearch" class="board-search" role="search">
+          <!-- list.skin.php's three boxes: 검색, 해시태그, 로그번호. -->
+          <select id="searchKind" aria-label="검색 종류">
+            <option value="text">제목·내용·이름</option>
+            <option value="tag">해시태그</option>
+            <option value="number">로그번호</option>
+          </select>
           <input
             id="searchText"
             type="search"

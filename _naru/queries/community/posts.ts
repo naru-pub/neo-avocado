@@ -74,12 +74,20 @@ export async function page(
     page?: number;
     category?: string | null;
     tag?: string | null;
+    upTo?: number | null;
   },
 ) {
-  const { board: id, page = 1, category = null, tag = null } = args ?? {};
+  const {
+    board: id,
+    page = 1,
+    category = null,
+    tag = null,
+    upTo = null,
+  } = args ?? {};
   if (
     !Number.isSafeInteger(page) ||
     page < 1 ||
+    (upTo !== null && (!Number.isSafeInteger(upTo) || upTo < 1)) ||
     (category !== null &&
       (typeof category !== "string" || category.length > 40)) ||
     (tag !== null && (typeof tag !== "string" || tag.length > 30))
@@ -98,6 +106,11 @@ export async function page(
   if (category) {
     clauses.push("posts.category = ?");
     values.push(category);
+  }
+  // 로그번호 (get_sql_search_mmb's wr_num >= -N): log N and those before it.
+  if (upTo !== null) {
+    clauses.push("posts.number <= ?");
+    values.push(upTo);
   }
   if (!questions) {
     const secret = secretClause(access, viewer, "posts", board);

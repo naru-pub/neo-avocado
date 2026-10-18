@@ -2806,3 +2806,18 @@ test("전체검색 finds words in every readable board's posts and comments, wit
   // Visitors search what level 1 reads.
   assert.deepEqual(ids(await search({ text: "바다" }, VISITOR)), [p2, p1, p5]);
 });
+
+test("로그번호 lists a board from log N down, as the mmb search's wr_num >= -N", async () => {
+  const site = await boardSite();
+  profile(site, "m-1", "아보");
+  for (let n = 0; n < 5; n += 1)
+    post(site, { owner: "m-1", image: "https://example.com/a.png" });
+  const numbers = async (args) =>
+    (await listPage(site, { board: "default", ...args })).documents.map(
+      (row) => row.data.number,
+    );
+  assert.deepEqual(await numbers({}), [5, 4, 3, 2, 1]);
+  assert.deepEqual(await numbers({ upTo: 3 }), [3, 2, 1]);
+  assert.equal((await listPage(site, { board: "default", upTo: 3 })).total, 3);
+  await assert.rejects(listPage(site, { board: "default", upTo: 0 }));
+});

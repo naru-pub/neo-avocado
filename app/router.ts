@@ -94,6 +94,10 @@ export function openRoute(path = location.pathname) {
         configureBoard();
       }
       state.tag = second === "tag" ? third : null;
+      state.upTo =
+        second === "from" && Number.isSafeInteger(Number(third))
+          ? Number(third)
+          : null;
       state.search = second === "search" ? third : null;
       // /logs/free/category/잡담, and its pages (…/category/잡담/page/2).
       const [, , , , fourth, fifth] = parts(path);

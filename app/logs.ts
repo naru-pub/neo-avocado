@@ -65,6 +65,7 @@ function logsPath() {
   const base = ["logs", state.board];
   if (state.search) return [...base, "search", state.search];
   if (state.tag) return [...base, "tag", state.tag];
+  if (state.upTo) return [...base, "from", String(state.upTo)];
   if (state.category) base.push("category", state.category);
   if (state.logPage > 1) return [...base, "page", String(state.logPage)];
   return base;
@@ -89,6 +90,7 @@ export async function loadLogs({ page: number = 1 } = {}) {
     page: number,
     ...(state.category ? { category: state.category } : {}),
     ...(state.tag ? { tag: state.tag } : {}),
+    ...(state.upTo ? { upTo: state.upTo } : {}),
   });
   // The board as it is now, should the owner have changed it.
   state.boards = state.boards.map((row) =>
@@ -99,9 +101,13 @@ export async function loadLogs({ page: number = 1 } = {}) {
   await preloadNicks(page.documents);
   $("logs").replaceChildren();
   if (number === 1) showNewPost(null);
-  $("tagFilter").hidden = !state.tag;
+  $("tagFilter").hidden = !state.tag && !state.upTo;
   $("searchMore").hidden = true;
-  $("tagName").textContent = state.tag ? `#${state.tag} 태그가 달린 로그` : "";
+  $("tagName").textContent = state.tag
+    ? `#${state.tag} 태그가 달린 로그`
+    : state.upTo
+      ? `${state.upTo}번 로그부터`
+      : "";
   for (const log of page.documents) {
     // Questions show whole, as the qna skin lists them.
     const item = await logItem(kindOf() === "qna" ? log : previewOf(log));
@@ -141,6 +147,7 @@ function showCategories() {
         run(async () => {
           state.category = name || null;
           state.tag = null;
+          state.upTo = null;
           state.search = null;
           $<HTMLInputElement>("searchText").value = "";
           await loadLogs();
@@ -223,12 +230,14 @@ $("closeFocus").onclick = () => {
 export async function searchTag(tag) {
   showTab("logs");
   state.tag = tag;
+  state.upTo = null;
   state.category = null;
   await loadLogs();
 }
 $("clearTag").onclick = () =>
   run(async () => {
     state.tag = null;
+    state.upTo = null;
     state.search = null;
     $<HTMLInputElement>("searchText").value = "";
     await loadLogs();
@@ -267,7 +276,20 @@ $("boardSearch").onsubmit = (event) => {
   event.preventDefault?.();
   run(async () => {
     const text = $<HTMLInputElement>("searchText").value.trim();
+    const kind = $<HTMLSelectElement>("searchKind").value;
+    if (kind === "tag" && text) return searchTag(text.replace(/^#/, ""));
+    if (kind === "number" && text) {
+      const number = Number(text.replace(/^@/, ""));
+      if (!Number.isSafeInteger(number) || number < 1)
+        return say("로그번호를 숫자로 입력해 주세요.");
+      state.tag = null;
+      state.search = null;
+      state.category = null;
+      state.upTo = number;
+      return loadLogs();
+    }
     state.tag = null;
+    state.upTo = null;
     state.category = null;
     state.search = text || null;
     await loadLogs();
@@ -1366,6 +1388,7 @@ $("board").onchange = () =>
     state.board = $<HTMLSelectElement>("board").value;
     route(`logs/${state.board}`, { replace: true });
     state.tag = null;
+    state.upTo = null;
     state.search = null;
     state.category = null;
     $<HTMLInputElement>("searchText").value = "";

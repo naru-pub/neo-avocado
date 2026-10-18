@@ -324,6 +324,7 @@ test("a board's preview: its name and description, while a visitor may list and 
   assert.equal((await at("/logs/free/page/2")).canonical, "/logs/free/page/2");
   // A tag or a search is the reader's own words: the board's name only.
   assert.equal((await at("/logs/free/tag/%EB%B4%84"))["og:title"], "자유");
+  assert.equal((await at("/logs/free/from/3"))["og:title"], "자유");
   assert.equal((await at("/logs/free/search/x"))["og:title"], "자유");
   // Its own 분류 is named; another is not.
   const category = await at(
