@@ -114,8 +114,12 @@ export async function page(
     values.push(upTo);
   }
   if (!questions) {
+    // Others' secret posts are not listed, but a guest's, locked, which its
+    // writer opens with their password (bbs/password.php?w=s).
     const secret = secretClause(access, viewer, "posts", board);
-    clauses.push(secret.text);
+    clauses.push(
+      `(${secret.text} OR (posts.secret != 0 AND posts.guest_hash IS NOT NULL))`,
+    );
     values.push(...secret.values);
   }
   // A visitor asking by #tag is not shown a 멤버공개 post's: its tags are
@@ -353,8 +357,8 @@ export async function search(
 }
 
 /**
- * Opens a guest's secret question with the password it was asked with
- * (skin/board/qna/password.php).
+ * Opens a guest's secret post with the password it was written with
+ * (bbs/password.php?w=s, skin/board/qna/password.php).
  */
 export async function open(
   ctx: QueryCtx,

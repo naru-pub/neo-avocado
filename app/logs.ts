@@ -694,7 +694,14 @@ export async function logItem(log) {
         item.replaceWith(await logItem(opened));
       });
     };
-    item.querySelector(".log-text").replaceChildren("비밀 질문입니다. ", form);
+    item
+      .querySelector(".log-text")
+      .replaceChildren(
+        kindOf(log.data.board) === "qna"
+          ? "비밀 질문입니다. "
+          : "비밀글입니다. ",
+        form,
+      );
   } else if (log.data.locked)
     item.querySelector(".log-text").textContent = log.data.membersOnly
       ? "멤버 공개용 로그입니다."
@@ -1621,10 +1628,7 @@ $("logForm").onsubmit = (event) => {
         board: state.board,
         title: $<HTMLInputElement>("logTitle").value.trim(),
         category: $<HTMLSelectElement>("logCategory").value,
-        secret:
-          guest && kindOf() !== "qna"
-            ? false
-            : $<HTMLInputElement>("logSecret").checked,
+        secret: $<HTMLInputElement>("logSecret").checked,
         ...(character ? { character } : {}),
         ...($<HTMLInputElement>("logDice").checked ? { dice: true } : {}),
         ...(links.length ? { links } : {}),
@@ -1746,7 +1750,8 @@ export function configureBoard() {
   $("logTitleLabel").hidden = !pictures;
   // A settlement names its category (정산 분류); a guest may ask in secret.
   $<HTMLSelectElement>("logCategory").required = kind === "settlement";
-  $("logSecretLabel").classList.toggle("member-only", kind !== "qna");
+  // Guests write secret posts too, opened again with their password.
+  $("logSecretLabel").classList.remove("member-only");
   $("logForm").hidden =
     board?.data.enabled === false ||
     (!boardStaff() && state.level < (board?.data.writeLevel ?? 2));

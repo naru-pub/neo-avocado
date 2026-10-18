@@ -139,14 +139,13 @@ export async function write(
     );
   await checkBannedWords(ctx, body);
   if (!previous) await checkDelay(ctx, isStaff(access, board));
-  const calls = guest
-    ? { text: body, recipients: [], called: [] }
-    : await resolveCalls(
-        ctx,
-        body,
-        previous?.body ?? "",
-        parsed(previous?.called, []),
-      );
+  // [[nick]] calls, a guest's too (write_comment_update.php names no member).
+  const calls = await resolveCalls(
+    ctx,
+    body,
+    previous?.body ?? "",
+    parsed(previous?.called, []),
+  );
   body = calls.text;
   let row: CommentRow;
   let speaker = previous ? parsed<any>(previous.speaker, null) : null;

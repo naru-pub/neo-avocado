@@ -252,12 +252,8 @@ export async function write(
       ? data.secret === true
       : Boolean(before?.secret));
   if (secret && board.data.secret === "off" && !before?.secret) invalid(ctx);
-  // A guest could never read their secret post back, so they cannot write
-  // one; on a Q&A board they open it again with their password.
-  if (secret && guest && board.data.kind !== "qna")
-    ctx.fail("ACCESS_DENIED", "손님은 비밀글을 쓸 수 없습니다.", {
-      reason: "guest_secret",
-    });
+  // A guest's secret post lists locked, and they open it again with their
+  // password (bbs/password.php?w=s), on any board.
   const title = text(data.title ?? before?.title ?? "", 120);
   const category = text(data.category ?? before?.category ?? "", 40);
   if (category && !(board.data.categories ?? []).includes(category))
@@ -403,14 +399,13 @@ export async function write(
   if (data.action === "explore") actions.push(await explore(ctx, speaker));
   if (data.item !== undefined)
     actions.push(await useInPost(ctx, data.item, speaker));
-  const calls = guest
-    ? { text: body, recipients: [], called: [] }
-    : await resolveCalls(
-        ctx,
-        body,
-        before?.text ?? "",
-        parsed(previous?.called, []),
-      );
+  // [[nick]] calls, a guest's too (write_update.inc.php names no member).
+  const calls = await resolveCalls(
+    ctx,
+    body,
+    before?.text ?? "",
+    parsed(previous?.called, []),
+  );
   body = calls.text;
   const tags = tagsOf(format === "html" ? plainText(body) : body);
   const columns: Record<string, SqlValue> = {

@@ -867,6 +867,7 @@ test("visitors read and post only on level-1 boards, as named guests with a pass
     await refusal(guestPost({ text: "x" }, { name: " ", password: "1234" })),
     "invalid_input",
   );
+  // A guest may write a secret post: it lists locked, opened by password.
   assert.equal(
     await refusal(
       guestPost(
@@ -874,8 +875,9 @@ test("visitors read and post only on level-1 boards, as named guests with a pass
         { name: "길손", password: "1234" },
       ),
     ),
-    "guest_secret",
+    null,
   );
+  site.run("DELETE FROM posts WHERE secret = 1");
   const { document: saved } = await guestPost(
     { text: "[[회원]] 안녕", character: "c-1", dice: true },
     { name: "길손", password: "1234" },
@@ -883,7 +885,12 @@ test("visitors read and post only on level-1 boards, as named guests with a pass
   assert.deepEqual(saved.data.guest, { name: "길손" });
   assert.equal(saved.data.owner, null);
   assert.equal(saved.data.character, undefined);
-  assert.equal(saved.data.text, "[[회원]] 안녕"); // guests do not call members
+  assert.equal(saved.data.text, "[[회원]] 안녕");
+  // A guest calls a member too, signed with their name.
+  assert.deepEqual(
+    callsTo(site, "m-1").map((row) => [row.sender, row.nick, row.kind]),
+    [[null, "길손 (손님)", "call"]],
+  );
   assert.equal(saved.data.rolls.length, 2);
   // The row keeps the password's hash, never the password.
   const [row] = site.rows("SELECT * FROM posts WHERE id = ?", Number(saved.id));
@@ -912,7 +919,7 @@ test("visitors read and post only on level-1 boards, as named guests with a pass
     },
     VISITOR,
   );
-  const [call] = callsTo(site, "m-1");
+  const call = callsTo(site, "m-1").at(-1);
   assert.deepEqual(
     [call.sender, call.nick, call.kind],
     [null, "길손 (손님)", "comment"],
@@ -1373,15 +1380,26 @@ test("a Q&A board lets guests ask in secret and open their question with its pas
     writeLevel: 1,
   });
   const guest = { name: "길손", password: "pass1234" };
+  // On any board, a guest's secret post lists locked and opens by password.
+  const { document: hidden } = await write(
+    site,
+    { data: { board: "free", text: "비밀이에요", secret: true }, guest },
+    VISITOR,
+  );
+  const free = (await listPage(site, { board: "free" }, VISITOR)).documents;
+  assert.deepEqual(
+    free.map((row) => [row.id, row.data.locked, row.data.text]),
+    [[hidden.id, true, undefined]],
+  );
   assert.equal(
-    await refusal(
-      write(
-        site,
-        { data: { board: "free", text: "?", secret: true }, guest },
+    (
+      await site.query(
+        "community/posts:open",
+        { id: hidden.id, password: guest.password },
         VISITOR,
-      ),
-    ),
-    "guest_secret",
+      )
+    ).document.data.text,
+    "비밀이에요",
   );
   const { document: asked } = await write(
     site,
