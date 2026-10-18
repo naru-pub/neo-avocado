@@ -1206,7 +1206,7 @@ test("디자인 설정 adds its CSS, hides the header or tops the menu, and show
       enabled: true,
       title: "",
       font: "sans",
-      colors: {},
+      colors: { accent: "#123456" },
       useHeader: false,
       menuPosition: "top",
       css: "body.site.designed .comment {\n  color: #eee;\n}\n",
@@ -1221,8 +1221,10 @@ test("디자인 설정 adds its CSS, hides the header or tops the menu, and show
   const { body } = window.document;
   assert.equal(
     window.document.getElementById("designStyles").textContent,
-    "body.site.designed .comment {\n  color: #eee;\n}\n",
+    // In the design layer, colours included, so 사용자 CSS (no layer) beats it.
+    "@layer design {\n:root {\n  --avocado: #123456;\n}\nbody.site.designed .comment {\n  color: #eee;\n}\n}\n",
   );
+  assert.equal(window.document.documentElement.getAttribute("style"), null);
   assert.ok(body.classList.contains("no-header"));
   assert.ok(body.classList.contains("menu-top"));
   // A picture board shows the counter, its links and pictures only.

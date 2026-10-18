@@ -763,12 +763,13 @@ export const configModels: Record<string, Model> = {
       color("styles.equalizer.glow", "외부광선"),
       ...boxFields("subMenu"),
       // The owner's own CSS, kept with the settings so a template update
-      // leaves it: applied after everything else, with 디자인 사용 or not.
+      // leaves it: beating the template's and 디자인's styles (app/site.ts),
+      // with 디자인 사용 or not.
       { type: "heading", label: "사용자 CSS" },
       {
         key: "customCss",
         label:
-          "사용자 CSS (디자인 사용과 상관없이 모든 화면에 마지막으로 적용됩니다. 색은 --avocado(강조), --paper(바탕), --ink(글자), --line(선), --surface(상자), --pit(흐린 글자) 변수로 바꿀 수 있고, 위에서 정한 색이 있으면 그 색이 먼저입니다(!important로 덮어쓰기). 변수와 바꿀 만한 부분의 클래스는 README의 「꾸미기」에 있습니다)",
+          "사용자 CSS (디자인 사용과 상관없이 모든 화면에 적용되며, 기본 모양과 위의 디자인 설정보다 먼저입니다. 색은 --avocado(강조), --paper(바탕), --ink(글자), --line(선), --surface(상자), --pit(흐린 글자) 변수로 바꿀 수 있고, 변수와 바꿀 만한 부분의 클래스는 README의 「꾸미기」에 있습니다)",
         type: "textarea",
         max: 50000,
       },

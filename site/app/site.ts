@@ -35,7 +35,6 @@ export async function loadSite() {
   }
   if (site.viewer) state.viewer = { ...state.viewer, ...site.viewer };
   applyItemNames(state.names);
-  const root = document.documentElement.style;
   // Without 디자인 사용 the page is plain (plain.css), as the original
   // without its design CSS: the title, logo, menus and slides still apply.
   document.body.classList.toggle("designed", design.enabled);
@@ -62,6 +61,35 @@ export async function loadSite() {
     "menu-top",
     design.enabled && design.menuPosition === "top",
   );
+  // The template's styles are the `template` layer (index.html), 디자인's
+  // the `design` layer after it, and 사용자 CSS none: unlayered rules beat
+  // every layer's, so the owner's need no !important or matching selectors.
+  const vars = {};
+  if (design.enabled) {
+    for (const [key, variable] of Object.entries(SITE_COLORS))
+      if (design.colors[key]) vars[variable] = design.colors[key];
+    if (design.background) {
+      // The owner's picture at its own size, repeated and placed as they
+      // chose (background_repeat, background_position).
+      vars["--site-background-size"] = "auto";
+      vars["--site-background"] = `url("${encodeURI(design.background)}")`;
+    }
+    // m_background: a phone's own picture (style.css's narrow layout).
+    if (design.mobileBackground) {
+      vars["--site-mobile-background-size"] = "auto";
+      vars["--site-mobile-background"] =
+        `url("${encodeURI(design.mobileBackground)}")`;
+    }
+    if (design.backgroundRepeat)
+      vars["--site-background-repeat"] = design.backgroundRepeat;
+    if (design.backgroundPosition)
+      vars["--site-background-position"] = design.backgroundPosition;
+    if (design.backgroundColor)
+      vars["--site-background-color"] = design.backgroundColor;
+    if (design.headerBackground)
+      vars["--site-header-background"] =
+        `url("${encodeURI(design.headerBackground)}")`;
+  }
   // The rest of 디자인 설정, as the server made it from checked values.
   let styles = document.getElementById("designStyles");
   if (!styles) {
@@ -69,8 +97,14 @@ export async function loadSite() {
     styles.id = "designStyles";
     document.head.append(styles);
   }
-  styles.textContent = design.enabled ? (design.css ?? "") : "";
-  // 사용자 CSS, after the design's, so it has the last word.
+  const declarations = Object.entries(vars)
+    .map(([name, value]) => `  ${name}: ${value};\n`)
+    .join("");
+  const rootRule = declarations ? `:root {\n${declarations}}\n` : "";
+  styles.textContent = design.enabled
+    ? `@layer design {\n${rootRule}${design.css ?? ""}}\n`
+    : "";
+  // 사용자 CSS, after the design's.
   let own = document.getElementById("ownerStyles");
   if (!own) {
     own = document.createElement("style");
@@ -80,34 +114,6 @@ export async function loadSite() {
   document.head.append(own);
   own.textContent = design.customCss ?? "";
   if (!design.enabled) return;
-  for (const [key, variable] of Object.entries(SITE_COLORS))
-    if (design.colors[key]) root.setProperty(variable, design.colors[key]);
-  if (design.background) {
-    // The owner's picture at its own size, repeated and placed as they
-    // chose (background_repeat, background_position).
-    root.setProperty("--site-background-size", "auto");
-    root.setProperty(
-      "--site-background",
-      `url("${encodeURI(design.background)}")`,
-    );
-  }
-  // m_background: a phone's own picture (style.css's narrow layout).
-  if (design.mobileBackground) {
-    root.setProperty("--site-mobile-background-size", "auto");
-    root.setProperty(
-      "--site-mobile-background",
-      `url("${encodeURI(design.mobileBackground)}")`,
-    );
-  }
-  root.setProperty("--site-background-repeat", design.backgroundRepeat);
-  root.setProperty("--site-background-position", design.backgroundPosition);
-  if (design.backgroundColor)
-    root.setProperty("--site-background-color", design.backgroundColor);
-  if (design.headerBackground)
-    root.setProperty(
-      "--site-header-background",
-      `url("${encodeURI(design.headerBackground)}")`,
-    );
   document.body.classList.remove("font-serif", "font-mono");
   if (design.font !== "sans")
     document.body.classList.add(`font-${design.font}`);

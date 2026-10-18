@@ -499,9 +499,9 @@ test("index.html names its scripts and styles from the site's root, as every add
     new URL("../dist/index.html", import.meta.url),
     "utf8",
   );
-  const paths = [...html.matchAll(/(?:src|href)="([^"]+\.(?:js|css))"/g)].map(
-    (match) => match[1],
-  );
+  const paths = [
+    ...html.matchAll(/(?:(?:src|href)=|url\()"([^"]+\.(?:js|css))"/g),
+  ].map((match) => match[1]);
   assert.ok(paths.length >= 5);
   for (const path of paths) assert.match(path, /^\//, path);
 });
