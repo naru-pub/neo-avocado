@@ -101,8 +101,11 @@ export async function join(
     ON CONFLICT (member) DO UPDATE SET nick = excluded.nick,
       accept_messages = excluded.accept_messages,
       comment_alerts = excluded.comment_alerts`;
-  if (!(await one(ctx, "SELECT 1 FROM members WHERE member = ?", [member])))
-    await ctx.sql`INSERT INTO members (member, requested_at, agreed_at, recommender) VALUES (${member}, ${ctx.now}, ${rules ? ctx.now : null}, ${recommender})`;
+  if (!(await one(ctx, "SELECT 1 FROM members WHERE member = ?", [member]))) {
+    // 회원가입시 권한 (cf_register_level, register_form_update.php:219).
+    const level = Number(settings.registerLevel ?? 2);
+    await ctx.sql`INSERT INTO members (member, level, requested_at, agreed_at, recommender) VALUES (${member}, ${Number.isInteger(level) && level >= 1 && level <= 9 ? level : 2}, ${ctx.now}, ${rules ? ctx.now : null}, ${recommender})`;
+  }
   else if (recommender)
     await ctx.sql`UPDATE members SET recommender = ${recommender} WHERE member = ${member}`;
   else if (rules)

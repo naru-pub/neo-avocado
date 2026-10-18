@@ -1005,6 +1005,18 @@ export const models: Record<string, Model> = {
           "admin,administrator,관리자,운영자,어드민,주인장,webmaster,웹마스터,sysop,시삽,시샵,manager,매니저,메니저,root,루트,su,guest,방문객",
         max: 2000,
       },
+      // cf_register_level 회원가입시 권한 (adm/config_form.php:349, installed
+      // at 2): the level a member starts at (register_form_update.php:219).
+      {
+        key: "registerLevel",
+        label: "회원가입시 권한 (새 회원의 등급)",
+        type: "choice",
+        default: "2",
+        options: Array.from({ length: 9 }, (_, i) => [
+          String(i + 1),
+          String(i + 1),
+        ]),
+      },
       // cf_use_recommend and cf_recommend_point (adm/config_form.php:360,
       // a hidden field there, installed at 0).
       {

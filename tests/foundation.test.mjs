@@ -857,3 +857,22 @@ test("게시판 기본 설정: rows a list reads, page links and where links ope
   assert.equal(paging.linkTarget, "_self");
   assert.equal(paging.rows, 20);
 });
+
+test("a new member starts at 회원가입시 권한, 2 until the owner sets it", async () => {
+  const site = await testSite();
+  await site.mutate("community/membership:join", { nick: "앨리스" }, M1);
+  assert.equal(site.rows("SELECT level FROM members")[0].level, 2);
+  setSettings(site, "community", { registerLevel: "4" });
+  await site.mutate("community/membership:join", { nick: "밥" }, M2);
+  assert.equal(
+    site.rows("SELECT level FROM members WHERE member = 'm-2'")[0].level,
+    4,
+  );
+  // Changing a nickname keeps the level the member has.
+  setSettings(site, "community", { registerLevel: "6" });
+  await site.mutate("community/membership:join", { nick: "밥2" }, M2);
+  assert.equal(
+    site.rows("SELECT level FROM members WHERE member = 'm-2'")[0].level,
+    4,
+  );
+});
