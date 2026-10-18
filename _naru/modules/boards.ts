@@ -196,6 +196,8 @@ export interface PostRow {
   thread: number | null;
   reply_path: string;
   tags?: string | null;
+  /** 조회수 (post_hits), where read with TAGS. */
+  hits?: number | null;
   comment_count?: number;
 }
 
@@ -290,8 +292,8 @@ export interface Written {
 
 /** A post's tags, as a column of a SELECT from posts. */
 export const TAGS =
-  "(SELECT json_group_array(tag) FROM post_tags WHERE post_tags.post_id = posts.id) AS tags";
-/** A post with its tags. */
+  "(SELECT json_group_array(tag) FROM post_tags WHERE post_tags.post_id = posts.id) AS tags, (SELECT hits FROM post_hits WHERE post_hits.post_id = posts.id) AS hits";
+/** A post with its tags and 조회수. */
 export const POST_SELECT = `SELECT posts.*, ${TAGS} FROM posts`;
 
 const list = (text: unknown): any[] => {
@@ -349,6 +351,7 @@ export function postOf(row: PostRow): Written {
       ? { settlement: parsed(row.settlement, null) }
       : {}),
     ...(row.tags !== undefined ? { tags: list(row.tags) } : {}),
+    ...(row.hits !== undefined ? { hits: row.hits ?? 0 } : {}),
     // 답변글: how deep a reply is (wr_reply's length), and what it answers.
     ...(row.reply_path
       ? {

@@ -210,6 +210,7 @@ export async function openPost(id, { comment = null, log = null } = {}) {
     await loadLogs();
   }
   await preloadNicks([post]);
+  countView(post.id);
   const item = await logItem(post);
   $("logFocus").replaceChildren(item);
   $("logFocusPanel").hidden = false;
@@ -653,6 +654,14 @@ export async function logItem(log) {
   reply.onclick = () => startReply(log);
   item.querySelector(".author").replaceChildren(await speakerLabel(log));
   item.querySelector("time").textContent = formatTime(log.createdAt);
+  // 조회 (basic/list.skin.php:99, view.skin.php:32), on a plain board.
+  if (kindOf(log.data.board) === "text" && typeof log.data.hits === "number")
+    item.querySelector("time").after(
+      Object.assign(document.createElement("span"), {
+        className: "hits",
+        textContent: ` · 조회 ${log.data.hits}`,
+      }),
+    );
   const remove = item.querySelector<HTMLButtonElement>(".delete");
   const guestPost = !state.member && Boolean(log.data.guest);
   const moderating = boardStaff(log.data.board);
@@ -1205,6 +1214,20 @@ async function commentItem(comment, log) {
     item.append(" ", remove);
   }
   return item;
+}
+/**
+ * 조회수: a post opened on its own counts once until the browser closes
+ * (bbs/board.php:116's ss_view_ session), and never holds the page up.
+ */
+function countView(id) {
+  const key = `neo-avocado:viewed:${id}`;
+  try {
+    if (sessionStorage.getItem(key)) return;
+    sessionStorage.setItem(key, "1");
+  } catch {
+    // Without storage, each opening counts.
+  }
+  mutate("community/posts:hit", { id }).catch(() => {});
 }
 /** Opens the log form to answer `log` (bbs/write.php?w=r), titled Re:. */
 function startReply(log) {

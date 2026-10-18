@@ -270,6 +270,8 @@ export const models: Record<string, Model> = {
           ["last desc", "최근글 최근것 부터 (글·댓글 시각)"],
           ["comment asc", "댓글수 낮은것 부터"],
           ["comment desc", "댓글수 높은것 부터"],
+          ["hit asc", "조회수 낮은것 부터"],
+          ["hit desc", "조회수 높은것 부터"],
           ["subject asc", "제목 오름차순"],
           ["subject desc", "제목 내림차순"],
           ["name asc", "글쓴이 오름차순"],

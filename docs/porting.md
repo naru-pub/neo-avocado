@@ -73,7 +73,7 @@ workflows to the port, and says what was left out and why.
 ## How it is built
 
 - **Tables**: every row the community keeps is in the site's own SQLite
-  tables, which `_naru/migrations/0001`–`0014` make when the files arrive
+  tables, which `_naru/migrations/0001`–`0015` make when the files arrive
   (the foundation, boards, characters, economy, mail and search, then the
   columns later features added). There are no
   collections, collection rules or site functions, and the owner's sign-in

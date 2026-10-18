@@ -27,8 +27,7 @@ export const BOARD_DEFAULTS = Object.freeze({
 
 /**
  * 리스트 정렬 필드 (bo_sort_field, board_form.php:697): the list's order
- * after its notices, by the SQL each sorts by. 조회수 and 추천수 have no
- * counts here.
+ * after its notices, by the SQL each sorts by. 추천수 has no counts here.
  */
 /**
  * A post's wr_name: the guest's name, else its member's nickname; a 익명
@@ -50,6 +49,11 @@ export const SORTS: Record<string, string> = {
     "(SELECT count(*) FROM comments WHERE comments.post_id = posts.id) ASC, posts.id DESC",
   "comment desc":
     "(SELECT count(*) FROM comments WHERE comments.post_id = posts.id) DESC, posts.id DESC",
+  // wr_hit: 조회수 (post_hits).
+  "hit asc":
+    "coalesce((SELECT hits FROM post_hits WHERE post_hits.post_id = posts.id), 0) ASC, posts.id DESC",
+  "hit desc":
+    "coalesce((SELECT hits FROM post_hits WHERE post_hits.post_id = posts.id), 0) DESC, posts.id DESC",
   // wr_subject, wr_name (the guest's name or the member's nickname) and
   // ca_name, then wr_num: the newest first.
   "subject asc": "posts.title ASC, posts.id DESC",

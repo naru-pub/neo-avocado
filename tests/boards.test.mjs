@@ -3047,3 +3047,37 @@ test("답변글 sit under what they answer, at 글답변 권한, and keep a post
     "invalid_input",
   );
 });
+
+test("조회수 counts a readable post's openings, lists them, sorts by them, and goes with the post", async () => {
+  const site = await boardSite();
+  board(site, "free", { ...PUBLIC_BOARD, sortField: "hit desc" });
+  profile(site, "m-1", "하나");
+  const quiet = post(site, { board: "free", owner: "m-1", title: "조용" });
+  const busy = post(site, { board: "free", owner: "m-1", title: "인기" });
+  const secret = post(site, {
+    board: "free",
+    owner: "m-1",
+    title: "비밀",
+    secret: 1,
+  });
+  const hit = (id, who = M2) => site.mutate("community/posts:hit", { id }, who);
+  await hit(busy);
+  await hit(busy, VISITOR);
+  await hit(quiet);
+  await hit(busy, M1);
+  // One the reader may not read is not counted.
+  assert.equal(await refusal(hit(secret)), "document_not_found");
+  const listed = (await listPage(site, { board: "free" })).documents;
+  assert.deepEqual(
+    listed.map((row) => [row.data.title, row.data.hits]),
+    [
+      ["인기", 3],
+      ["조용", 1],
+      ["비밀", 0],
+    ].filter(([title]) => listed.some((row) => row.data.title === title)),
+  );
+  assert.equal(listed[0].id, busy);
+  assert.equal((await read(site, { id: busy })).document.data.hits, 3);
+  await site.mutate("community/posts:remove", { id: busy }, M1);
+  assert.equal(count(site, "post_hits"), 1);
+});

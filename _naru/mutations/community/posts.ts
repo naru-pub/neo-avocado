@@ -457,6 +457,18 @@ export async function write(
  * Its uploads stay: Naru deletes media only when asked, and marks
  * unreferenced uploads in its library.
  */
+/**
+ * 조회수 (bbs/board.php:116-120's wr_hit + 1): a post a reader may read was
+ * opened on its own. The page asks once a browser session, as the original
+ * counts once until the browser closes.
+ */
+export async function hit(ctx: MutationCtx, { id }: { id?: string } = {}) {
+  const { row } = await readablePost(ctx, id);
+  await ctx.sql`INSERT INTO post_hits (post_id, hits) VALUES (${row.id}, 1)
+    ON CONFLICT (post_id) DO UPDATE SET hits = post_hits.hits + 1`;
+  return { counted: true };
+}
+
 export async function remove(
   ctx: MutationCtx,
   args: { id?: string; guest?: GuestCredentials },
@@ -534,6 +546,7 @@ export async function remove(
   await ctx.sql`DELETE FROM comments WHERE post_id = ${previous.id}`;
   await ctx.sql`DELETE FROM posts_search WHERE rowid = ${previous.id}`;
   await ctx.sql`DELETE FROM post_tags WHERE post_id = ${previous.id}`;
+  await ctx.sql`DELETE FROM post_hits WHERE post_id = ${previous.id}`;
   await ctx.sql`DELETE FROM calls WHERE post_id = ${previous.id}`;
   await ctx.sql`DELETE FROM favorites WHERE post = ${previous.id}`;
   await ctx.sql`DELETE FROM posts WHERE id = ${previous.id}`;
