@@ -21,6 +21,8 @@ export const BOARD_DEFAULTS = Object.freeze({
   editLock: 1,
   // bo_upload_count 1, bo_new 24, bo_image_width 600 (board_form.php:102-105).
   uploadCount: 1,
+  // bo_upload_size in MB: 0, Naru Media's own limit.
+  uploadSize: 0,
   newHours: 24,
   imageWidth: 600,
 });

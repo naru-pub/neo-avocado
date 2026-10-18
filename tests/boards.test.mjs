@@ -3407,3 +3407,44 @@ test("a post's links count the times they are followed (wr_link1_hit), and go wi
   await site.mutate("community/posts:remove", { id: saved.id }, M1);
   assert.equal(count(site, "link_hits"), 0);
 });
+
+test("첨부파일 take a 설명 where the board asks, and stay within 파일 업로드 용량", async () => {
+  const site = await boardSite();
+  board(site, "free", {
+    ...PUBLIC_BOARD,
+    kind: "text",
+    uploadCount: 3,
+    uploadSize: 1,
+    fileContent: true,
+  });
+  profile(site, "m-1", "하나");
+  const file = {
+    url: "https://media.naru.pub/a.pdf",
+    name: "a.pdf",
+    size: 1000,
+    type: "application/pdf",
+    note: "규칙 모음",
+  };
+  const { document: saved } = await write(site, {
+    data: { board: "free", text: "x", attachments: [file] },
+  });
+  assert.equal(saved.data.attachments[0].note, "규칙 모음");
+  assert.equal(
+    await refusal(
+      write(site, {
+        data: {
+          board: "free",
+          text: "y",
+          attachments: [{ ...file, size: 2 * 1048576 }],
+        },
+      }),
+    ),
+    "upload_size",
+  );
+  // Without 파일 설명 사용, a note is not kept.
+  board(site, "free", { ...PUBLIC_BOARD, kind: "text", uploadCount: 3 });
+  const { document: plain } = await write(site, {
+    data: { board: "free", text: "z", attachments: [file] },
+  });
+  assert.equal(plain.data.attachments[0].note, undefined);
+});

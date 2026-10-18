@@ -315,6 +315,26 @@ export const models: Record<string, Model> = {
         type: "number",
         default: 1,
       },
+      // bo_upload_size, bo_use_file_content, bo_use_list_file.
+      {
+        key: "uploadSize",
+        label:
+          "파일 업로드 용량 (MB, 파일 하나의 최대 크기, 0이면 나루 미디어의 한도)",
+        type: "number",
+        default: 0,
+      },
+      {
+        key: "fileContent",
+        label: "파일 설명 사용 (일반 글 게시판의 첨부파일마다 설명을 받음)",
+        type: "checkbox",
+      },
+      {
+        key: "listFile",
+        label: "리스트에서 파일 사용 (끄면 첨부파일은 글을 따로 열 때만 보임)",
+        type: "checkbox",
+        default: true,
+        newDefault: false,
+      },
       {
         key: "imageWidth",
         label: "이미지 폭 크기 (px, 일반 글 게시판에서 보이는 그림의 최대 폭)",

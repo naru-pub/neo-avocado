@@ -99,7 +99,13 @@ export interface PostInput {
   /** 답변 (bbs/write.php w=r): the post this one answers, on a new post. */
   replyTo?: string;
   /** A plain board's 첨부파일: uploads, as media.upload answered them. */
-  attachments?: { url: string; name: string; size: number; type: string }[];
+  attachments?: {
+    url: string;
+    name: string;
+    size: number;
+    type: string;
+    note?: string;
+  }[];
 }
 
 /** What Naru Media stores besides pictures, as a post's 첨부파일 may be. */
@@ -131,11 +137,14 @@ function attachmentsOf(ctx: MutationCtx, value: unknown) {
         !ATTACHMENT_TYPES.includes(file.type as string)
       )
         throw new Error("Not an attachment.");
+      // bf_content: a file's 설명, where the board takes them.
+      const note = text(file.note ?? "", 255);
       return {
         url: imageUrl(file.url),
         name: text(file.name, 200, true),
         size,
         type: file.type as string,
+        ...(note ? { note } : {}),
       };
     });
   } catch {
@@ -282,6 +291,20 @@ export async function write(
       ? attachmentsOf(ctx, data.attachments)
       : parsed<any[]>(previous?.attachments, []);
   if (board.data.kind !== "text" && attachments.length) invalid(ctx);
+  // 파일 업로드 용량 (bo_upload_size): each new file within it.
+  const limit = boardNumber(board, "uploadSize") * 1048576;
+  if (
+    limit &&
+    JSON.stringify(attachments) !== (previous?.attachments ?? "[]") &&
+    attachments.some((file) => file.size > limit)
+  )
+    ctx.fail(
+      "INVALID_REQUEST",
+      `파일은 ${boardNumber(board, "uploadSize")}MB까지 올릴 수 있습니다.`,
+      { reason: "upload_size" },
+    );
+  if (!board.data.fileContent)
+    for (const file of attachments) delete (file as { note?: string }).note;
   if (
     attachments.length &&
     JSON.stringify(attachments) !== (previous?.attachments ?? "[]") &&

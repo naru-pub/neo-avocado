@@ -643,6 +643,13 @@ export async function logItem(log) {
           .catch(() => {});
       };
       entry.append(link, count);
+      if (file.note)
+        entry.append(
+          Object.assign(document.createElement("span"), {
+            className: "file-note",
+            textContent: ` — ${file.note}`,
+          }),
+        );
       list.append(entry);
     }
     if (list.childElementCount) links.after(list);
@@ -876,6 +883,7 @@ export async function logItem(log) {
         pictureUrl = "",
         pictureRemove = false,
         attachmentAdd = null,
+        attachmentNote = "",
         ...rest
       }) => {
         // basic/write.skin.php's 파일 삭제 boxes and a new 파일.
@@ -884,7 +892,13 @@ export async function logItem(log) {
         );
         let attachments = (current.data.attachments ?? [])
           .filter((file) => !rest[`drop:${file.url}`])
-          .map(({ url, name, size, type }) => ({ url, name, size, type }));
+          .map(({ url, name, size, type, note }) => ({
+            url,
+            name,
+            size,
+            type,
+            ...(note ? { note } : {}),
+          }));
         if (attachmentAdd) {
           const stored = await uploadMedia(attachmentAdd);
           attachments = [
@@ -894,6 +908,7 @@ export async function logItem(log) {
               name: stored.name ?? attachmentAdd.name,
               size: stored.size ?? attachmentAdd.size,
               type: stored.contentType ?? attachmentAdd.type,
+              ...(attachmentNote ? { note: attachmentNote } : {}),
             },
           ];
         }
@@ -1191,6 +1206,9 @@ function attachmentEdits(current): EditField[] {
             accept:
               ".pdf,.zip,.txt,.mp3,.ogg,.opus,.wav,image/*,application/pdf,application/zip,text/plain,audio/*",
           },
+          ...(state.boards.find((row) => row.id === board)?.data.fileContent
+            ? [{ name: "attachmentNote", label: "추가할 파일 설명", max: 255 }]
+            : []),
         ]
       : []),
   ];
@@ -1440,6 +1458,24 @@ function countView(id) {
   }
   mutate("community/posts:hit", { id }).catch(() => {});
 }
+// bo_use_file_content: a 설명 box for each file chosen.
+$("logAttachments").addEventListener("change", () => {
+  const board = state.boards.find((row) => row.id === state.board);
+  const notes = $("logAttachmentNotes");
+  const files = [...($<HTMLInputElement>("logAttachments").files ?? [])];
+  notes.replaceChildren(
+    ...(board?.data.fileContent
+      ? files.map((file) => {
+          const label = document.createElement("label");
+          const input = document.createElement("input");
+          input.maxLength = 255;
+          label.append(`${file.name} 설명 `, input);
+          return label;
+        })
+      : []),
+  );
+  notes.hidden = !notes.childElementCount;
+});
 /** Opens the log form to answer `log` (bbs/write.php?w=r), titled Re:. */
 function startReply(log) {
   state.replyTo = log.id;
@@ -1499,14 +1535,25 @@ $("logForm").onsubmit = (event) => {
       : [...($<HTMLInputElement>("logAttachments").files ?? [])];
     if (attaching.length && chosen.length + attaching.length > most)
       return say(`파일은 그림과 합쳐 ${most}개까지 올릴 수 있습니다.`);
+    // 파일 업로드 용량 (bo_upload_size), checked before anything goes up.
+    const most_mb = boardSetting(state.board, "uploadSize", 0);
+    if (
+      most_mb &&
+      [...chosen, ...attaching].some((file) => file.size > most_mb * 1048576)
+    )
+      return say(`파일은 ${most_mb}MB까지 올릴 수 있습니다.`);
+    const notes = [
+      ...$("logAttachmentNotes").querySelectorAll<HTMLInputElement>("input"),
+    ].map((input) => input.value.trim());
     const attachments = [];
-    for (const file of attaching) {
+    for (const [n, file] of attaching.entries()) {
       const stored = await uploadMedia(file);
       attachments.push({
         url: stored.url,
         name: stored.name ?? file.name,
         size: stored.size ?? file.size,
         type: stored.contentType ?? file.type,
+        ...(notes[n] ? { note: notes[n] } : {}),
       });
     }
     const links = [
@@ -1570,6 +1617,8 @@ $("logForm").onsubmit = (event) => {
     if (state.newPost === log.id) showNewPost(null);
     $("logs").prepend(await logItem(log));
     $<HTMLFormElement>("logForm").reset?.();
+    $("logAttachmentNotes").replaceChildren();
+    $("logAttachmentNotes").hidden = true;
     $<HTMLSelectElement>("logCharacter").value = character;
     configureBoard();
     say("로그를 올렸습니다.");
@@ -1662,6 +1711,11 @@ export function configureBoard() {
   $("logImageLabel").hidden = !pictures || uploads === 0;
   $("logImageUrlLabel").hidden = !pictures || uploads === 0;
   $("logAttachmentsLabel").hidden = kind !== "text" || uploads === 0;
+  // 리스트에서 파일 사용 (bo_use_list_file): off, files show on a post alone.
+  $("logs").classList.toggle(
+    "no-list-file",
+    kind === "text" && board?.data.listFile === false,
+  );
   $("logTitleLabel").hidden = !pictures;
   // A settlement names its category (정산 분류); a guest may ask in secret.
   $<HTMLSelectElement>("logCategory").required = kind === "settlement";

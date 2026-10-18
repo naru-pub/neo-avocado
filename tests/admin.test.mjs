@@ -235,6 +235,10 @@ test("boards and groups are saved as their forms check them, and members see the
       // 전체목록보이기: off, as the original makes a board.
       listView: false,
       uploadCount: 1,
+      // bo_upload_size, bo_use_file_content, bo_use_list_file as installed.
+      uploadSize: 0,
+      fileContent: false,
+      listFile: false,
       imageWidth: 600,
       editLock: 1,
       writeReward: 5,

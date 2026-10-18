@@ -1810,3 +1810,10 @@ img.side-icon {
   height: 1.2em;
   vertical-align: middle;
 }
+/* 리스트에서 파일 사용 off: a list's posts show their files only alone. */
+#logs.no-list-file .log-attachments {
+  display: none;
+}
+.file-note {
+  color: var(--muted);
+}
