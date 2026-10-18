@@ -500,10 +500,12 @@
           <h2>로그 올리기</h2>
           <label id="logImageLabel" class="member-only">
             그림
-            <input id="logImage" type="file" accept="image/*" required />
+            <input id="logImage" type="file" accept="image/*" />
           </label>
-          <label id="logImageUrlLabel" class="guest-only">
-            그림 주소 (HTTPS)
+          <!-- write.skin.php's UPLOAD or URL (wr_type, wr_url): a member
+               links a picture instead of uploading one; a guest only links. -->
+          <label id="logImageUrlLabel">
+            그림 주소 (HTTPS<span class="member-only">, 파일 대신</span>)
             <input id="logImageUrl" type="url" maxlength="2000" />
           </label>
           <label class="member-only"

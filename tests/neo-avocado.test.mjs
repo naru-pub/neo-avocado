@@ -1357,6 +1357,42 @@ test("a log uploads its picture, then saves the stored URL", async () => {
   assert.equal($("logs").querySelector(".log-text").textContent, "첫 로그");
 });
 
+test("a member links a log's picture by address, and changes it when editing", async () => {
+  const database = fakeDatabase({ [PROFILES]: [me] });
+  const { $, window, settle, submit } = await page(database);
+  // write.skin.php's UPLOAD or URL: one of them, not both.
+  const file = new window.File(["png"], "log.png", { type: "image/png" });
+  Object.defineProperty($("logImage"), "files", {
+    value: [file],
+    configurable: true,
+  });
+  $("logImageUrl").value = "https://cdn.example/linked.png";
+  submit($("logForm"));
+  await settle();
+  assert.match($("status").textContent, /하나만/);
+  Object.defineProperty($("logImage"), "files", { value: [] });
+  submit($("logForm"));
+  await settle();
+  await settle();
+  const added = database.calls.find((call) => call.method === "add");
+  assert.equal(added.data.image, "https://cdn.example/linked.png");
+  assert.equal(
+    database.calls.some((call) => call.method === "media.upload"),
+    false,
+  );
+  // Editing offers a new picture; an address replaces the old one.
+  $("logs").querySelector(".log .edit").onclick();
+  const fields = $("editorFields");
+  assert.ok(fields.querySelector('[name="pictureFile"]'));
+  // A picture board's log always has one: no 그림 삭제 there.
+  assert.equal(fields.querySelector('[name="pictureRemove"]'), null);
+  fields.querySelector('[name="pictureUrl"]').value =
+    "https://cdn.example/new.png";
+  await submit($("editorForm"));
+  const write = database.calls.filter((call) => call.method === "set").at(-1);
+  assert.equal(write.data.image, "https://cdn.example/new.png");
+});
+
 test("characters are read when their tab is first opened, and registered by members", async () => {
   const database = fakeDatabase({
     [PROFILES]: [me],

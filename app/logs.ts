@@ -6,6 +6,7 @@ import {
   $,
   boardStaff,
   edit,
+  type EditField,
   formatTime,
   guestCredentials,
   mine,
@@ -718,6 +719,7 @@ export async function logItem(log) {
           value: current.data.links?.[n] ?? "",
           max: 2000,
         })),
+        ...pictureEdits(current),
         ...optionEdits(current),
         ...actionEdits(current),
       ],
@@ -735,9 +737,19 @@ export async function logItem(log) {
         item: used = "",
         link1 = "",
         link2 = "",
+        pictureFile = null,
+        pictureUrl = "",
+        pictureRemove = false,
         ...options
       }) => {
         const links = [link1, link2].map((link) => link.trim()).filter(Boolean);
+        // write.skin.php's edit: a new picture (UPLOAD or URL), or 로그 삭제
+        // (bf_file_del); else the post keeps its own.
+        if (pictureFile && pictureUrl)
+          throw new Error("그림은 파일과 주소 중 하나만 정해 주세요.");
+        const image = pictureFile
+          ? (await uploadMedia(pictureFile)).url
+          : pictureUrl || (pictureRemove ? null : (current.data.image ?? null));
         const materials = [material1, material2, material3].filter(Boolean);
         if (action === "combine" && !materials.length)
           throw new Error("조합 재료를 골라 주세요.");
@@ -745,6 +757,7 @@ export async function logItem(log) {
           id: log.id,
           data: {
             ...current.data,
+            image,
             text,
             title,
             category,
@@ -941,6 +954,38 @@ export async function logItem(log) {
   };
   return item;
 }
+/**
+ * write.skin.php's picture in edit mode: a replacement file (members) or
+ * address, and on a plain board, where a picture is optional, 로그 삭제.
+ */
+function pictureEdits(current): EditField[] {
+  const board = current.data.board ?? "default";
+  const kind = kindOf(board);
+  if (["qna", "settlement"].includes(kind)) return [];
+  if (kind === "text" && uploadCountOf(board) === 0 && !current.data.image)
+    return [];
+  return [
+    ...(state.member
+      ? [
+          {
+            name: "pictureFile",
+            label: "그림 바꾸기 (파일)",
+            type: "file",
+            accept: "image/*",
+          },
+        ]
+      : []),
+    {
+      name: "pictureUrl",
+      label: "그림 바꾸기 (HTTPS 주소)",
+      type: "url",
+      max: 2000,
+    },
+    ...(kind === "text" && current.data.image
+      ? [{ name: "pictureRemove", label: "그림 삭제", type: "checkbox" }]
+      : []),
+  ];
+}
 /** Who wrote a post or comment, as far as the reader is shown. */
 const writerOf = (row) => row.createdBy ?? row.data.owner ?? null;
 async function commentItem(comment, log) {
@@ -1092,9 +1137,10 @@ $("logForm").onsubmit = (event) => {
           : "이 게시판은 그림을 올릴 수 없습니다.",
       );
     const file = chosen[0] ?? null;
-    const address = guest
-      ? $<HTMLInputElement>("logImageUrl").value.trim()
-      : "";
+    // write.skin.php's UPLOAD or URL: a picture's address in place of a file.
+    const address = $<HTMLInputElement>("logImageUrl").value.trim();
+    if (file && address)
+      return say("그림은 파일과 주소 중 하나만 정해 주세요.");
     if (!file && !address && kindOf() === "image")
       return say("그림을 골라 주세요.");
     say("올리는 중…");
@@ -1242,8 +1288,8 @@ export function configureBoard() {
   const kind = kindOf();
   // Pictures belong to image boards; questions and settlements are text.
   const pictures = !["qna", "settlement"].includes(kind);
-  $<HTMLInputElement>("logImage").required =
-    Boolean(state.member) && kind === "image";
+  // A member uploads or links one; the submit checks they did.
+  $<HTMLInputElement>("logImage").required = false;
   $<HTMLInputElement>("logImageUrl").required =
     !state.member && kind === "image";
   // bo_upload_count: several pictures on a plain board, none at 0.
