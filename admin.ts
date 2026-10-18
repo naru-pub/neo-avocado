@@ -228,6 +228,18 @@ const CALLS: Record<
     save: "admin/items:save",
     remove: "admin/items:remove",
   },
+  popups: {
+    list: "admin/popups:list",
+    get: "admin/popups:get",
+    save: "admin/popups:save",
+    remove: "admin/popups:remove",
+  },
+  polls: {
+    list: "admin/polls:list",
+    get: "admin/polls:get",
+    save: "admin/polls:save",
+    remove: "admin/polls:remove",
+  },
   shop_entries: {
     list: "admin/shop_entries:list",
     get: "admin/shop_entries:get",

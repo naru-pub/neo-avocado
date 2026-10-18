@@ -266,6 +266,26 @@
             </p>
           </div>
         </div>
+        <!-- poll.skin.php: the newest 설문조사, its vote and results. -->
+        <section id="pollBox" class="card poll" hidden>
+          <h3 id="pollSubject"></h3>
+          <form id="pollForm">
+            <ul id="pollAnswers"></ul>
+            <button id="pollVote" type="submit">투표하기</button>
+            <button id="pollResults" type="button">결과보기</button>
+          </form>
+          <p id="pollNote" class="hint"></p>
+          <div id="pollEtc" hidden>
+            <h4 id="pollEtcQuestion"></h4>
+            <form id="pollEtcForm">
+              <input id="pollEtcText" maxlength="255" aria-label="기타의견" />
+              <button type="submit">의견 남기기</button>
+            </form>
+            <ul id="pollComments"></ul>
+          </div>
+        </section>
+        <!-- bbs/newwin.inc.php's 팝업레이어. -->
+        <div id="popups" class="popups"></div>
         <p class="copyright">
           COPYRIGHT &copy; <span id="copyrightYear"></span> by
           <span id="copyrightName">네오 아보카도</span>

@@ -1772,6 +1772,72 @@ test("데이터 백업 keeps a category's rows and 데이터 복원하기 puts t
   );
 });
 
+test("팝업레이어 show between their times, and 설문조사 take members' one vote each, paid", async () => {
+  // 2030-01-01 12:00 in Korea.
+  const site = await testSite({ now: Date.parse("2030-01-01T03:00:00Z") });
+  profile(site, "m-1", "하나");
+  site.run("INSERT INTO members (member, level) VALUES ('m-1', 3)");
+  await create(site, "popups", "notice", {
+    subject: "공지",
+    content: "<b>점검</b>",
+    startsAt: "2029-12-31T00:00",
+    endsAt: "2030-01-02T00:00",
+    disableHours: 12,
+  });
+  await create(site, "popups", "later", {
+    subject: "나중",
+    content: "x",
+    startsAt: "2030-02-01T00:00",
+  });
+  const { popups } = await site.query("content/site:site");
+  assert.deepEqual(
+    popups.map((row) => [row.id, row.disableHours]),
+    [["notice", 12]],
+  );
+  assert.equal(
+    await refusedWith(
+      create(site, "polls", "one", { subject: "?", options: "하나만" }),
+    ),
+    "답은 2~9개를 한 줄에 하나씩 적어 주세요.",
+  );
+  await create(site, "polls", "food", {
+    subject: "좋아하는 음식",
+    options: "김밥\n떡볶이\n",
+    level: 3,
+    point: 5,
+    etc: "그 밖에는?",
+  });
+  const latest = async (who) =>
+    (await site.query("content/polls:latest", {}, who)).poll;
+  assert.deepEqual((await latest(M1)).answers, ["김밥", "떡볶이"]);
+  assert.equal((await latest()).canVote, false);
+  const vote = (choice, who = M1) =>
+    site.mutate("content/polls:vote", { id: "food", choice }, who);
+  await vote(2);
+  assert.equal(await refusal(vote(1)), "voted");
+  const after = await latest(M1);
+  assert.deepEqual([after.counts, after.voted], [[0, 1], 2]);
+  assert.equal(
+    site.rows("SELECT balance FROM wallets WHERE member = 'm-1'")[0].balance,
+    5,
+  );
+  // A member below its level cannot vote.
+  profile(site, "m-2", "둘");
+  assert.equal(await refusal(vote(1, { member: "m-2" })), "poll_level");
+  await site.mutate("content/polls:comment", { id: "food", idea: "라면" }, M1);
+  const { comments } = await latest(M1);
+  assert.deepEqual(
+    comments.map((row) => [row.nick, row.idea, row.mine]),
+    [["하나", "라면", true]],
+  );
+  await site.mutate("content/polls:removeComment", { id: comments[0].id }, M1);
+  assert.equal((await latest(M1)).comments.length, 0);
+  // The site frame carries the newest poll.
+  assert.equal((await site.query("content/site:site", {}, M1)).poll.id, "food");
+  await mutate(site, "polls:remove", { id: "food" });
+  assert.equal(site.rows("SELECT * FROM poll_votes").length, 0);
+});
+
 test("the forms' pick lists come in one read", async () => {
   const site = await testSite();
   profile(site, "m-1", "하나");

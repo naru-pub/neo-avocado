@@ -1821,3 +1821,40 @@ img.side-icon {
 .quick-fields .quick-number {
   width: 6em;
 }
+/* bbs/newwin.inc.php's 팝업레이어: over the page where the owner put it. */
+.popups .popup-layer {
+  position: fixed;
+  z-index: 900;
+  background: var(--surface, #1a1a1a);
+  color: var(--ink, #fff);
+  border: 1px solid var(--line, #555);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 40%);
+}
+@media (max-width: 700px) {
+  .popups .popup-layer {
+    left: 16px;
+    right: 16px;
+    top: 16px;
+  }
+}
+.popup-content {
+  overflow: auto;
+  padding: 10px;
+  max-height: calc(100vh - 120px);
+}
+.popup-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--line, #555);
+}
+/* poll.skin.php's 설문조사. */
+.poll ul {
+  list-style: none;
+  padding: 0;
+}
+.poll meter {
+  width: 8em;
+  vertical-align: middle;
+}

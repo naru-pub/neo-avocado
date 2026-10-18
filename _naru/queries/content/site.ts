@@ -19,6 +19,7 @@ import {
 } from "../../modules/content.js";
 import { designCss, designLayout, ownerMarks } from "../../modules/design.js";
 import { imageSlotsOf, nameFieldOf, viewerOf } from "../../modules/images.js";
+import { latestPoll } from "../../modules/polls.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
 
 const COLORS = ["accent", "muted", "paper", "ink", "line", "surface"];
@@ -159,6 +160,38 @@ export async function site(ctx: QueryCtx) {
     bgm: backgroundMusic(settings.bgm),
     // 쪽지·호출 알림음: the arrival popups' chime, off unless the owner wants it.
     alarmSound: settings.alarmSound === true,
+    // 설문조사: the newest poll in use (poll.skin.php on the main page).
+    poll: (await latestPoll(ctx)).poll,
+    // 팝업레이어 (bbs/newwin.inc.php): those between their times, in order.
+    popups: (
+      await ctx.sql<{
+        id: string;
+        subject: string;
+        content: string;
+        device: string;
+        starts_at: string | null;
+        ends_at: string | null;
+        disable_hours: number;
+        left_px: number;
+        top_px: number;
+        width_px: number;
+        height_px: number;
+      }>`SELECT * FROM popups WHERE enabled != 0 ORDER BY id LIMIT 20`
+    ).rows
+      .filter((row) =>
+        scheduled({ startsAt: row.starts_at, endsAt: row.ends_at }, ctx.now),
+      )
+      .map((row) => ({
+        id: row.id,
+        subject: short(row.subject, 200),
+        content: short(row.content, 20000),
+        device: ["pc", "mobile"].includes(row.device) ? row.device : "both",
+        disableHours: row.disable_hours,
+        left: row.left_px,
+        top: row.top_px,
+        width: row.width_px,
+        height: row.height_px,
+      })),
     // 소속 icons (get_side_icon), by name, beside a writer's character.
     sideIcons: Object.fromEntries(
       (

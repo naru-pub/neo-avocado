@@ -6,6 +6,7 @@ import { loadContentBody, loadContentPages } from "./content.js";
 import { NAME_DEFAULTS } from "./names.js";
 import { renderContent } from "../content-renderer.js";
 import { showRecent, showSearch } from "./across.js";
+import { loadPoll, showPopups } from "./polls.js";
 
 const SITE_COLORS = {
   accent: "--avocado",
@@ -42,6 +43,9 @@ export async function loadSite() {
   renderMenus(site.menus);
   const entering = showEntrance(site, design);
   renderBanners(site.banners, entering);
+  // 팝업레이어 and 설문조사 on the main page; neither holds the page up.
+  showPopups(site.popups ?? []);
+  loadPoll(site.poll ?? null).catch(() => ($("pollBox").hidden = true));
   await showMainPage(site.main === true, site.banners);
   setMusic(site.bgm);
   state.alarmSound = site.alarmSound === true;
