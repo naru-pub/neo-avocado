@@ -1909,6 +1909,14 @@ models.grants = {
   report: "grants",
   readOnly: true,
 };
+// adm/data_backup.php and data_restore.php (기타관리): the original's
+// categories of rows, kept as a file and put back.
+models.backup = {
+  label: "데이터 백업·복원",
+  help: "원본의 데이터 백업지점 설정·데이터 복원하기처럼 디자인, 메뉴·메인 화면, 캐릭터, 능력치 정의, 경험치 내역, 화폐를 하나씩 파일로 내려받아 두고, 그 파일로 되돌립니다. 되돌리면 그 항목의 지금 행을 지우고 파일의 행을 넣습니다. 사이트 데이터베이스 전체는 나루 제어판의 데이터베이스 → 복원 지점에서 되돌립니다.",
+  report: "backup",
+  readOnly: true,
+};
 models.activity = {
   label: "활동량 관리",
   help: "게시판과 기간을 골라 회원별 로그·댓글 수와 최종 접속을 봅니다. 누적 경고와 경고 내용은 여기서 바로 고칩니다.",

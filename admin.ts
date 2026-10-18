@@ -454,7 +454,9 @@ async function load({ more = false } = {}) {
       ? visitsView()
       : model.report === "grants"
         ? grantsView()
-        : activityView();
+        : model.report === "backup"
+          ? backupView()
+          : activityView();
   }
   $("holdingsSearchLabel").hidden = !model.holdings;
   $("reviewTools").hidden = !model.review;
@@ -2339,6 +2341,136 @@ async function activityView() {
  * inventory_list.php): the form, one call for all its recipients, and the
  * last grants.
  */
+/**
+ * 데이터 백업 and 데이터 복원하기 (adm/data_backup.php, data_restore.php):
+ * each category kept as a JSON file, and put back from one.
+ */
+async function backupView() {
+  const report = $("adminReport");
+  const status = document.createElement("p");
+  status.setAttribute("role", "status");
+  const list = document.createElement("ul");
+  list.className = "backup-list";
+  const categories = await owner.query("admin/backup:categories");
+  for (const category of categories) {
+    const item = document.createElement("li");
+    const keep = document.createElement("button");
+    keep.type = "button";
+    keep.textContent = "백업 내려받기";
+    keep.onclick = () =>
+      run(async () => {
+        keep.disabled = true;
+        try {
+          const tables = [];
+          for (let part = 0; part < category.tables; part += 1) {
+            const rows = [];
+            let after = 0;
+            let table = "";
+            do {
+              status.textContent = `${category.label} 백업 중… (${rows.length}행)`;
+              const page = await owner.query("admin/backup:rows", {
+                category: category.id,
+                part,
+                after,
+              });
+              table = page.table;
+              rows.push(...page.rows);
+              after = page.next;
+            } while (after !== null);
+            tables.push({ table, rows });
+          }
+          const file = new Blob(
+            [
+              JSON.stringify({
+                format: "neo-avocado-backup",
+                category: category.id,
+                at: new Date().toISOString(),
+                tables,
+              }),
+            ],
+            { type: "application/json" },
+          );
+          const link = document.createElement("a");
+          link.href = URL.createObjectURL(file);
+          const stamp = new Date()
+            .toISOString()
+            .slice(0, 19)
+            .replace(/\D/g, "");
+          link.download = `data_backup_${category.id}_${stamp}.json`;
+          link.click();
+          URL.revokeObjectURL(link.href);
+          status.textContent = `${category.label}을(를) 백업했습니다.`;
+        } finally {
+          keep.disabled = false;
+        }
+      });
+    const choose = document.createElement("input");
+    choose.type = "file";
+    choose.accept = "application/json,.json";
+    choose.setAttribute("aria-label", `${category.label} 복원 파일`);
+    const restore = document.createElement("button");
+    restore.type = "button";
+    restore.textContent = "복원하기";
+    restore.onclick = () =>
+      run(async () => {
+        const file = choose.files?.[0];
+        if (!file) return (status.textContent = "복원할 백업 파일을 고르세요.");
+        let backup;
+        try {
+          backup = JSON.parse(await file.text());
+        } catch {
+          return (status.textContent = "백업 파일을 읽을 수 없습니다.");
+        }
+        if (
+          backup?.format !== "neo-avocado-backup" ||
+          backup.category !== category.id ||
+          !Array.isArray(backup.tables) ||
+          backup.tables.length !== category.tables
+        )
+          return (status.textContent = `${category.label}의 백업 파일이 아닙니다.`);
+        if (
+          !confirm(
+            `${category.label}의 지금 자료를 지우고 ${backup.at ?? "백업"} 시점으로 되돌릴까요? 되돌릴 수 없습니다.`,
+          )
+        )
+          return;
+        restore.disabled = true;
+        try {
+          for (const [part, { rows }] of backup.tables.entries()) {
+            const all = Array.isArray(rows) ? rows : [];
+            let done = 0;
+            // The first call empties the category's rows of the table.
+            do {
+              status.textContent = `${category.label} 복원 중… (${done}/${all.length}행)`;
+              await owner.mutate("admin/backup:restore", {
+                category: category.id,
+                part,
+                clear: done === 0,
+                rows: all.slice(done, done + 200),
+              });
+              done += 200;
+            } while (done < all.length);
+          }
+          status.textContent = `${category.label}을(를) 복원했습니다.`;
+        } finally {
+          restore.disabled = false;
+        }
+      });
+    item.append(
+      Object.assign(document.createElement("strong"), {
+        textContent: category.label,
+      }),
+      " ",
+      keep,
+      " ",
+      choose,
+      " ",
+      restore,
+    );
+    list.append(item);
+  }
+  report.replaceChildren(list, status);
+}
 async function grantsView() {
   const report = $("adminReport");
   const form = document.createElement("form");

@@ -54,6 +54,8 @@ export const menu = [
       "grants",
     ],
   },
+  // adm/admin.menu900.php's 기타관리.
+  { label: "기타관리", sections: ["backup"] },
 ];
 
 /**

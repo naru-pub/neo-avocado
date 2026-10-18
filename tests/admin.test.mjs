@@ -1697,6 +1697,81 @@ test("선택수정 saves a row's in-place fields and keeps the rest of the entry
   );
 });
 
+test("데이터 백업 keeps a category's rows and 데이터 복원하기 puts them back, those rows alone", async () => {
+  const site = await testSite();
+  profile(site, "m-1", "하나");
+  const hero = character(site, { name: "용사", exp: 7, stats: '{"hp":1}' });
+  site.run(
+    "INSERT INTO character_titles (character_id, title_id) VALUES (?, 'brave')",
+    Number(hero),
+  );
+  site.run(
+    "INSERT INTO history (owner, kind, at, exp_delta, exp, details) VALUES ('m-1', 'exp', 1, 7, 7, '{}'), ('m-1', 'daily', 2, NULL, NULL, '{}')",
+  );
+  const all = async (category) => {
+    const tables = [];
+    const parts = (await query(site, "backup:categories")).find(
+      (row) => row.id === category,
+    ).tables;
+    for (let part = 0; part < parts; part += 1) {
+      const rows = [];
+      let after = 0;
+      do {
+        const page = await query(site, "backup:rows", {
+          category,
+          part,
+          after,
+        });
+        rows.push(...page.rows);
+        after = page.next;
+      } while (after !== null);
+      tables.push(rows);
+    }
+    return tables;
+  };
+  const characters = await all("characters");
+  const exp = await all("exp");
+  assert.equal(characters[0][0].name, "용사");
+  assert.equal(exp[0].length, 1);
+  // Things change; the backups put them back.
+  site.run("UPDATE characters SET name = '바뀜', exp = 0");
+  site.run("DELETE FROM character_titles");
+  site.run("DELETE FROM history WHERE kind = 'exp'");
+  for (const [part, rows] of characters.entries())
+    await mutate(site, "backup:restore", {
+      category: "characters",
+      part,
+      clear: true,
+      rows,
+    });
+  await mutate(site, "backup:restore", {
+    category: "exp",
+    part: 0,
+    clear: true,
+    rows: exp[0],
+  });
+  assert.deepEqual(site.rows("SELECT name, exp, stats FROM characters"), [
+    { name: "용사", exp: 7, stats: '{"hp":1}' },
+  ]);
+  assert.equal(site.rows("SELECT * FROM character_titles").length, 1);
+  // The money history was not the exp category's: it stayed, and the exp
+  // entry is back at its own ID.
+  assert.deepEqual(
+    site.rows("SELECT kind FROM history ORDER BY id").map((row) => row.kind),
+    ["exp", "daily"],
+  );
+  assert.equal(
+    await refusal(
+      mutate(site, "backup:restore", {
+        category: "stats",
+        part: 0,
+        rows: [{ id: "hp", evil: 1 }],
+      }),
+    ),
+    "invalid_row",
+  );
+});
+
 test("the forms' pick lists come in one read", async () => {
   const site = await testSite();
   profile(site, "m-1", "하나");
