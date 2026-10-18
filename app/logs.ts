@@ -83,6 +83,11 @@ function routeList() {
  */
 export async function loadLogs({ page: number = 1 } = {}) {
   if (!state.member && !state.boards.length) return $("logs").replaceChildren();
+  // 전체목록보이기 hid the list under a post; with none open, it shows.
+  if ($("logFocusPanel").hidden) {
+    $("logs").hidden = false;
+    $("logPages").classList.remove("under-post");
+  }
   watchBoard();
   if (state.search) return showSearch();
   showCategories();
@@ -214,6 +219,12 @@ export async function openPost(id, { comment = null, log = null } = {}) {
   const item = await logItem(post);
   $("logFocus").replaceChildren(item);
   await showNeighbors(post);
+  // 전체목록보이기 (bo_use_list_view): off, the list is not under the post.
+  const listed =
+    kindOf(board) !== "text" ||
+    state.boards.find((row) => row.id === board)?.data.listView !== false;
+  $("logs").hidden = !listed;
+  $("logPages").classList.toggle("under-post", !listed);
   $("logFocusPanel").hidden = false;
   pageTitle(
     post.data.title ||
@@ -231,6 +242,8 @@ export async function openPost(id, { comment = null, log = null } = {}) {
   ).scrollIntoView?.();
 }
 $("closeFocus").onclick = () => {
+  $("logs").hidden = false;
+  $("logPages").classList.remove("under-post");
   $("logFocus").replaceChildren();
   $("logFocusPanel").hidden = true;
   route(logsPath(), { replace: true });

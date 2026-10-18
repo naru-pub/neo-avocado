@@ -296,6 +296,17 @@ export const models: Record<string, Model> = {
         default: true,
         newDefault: false,
       },
+      // bo_use_list_view (bbs/board.php:234): a post opened on its own has
+      // the list under it, or only 윗글·아래글. Off as the original makes a
+      // board; a board saved before keeps its list.
+      {
+        key: "listView",
+        label:
+          "전체목록보이기 사용 (일반 글 게시판, 글을 따로 열 때 아래에 목록도 보임)",
+        type: "checkbox",
+        default: true,
+        newDefault: false,
+      },
       // bo_upload_count and bo_image_width: a plain board's pictures.
       {
         key: "uploadCount",

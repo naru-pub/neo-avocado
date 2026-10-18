@@ -535,6 +535,7 @@ function fakeDatabase(rows = {}) {
             };
           },
           "community/posts:latest": () => ({ id: null }),
+          "community/posts:neighbors": () => ({ previous: null, next: null }),
           "community/inbox:status": () => ({ messages: 0, calls: false }),
         };
       };
@@ -3056,4 +3057,31 @@ test("a visitor arriving at an open site's home clicks through the entrance firs
   assert.equal($("entrance").open, false);
   assert.equal($("intro").open, true);
   assert.equal(window.sessionStorage.getItem("neo-avocado-entered"), "1");
+});
+
+test("a plain board without 전체목록보이기 shows a post opened alone without the list under it", async () => {
+  const database = fakeDatabase({
+    [PROFILES]: [me],
+    neo_avocado_boards: [
+      {
+        id: "default",
+        data: { ...DEFAULT_BOARD.data, kind: "text", listView: false },
+      },
+    ],
+    [LOGS]: [
+      { id: "a", data: { title: "첫 글", text: "본문", number: 1 } },
+      { id: "c", data: { title: "링크", text: "@1 보세요", number: 2 } },
+    ],
+  });
+  const { $, settle } = await page(database);
+  await settle();
+  const linking = [...$("logs").querySelectorAll(".log")].find((item) =>
+    item.querySelector(".log-link"),
+  );
+  linking.querySelector(".log-link").onclick({ preventDefault() {} });
+  for (let n = 0; n < 4; n += 1) await settle();
+  assert.equal($("logFocusPanel").hidden, false);
+  assert.equal($("logs").hidden, true);
+  $("closeFocus").onclick();
+  assert.equal($("logs").hidden, false);
 });

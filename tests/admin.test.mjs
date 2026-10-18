@@ -232,6 +232,8 @@ test("boards and groups are saved as their forms check them, and members see the
       sortField: "",
       newHours: 24,
       listContent: false,
+      // 전체목록보이기: off, as the original makes a board.
+      listView: false,
       uploadCount: 1,
       imageWidth: 600,
       editLock: 1,

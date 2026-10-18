@@ -1792,3 +1792,7 @@ dialog.entrance::backdrop {
   color: var(--muted);
   font-size: 0.9em;
 }
+/* 전체목록보이기 off: no list, so no page numbers, under a post shown alone. */
+#logPages.under-post {
+  display: none;
+}
