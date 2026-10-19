@@ -1,6 +1,6 @@
 // The owner's admin page: its addresses (#/<section>/<entry>), the menu,
 // signing in, and what opens first.
-import { models, menu, sectionLabel } from "./forms.js";
+import { models, menu, sectionLabel, shownSections } from "./forms.js";
 import { config } from "../shared/config.js";
 import {
   $,
@@ -60,7 +60,9 @@ export async function openAddress() {
   const [name, entry, ...filters] = addressParts();
   setRouting(true);
   try {
-    if (name && Object.hasOwn(models, name)) {
+    // The bare address (the header's title) is 관리자메인.
+    if (!name) setSection("main");
+    else if (Object.hasOwn(models, name)) {
       // A search is the section's it was made in.
       if (name !== section) $<HTMLInputElement>("recordText").value = "";
       setSection(name);
@@ -94,8 +96,7 @@ addEventListener("hashchange", () => {
 });
 /**
  * The menu (adm/admin.head.php's side menu): the original's groups, the
- * current one open, the current section marked. As in the original, 소속 and
- * 종족 are left out while untitled, unless one is open.
+ * current one open, the current section marked.
  */
 export function renderNav() {
   const groups = menu.map((group) => {
@@ -104,13 +105,7 @@ export function renderNav() {
     const summary = document.createElement("summary");
     summary.textContent = group.label;
     const list = document.createElement("ul");
-    for (const name of group.sections) {
-      if (
-        name !== section &&
-        ((name === "sides" && !itemNames.sideTitle) ||
-          (name === "classes" && !itemNames.classTitle))
-      )
-        continue;
+    for (const name of shownSections(group, itemNames, section)) {
       const link = document.createElement("a");
       link.href = `#/${name}`;
       link.textContent = sectionLabel(name, itemNames);

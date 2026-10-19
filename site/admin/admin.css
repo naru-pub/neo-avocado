@@ -522,7 +522,8 @@ body.admin-page:has(#adminWorkspace:not([hidden])) #adminStatus {
   font-size: 18px;
 }
 #adminForm h3,
-#characterForm h3 {
+#characterForm h3,
+#adminReport h3 {
   margin: 30px 0 15px;
   padding-left: 10px;
   border-left: 5px solid var(--mint);
@@ -589,6 +590,77 @@ body.admin-page:has(#adminWorkspace:not([hidden])) #adminStatus {
   margin: 20px 5px 0 0;
 }
 
+/* 관리자메인 (adm/index.php): the system pages' table, then .index-gnb's
+   groups, each a navy name beside its sections. */
+#adminReport h3:first-child {
+  margin-top: 0;
+}
+.admin-page .system-pages {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  margin: 0;
+  border-top: 2px solid var(--admin-rule);
+  font-size: 13px;
+}
+.admin-page .system-pages > * {
+  margin: 0;
+  padding: 10px;
+  border-bottom: 1px solid var(--admin-line);
+  overflow-wrap: anywhere;
+}
+.admin-page .system-pages dt {
+  background: var(--admin-bar);
+  font-weight: 600;
+}
+.admin-page .main-menu,
+.admin-page .main-menu ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.admin-page .main-menu {
+  display: grid;
+  gap: 10px;
+  font-size: 13px;
+}
+.admin-page .main-menu > li {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr);
+  gap: 15px;
+  padding: 10px;
+  border: 1px solid var(--admin-line);
+  border-radius: 10px;
+}
+.admin-page .main-menu > li > a {
+  display: grid;
+  place-items: center;
+  padding: 8px;
+  border-radius: 10px;
+  background: var(--admin-head);
+  color: #fff;
+  font-size: 14px;
+  text-decoration: none;
+}
+.admin-page .main-menu ul {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.admin-page .main-menu ul li + li {
+  border-left: 1px solid var(--admin-line);
+}
+.admin-page .main-menu ul a {
+  display: block;
+  padding: 4px 10px;
+  color: inherit;
+  text-decoration: none;
+}
+.admin-page .main-menu ul a:hover,
+.admin-page .main-menu ul a:focus {
+  color: var(--rose);
+  font-weight: 800;
+}
+
 /* The reports (visit_list, action_list…): tbl_head01's table. */
 .admin-page table.report {
   width: 100%;
@@ -614,6 +686,10 @@ body.admin-page:has(#adminWorkspace:not([hidden])) #adminStatus {
 
 /* A narrow screen: the menu above the work. */
 @media (max-width: 900px) {
+  .admin-page .main-menu > li {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
   .admin-header {
     position: absolute;
   }

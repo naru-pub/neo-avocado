@@ -454,11 +454,12 @@ test("profile field definitions validate codes and options; explore misses store
   );
 });
 
-test("the admin menu has every section once, in the original's groups and names", async () => {
+test("the admin menu has every section but 관리자메인 once, in the original's groups and names", async () => {
   const { menu, sectionLabel } = await import("../dist/admin/forms.js");
   const { NAME_DEFAULTS } = await import("../dist/app/names.js");
   const listed = menu.flatMap((group) => group.sections);
-  assert.deepEqual([...listed].sort(), Object.keys(models).sort());
+  // 관리자메인 is the header's, as adm/index.php is in no group.
+  assert.deepEqual([...listed, "main"].sort(), Object.keys(models).sort());
   assert.equal(new Set(listed).size, listed.length);
   const names = { ...NAME_DEFAULTS, moneyName: "골드", rankName: "레벨" };
   assert.equal(sectionLabel("wallets", names), "골드 관리");

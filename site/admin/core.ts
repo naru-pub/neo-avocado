@@ -18,7 +18,7 @@ export const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
 export let grantTitleId;
 export let naru: NaruClient,
   owner,
-  section = "couples",
+  section = "main",
   cursor = null,
   selected = null;
 // 기타 항목명 설정, from 커뮤니티 설정: the menu and labels use them.

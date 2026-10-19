@@ -18,7 +18,7 @@ import {
   setGrantTitleId,
 } from "./core.js";
 import { openForm } from "./editor.js";
-import { activityView, visitsView } from "./views.js";
+import { activityView, mainView, visitsView } from "./views.js";
 import { backupView, grantsView } from "./tools.js";
 import { review, reviewFilters, reviewRow } from "./characters.js";
 import { boardRow, groupMembers } from "./boards.js";
@@ -185,13 +185,15 @@ export async function load({ more = false } = {}) {
     $("logSearch").hidden = true;
     $("recordSearch").hidden = true;
     $("quickTools").hidden = true;
-    return model.report === "visits"
-      ? visitsView()
-      : model.report === "grants"
-        ? grantsView()
-        : model.report === "backup"
-          ? backupView()
-          : activityView();
+    return model.report === "main"
+      ? mainView()
+      : model.report === "visits"
+        ? visitsView()
+        : model.report === "grants"
+          ? grantsView()
+          : model.report === "backup"
+            ? backupView()
+            : activityView();
   }
   $("holdingsSearchLabel").hidden = !model.holdings;
   $("reviewTools").hidden = !model.review;

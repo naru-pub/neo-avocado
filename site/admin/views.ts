@@ -1,9 +1,12 @@
-// The owner's reports (접속자 집계, 활동량), drawn as tables with their filters.
+// 관리자메인 and the owner's reports (접속자 집계, 활동량), drawn as tables
+// with their filters.
 import { koreanDay, VISIT_BREAKDOWNS } from "./reports.js";
+import { menu, sectionLabel, shownSections } from "./forms.js";
 import {
   $,
   CALLS,
   cursor,
+  itemNames,
   loadReferences,
   owner,
   reportFilters,
@@ -11,6 +14,62 @@ import {
   setCursor,
 } from "./core.js";
 import { adminRoute } from "./main.js";
+
+/* ------------------------------------------------------- 관리자메인 --- */
+
+// adm/index.php's 시스템 페이지: the community's own pages, by the menu's
+// default names (app/site.ts DEFAULT_MENUS).
+const SYSTEM_PAGES = [
+  ["멤버목록", "members"],
+  ["신청자목록", "applicants"],
+  ["커플목록", "couples"],
+  ["상점", "shop"],
+  ["마이페이지", "mypage"],
+  ["현재접속자", "online"],
+];
+/** adm/index.php: the system pages, then the menu's groups, every section. */
+export function mainView() {
+  const pagesHeading = document.createElement("h3");
+  pagesHeading.textContent = "시스템 페이지";
+  const pages = document.createElement("dl");
+  pages.className = "system-pages";
+  for (const [label, path] of SYSTEM_PAGES) {
+    const term = document.createElement("dt");
+    term.textContent = label;
+    const link = document.createElement("a");
+    link.href = new URL(`../${path}`, location.href).href;
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = link.href;
+    const value = document.createElement("dd");
+    value.append(link);
+    pages.append(term, value);
+  }
+  const menuHeading = document.createElement("h3");
+  menuHeading.textContent = "관리자 메뉴";
+  const groups = document.createElement("ul");
+  groups.className = "main-menu";
+  for (const group of menu) {
+    const sections = shownSections(group, itemNames);
+    const item = document.createElement("li");
+    // The group's name opens its first section, as the original's does.
+    const head = document.createElement("a");
+    head.href = `#/${sections[0]}`;
+    head.textContent = group.label;
+    const list = document.createElement("ul");
+    for (const name of sections) {
+      const link = document.createElement("a");
+      link.href = `#/${name}`;
+      link.textContent = sectionLabel(name, itemNames);
+      const entry = document.createElement("li");
+      entry.append(link);
+      list.append(entry);
+    }
+    item.append(head, list);
+    groups.append(item);
+  }
+  $("adminReport").replaceChildren(pagesHeading, pages, menuHeading, groups);
+}
 
 /* ---------------------------------------------------------- reports --- */
 

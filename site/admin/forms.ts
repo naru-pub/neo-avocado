@@ -59,6 +59,21 @@ export const menu = [
 ];
 
 /**
+ * A group's sections as the menu lists them: as in the original, 소속 and
+ * 종족 are left out while untitled, unless one is open.
+ */
+export function shownSections(group, names, current = null) {
+  return group.sections.filter(
+    (name) =>
+      name === current ||
+      !(
+        (name === "sides" && !names.sideTitle) ||
+        (name === "classes" && !names.classTitle)
+      ),
+  );
+}
+
+/**
  * A section's name in the owner's names (기타 항목명 설정), as the original's
  * menu says "랭킹 설정 관리", "화폐 관리", "소속 관리".
  */

@@ -175,6 +175,14 @@ function textFields(name: keyof typeof TEXTS): ModelField[] {
 }
 
 export const configModels: Record<string, Model> = {
+  // adm/index.php (관리자메인): where the admin opens, the header's title
+  // leads back to it, and it sits in no group of the menu.
+  main: {
+    label: "관리자메인",
+    help: "커뮤니티의 시스템 페이지와 관리자 메뉴 전체입니다. 원본의 관리자메인과 같습니다.",
+    report: "main",
+    readOnly: true,
+  },
   // adm/community_form.php (커뮤니티 설정): one page, in its sections.
   settings: {
     label: "커뮤니티 설정",
