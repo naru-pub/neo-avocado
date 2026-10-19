@@ -6,6 +6,7 @@ import {
   characterRow,
   characterState,
   rankAt,
+  shownCharacter,
   viewable,
 } from "../../modules/characters.js";
 import { historyPage, walletOf } from "../../modules/members.js";
@@ -39,7 +40,7 @@ export async function characterSheet(
     size > 50
   )
     invalid(ctx);
-  const row = await characterRow(ctx, character);
+  const row = shownCharacter(ctx, await characterRow(ctx, character));
   if (!row)
     ctx.fail("NOT_FOUND", "캐릭터를 확인해 주세요.", {
       reason: "no_character",
@@ -78,7 +79,7 @@ export async function characterStatus(
   { character }: { character?: string } = {},
 ) {
   await viewable(ctx);
-  if (!(await characterRow(ctx, character)))
+  if (!shownCharacter(ctx, await characterRow(ctx, character)))
     ctx.fail("INVALID_REQUEST", "캐릭터를 확인해 주세요.", {
       reason: "no_character",
     });

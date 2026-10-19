@@ -13,6 +13,7 @@ import {
   presentCharacter,
   rankAt,
   sheetOf,
+  shownCharacter,
   viewable,
   visibleFields,
 } from "../../modules/characters.js";
@@ -37,9 +38,7 @@ const LIVE = "state != 'deleted'";
 /** The most a list answers at once (a statement's rows). */
 const MOST = 1000;
 
-/** A character as a reader may see it: a deleted one is the site owner's alone. */
-const shownRow = (ctx: QueryCtx, row: CharacterRow | null) =>
-  row && (row.state !== "deleted" || ctx.owner) ? row : null;
+const shownRow = shownCharacter;
 
 /** The nicknames of the members owning `rows`, by member ID. */
 async function nicksOf(ctx: QueryCtx, rows: CharacterRow[]) {

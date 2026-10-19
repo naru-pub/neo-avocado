@@ -1285,6 +1285,16 @@ test("선택삭제 puts a character away, out of every list and use, until the o
     (await site.query("characters/sheet:sheet", { id: hero }, OWNER)).document,
     null,
   );
+  // Nor its record, history or link preview, but for the owner.
+  for (const name of ["characterSheet", "characterStatus"]) {
+    const call = (who) =>
+      site.query(`characters/progression:${name}`, { character: hero }, who);
+    assert.ok(["no_character", "NOT_FOUND"].includes(await refusal(call(M2))));
+    assert.ok(["no_character", "NOT_FOUND"].includes(await refusal(call(M1))));
+    assert.equal(await refusal(call(OWNER)), null);
+  }
+  const preview = await site.route(`/character/${hero}`);
+  assert.doesNotMatch(JSON.stringify(preview), /Hero/);
   // Its member neither speaks as it nor changes or removes it.
   site.run(
     "INSERT INTO boards (id, name, kind) VALUES ('default', '로그', 'text')",

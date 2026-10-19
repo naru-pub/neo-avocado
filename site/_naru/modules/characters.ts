@@ -139,6 +139,13 @@ export async function characterRow(
   ]);
 }
 
+/** A character as a reader may see it: a deleted one is the site owner's alone. */
+export const shownCharacter = (
+  ctx: { readonly owner?: boolean },
+  row: CharacterRow | null,
+): CharacterRow | null =>
+  row && (row.state !== DELETED || ctx.owner) ? row : null;
+
 /** The custom values a row keeps, by field code. */
 export const fieldsOf = (row: CharacterRow): Record<string, string> =>
   parsed(row.fields, {});

@@ -22,7 +22,7 @@ import {
   rowKey,
 } from "./boards.js";
 import type { Board, PostRow } from "./boards.js";
-import { characterKey, characterRow } from "./characters.js";
+import { characterKey, characterRow, shownCharacter } from "./characters.js";
 import { MAIN_PAGE, readablePage } from "./content.js";
 import type { QueryCtx } from "./naru-types.js";
 import { placeOf, whole, type Place } from "./places.js";
@@ -316,7 +316,8 @@ export const board: Page = async (
 export const character: Page = async (ctx, { id }, access) => {
   if (characterKey(id) === null) return false;
   if (access.closed) return null;
-  const row = await characterRow(ctx, id);
+  // A deleted character is the site owner's alone.
+  const row = shownCharacter(ctx, await characterRow(ctx, id));
   if (!row) return null;
   return {
     title: row.name,
