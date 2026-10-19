@@ -6,7 +6,8 @@ import type { Access } from "./access.js";
 import { accessOf, boardOf, commentRow, isStaff, postRow } from "./boards.js";
 import type { CommentRow, PostRow } from "./boards.js";
 import type { GuestCredentials, MutationCtx } from "./naru-types.js";
-import { invalid } from "./access.js";
+import { invalid, reservedNick } from "./access.js";
+import { nickTaken, nickValid } from "./members.js";
 
 /** A guest writer: the name they post under and their password's hash. */
 export interface GuestWriter {
@@ -95,6 +96,21 @@ export async function startWrite<T extends "post" | "comment">(
       const name = given?.name;
       if (typeof name !== "string" || !name.trim() || name.length > 20)
         invalid(ctx);
+      // A guest's name is held to a nickname's rules, and is neither a
+      // reserved word nor a member's: it heads their calls' notices.
+      if (!nickValid(name.trim()))
+        ctx.fail(
+          "INVALID_REQUEST",
+          "이름은 공백없이 한글, 영문, 숫자만 입력 가능합니다.",
+          { reason: "invalid_nick" },
+        );
+      if (await reservedNick(ctx, name.trim()))
+        ctx.fail(
+          "INVALID_REQUEST",
+          "이미 예약된 단어로 사용할 수 없는 이름입니다.",
+          { reason: "reserved_nick" },
+        );
+      await nickTaken(ctx, name.trim(), "");
       guest = { name: name.trim(), hash: await ctx.passwords.hash(password) };
     }
   } else if (

@@ -1612,6 +1612,34 @@ test("a settlement is settled by a moderator, granting experience and money, the
   assert.equal(balanceOf(site, "m-2"), 500);
 });
 
+test("a guest names themselves as a member would, not as one, and calls only within the site", async () => {
+  const site = await boardSite();
+  profile(site, "m-1", "하나");
+  board(site, "free", PUBLIC_BOARD);
+  const guestWrite = (name, text = "안녕") =>
+    write(
+      site,
+      {
+        data: { board: "free", text, image: null },
+        guest: { name, password: "1234" },
+      },
+      VISITOR,
+    );
+  for (const [name, reason] of [
+    ["관​리자", "invalid_nick"],
+    ["аdmin", "invalid_nick"],
+    ["길 손", "invalid_nick"],
+    ["운영자", "reserved_nick"],
+    ["하나", "nick_taken"],
+  ])
+    assert.equal(await refusal(guestWrite(name)), reason, name);
+  await guestWrite("길손", "[[하나]] 보세요");
+  const [call] = callsTo(site, "m-1");
+  assert.deepEqual([call.nick, call.kind], ["길손 (손님)", "call"]);
+  // The call waits in the site; nothing reaches the Naru app.
+  assert.deepEqual(site.notifications, []);
+});
+
 test("a board search reaches every post at once and pages what it finds", async () => {
   const site = await boardSite();
   board(site, "free", {

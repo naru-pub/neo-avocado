@@ -217,12 +217,14 @@ export async function deliverCalls(
       : (me?.data.nick ?? (guest ? `${guest} (손님)` : ""));
     await ctx.sql`INSERT INTO calls (recipient, sender, nick, speaker, kind, board, post_id, comment_id, preview, at)
       VALUES (${to}, ${anonymous ? null : from}, ${nick}, ${anonymous ? null : (speaker?.name ?? null)}, ${kind}, ${post.board}, ${post.id}, ${comment}, ${shownPreview}, ${ctx.now})`;
-    // The arrival popup's words (app/live.ts), in the Naru app.
-    await push(ctx, [to], {
-      title: `${nick || "누군가"}님이 ${kind === "comment" ? "내 글에 댓글을 남겼습니다" : "호출하셨습니다"}`,
-      body: shownPreview,
-      path: `/post/${encodeURIComponent(post.id)}${comment ? `/comment/${encodeURIComponent(comment)}` : ""}`,
-    });
+    // The arrival popup's words (app/live.ts), in the Naru app; a guest,
+    // whom nothing limits, calls only within the site.
+    if (!guest)
+      await push(ctx, [to], {
+        title: `${nick || "누군가"}님이 ${kind === "comment" ? "내 글에 댓글을 남겼습니다" : "호출하셨습니다"}`,
+        body: shownPreview,
+        path: `/post/${encodeURIComponent(post.id)}${comment ? `/comment/${encodeURIComponent(comment)}` : ""}`,
+      });
   };
   for (const recipient of recipients) await send(recipient.id, "call");
   const owner = post.owner;
