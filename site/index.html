@@ -478,6 +478,9 @@
         <table id="newList" class="ledger">
           <thead>
             <tr>
+              <th class="staff-pick" hidden>
+                <input id="newAll" type="checkbox" aria-label="전체 선택" />
+              </th>
               <th>그룹</th>
               <th>게시판</th>
               <th>제목</th>
@@ -487,6 +490,10 @@
           </thead>
           <tbody></tbody>
         </table>
+        <!-- new.skin.php's 선택삭제 (bbs/new_delete.php), for 운영자. -->
+        <p class="bulk-tools staff-pick" hidden>
+          <button id="newDelete" type="button">선택삭제</button>
+        </p>
         <nav
           id="newPages"
           class="pages"
@@ -671,6 +678,14 @@
             >
           </div>
           <button type="submit">올리기</button>
+          <!-- write.skin.php's #autosave_wrapper: a member's drafts. -->
+          <span class="member-only drafts">
+            <button id="logDrafts" type="button" aria-expanded="false">
+              임시 저장된 글 (<span id="logDraftCount">0</span>)
+            </button>
+            <span id="logDraftStatus" role="status"></span>
+          </span>
+          <ul id="logDraftList" class="draft-list" hidden></ul>
         </form>
         <form id="boardSearch" class="board-search" role="search">
           <!-- list.skin.php's three boxes: 검색, 해시태그, 로그번호. -->
@@ -679,6 +694,8 @@
             <option value="tag">해시태그</option>
             <option value="number">로그번호</option>
           </select>
+          <!-- list.skin.php's 검색대상 (sfl), as the board's skin offers it. -->
+          <select id="boardSearchField" aria-label="검색대상"></select>
           <input
             id="searchText"
             type="search"
@@ -703,6 +720,14 @@
             hidden
           ></nav>
         </div>
+        <!-- list.skin.php's 선택삭제, 선택복사 and 선택이동 ($is_checkbox),
+             for the board's staff. -->
+        <p id="logBulk" class="bulk-tools" hidden>
+          <button id="bulkAll" type="button">전체선택</button>
+          <button id="bulkDelete" type="button">선택삭제</button>
+          <button id="bulkCopy" type="button">선택복사</button>
+          <button id="bulkMove" type="button">선택이동</button>
+        </p>
         <ol id="logs" class="logs"></ol>
         <button id="searchMore" type="button" hidden>
           이전 글에서 더 찾기
@@ -868,6 +893,9 @@
     <template id="logTemplate">
       <li class="log card">
         <div class="log-picture">
+          <label class="log-pick" hidden
+            ><input type="checkbox" aria-label="이 글 선택"
+          /></label>
           <p class="log-number"></p>
           <h3 class="log-title"></h3>
           <img class="log-image" alt="" />
@@ -1002,6 +1030,14 @@
         </div>
       </li>
     </template>
+
+    <!-- bbs/view_image.php: a post's picture at its own size. -->
+    <dialog id="imageViewer" class="image-viewer" aria-label="이미지 크게 보기">
+      <form method="dialog">
+        <button type="submit" class="image-viewer-close">닫기</button>
+      </form>
+      <img id="imageViewerPicture" alt="" />
+    </dialog>
 
     <dialog id="editor">
       <form id="editorForm">

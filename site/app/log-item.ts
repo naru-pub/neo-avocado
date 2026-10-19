@@ -195,6 +195,57 @@ export function forgetInventory() {
   $("logMaterials").replaceChildren();
   delete $("logMaterials").dataset.loaded;
 }
+/**
+ * bbs/move.php: moves or copies the posts `ids` (with their 답변글) to the
+ * boards checked, `from` being the board they are on.
+ */
+export function transferDialog(
+  ids: string[],
+  from: string,
+  how: "move" | "copy" = "move",
+) {
+  edit(
+    "다른 게시판으로 이동·복사",
+    [
+      {
+        name: "how",
+        label: "방식",
+        value: how,
+        options: [
+          ["move", "이동"],
+          ["copy", "복사 (댓글과 함께)"],
+        ],
+      },
+      // bbs/move.php's boards, checked one or more: a 게시판·그룹 관리자
+      // moves to boards they administer. 답변글 go with their post.
+      ...state.boards
+        .filter((row) => boardStaff(row.id))
+        .map((row) => ({
+          name: `board:${row.id}`,
+          label: `${row.data.name}${row.id === from ? " (현재)" : ""}`,
+          type: "checkbox",
+        })),
+    ],
+    async ({ how, ...checked }) => {
+      const boards = Object.entries(checked)
+        .filter(([, on]) => on)
+        .map(([name]) => name.slice("board:".length));
+      if (!boards.length)
+        throw Object.assign(new Error("게시판을 하나 이상 골라 주세요."), {
+          details: { reason: "no_board" },
+        });
+      await mutate(
+        how === "copy"
+          ? "community/boards:copyPost"
+          : "community/boards:movePosts",
+        { ids, boards },
+      );
+      say(how === "copy" ? "복사했습니다." : "이동했습니다.");
+      await loadLogs();
+    },
+  );
+}
+
 export async function logItem(log) {
   // A post's card, with what opens one of its comments.
   const item = $<HTMLTemplateElement>(
@@ -246,47 +297,11 @@ export async function logItem(log) {
     });
   // bbs/move.php's 이동 and 복사 (sw=move, copy).
   move.textContent = "이동·복사";
-  move.onclick = () =>
-    edit(
-      "다른 게시판으로 이동·복사",
-      [
-        {
-          name: "how",
-          label: "방식",
-          value: "move",
-          options: [
-            ["move", "이동"],
-            ["copy", "복사 (댓글과 함께)"],
-          ],
-        },
-        // bbs/move.php's boards, checked one or more: a 게시판·그룹 관리자
-        // moves to boards they administer. 답변글 go with their post.
-        ...state.boards
-          .filter((row) => boardStaff(row.id))
-          .map((row) => ({
-            name: `board:${row.id}`,
-            label: `${row.data.name}${row.id === (log.data.board ?? "default") ? " (현재)" : ""}`,
-            type: "checkbox",
-          })),
-      ],
-      async ({ how, ...checked }) => {
-        const boards = Object.entries(checked)
-          .filter(([, on]) => on)
-          .map(([name]) => name.slice("board:".length));
-        if (!boards.length)
-          throw Object.assign(new Error("게시판을 하나 이상 골라 주세요."), {
-            details: { reason: "no_board" },
-          });
-        await mutate(
-          how === "copy"
-            ? "community/boards:copyPost"
-            : "community/boards:movePosts",
-          { id: log.id, boards },
-        );
-        say(how === "copy" ? "복사했습니다." : "이동했습니다.");
-        await loadLogs();
-      },
-    );
+  move.onclick = () => transferDialog([log.id], log.data.board ?? "default");
+  // list.skin.php's chk_wr_id[], for 선택삭제·복사·이동.
+  const pick = item.querySelector<HTMLElement>(".log-pick");
+  pick.hidden = move.hidden;
+  pick.querySelector("input").value = log.id;
   const image = item.querySelector<HTMLImageElement>(".log-image");
   if (log.data.image && !log.data.locked) image.src = log.data.image;
   else image.remove();
@@ -304,6 +319,16 @@ export async function logItem(log) {
           }),
         );
   files.hidden = !files.children.length;
+  // view.skin.php: a picture opens at its own size (bbs/view_image.php).
+  for (const picture of item.querySelectorAll<HTMLImageElement>(
+    ".log-image, .log-file",
+  )) {
+    picture.classList.add("zoomable");
+    picture.onclick = () => {
+      $<HTMLImageElement>("imageViewerPicture").src = picture.src;
+      $<HTMLDialogElement>("imageViewer").showModal?.();
+    };
+  }
   if (kindOf(log.data.board) === "text") {
     const width = imageWidthOf(log.data.board);
     for (const picture of item.querySelectorAll<HTMLImageElement>(

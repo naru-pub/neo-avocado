@@ -3978,3 +3978,77 @@ test("이동 and 복사 take a post's 답변글 along, to every board checked", 
     "access_denied",
   );
 });
+
+test("a board search looks where 검색대상 says, in the 분류 being read", async () => {
+  const site = await boardSite();
+  board(site, "free", { ...PUBLIC_BOARD, categories: ["잡담", "질문"] });
+  profile(site, "m-1", "하나");
+  profile(site, "m-2", "둘");
+  const said = post(site, {
+    board: "free",
+    owner: "m-1",
+    title: "봄 소식",
+    body: "꽃이 핀다",
+    category: "잡담",
+  });
+  const asked = post(site, {
+    board: "free",
+    owner: "m-2",
+    title: "질문",
+    body: "봄은 언제",
+    category: "질문",
+  });
+  comment(site, { post_id: Number(asked), owner: "m-1", body: "곧 와요" });
+  const found = async (args) =>
+    (await search(site, { board: "free", ...args })).documents.map(
+      (row) => row.id,
+    );
+  assert.deepEqual(await found({ text: "봄", field: "title" }), [said]);
+  assert.deepEqual(await found({ text: "봄", field: "body" }), [asked]);
+  assert.deepEqual(await found({ text: "봄", field: "titleBody" }), [
+    asked,
+    said,
+  ]);
+  assert.deepEqual(await found({ text: "하나", field: "writer" }), [said]);
+  assert.deepEqual(await found({ text: "하나", field: "commentWriter" }), [
+    asked,
+  ]);
+  assert.deepEqual(await found({ text: "곧 와요", field: "comment" }), [asked]);
+  assert.deepEqual(await found({ text: "봄", category: "질문" }), [asked]);
+  assert.equal(
+    await refusal(search(site, { board: "free", text: "봄", field: "id" })),
+    "invalid_input",
+  );
+});
+
+test("임시 저장: a member's drafts, saved again in place, theirs alone, twenty at most", async () => {
+  const site = await boardSite();
+  profile(site, "m-1", "하나");
+  profile(site, "m-2", "둘");
+  const save = (args, who = M1) =>
+    site.mutate("community/drafts:save", args, who);
+  const list = async (who = M1) =>
+    (await site.query("community/drafts:list", null, who)).drafts;
+  const { id } = await save({ title: "초안", text: "처음" });
+  assert.equal((await save({ id, title: "초안", text: "고침" })).id, id);
+  assert.deepEqual(
+    (await list()).map((draft) => [draft.title, draft.text]),
+    [["초안", "고침"]],
+  );
+  // Another's draft is not theirs to change or see.
+  assert.notEqual((await save({ id, text: "남의" }, M2)).id, id);
+  assert.equal((await list()).length, 1);
+  assert.equal(await refusal(save({ title: "", text: " " })), "invalid_input");
+  for (let n = 0; n < 25; n += 1) await save({ text: `초안 ${n}` });
+  assert.equal((await list()).length, 20);
+  await site.mutate(
+    "community/drafts:remove",
+    { id: (await list())[0].id },
+    M1,
+  );
+  assert.equal((await list()).length, 19);
+  assert.equal(
+    await refusal(site.query("community/drafts:list", null, VISITOR)),
+    "sign_in",
+  );
+});

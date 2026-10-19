@@ -12,12 +12,18 @@ import {
   say,
   showTab,
   boardStaff,
+  mutate,
 } from "./core.js";
 import { watchBoard, showNewPost } from "./live.js";
 import { sanitizedFragment } from "../shared/content-renderer.js";
-import { countView, logItem, showNeighbors } from "./log-item.js";
+import {
+  countView,
+  logItem,
+  showNeighbors,
+  transferDialog,
+} from "./log-item.js";
 // The writing form, which wires its own controls as it loads.
-import "./log-form.js";
+import { listDrafts } from "./log-form.js";
 
 /** A board's own number setting, else the original's default. */
 export function boardSetting(id, key, fallback) {
@@ -104,6 +110,7 @@ export async function loadLogs({ page: number = 1 } = {}) {
     : state.upTo
       ? `${state.upTo}번 로그부터`
       : "";
+  $("logBulk").hidden = !boardStaff() || !page.documents.length;
   for (const log of page.documents) {
     // Questions show whole, as the qna skin lists them.
     const item = await logItem(kindOf() === "qna" ? log : previewOf(log));
@@ -274,6 +281,7 @@ $("clearTag").onclick = () =>
 export let searchFrom = null;
 export let searchFound = 0;
 export async function showSearch({ more = false } = {}) {
+  $("logBulk").hidden = true;
   if (!more) {
     searchFrom = null;
     searchFound = 0;
@@ -283,6 +291,8 @@ export async function showSearch({ more = false } = {}) {
     board: state.board,
     text: state.search,
     after: searchFrom,
+    field: $<HTMLSelectElement>("boardSearchField").value || "all",
+    ...(state.category ? { category: state.category } : {}),
   });
   await preloadNicks(page.documents);
   for (const log of page.documents)
@@ -297,6 +307,44 @@ export async function showSearch({ more = false } = {}) {
   routeList();
 }
 $("searchMore").onclick = () => run(() => showSearch({ more: true }));
+/**
+ * 검색대상 as the board's skin lists it: the mmb skin's 캐릭터, 코멘트, 오너
+ * and 오너(코) (mmb/list.skin.php:200-204); the others' 제목, 내용,
+ * 제목+내용, 글쓴이 and 글쓴이(코) (basic/list.skin.php:134-143).
+ */
+function fillSearchFields(kind) {
+  const select = $<HTMLSelectElement>("boardSearchField");
+  const fields =
+    kind === "image"
+      ? [
+          ["all", "전체"],
+          ["character", "캐릭터"],
+          ["comment", "코멘트"],
+          ["owner", "오너"],
+          ["commentWriter", "오너(코)"],
+        ]
+      : [
+          ["all", "전체"],
+          ["title", "제목"],
+          ["body", "내용"],
+          ["titleBody", "제목+내용"],
+          ["writer", "글쓴이"],
+          ["commentWriter", "글쓴이(코)"],
+        ];
+  const chosen = select.value;
+  select.replaceChildren(
+    ...fields.map(([value, text]) =>
+      Object.assign(document.createElement("option"), {
+        value,
+        textContent: text,
+      }),
+    ),
+  );
+  if (fields.some(([value]) => value === chosen)) select.value = chosen;
+}
+$("searchKind").onchange = () =>
+  ($("boardSearchField").hidden =
+    $<HTMLSelectElement>("searchKind").value !== "text");
 $("boardSearch").onsubmit = (event) => {
   event.preventDefault?.();
   run(async () => {
@@ -313,9 +361,9 @@ $("boardSearch").onsubmit = (event) => {
       state.upTo = number;
       return loadLogs();
     }
+    // A search stays in the 분류 being read (sca).
     state.tag = null;
     state.upTo = null;
-    state.category = null;
     state.search = text || null;
     await loadLogs();
   });
@@ -374,6 +422,8 @@ export async function loadBoards() {
   configureBoard();
 }
 export function configureBoard() {
+  // 임시 저장된 글: how many the member keeps.
+  if (state.member) listDrafts().catch(() => {});
   const board = state.boards.find((row) => row.id === state.board);
   // bo_content_head: the owner's HTML, sanitized as HTML posts are.
   $("boardDescription").replaceChildren(
@@ -422,6 +472,7 @@ export function configureBoard() {
     kind === "text" && board?.data.listFile === false,
   );
   $("logTitleLabel").hidden = !pictures;
+  fillSearchFields(kind);
   // A settlement names its category (정산 분류); a guest may ask in secret.
   $<HTMLSelectElement>("logCategory").required = kind === "settlement";
   // Guests write secret posts too, opened again with their password.
@@ -481,3 +532,56 @@ export async function loadEmoticons() {
 }
 
 // Writes to the shared state from the other modules.
+
+/* list.skin.php's 선택삭제, 선택복사 and 선택이동 (chk_wr_id[]). */
+const picked = () =>
+  [
+    ...$("logs").querySelectorAll<HTMLInputElement>(
+      ".log-pick:not([hidden]) input:checked",
+    ),
+  ].map((box) => box.value);
+const pickedOrSay = (what) => {
+  const ids = picked();
+  if (!ids.length) say(`${what}할 글을 하나 이상 선택하세요.`);
+  return ids;
+};
+$("bulkAll").onclick = () => {
+  const boxes = [
+    ...$("logs").querySelectorAll<HTMLInputElement>(
+      ".log-pick:not([hidden]) input",
+    ),
+  ];
+  const all = boxes.every((box) => box.checked);
+  for (const box of boxes) box.checked = !all;
+};
+// bbs/delete_all.php: each as its own delete would, the replies before
+// what they answer; what may not go (a writer above one's level, a post
+// with replies left) stays.
+$("bulkDelete").onclick = () =>
+  run(async () => {
+    const ids = pickedOrSay("삭제");
+    if (!ids.length) return;
+    if (!confirm("선택한 게시물을 정말 삭제하시겠습니까?")) return;
+    let deleted = 0;
+    for (const id of ids.reverse())
+      try {
+        await mutate("community/posts:remove", { id });
+        deleted += 1;
+      } catch {
+        // Left, as delete_all.php passes over it.
+      }
+    say(
+      deleted === ids.length
+        ? `${deleted}개를 삭제했습니다.`
+        : `${deleted}개를 삭제했고 ${ids.length - deleted}개는 삭제하지 못했습니다.`,
+    );
+    await loadLogs({ page: state.logPage });
+  });
+$("bulkCopy").onclick = () => {
+  const ids = pickedOrSay("복사");
+  if (ids.length) transferDialog(ids, state.board, "copy");
+};
+$("bulkMove").onclick = () => {
+  const ids = pickedOrSay("이동");
+  if (ids.length) transferDialog(ids, state.board);
+};

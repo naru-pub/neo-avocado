@@ -12,6 +12,8 @@ import {
   run,
   showTab,
   state,
+  mutate,
+  say,
 } from "./core.js";
 
 /** The board groups, as the group pickers list them. */
@@ -49,6 +51,13 @@ export async function showRecent(page = 1) {
   );
   const body = $("newList").querySelector("tbody");
   body.replaceChildren();
+  // new_delete.php is the 최고관리자's: here the site's 운영자.
+  const staff = state.role === "moderator";
+  for (const element of document.querySelectorAll<HTMLElement>(
+    "#newView .staff-pick",
+  ))
+    element.hidden = !staff;
+  $<HTMLInputElement>("newAll").checked = false;
   for (const entry of result.entries) {
     const row = document.createElement("tr");
     const cell = (...content) => {
@@ -56,6 +65,14 @@ export async function showRecent(page = 1) {
       td.append(...content);
       row.append(td);
     };
+    if (staff) {
+      const pick = document.createElement("input");
+      pick.type = "checkbox";
+      pick.setAttribute("aria-label", "선택");
+      pick.dataset.kind = entry.comment ? "comment" : "post";
+      pick.value = (entry.comment ?? entry.post).id;
+      cell(pick);
+    }
     const group = (state.groups ?? []).find((item) => item.id === entry.group);
     cell(group?.data.name ?? "");
     const board = document.createElement("a");
@@ -73,7 +90,7 @@ export async function showRecent(page = 1) {
   if (!result.entries.length) {
     const row = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 5;
+    td.colSpan = staff ? 6 : 5;
     td.textContent = "게시물이 없습니다.";
     row.append(td);
     body.append(row);
@@ -85,6 +102,49 @@ export async function showRecent(page = 1) {
     (next) => showRecent(next),
   );
 }
+$("newAll").onchange = () => {
+  for (const box of $("newList").querySelectorAll<HTMLInputElement>(
+    "tbody input[type=checkbox]",
+  ))
+    box.checked = $<HTMLInputElement>("newAll").checked;
+};
+$("newDelete").onclick = () =>
+  run(async () => {
+    const boxes = [
+      ...$("newList").querySelectorAll<HTMLInputElement>(
+        "tbody input[type=checkbox]:checked",
+      ),
+    ];
+    if (!boxes.length) return say("삭제할 게시물을 하나 이상 선택하세요.");
+    if (!confirm("선택한 게시물을 정말 삭제하시겠습니까?")) return;
+    let deleted = 0;
+    // Comments first, so a post's go before it.
+    boxes.sort((a, b) =>
+      a.dataset.kind === b.dataset.kind
+        ? 0
+        : a.dataset.kind === "comment"
+          ? -1
+          : 1,
+    );
+    for (const box of boxes)
+      try {
+        await mutate(
+          box.dataset.kind === "comment"
+            ? "community/comments:remove"
+            : "community/posts:remove",
+          { id: box.value },
+        );
+        deleted += 1;
+      } catch {
+        // Left, as new_delete.php passes over what it may not delete.
+      }
+    say(
+      deleted === boxes.length
+        ? `${deleted}개를 삭제했습니다.`
+        : `${deleted}개를 삭제했고 ${boxes.length - deleted}개는 삭제하지 못했습니다.`,
+    );
+    await showRecent();
+  });
 $("newFilters").onsubmit = (event) => {
   event.preventDefault?.();
   run(() => showRecent());

@@ -10,6 +10,8 @@ import {
   uploadMedia,
   mutate,
   boardStaff,
+  query,
+  formatTime,
 } from "./core.js";
 import { showNewPost } from "./live.js";
 import { wireItemChoice, postInventory, wireSpeakerChoice } from "./posts.js";
@@ -180,6 +182,15 @@ $("logForm").onsubmit = (event) => {
       ...(guest ? { guest } : {}),
     });
     endReply();
+    // write_update.php deletes the draft (as_uid) the post was written from.
+    // Best effort: the post is up either way.
+    const written = draftId;
+    draftId = null;
+    savedDraft = "";
+    if (written)
+      mutate("community/drafts:remove", { id: written })
+        .then(listDrafts)
+        .catch(() => {});
     if (action || used) forgetInventory();
     state.ownPosts.add(log.id);
     if (state.newPost === log.id) showNewPost(null);
@@ -212,3 +223,81 @@ $("logMaterials").onfocus = $("logMaterials").onpointerdown = () =>
         );
   });
 wireSpeakerChoice($("logCharacter"));
+
+/*
+ * 임시 저장 (js/autosave.js): while a member writes, the title and text are
+ * saved a minute after they last changed, and the drafts listed to open
+ * again or delete (ajax.autosave*.php).
+ */
+let draftId: string | null = null;
+let savedDraft = "";
+const draftOf = () => ({
+  title: $<HTMLInputElement>("logTitle").value.trim(),
+  text: $<HTMLTextAreaElement>("logText").value.trim(),
+});
+export async function listDrafts() {
+  const { drafts } = await query("community/drafts:list");
+  $("logDraftCount").textContent = String(drafts.length);
+  const list = $("logDraftList");
+  list.replaceChildren(
+    ...drafts.map((draft) => {
+      const item = document.createElement("li");
+      const open = document.createElement("button");
+      open.type = "button";
+      open.textContent = `${draft.title || draft.text.slice(0, 30) || "(제목 없음)"} · ${formatTime(draft.savedAt)}`;
+      open.onclick = () => {
+        $<HTMLInputElement>("logTitle").value = draft.title;
+        $<HTMLTextAreaElement>("logText").value = draft.text;
+        draftId = draft.id;
+        savedDraft = JSON.stringify(draftOf());
+        list.hidden = true;
+        $("logDrafts").setAttribute("aria-expanded", "false");
+      };
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.textContent = "삭제";
+      remove.onclick = () =>
+        run(async () => {
+          await mutate("community/drafts:remove", { id: draft.id });
+          if (draftId === draft.id) draftId = null;
+          await listDrafts();
+        });
+      item.append(open, " ", remove);
+      return item;
+    }),
+  );
+  if (!drafts.length) list.hidden = true;
+}
+$("logDrafts").onclick = () =>
+  run(async () => {
+    await listDrafts();
+    const list = $("logDraftList");
+    list.hidden = !list.hidden || !list.childElementCount;
+    $("logDrafts").setAttribute("aria-expanded", String(!list.hidden));
+  });
+async function saveDraft() {
+  if (!state.member || $("logForm").hidden) return;
+  const draft = draftOf();
+  const key = JSON.stringify(draft);
+  if ((!draft.title && !draft.text) || key === savedDraft) return;
+  const { id } = await mutate("community/drafts:save", {
+    ...(draftId ? { id: draftId } : {}),
+    ...draft,
+  });
+  draftId = id;
+  savedDraft = key;
+  $("logDraftStatus").textContent =
+    `${formatTime(Date.now())}에 임시 저장했습니다.`;
+  await listDrafts();
+}
+// autosave.js saves each minute what changed: here a minute after a change
+// not yet saved, so nothing runs while nothing changes.
+let draftTimer: ReturnType<typeof setTimeout> | null = null;
+const draftLater = () => {
+  draftTimer ??= setTimeout(() => {
+    draftTimer = null;
+    saveDraft().catch(() => {});
+  }, 60_000);
+};
+$("logTitle").addEventListener("input", draftLater);
+$("logText").addEventListener("input", draftLater);

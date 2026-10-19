@@ -252,12 +252,44 @@ const COMMENT_PHASE = "comments:";
  * which trigram cannot find, by LIKE on the board's posts and on comments,
  * as before them. Either finds the term anywhere, case aside.
  */
+/** list.skin.php's 검색대상 (sfl), as the board search takes them. */
+const SEARCH_FIELDS = [
+  "all",
+  "title",
+  "body",
+  "titleBody",
+  "writer",
+  "owner",
+  "character",
+  "comment",
+  "commentWriter",
+];
+
 export async function search(
   ctx: QueryCtx,
-  args: { board?: string; text?: string; after?: string | null },
+  args: {
+    board?: string;
+    text?: string;
+    after?: string | null;
+    field?: string;
+    category?: string;
+  },
 ) {
-  const { board: id, text: wanted, after = null } = args ?? {};
+  const {
+    board: id,
+    text: wanted,
+    after = null,
+    field = "all",
+    category = "",
+  } = args ?? {};
   if (after !== null && typeof after !== "string") invalid(ctx);
+  if (
+    typeof field !== "string" ||
+    !SEARCH_FIELDS.includes(field) ||
+    typeof category !== "string" ||
+    category.length > 40
+  )
+    invalid(ctx);
   if (typeof wanted !== "string" || !wanted.trim() || wanted.length > 40)
     ctx.fail("INVALID_REQUEST", "검색어를 1~40자로 입력해 주세요.", {
       reason: "invalid_input",
@@ -268,12 +300,26 @@ export async function search(
   const like = containing(term);
   const viewer = ctx.member?.id ?? null;
   // An author's name finds only what shows it: not 익명 posts or comments.
-  const named = (table: string) => ({
-    text: `(${isStaff(access, board) ? "1" : `${table}.anonymous = 0`} AND (
-      ${table}.owner IN (SELECT member FROM profiles WHERE nick LIKE ? ESCAPE '\\' LIMIT 100)
-      OR ${table}.character_id IN (SELECT id FROM characters WHERE name LIKE ? ESCAPE '\\' LIMIT 100)))`,
-    values: [like, like],
-  });
+  // 글쓴이 is the member's nickname or the character they wrote as; the mmb
+  // skin's 오너 is the one, its 캐릭터 the other.
+  const named = (table: string, by: "both" | "nick" | "character" = "both") => {
+    const parts = [
+      ...(by === "character"
+        ? []
+        : [
+            `${table}.owner IN (SELECT member FROM profiles WHERE nick LIKE ? ESCAPE '\\' LIMIT 100)`,
+          ]),
+      ...(by === "nick"
+        ? []
+        : [
+            `${table}.character_id IN (SELECT id FROM characters WHERE name LIKE ? ESCAPE '\\' LIMIT 100)`,
+          ]),
+    ];
+    return {
+      text: `(${isStaff(access, board) ? "1" : `${table}.anonymous = 0`} AND (${parts.join(" OR ")}))`,
+      values: parts.map(() => like) as SqlValue[],
+    };
+  };
   // Its text: the full-text table's rows holding the phrase, or LIKE.
   const holding = (table: "posts" | "comments", columns: string[]) =>
     full
@@ -285,17 +331,35 @@ export async function search(
           text: `(${columns.map((column) => `${table}.${column} LIKE ? ESCAPE '\\'`).join(" OR ")})`,
           values: columns.map(() => like),
         };
-  const own = named("posts");
-  const said = holding("posts", ["title", "body"]);
+  const either = (...clauses: { text: string; values: SqlValue[] }[]) => ({
+    text: `(${clauses.map((clause) => clause.text).join(" OR ")})`,
+    values: clauses.flatMap((clause) => clause.values),
+  });
+  // list.skin.php's 검색대상 (sfl): what a post's own words or writer are
+  // looked for in, and what its comments' are (the "(코)" choices).
   const matches = {
-    text: `(${said.text} OR ${own.text})`,
-    values: [...said.values, ...own.values],
-  };
+    all: () => either(holding("posts", ["title", "body"]), named("posts")),
+    title: () => ({
+      text: "posts.title LIKE ? ESCAPE '\\'",
+      values: [like] as SqlValue[],
+    }),
+    body: () => holding("posts", ["body"]),
+    titleBody: () => holding("posts", ["title", "body"]),
+    writer: () => named("posts"),
+    owner: () => named("posts", "nick"),
+    character: () => named("posts", "character"),
+  }[field]?.();
+  const commentMatch = {
+    all: () => either(holding("comments", ["body"]), named("comments")),
+    comment: () => holding("comments", ["body"]),
+    commentWriter: () => named("comments"),
+  }[field]?.();
   const secret = secretClause(access, viewer, "posts", board);
-  // 멤버공개: a visitor's search does not look inside them.
+  // 멤버공개: a visitor's search does not look inside them. In the 분류 being
+  // read (sca), when one is.
   const visible = {
-    text: `posts.board = ? AND ${secret.text}${viewer ? "" : " AND posts.members_only = 0"}`,
-    values: [board.id, ...secret.values],
+    text: `posts.board = ? AND ${secret.text}${viewer ? "" : " AND posts.members_only = 0"}${category ? " AND posts.category = ?" : ""}`,
+    values: [board.id, ...secret.values, ...(category ? [category] : [])],
   };
   const inComments = after?.startsWith(COMMENT_PHASE) ?? false;
   const offset = Number(
@@ -304,7 +368,7 @@ export async function search(
   if (!Number.isSafeInteger(offset) || offset < 0) invalid(ctx);
   const found: PostRow[] = [];
   let nextCursor: string | null = null;
-  if (!inComments) {
+  if (!inComments && matches) {
     const { rows } = await ctx.sql<PostRow>(
       `${POST_SELECT} WHERE ${visible.text} AND ${matches.text}
        ORDER BY id DESC LIMIT ? OFFSET ?`,
@@ -314,11 +378,11 @@ export async function search(
     if (rows.length > SEARCH_PAGE) nextCursor = String(offset + SEARCH_PAGE);
   }
   // Once the posts are done, those found by their comments, filling the page.
-  if (!nextCursor) {
+  if (!nextCursor && commentMatch) {
     const from = inComments ? offset : 0;
     const room = SEARCH_PAGE - found.length;
-    const writer = named("comments");
-    const commented = holding("comments", ["body"]);
+    // What the posts' own search found is not found again.
+    const notFound = matches ?? { text: "0", values: [] };
     // Others' secret comments are found by no one but the staff.
     const unhidden = readableComments(
       viewer,
@@ -327,14 +391,13 @@ export async function search(
     const { rows } = await ctx.sql<PostRow>(
       `SELECT posts.*, ${TAGS}, max(comments.id) AS found
        FROM comments JOIN posts ON posts.id = comments.post_id
-       WHERE ${visible.text} AND NOT ${matches.text}
-         AND (${commented.text} OR ${writer.text}) AND ${unhidden.text}
+       WHERE ${visible.text} AND NOT ${notFound.text}
+         AND ${commentMatch.text} AND ${unhidden.text}
        GROUP BY posts.id ORDER BY found DESC LIMIT ? OFFSET ?`,
       [
         ...visible.values,
-        ...matches.values,
-        ...commented.values,
-        ...writer.values,
+        ...notFound.values,
+        ...commentMatch.values,
         ...unhidden.values,
         room + 1,
         from,

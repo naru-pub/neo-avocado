@@ -1820,3 +1820,44 @@ img.side-icon {
   color: #d33;
   font-size: 0.85em;
 }
+
+/* list.skin.php's 선택 boxes and buttons, for the board's staff. */
+.bulk-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 8px 0;
+}
+.log-pick {
+  float: left;
+  margin-right: 6px;
+}
+
+/* bbs/view_image.php: a picture at its own size, scrolled when larger. */
+img.zoomable {
+  cursor: zoom-in;
+}
+.image-viewer {
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
+  padding: 0;
+  overflow: auto;
+}
+.image-viewer img {
+  display: block;
+  max-width: none;
+}
+.image-viewer form {
+  position: sticky;
+  top: 0;
+  text-align: right;
+}
+
+/* write.skin.php's 임시 저장된 글. */
+.draft-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.draft-list li + li {
+  margin-top: 4px;
+}

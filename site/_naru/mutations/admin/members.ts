@@ -126,6 +126,7 @@ export const deleteMember = ownerOnly(async function deleteMember(
   await ctx.sql`DELETE FROM messages WHERE recipient = ${id}`;
   await ctx.sql`DELETE FROM messages WHERE sender = ${id}`;
   await ctx.sql`DELETE FROM favorites WHERE member = ${id}`;
+  await ctx.sql`DELETE FROM drafts WHERE owner = ${id}`;
   await ctx.sql`UPDATE board_groups SET admin = NULL WHERE admin = ${id}`;
   await ctx.sql`UPDATE boards SET admin = NULL WHERE admin = ${id}`;
   const roles = (await ctx.rolesOf([id]))[id] ?? [];
