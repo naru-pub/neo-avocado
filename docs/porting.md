@@ -63,6 +63,28 @@ server kept.
   they open 알림.
 - 인기검색어, FAQ, 1:1문의 and 관리권한설정 (`avo_popular`, `avo_faq*`,
   `avo_qa_*`, `adm/auth_list.php`): no admin menu of Avocado's reaches them.
+- SNS 사용 (`bo_use_sns`): posting a comment to Facebook or Twitter needs
+  the site's own app keys there, which a Naru site does not hold.
+- 테마설정 (`adm/theme.php`), 검색 단위 (`cf_search_part`) and the upload
+  extensions (`cf_image_extension`, `cf_movie_extension`): the site has one
+  theme, the database searches whole, and Naru Media decides what uploads.
+- 회원아이디 in the board search (`mb_id`): a Naru member's ID is shown to no
+  reader. 정보공개 (`mb_open`) is the member's own 쪽지 받기 setting.
+- 상점 랭킹 제한 and 아이템 사용여부 (`sh_rank`, `sh_use_rank`, `it_use`): the
+  original's shop never checks them.
+
+## Kept different, on purpose
+
+- Deleting a board keeps its posts (`board_delete.inc.php` drops them): a
+  mistaken click should not take a community's logs. Move them first.
+- A 쪽지's recipient may clear it from their own box, where the original
+  let only its sender delete it (for both, as here).
+- 멤버목록 by 소속 lists the characters of no listed 소속 under 기타, where
+  the original leaves them out.
+- 뽑기 and 탐색 draw by relative weights with an explicit 꽝 row, where the
+  original rolls 0–100 against ranges; any table of ranges has its weights.
+- Deleting a purchase's record gives its money back as well as freeing its
+  구매 한도: here one record is both the order and its money.
 
 ## How it is built
 
