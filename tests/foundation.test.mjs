@@ -788,6 +788,14 @@ test("a member edits their own nickname and preferences, within the owner's rule
     { nick: "앨리", acceptMessages: "no", commentAlerts: true },
   ])
     assert.equal(await refusal(update(bad)), "invalid_input");
+  // Only Hangul, letters and digits, as joining asks: no lookalike of a
+  // reserved word or another's name.
+  for (const nick of ["관​리자", "аdmin", "밥ㅤ", "앨 리", "앨리!"])
+    assert.equal(
+      await refusal(update({ nick, ...valid })),
+      "invalid_nick",
+      nick,
+    );
   assert.equal(
     await refusal(update({ nick: "관리자", ...valid })),
     "reserved_nick",

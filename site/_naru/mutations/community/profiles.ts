@@ -1,7 +1,12 @@
 // A member changes their own nickname and preferences (프로필 수정); the
 // rest of the profile is kept by the community's own code.
 import { reservedNick, signedIn, invalid } from "../../modules/access.js";
-import { birthYearValid, nickTaken, profileOf } from "../../modules/members.js";
+import {
+  birthYearValid,
+  nickTaken,
+  nickValid,
+  profileOf,
+} from "../../modules/members.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
 export async function update(
@@ -34,9 +39,16 @@ export async function update(
     !birthYearValid(birthYear)
   )
     invalid(ctx);
-  // A new nickname may not be a reserved word (cf_prohibit_id); one taken
-  // before the owner reserved it may stay.
+  // A new nickname is Hangul, letters and digits, as joining asks, and not
+  // a reserved word (cf_prohibit_id); one taken before the owner reserved
+  // it may stay.
   if (nick !== before.data.nick) {
+    if (!nickValid(nick))
+      ctx.fail(
+        "INVALID_REQUEST",
+        "닉네임은 공백없이 한글, 영문, 숫자만 입력 가능합니다.",
+        { reason: "invalid_nick" },
+      );
     if (await reservedNick(ctx, nick))
       ctx.fail(
         "INVALID_REQUEST",
