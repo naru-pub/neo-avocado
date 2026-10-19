@@ -13,6 +13,7 @@ import {
   boardAllowed,
   boardOf,
   boardsOf,
+  commentOf,
   excerpt,
   isStaff,
   lockedPost,
@@ -20,6 +21,7 @@ import {
   postOf,
   postReadable,
   postRow,
+  presentComment,
   presentPost,
   readerOf,
   requireBoard,
@@ -27,7 +29,12 @@ import {
   secretReadable,
   readableComments,
 } from "../../modules/boards.js";
-import type { Board, PostRow, Written } from "../../modules/boards.js";
+import type {
+  Board,
+  CommentRow,
+  PostRow,
+  Written,
+} from "../../modules/boards.js";
 import {
   boardNumber,
   listsContent,
@@ -489,24 +496,58 @@ export async function favorites(
   return { documents, total };
 }
 
+/** 나의로그's posts a page (mypage/log/index.php's $rows). */
+const MY_LOGS_PAGE = 10;
+
 /**
- * 로그내역 (mypage): the member's own posts, newest first, 30 of them, on
- * the boards they may still read. Readers cannot ask by author otherwise,
- * which would find others' 익명 posts.
+ * 나의로그 (mypage/log/index.php): the member's own logs on the picture
+ * (mmb) boards they may still read, not their 답변글, newest first, 10 a
+ * page; each with its three newest comments (lines 125-155). Readers cannot
+ * ask by author otherwise, which would find others' 익명 posts.
  */
-export async function mine(ctx: QueryCtx) {
+export async function mine(ctx: QueryCtx, args: { page?: number } | null) {
   if (!ctx.member)
     ctx.fail("AUTH_REQUIRED", "로그인해 주세요.", { reason: "sign_in" });
+  const me = ctx.member.id;
+  const { page = 1 } = args ?? {};
+  if (!Number.isSafeInteger(page) || page < 1 || page > 1000) invalid(ctx);
   const access = await accessOf(ctx);
-  const boards = [...(await readableBoards(ctx, access)).keys()];
-  if (!boards.length) return { documents: [] };
+  const boards = [...(await readableBoards(ctx, access)).values()]
+    .filter((board) => board.data.kind === "image")
+    .map((board) => board.id);
+  const size = MY_LOGS_PAGE;
+  if (!boards.length) return { documents: [], total: 0, size };
+  const where = `owner = ? AND thread IS NULL
+     AND board IN (SELECT value FROM json_each(?))`;
+  const values = [me, JSON.stringify(boards)];
+  const total =
+    (
+      await one<{ n: number }>(
+        ctx,
+        `SELECT count(*) AS n FROM posts WHERE ${where}`,
+        values,
+      )
+    )?.n ?? 0;
   const { rows } = await ctx.sql<PostRow>(
-    `${POST_SELECT} WHERE owner = ?
-     AND board IN (SELECT value FROM json_each(?))
-     ORDER BY id DESC LIMIT 30`,
-    [ctx.member.id, JSON.stringify(boards)],
+    `${POST_SELECT} WHERE ${where} ORDER BY id DESC LIMIT ? OFFSET ?`,
+    [...values, size, (page - 1) * size],
   );
-  return { documents: rows.map((row) => excerpt(postOf(row))) };
+  const documents = [];
+  for (const row of rows) {
+    // On their own post a writer reads every comment, secret ones too.
+    const { rows: newest } = await ctx.sql<CommentRow>(
+      `SELECT * FROM comments WHERE post_id = ?
+       ORDER BY created_at DESC, id DESC LIMIT 3`,
+      [row.id],
+    );
+    documents.push({
+      ...excerpt(postOf(row)),
+      comments: newest.map((comment) =>
+        presentComment(commentOf(comment), { member: me }, me),
+      ),
+    });
+  }
+  return { documents, total, size };
 }
 
 /**

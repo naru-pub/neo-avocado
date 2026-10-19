@@ -4052,3 +4052,33 @@ test("임시 저장: a member's drafts, saved again in place, theirs alone, twen
     "sign_in",
   );
 });
+
+test("나의로그 lists one's own logs on the picture boards, 10 a page, each with its three newest comments", async () => {
+  const site = await boardSite();
+  board(site, "free", { ...PUBLIC_BOARD, kind: "text" });
+  profile(site, "m-1", "하나");
+  profile(site, "m-2", "둘");
+  const logs = [];
+  for (let n = 0; n < 12; n += 1)
+    logs.push(post(site, { owner: "m-1", image: `https://e.com/${n}.png` }));
+  post(site, { board: "free", owner: "m-1", title: "글" });
+  post(site, { owner: "m-2", image: "https://e.com/x.png" });
+  for (let n = 0; n < 4; n += 1) {
+    site.now += 1000;
+    comment(site, {
+      post_id: Number(logs[11]),
+      owner: "m-2",
+      body: `댓글 ${n}`,
+    });
+  }
+  const mine = (page) => site.query("community/posts:mine", { page }, M1);
+  const first = await mine(1);
+  assert.equal(first.total, 12);
+  assert.equal(first.documents.length, 10);
+  assert.equal(first.documents[0].id, logs[11]);
+  assert.deepEqual(
+    first.documents[0].comments.map((row) => row.data.text),
+    ["댓글 3", "댓글 2", "댓글 1"],
+  );
+  assert.equal((await mine(2)).documents.length, 2);
+});

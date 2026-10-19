@@ -399,6 +399,12 @@
       <section id="myLogsView" hidden>
         <h2>로그내역 <small>My Logs</small></h2>
         <ul id="myLogs" class="my-logs"></ul>
+        <nav
+          id="myLogPages"
+          class="pages"
+          aria-label="로그내역 페이지"
+          hidden
+        ></nav>
       </section>
       <section id="myExpView" hidden>
         <h2>
@@ -438,6 +444,18 @@
             </tr>
           </thead>
           <tbody></tbody>
+          <!-- mypage/money/index.php:107-115: 소계 and 보유 금액. -->
+          <tfoot>
+            <tr>
+              <th scope="row">소계</th>
+              <td id="moneyGained" class="amount"></td>
+              <td id="moneySpent" class="amount"></td>
+            </tr>
+            <tr>
+              <th scope="row">보유 금액</th>
+              <td id="moneyBalance" class="amount" colspan="2"></td>
+            </tr>
+          </tfoot>
         </table>
         <button id="moreMoney" type="button" hidden>더 보기</button>
       </section>

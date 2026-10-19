@@ -438,21 +438,57 @@ export async function inventoryOf(
 }
 
 /**
- * What a character holds, by name and picture, as its page shows it
- * (member/viewer.php's ad_use_inven), at most 100.
+ * What a character holds, as its page shows it (member/viewer.php's
+ * ad_use_inven, inventory/list.inc.php): gifts one by one, with who gave
+ * them and their note; the rest one entry an item, with how many. Each
+ * says what the item is (inventory/skin/item.skin.php): its description,
+ * effect and resale price. Read from at most 100 rows.
  */
 export async function characterInventory(ctx: SqlCtx, character: number) {
   const { rows } = await ctx.sql<{
+    item_id: string;
     name: string;
+    gift: string;
     item_name: string | null;
     image: string | null;
-  }>`SELECT inventory.name, items.name AS item_name, items.image FROM inventory
-     LEFT JOIN items ON items.id = inventory.item_id
+    description: string | null;
+    effect_description: string | null;
+    sell_price: number | null;
+    sellable: number | null;
+  }>`SELECT inventory.item_id, inventory.name, inventory.gift,
+       items.name AS item_name, items.image, items.description,
+       items.effect_description, items.sell_price, items.sellable
+     FROM inventory LEFT JOIN items ON items.id = inventory.item_id
      WHERE inventory.character_id = ${character} ORDER BY inventory.id LIMIT 100`;
-  return rows.map((row) => ({
-    name: row.name || row.item_name || "",
-    image: row.image ?? null,
-  }));
+  const entries = [];
+  const stacks = new Map<string, { count: number }>();
+  const gifts = [];
+  for (const row of rows) {
+    const gift = parsed<Record<string, any>>(row.gift, {});
+    const entry = {
+      name: row.name || row.item_name || "",
+      image: row.image ?? null,
+      description: row.description ?? "",
+      effect: row.effect_description ?? "",
+      sell: row.sellable ? (row.sell_price ?? null) : null,
+      count: 1,
+    };
+    if (gift.sender)
+      gifts.push({
+        ...entry,
+        gift: {
+          memo: String(gift.memo ?? ""),
+          from: String(gift.senderName ?? ""),
+        },
+      });
+    else if (stacks.has(row.item_id)) stacks.get(row.item_id).count += 1;
+    else {
+      stacks.set(row.item_id, entry);
+      entries.push(entry);
+    }
+  }
+  // The gifts first, as list.inc.php reads them first.
+  return [...gifts, ...entries];
 }
 
 /** The caller's wallet: { balance, lastDaily }. */

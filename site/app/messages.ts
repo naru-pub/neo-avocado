@@ -152,9 +152,12 @@ function messageItem(message) {
   remove.textContent = "삭제";
   remove.onclick = () =>
     run(async () => {
+      // memo_delete.php: a sender's delete takes it back from both.
       if (
         !confirm(
-          "이 쪽지를 내 보관함에서 삭제할까요? 상대의 보관함에는 그대로 남습니다.",
+          mine
+            ? "이 쪽지를 삭제할까요? 상대의 보관함에서도 사라집니다."
+            : "이 쪽지를 내 보관함에서 삭제할까요? 보낸 사람의 보관함에는 그대로 남습니다.",
         )
       )
         return;
@@ -164,6 +167,22 @@ function messageItem(message) {
       item.remove();
     });
   meta.append(" ", remove);
+  // memo_form.php?me_id: a reply quoting what they sent, each line "> ".
+  if (!mine) {
+    const quote = document.createElement("button");
+    quote.type = "button";
+    quote.textContent = "답장";
+    quote.onclick = () => {
+      const box = $("messageDetail").querySelector<HTMLTextAreaElement>(
+        "form.reply textarea",
+      );
+      if (!box) return;
+      box.value = `\n\n\n >\n >\n >${message.data.body.replace(/\n/g, "\n> ")}\n > >`;
+      box.focus();
+      box.setSelectionRange?.(0, 0);
+    };
+    meta.append(" ", quote);
+  }
   item.append(body, meta);
   return item;
 }

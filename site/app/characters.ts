@@ -250,7 +250,11 @@ $("applicantSearch").onsubmit = (event) => {
     await showApplicants();
   });
 };
-/** Every approved character under its 소속's title, the rest under 기타. */
+/**
+ * Every approved character under its 소속's title, each 소속 shown even with
+ * no one (member/skin/list.skin.php's 등록된 멤버가 없습니다); those of no
+ * listed 소속, whom the original leaves out, under 기타.
+ */
 async function showBySide() {
   const characters = (await characterPage("approved", 1, 0)).documents;
   const sections = [
@@ -264,7 +268,7 @@ async function showBySide() {
         (row) => !state.sides.some((side) => side.data.name === row.data.side),
       ),
     },
-  ].filter((section) => section.members.length);
+  ].filter((section) => section.side || section.members.length);
   const items = [];
   for (const { side, members } of sections) {
     const title = document.createElement("li");
@@ -279,6 +283,13 @@ async function showBySide() {
     else title.textContent = side?.data.name ?? "기타";
     items.push(title);
     for (const character of members) items.push(await characterItem(character));
+    if (!members.length)
+      items.push(
+        Object.assign(document.createElement("li"), {
+          className: "no-data",
+          textContent: "등록된 멤버가 없습니다.",
+        }),
+      );
   }
   $("characters").replaceChildren(...items);
   $("characterPages").hidden = true;
@@ -1221,17 +1232,58 @@ export async function openCharacter(id) {
     }
     const list = document.createElement("ul");
     list.className = "viewer-inventory";
+    // inventory/skin/list.skin.php: a gift marked, a stack counted; each
+    // opens to what it is (item.skin.php).
     for (const entry of inventory) {
       const li = document.createElement("li");
+      const details = document.createElement("details");
+      const summary = document.createElement("summary");
       if (entry.image?.startsWith("https://"))
-        li.append(
+        summary.append(
           Object.assign(new Image(), {
             src: entry.image,
             alt: "",
             loading: "lazy",
           }),
         );
-      li.append(entry.name);
+      summary.append(entry.name);
+      if (entry.count > 1)
+        summary.append(
+          Object.assign(document.createElement("span"), {
+            className: "count",
+            textContent: ` ×${entry.count}`,
+          }),
+        );
+      if (entry.gift)
+        summary.append(
+          Object.assign(document.createElement("span"), {
+            className: "present",
+            textContent: " (선물)",
+          }),
+        );
+      details.append(summary);
+      const about = (className, text) => {
+        if (text)
+          details.append(
+            Object.assign(document.createElement("p"), {
+              className,
+              textContent: text,
+            }),
+          );
+      };
+      about(
+        "item-sell",
+        entry.sell !== null && entry.sell !== undefined
+          ? `판매가 ${moneyText(state.names, entry.sell)}`
+          : "",
+      );
+      about("item-description", entry.description);
+      about("item-effect", entry.effect);
+      if (entry.gift) {
+        about("gift-memo", entry.gift.memo);
+        about("gift-from", `By. ${entry.gift.from || "누군가"}`);
+      }
+      li.append(details);
       list.append(li);
     }
     if (!inventory.length)
@@ -1241,10 +1293,6 @@ export async function openCharacter(id) {
         }),
       );
     extras.append(title, list);
-  } else if (sheet.balance !== null) {
-    const money = heading("소지금");
-    money.append(` ${moneyText(state.names, sheet.balance)}`);
-    extras.append(money);
   }
   const outfit = bodyUsed() ? outfitImage : null;
   $("characterSheet").replaceChildren(

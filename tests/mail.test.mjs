@@ -145,7 +145,7 @@ test("a member sends so many a day, counted from the Korean midnight, and a gift
   await send(site, ["m-3"], "default");
 });
 
-test("only the two sides read a message; reading marks the recipient's, and each side removes its own", async () => {
+test("only the two sides read a message; reading marks the recipient's; a sender takes one back, a recipient removes their own", async () => {
   const site = await people("m-1", "m-2", "m-3");
   const {
     ids: [id],
@@ -176,8 +176,8 @@ test("only the two sides read a message; reading marks the recipient's, and each
   // Read once: a second read keeps the first time.
   site.now += 1000;
   assert.equal((await read(M2)).document.data.readAt, site.now - 1000);
-  // Removing it takes it from the recipient's box only; the sender keeps
-  // theirs, so a sender cannot erase what was received, nor the reverse.
+  // Its recipient removing it takes it from their own box only; the sender
+  // keeps theirs.
   assert.equal(await remove(M2), null);
   assert.equal(await refusal(read(M2)), "message_not_found");
   assert.equal((await boxes(site, M2)).total, 0);
@@ -196,6 +196,22 @@ test("only the two sides read a message; reading marks the recipient's, and each
     M2,
   );
   assert.equal((await status(site, M2)).messages, 0);
+  // Its sender deletes one for both (memo_delete.php): unread, it never
+  // arrives.
+  const taken = await send(site, ["m-2"], "oops");
+  assert.equal((await status(site, M2)).messages, 1);
+  await site.mutate(
+    "community/messages:removeMessage",
+    { id: taken.ids[0] },
+    M1,
+  );
+  assert.equal((await status(site, M2)).messages, 0);
+  assert.equal(
+    await refusal(
+      site.mutate("community/messages:readMessage", { id: taken.ids[0] }, M2),
+    ),
+    "message_not_found",
+  );
 });
 
 test("the 쪽지함 has one entry a correspondent, newest first, with the last message, a count and N", async () => {
@@ -348,7 +364,8 @@ test("a conversation shows both sides oldest first, pages back by fifty, and ope
   assert.equal((await boxes(site, M1)).documents[0].unread, false);
   // The other side's are not theirs to read: m-2 has three unread.
   assert.equal((await status(site, M2)).messages, 3);
-  // A side's removed messages leave its conversation only.
+  // A message its sender deletes leaves both sides' conversation
+  // (memo_delete.php).
   await site.mutate(
     "community/messages:removeMessage",
     { id: first.documents.at(-1).id },
@@ -360,7 +377,7 @@ test("a conversation shows both sides oldest first, pages back by fifty, and ope
   );
   assert.equal(
     (await talk(M2, { partner: "m-1" })).documents.at(-1).data.body,
-    "같은 때 2",
+    "같은 때 1",
   );
   for (const args of [
     { partner: "m-1" },

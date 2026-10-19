@@ -19,9 +19,9 @@ const EXP_PAGE = 20;
 /**
  * What the character viewer adds to the profile: the character's experience
  * history (member/exp.php) a page at a time, newest first, and, where the
- * owner turns it on (ad_use_money), its owner's money, and (ad_use_inven)
- * what it holds, by name and picture (`inventory`, null where the owner
- * hides it; `showsInventory` says which). A later page (`after`, the
+ * owner turns it on (ad_use_inven), what it holds (`inventory`, null where
+ * the owner hides it; `showsInventory` says which), with its owner's money
+ * where 금액 사용 (ad_use_money) is on too. A later page (`after`, the
  * `expCursor` of the one before) carries only the history.
  */
 export async function characterSheet(
@@ -59,11 +59,12 @@ export async function characterSheet(
   const expCursor = page.nextCursor ?? null;
   if (after !== null) return { exp, expCursor };
   const settings = await communitySettings(ctx);
+  const showsInventory = settings.viewerInventory === true;
+  // The owner's money shows inside the inventory (viewer.skin.php:179-188).
   const balance =
-    settings.viewerMoney === true
+    settings.viewerMoney === true && showsInventory
       ? (await walletOf(ctx, row.owner)).balance
       : null;
-  const showsInventory = settings.viewerInventory === true;
   return {
     exp,
     expCursor,

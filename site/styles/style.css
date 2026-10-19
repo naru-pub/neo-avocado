@@ -1861,3 +1861,28 @@ img.zoomable {
 .draft-list li + li {
   margin-top: 4px;
 }
+
+/* mypage/log: each log's picture, then its three newest comments. */
+.my-logs > li {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.my-log-picture img {
+  display: block;
+  width: 140px;
+  height: 90px;
+  object-fit: cover;
+}
+.my-log-comments {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 480px) {
+  .my-logs > li {
+    grid-template-columns: 1fr;
+  }
+}

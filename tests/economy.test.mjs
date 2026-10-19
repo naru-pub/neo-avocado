@@ -811,8 +811,32 @@ test("a character's page shows its inventory when the owner allows", async () =>
     );
   assert.equal((await sheet()).inventory, null);
   setSettings(site, "community", { viewerInventory: true });
+  const potion = {
+    name: "물약",
+    image: "https://example.com/p.png",
+    description: "",
+    effect: "",
+    sell: null,
+    count: 1,
+  };
+  assert.deepEqual((await sheet()).inventory, [potion]);
+  // list.inc.php: a gift on its own, with its note and giver, first; the
+  // rest stacked by item.
+  own(site, {
+    owner: "m-2",
+    item_id: "potion",
+    character_id: Number(hero),
+  });
+  own(site, {
+    owner: "m-2",
+    item_id: "potion",
+    name: "",
+    character_id: Number(hero),
+    gift: JSON.stringify({ sender: "m-1", senderName: "하나", memo: "힘내" }),
+  });
   assert.deepEqual((await sheet()).inventory, [
-    { name: "물약", image: "https://example.com/p.png" },
+    { ...potion, gift: { memo: "힘내", from: "하나" } },
+    { ...potion, count: 2 },
   ]);
   // A later page of the history carries no inventory.
   assert.equal(

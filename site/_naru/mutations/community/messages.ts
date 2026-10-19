@@ -132,14 +132,19 @@ export async function readConversation(
 }
 
 /**
- * Removes a message from the member's own box only, as GnuBoard 5.4 keeps a
- * sender's and a recipient's copy (AvocadoEdition's single row let a sender
- * erase what the recipient received). Gone once both have removed it.
+ * Deletes a message. Its sender deletes it for both, as AvocadoEdition's
+ * memo_delete.php does (본인이 보낸 우편만 삭제 가능): unread, it never
+ * arrives. Its recipient, whom the original let delete nothing, removes it
+ * from their own box only. Gone once both have removed it.
  */
 export async function removeMessage(ctx: MutationCtx, args: { id?: string }) {
   const me = signedIn(ctx);
   const row = await ownMessage(ctx, args?.id);
-  const bySender = row.sender === me || row.hidden_by_sender !== 0;
+  if (row.sender === me) {
+    await ctx.sql`DELETE FROM messages WHERE id = ${row.id}`;
+    return null;
+  }
+  const bySender = row.hidden_by_sender !== 0;
   const byRecipient = row.recipient === me || row.hidden_by_recipient !== 0;
   if (bySender && byRecipient)
     await ctx.sql`DELETE FROM messages WHERE id = ${row.id}`;

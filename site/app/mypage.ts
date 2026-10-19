@@ -17,6 +17,8 @@ import {
   mutate,
   query,
   suggestNames,
+  nickOf,
+  preloadNicks,
 } from "./core.js";
 import { expText, moneyText } from "./names.js";
 import { configureBoard, openLogNumber } from "./logs.js";
@@ -157,13 +159,23 @@ async function loadMyPage() {
 }
 $("newCharacter").onclick = () => run(() => openCharacterForm());
 
+/** A comment's writer as 나의로그 names them: the character, else the nick. */
+async function commenterOf(comment) {
+  if (comment.data.speaker?.name) return comment.data.speaker.name;
+  if (comment.data.guest?.name) return comment.data.guest.name;
+  if (comment.data.owner) return await nickOf(comment.data.owner);
+  return "익명의 누군가";
+}
+
 /**
- * 로그내역 (mypage/log): the member's own posts on every board they can read,
- * newest first.
+ * 나의로그 (mypage/log/index.php): the member's own logs on the picture
+ * boards, 10 a page; each its picture, to the log, and its three newest
+ * comments.
  */
-async function loadMyLogs() {
-  const { documents } = await query("community/posts:mine");
-  const posts = documents
+async function loadMyLogs(page = 1) {
+  const result = await query("community/posts:mine", { page });
+  await preloadNicks(result.documents.flatMap((log) => log.comments ?? []));
+  const posts = result.documents
     .map((log) => ({
       board: state.boards.find(
         (row) => row.id === (log.data.board ?? "default"),
@@ -171,37 +183,65 @@ async function loadMyLogs() {
       log,
     }))
     .filter((post) => post.board);
-  $("myLogs").replaceChildren(
-    ...posts.map(({ board, log }) => {
-      const item = document.createElement("li");
-      const open = document.createElement("a");
-      open.href = "#";
-      const text = (log.data.title || log.data.text || "그림 로그").slice(
-        0,
-        60,
-      );
-      open.textContent = `[${board.data.name}] No. ${log.data.number ?? "-"} ${text}`;
-      open.onclick = (event) => {
-        event.preventDefault();
-        run(async () => {
-          state.board = board.id;
-          $<HTMLSelectElement>("board").value = board.id;
-          configureBoard();
-          showTab("logs");
-          await openLogNumber(log.data.number);
-        });
-      };
+  const items = [];
+  for (const { board, log } of posts) {
+    const item = document.createElement("li");
+    const open = document.createElement("a");
+    open.href = "#";
+    open.className = "my-log-picture";
+    if (log.data.image) {
+      const picture = document.createElement("img");
+      picture.src = log.data.image;
+      picture.alt = "";
+      picture.loading = "lazy";
+      open.append(picture);
+    }
+    const title = document.createElement("span");
+    title.textContent = `[${board.data.name}] No. ${log.data.number ?? "-"}`;
+    open.append(title);
+    open.onclick = (event) => {
+      event.preventDefault();
+      run(async () => {
+        state.board = board.id;
+        $<HTMLSelectElement>("board").value = board.id;
+        configureBoard();
+        showTab("logs");
+        await openLogNumber(log.data.number);
+      });
+    };
+    const said = document.createElement("ul");
+    said.className = "my-log-comments";
+    for (const comment of log.comments ?? []) {
+      const line = document.createElement("li");
+      const who = document.createElement("strong");
+      who.textContent = await commenterOf(comment);
+      const words = document.createElement("span");
+      words.textContent = ` ${comment.data.hidden ? "비밀글 입니다." : (comment.data.text ?? "").slice(0, 100)}`;
       const time = document.createElement("time");
-      time.textContent = ` · ${formatTime(log.createdAt)}`;
-      item.append(open, time);
-      return item;
-    }),
-  );
+      time.textContent = ` ${formatTime(comment.createdAt)}`;
+      line.append(who, words, time);
+      said.append(line);
+    }
+    if (!said.childElementCount) {
+      const none = document.createElement("li");
+      none.textContent = "코멘트가 없습니다.";
+      said.append(none);
+    }
+    item.append(open, said);
+    items.push(item);
+  }
+  $("myLogs").replaceChildren(...items);
   if (!posts.length) {
     const empty = document.createElement("li");
     empty.textContent = "쓴 로그가 없습니다.";
     $("myLogs").append(empty);
   }
+  renderPages(
+    $("myLogPages"),
+    page,
+    Math.ceil(result.total / result.size),
+    (next) => loadMyLogs(next),
+  );
 }
 
 /** 경험치 내역 (member/exp.php): what the owner gave or took, and why. */
@@ -276,16 +316,23 @@ async function loadMyFavorites(page = 1) {
 }
 /** 화폐관리's ledger (mypage/money/index.php): 획득 and 사용, 20 a page. */
 let moneyCursor = null;
+let moneyGained = 0;
+let moneySpent = 0;
 async function loadMyMoney({ more = false } = {}) {
   const page = await query("economy/money:ledger", {
     after: more ? moneyCursor : null,
     size: state.paging.rows,
   });
   const body = $("moneyLedger").querySelector("tbody");
-  if (!more) body.replaceChildren();
+  if (!more) {
+    body.replaceChildren();
+    moneyGained = moneySpent = 0;
+  }
   for (const row of page.documents) {
     const line = document.createElement("tr");
     const delta = row.data.delta ?? 0;
+    if (delta > 0) moneyGained += delta;
+    else moneySpent -= delta;
     const content = document.createElement("td");
     content.textContent = `[${formatTime(row.data.at)}] ${row.data.memo || HISTORY_KINDS[row.data.kind] || row.data.kind}`;
     const gained = document.createElement("td");
@@ -304,6 +351,10 @@ async function loadMyMoney({ more = false } = {}) {
     empty.append(cell);
     body.append(empty);
   }
+  // 소계 of what is shown, and what the member holds now.
+  $("moneyGained").textContent = moneyText(state.names, moneyGained);
+  $("moneySpent").textContent = moneyText(state.names, moneySpent);
+  $("moneyBalance").textContent = moneyText(state.names, page.balance ?? 0);
   moneyCursor = page.nextCursor;
   $("moreMoney").hidden = !page.nextCursor;
 }
