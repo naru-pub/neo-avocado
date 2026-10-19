@@ -2004,6 +2004,28 @@ test("boards pay for posts and comments, and take it back when they are deleted"
       ["m-2", -3, 0, `로그 ${number} 댓글삭제`],
     ],
   );
+  // A writer who spent what a post and their comments on it earned cannot
+  // delete it, nor a comment, to keep the money; the staff still may.
+  const { document: spent } = await write(site, {
+    data: { image: "https://example.com/p.png", text: "b" },
+  });
+  const { document: own } = await reply(site, {
+    data: { logId: spent.id, text: "mine" },
+  });
+  assert.equal(balanceOf(site, "m-1"), 13);
+  wallet(site, "m-1", 12);
+  assert.equal(
+    await refusal(site.mutate("community/posts:remove", { id: spent.id }, M1)),
+    "not_enough",
+  );
+  wallet(site, "m-1", 2);
+  assert.equal(
+    await refusal(site.mutate("community/comments:remove", { id: own.id }, M1)),
+    "not_enough",
+  );
+  moderator(site, "m-3");
+  await site.mutate("community/posts:remove", { id: spent.id }, M3);
+  assert.equal(balanceOf(site, "m-1"), 0);
   // Guests are paid nothing.
   site.run(
     "UPDATE boards SET write_level = 1, list_level = 1, read_level = 1 WHERE id = 'default'",

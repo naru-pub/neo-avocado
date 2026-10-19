@@ -15,6 +15,7 @@ import {
   postRow,
   requireBoard,
   saveCommentSearch,
+  canRepay,
   takeBackReward,
 } from "../../modules/boards.js";
 import type { CommentRow } from "../../modules/boards.js";
@@ -243,8 +244,11 @@ export async function remove(
       "이 코멘트와 관련된 답변코멘트가 존재하므로 삭제 할 수 없습니다.",
       { reason: "has_replies" },
     );
-  // 댓글쓰기 포인트 goes back (bbs/delete_comment.php:63).
+  // 댓글쓰기 포인트 goes back (bbs/delete_comment.php:63), in full from a
+  // writer deleting their own.
   if (previous.reward > 0) {
+    if (previous.owner && ctx.member?.id === previous.owner)
+      await canRepay(ctx, previous.owner, previous.reward);
     await takeBackReward(
       ctx,
       previous,

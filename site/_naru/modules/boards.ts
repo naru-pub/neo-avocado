@@ -7,6 +7,7 @@
 import {
   communityAccess,
   communitySettings,
+  lacking,
   one,
   parsed,
   siteOpen,
@@ -886,6 +887,19 @@ export async function payReward(
     memo,
   });
   return reward as number;
+}
+
+/**
+ * Refuses a writer deleting their own post or comment while they hold less
+ * than the rewards it takes back (`owed`): else they could spend a reward
+ * and delete what earned it, keeping the money, as takeBackReward stops at
+ * zero. The staff deleting another's are not held to it.
+ */
+export async function canRepay(ctx: BoardCtx, member: string, owed: number) {
+  if (owed > 0 && (await walletOf(ctx, member)).balance < owed)
+    ctx.fail("CONFLICT", await lacking(ctx, "moneyName"), {
+      reason: "not_enough",
+    });
 }
 
 /**

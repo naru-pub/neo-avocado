@@ -35,6 +35,7 @@ import {
   savePostSearch,
   saveTags,
   tagsOf,
+  canRepay,
   takeBackReward,
 } from "../../modules/boards.js";
 import type { PostRow } from "../../modules/boards.js";
@@ -793,6 +794,20 @@ export async function remove(
       "이 글과 관련된 답변글이 존재하므로 삭제 할 수 없습니다.",
       { reason: "has_replies" },
     );
+  // A writer deleting their own post repays what it and their comments on
+  // it earned, in full.
+  if (previous.owner && ctx.member?.id === previous.owner) {
+    const own = await one<{ reward: number }>(
+      ctx,
+      "SELECT coalesce(sum(reward), 0) AS reward FROM comments WHERE post_id = ? AND owner = ? AND reward > 0",
+      [previous.id, previous.owner],
+    );
+    await canRepay(
+      ctx,
+      previous.owner,
+      Math.max(previous.reward, 0) + (own?.reward ?? 0),
+    );
+  }
   // 글쓰기 포인트 goes back (bbs/delete.php:78), then each commenter's
   // 댓글쓰기 포인트, theirs together, down to nothing.
   await takeBackReward(ctx, previous, memoOf(board, previous.number, "글삭제"));
