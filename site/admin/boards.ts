@@ -111,8 +111,9 @@ export function boardRow(row) {
   kind.value = row.data.kind ?? "image";
   const reward = (key, label) => {
     const input = field(key, label, document.createElement("input"));
+    // Each may be negative: a charge (bo_*_point).
     (input as HTMLInputElement).type = "number";
-    (input as HTMLInputElement).min = "0";
+    (input as HTMLInputElement).step = "1";
     input.value = String(row.data[key] ?? 0);
     input.title = label;
     return input;
@@ -181,8 +182,11 @@ export function boardRow(row) {
     name,
     group,
     kind,
-    reward("writeReward", "글쓰기 보상"),
-    reward("commentReward", "댓글쓰기 보상"),
+    // board_list.php's 읽기P, 쓰기P, 댓글P and 다운P.
+    reward("readReward", "글읽기 포인트"),
+    reward("writeReward", "글쓰기 포인트"),
+    reward("commentReward", "댓글쓰기 포인트"),
+    reward("downloadPoint", "다운로드 포인트"),
     " ",
     edit,
     " ",

@@ -10,7 +10,14 @@ export const list = ownerOnly(
     {
       section,
       ...args
-    }: { section?: string; after?: string | null; search?: string } = {},
+    }: {
+      section?: string;
+      after?: string | null;
+      search?: string;
+      sort?: string | null;
+      desc?: boolean;
+      filter?: { field?: string; value?: string } | null;
+    } = {},
   ) => listRecords(ctx, recordSection(ctx, section, "list"), args),
 );
 

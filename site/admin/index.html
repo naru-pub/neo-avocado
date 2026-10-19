@@ -186,12 +186,19 @@
             aria-label="ID·이름 검색"
             placeholder="ID·이름"
           />
+          <!-- subject_sort_link's 정렬, and quest_list's 세력 or the
+               banners' place. -->
+          <select id="recordSort" aria-label="정렬" hidden></select>
+          <select id="recordFilter" aria-label="거르기" hidden></select>
           <button type="submit">검색</button>
         </form>
         <!-- The smaller lists' 선택수정 (title_list, level_list, side_list,
              class_list, recipi_list, status_list _update.php). -->
         <p id="quickTools" hidden>
           <button id="quickSave" type="button">선택수정</button>
+          <button id="quickRemove" type="button" class="danger">
+            선택삭제
+          </button>
         </p>
         <!-- adm/member_list.php's 총회원수, 차단 and 탈퇴. -->
         <p id="memberCounts" hidden></p>

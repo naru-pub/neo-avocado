@@ -599,9 +599,12 @@ test("items, recipes, draws and exploration keep the forms' rules", async () => 
     item: "",
     weight: "0.5",
   });
+  // Read with its items' names, as explorer_list.php shows them.
   assert.deepEqual((await query(site, "gacha:get", { id: "miss" })).data, {
     source: "cake",
     weight: 0.5,
+    sourceName: "케이크",
+    itemName: "",
   });
   assert.equal(
     await refusedWith(update(site, "gacha", "miss", { item: "nothing" })),
@@ -664,6 +667,8 @@ test("profile fields, stats, levels, sides and couples are saved as their forms 
     second: b,
     since: "2030-01-01",
     order: 0,
+    firstName: "Hero",
+    secondName: "Other",
   });
   for (const [change, message] of [
     [{ second: a }, "서로 다른 캐릭터를 선택하세요."],
@@ -2438,4 +2443,52 @@ test("admin/records answers only the calls a section leaves to it", async () => 
     create: true,
   });
   assert.equal((await query(site, "sides:get", { id: "s" })).data.name, "빛");
+});
+
+test("a list reads in its 순서, sorts and narrows as asked, and finds a row by its item's name", async () => {
+  const site = await testSite();
+  const ids = (rows) => rows.documents.map((row) => row.id);
+  for (const [id, place, order, starts] of [
+    ["a", "main", 2, "2030-01-03T00:00"],
+    ["b", "intro", 1, "2030-01-01T00:00"],
+    ["c", "main", 3, "2030-01-02T00:00"],
+  ])
+    site.run(
+      "INSERT INTO banners (id, place, image, sort_order, starts_at) VALUES (?, ?, 'https://e.com/a.png', ?, ?)",
+      id,
+      place,
+      order,
+      starts,
+    );
+  // couple_list.php's co_order, as every list with a 순서.
+  assert.deepEqual(ids(await query(site, "banners:list")), ["b", "a", "c"]);
+  assert.deepEqual(
+    ids(await query(site, "banners:list", { sort: "startsAt", desc: true })),
+    ["a", "c", "b"],
+  );
+  // Main slides apart from the intro (banner_list.php, intro_list.php).
+  assert.deepEqual(
+    ids(
+      await query(site, "banners:list", {
+        filter: { field: "place", value: "main" },
+      }),
+    ),
+    ["a", "c"],
+  );
+  for (const wrong of [
+    { sort: "nothing" },
+    { sort: "order", desc: "yes" },
+    { filter: { field: "nothing", value: "x" } },
+  ])
+    assert.equal(
+      await refusal(query(site, "banners:list", wrong)),
+      "invalid_input",
+    );
+  // explorer_list.php's sch_it_id: a draw found by its item's name.
+  site.run("INSERT INTO items (id, name) VALUES ('cake', '케이크')");
+  site.run("INSERT INTO gacha (id, item_id, weight) VALUES ('g1', 'cake', 1)");
+  site.run("INSERT INTO gacha (id, item_id, weight) VALUES ('g2', NULL, 1)");
+  const found = await query(site, "gacha:list", { search: "케이크" });
+  assert.deepEqual(ids(found), ["g1"]);
+  assert.equal(found.documents[0].data.itemName, "케이크");
 });

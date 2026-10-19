@@ -229,12 +229,24 @@ export const TABLES: Record<string, Table> = {
     ["image", "image", "text", null],
     ["description", "description", "text", ""],
   ]),
-  couples: table("couples", [
-    ["first", "first", "ref", 0],
-    ["second", "second", "ref", 0],
-    ["since", "since", "text", null],
-    ["order", "sort_order", "int", 0],
-  ]),
+  couples: table(
+    "couples",
+    [
+      ["first", "first", "ref", 0],
+      ["second", "second", "ref", 0],
+      ["since", "since", "text", null],
+      ["order", "sort_order", "int", 0],
+    ],
+    {
+      // couple_list.php's two characters, by name.
+      select:
+        "(SELECT name FROM characters WHERE id = couples.first) AS first_name, (SELECT name FROM characters WHERE id = couples.second) AS second_name",
+      read(row, data) {
+        data.firstName = row.first_name ?? "";
+        data.secondName = row.second_name ?? "";
+      },
+    },
+  ),
   character_fields: table("character_fields", [
     ["label", "label", "text", ""],
     ["type", "type", "text", "text"],
@@ -288,17 +300,28 @@ export const TABLES: Record<string, Table> = {
     ["itemType", "item_type", "text", ""],
   ]),
   // 상점 진열: an item's further sales.
-  shop_entries: table("shop_entries", [
-    ["item", "item_id", "text", ""],
-    ["enabled", "enabled", "bool", 1],
-    ["shopCategory", "shop_category", "text", ""],
-    ["shopTalk", "shop_talk", "text", ""],
-    ["display", "display", "json", null],
-    ["price", "price", "int", 0],
-    ["stock", "stock", "int", null],
-    ["order", "sort_order", "int", 0],
-    ["requirements", "requirements", "json", "{}"],
-  ]),
+  shop_entries: table(
+    "shop_entries",
+    [
+      ["item", "item_id", "text", ""],
+      ["enabled", "enabled", "bool", 1],
+      ["shopCategory", "shop_category", "text", ""],
+      ["shopTalk", "shop_talk", "text", ""],
+      ["display", "display", "json", null],
+      ["price", "price", "int", 0],
+      ["stock", "stock", "int", null],
+      ["order", "sort_order", "int", 0],
+      ["requirements", "requirements", "json", "{}"],
+    ],
+    {
+      // shop_list.php's 아이템, by name.
+      select:
+        "(SELECT name FROM items WHERE id = shop_entries.item_id) AS item_name",
+      read(row, data) {
+        data.itemName = row.item_name ?? "";
+      },
+    },
+  ),
   // A grant's 지급 사유 (memo), and a gift's sender and memo, are its gift JSON.
   inventory: table(
     "inventory",
@@ -328,15 +351,37 @@ export const TABLES: Record<string, Table> = {
       },
     },
   ),
-  gacha: table("gacha", [
-    ["source", "source", "text", null],
-    ["item", "item_id", "text", null],
-    ["weight", "weight", "num", 1],
-  ]),
-  explore: table("explore", [
-    ["item", "item_id", "text", null],
-    ["weight", "weight", "num", 1],
-  ]),
+  gacha: table(
+    "gacha",
+    [
+      ["source", "source", "text", null],
+      ["item", "item_id", "text", null],
+      ["weight", "weight", "num", 1],
+    ],
+    {
+      // explorer_list.php's 뽑기 아이템 and 획득 아이템, by name.
+      select:
+        "(SELECT name FROM items WHERE id = gacha.source) AS source_name, (SELECT name FROM items WHERE id = gacha.item_id) AS item_name",
+      read(row, data) {
+        data.sourceName = row.source_name ?? "";
+        data.itemName = row.item_name ?? "";
+      },
+    },
+  ),
+  explore: table(
+    "explore",
+    [
+      ["item", "item_id", "text", null],
+      ["weight", "weight", "num", 1],
+    ],
+    {
+      select:
+        "(SELECT name FROM items WHERE id = explore.item_id) AS item_name",
+      read(row, data) {
+        data.itemName = row.item_name ?? "";
+      },
+    },
+  ),
 };
 
 /** `section`, if it answers `call` here; refused otherwise. */
@@ -471,18 +516,47 @@ export const pageOf = <T>(rows: T[], offset: number) => ({
   nextCursor: rows.length > PAGE ? String(offset + PAGE) : null,
 });
 
-/** A section's rows a page at a time, in key order: { documents, nextCursor }. */
+/**
+ * A section's rows a page at a time: { documents, nextCursor }. In its 순서
+ * (sort_order) where it keeps one, as couple_list.php reads co_order, else
+ * by key; or by `sort`, one of its fields, as a list's column headings
+ * sort (subject_sort_link), `desc` for the other way. `filter` narrows to
+ * rows whose field holds a value (quest_list.php's 세력, a 배너's place).
+ */
 export async function listRecords(
   ctx: QueryCtx,
   section: string,
   {
     after = null,
     search = "",
-  }: { after?: string | null; search?: string } = {},
+    sort = null,
+    desc = false,
+    filter = null,
+  }: {
+    after?: string | null;
+    search?: string;
+    sort?: string | null;
+    desc?: boolean;
+    filter?: { field?: string; value?: string } | null;
+  } = {},
 ) {
   const t = tableOf(ctx, section);
   const offset = offsetOf(ctx, after);
   if (typeof search !== "string" || search.length > 40) invalid(ctx);
+  const columnOf = (field: unknown) =>
+    t.columns.find(
+      ([name, , kind]) => name === field && kind !== "json",
+    )?.[1] ?? null;
+  const sortColumn = sort === null ? null : columnOf(sort);
+  if ((sort !== null && !sortColumn) || typeof desc !== "boolean") invalid(ctx);
+  const filterColumn = filter === null ? null : columnOf(filter?.field);
+  if (
+    filter !== null &&
+    (!filterColumn ||
+      typeof filter.value !== "string" ||
+      filter.value.length > 64)
+  )
+    invalid(ctx);
   // The lists' 검색 (board_list.php's bo_table and bo_subject, quest_list's
   // title, boardgroup_list's gr_id and gr_subject…): the ID or name holding it.
   const named = [
@@ -494,13 +568,40 @@ export async function listRecords(
       )
       .map(([, column]) => column),
   ];
+  // An item a row names is found by its name too (explorer_list.php's
+  // sch_it_id).
+  const items = t.columns
+    .filter(([field]) => field === "item" || field === "source")
+    .map(([, column]) => column);
   const term = search.trim();
-  const where = term
-    ? ` WHERE (${named.map((column) => `CAST(${column} AS TEXT) LIKE ? ESCAPE '\\'`).join(" OR ")})`
-    : "";
+  const clauses: string[] = [];
+  const values: SqlValue[] = [];
+  if (term) {
+    clauses.push(
+      `(${[
+        ...named.map((column) => `CAST(${column} AS TEXT) LIKE ? ESCAPE '\\'`),
+        ...items.map(
+          (column) =>
+            `${column} IN (SELECT id FROM items WHERE name LIKE ? ESCAPE '\\' LIMIT 100)`,
+        ),
+      ].join(" OR ")})`,
+    );
+    values.push(...[...named, ...items].map(() => containing(term)));
+  }
+  if (filterColumn) {
+    clauses.push(`${filterColumn} = ?`);
+    values.push(filter.value);
+  }
+  const where = clauses.length ? ` WHERE ${clauses.join(" AND ")}` : "";
+  const ordered = t.columns.find(([field]) => field === "order")?.[1];
+  const order = sortColumn
+    ? `${sortColumn} ${desc ? "DESC" : "ASC"}, ${t.key}`
+    : ordered
+      ? `${ordered}, ${t.key}`
+      : t.key;
   const { rows } = await ctx.sql(
-    `${selectOf(t)}${where} ORDER BY ${t.key} LIMIT ? OFFSET ?`,
-    [...(term ? named.map(() => containing(term)) : []), PAGE + 1, offset],
+    `${selectOf(t)}${where} ORDER BY ${order} LIMIT ? OFFSET ?`,
+    [...values, PAGE + 1, offset],
   );
   return pageOf(
     rows.map((row) => recordOf(t, row)),

@@ -35,7 +35,61 @@ import { boardRow, groupMembers } from "./boards.js";
  * class_list's name and 권한, recipi_list's name and use, status_list's
  * fields), each [key, label, kind].
  */
-export const QUICK: Record<string, [string, string, string][]> = {
+export const QUICK: Record<
+  string,
+  [string, string, string, [string, string][]?][]
+> = {
+  // item_list_update.php: 분류, 이름, 되팔기 and what it may do.
+  items: [
+    ["name", "이름", "text"],
+    [
+      "category",
+      "분류",
+      "select",
+      [
+        ["general", "일반"],
+        ["personal", "개인"],
+        ["attendance", "출석"],
+      ],
+    ],
+    ["sellPrice", "되팔기", "number"],
+    ["sellable", "판매", "checkbox"],
+    ["giftable", "선물", "checkbox"],
+    ["usable", "사용", "checkbox"],
+  ],
+  // shop_list_update.php: 분류, 가격, 재고 and 순서.
+  shop_entries: [
+    ["shopCategory", "분류", "text"],
+    ["price", "가격", "number"],
+    ["stock", "재고", "number"],
+    ["order", "순서", "number"],
+    ["enabled", "진열", "checkbox"],
+  ],
+  // explorer_list_update.php: each row's chance.
+  gacha: [["weight", "가중치", "number"]],
+  explore: [["weight", "가중치", "number"]],
+  // quest_list_update.php: 종류, 세력, 이름 and 기간.
+  quests: [
+    ["name", "이름", "text"],
+    [
+      "type",
+      "종류",
+      "select",
+      [
+        ["daily", "일일"],
+        ["weekly", "주간"],
+      ],
+    ],
+    ["side", "소속", "text"],
+    ["startsAt", "시작", "datetime-local"],
+    ["endsAt", "종료", "datetime-local"],
+  ],
+  // boardgroup_list_update.php: 제목 and 순서.
+  board_groups: [
+    ["name", "이름", "text"],
+    ["membersOnly", "멤버 전용", "checkbox"],
+    ["order", "순서", "number"],
+  ],
   titles: [
     ["name", "이름", "text"],
     ["enabled", "사용", "checkbox"],
@@ -76,16 +130,21 @@ export function quickFields(row) {
   pick.dataset.quick = row.id;
   pick.setAttribute("aria-label", `${row.data.name ?? row.id} 선택`);
   box.append(pick, " ");
-  for (const [key, label, kind] of QUICK[section]) {
-    const input = document.createElement("input");
+  for (const [key, label, kind, options] of QUICK[section]) {
+    const input = document.createElement(
+      kind === "select" ? "select" : "input",
+    ) as HTMLInputElement;
     input.dataset.key = key;
+    input.dataset.kind = kind;
     input.setAttribute("aria-label", label);
+    for (const [value, text] of options ?? [])
+      input.append(new Option(text, value));
     if (kind === "checkbox") input.type = "checkbox";
     else if (kind === "number") {
       input.type = "number";
-      input.step = "1";
+      input.step = "any";
       input.className = "quick-number";
-    }
+    } else if (kind === "datetime-local") input.type = "datetime-local";
     if (kind === "checkbox") input.checked = Boolean(row.data[key]);
     else input.value = row.data[key] ?? "";
     // Changing a row ticks it, as the original's forms do.
@@ -107,7 +166,7 @@ $("quickSave").onclick = () =>
     for (const pick of rows) {
       const values = {};
       for (const input of pick.parentElement.querySelectorAll<HTMLInputElement>(
-        "input[data-key]",
+        "[data-key]",
       ))
         values[input.dataset.key] =
           input.type === "checkbox" ? input.checked : input.value;
@@ -118,6 +177,196 @@ $("quickSave").onclick = () =>
       });
     }
     $("adminStatus").textContent = `${rows.length}개를 수정했습니다.`;
+    await load();
+  });
+/**
+ * Whether the open list deletes several at once (the lists' 선택삭제):
+ * those with a delete, but the boards', members' and characters' own tools.
+ */
+export function bulkRemovable() {
+  const model = models[section];
+  return (
+    section === "history" ||
+    Boolean(model?.holdings) ||
+    (Boolean(CALLS[section]?.remove) &&
+      !model?.noDelete &&
+      !model?.review &&
+      !["boards", "members"].includes(section))
+  );
+}
+/** A row's 선택 box, as the 선택수정 rows have theirs. */
+function pickBox(id: string, name: string, data: Record<string, string> = {}) {
+  const pick = document.createElement("input");
+  pick.type = "checkbox";
+  pick.dataset.quick = id;
+  Object.assign(pick.dataset, data);
+  pick.setAttribute("aria-label", `${name} 선택`);
+  return pick;
+}
+/** The day and time a list shows, from a stored 한국 시간 or a moment. */
+const when = (value) =>
+  value
+    ? typeof value === "number"
+      ? new Date(value).toLocaleString("ko-KR")
+      : String(value).replace("T", " ")
+    : "";
+/**
+ * What the original's lists show in their columns, past an entry's name:
+ * banner_list.php's place, 대체 문구, 기간 and 순서; couple_list.php's two
+ * characters; explorer_list.php's items and chance; quest_list.php's 종류,
+ * 세력 and 기간; shop_list.php's item.
+ */
+function rowSummary(row) {
+  const data = row.data;
+  const parts: (string | Node)[] = [];
+  const thumb = (url) => {
+    if (typeof url !== "string" || !url.startsWith("https://")) return;
+    const image = document.createElement("img");
+    image.src = url;
+    image.alt = "";
+    image.loading = "lazy";
+    image.className = "title-image";
+    parts.push(image);
+  };
+  const period = () =>
+    data.startsAt || data.endsAt
+      ? `${when(data.startsAt)} ~ ${when(data.endsAt)}`
+      : "기간 없음";
+  if (section === "banners") {
+    thumb(data.image);
+    parts.push(
+      [
+        data.place === "intro" ? "인트로" : "메인 슬라이드",
+        data.alt,
+        period(),
+        `순서 ${data.order ?? 0}`,
+        data.enabled === false && "사용 안 함",
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    );
+  } else if (section === "couples")
+    parts.push(
+      `${data.firstName || data.first} ♥ ${data.secondName || data.second} · ${data.since ?? ""} · 순서 ${data.order ?? 0}`,
+    );
+  else if (section === "gacha")
+    parts.push(
+      `${data.sourceName || data.source || "탐색"} → ${data.itemName || "꽝"} (${data.weight})`,
+    );
+  else if (section === "explore")
+    parts.push(`${data.itemName || "꽝"} (${data.weight})`);
+  else if (section === "quests") {
+    thumb(data.images?.[0]);
+    if (!Object.hasOwn(QUICK, section))
+      parts.push(
+        `${data.type === "weekly" ? "주간" : "일일"} · ${data.side || "공통"} · ${period()}`,
+      );
+  } else if (section === "shop_entries")
+    parts.push(`· ${data.itemName || data.item}`);
+  if (!parts.length) return null;
+  const span = document.createElement("span");
+  span.className = "row-summary";
+  span.append(...parts);
+  return span;
+}
+/**
+ * The list's 정렬 (subject_sort_link's columns) and its filter: quest_list's
+ * 세력, and main slides apart from the intro (banner_list, intro_list).
+ */
+const SORTS: Record<string, [string, string][]> = {
+  banners: [
+    ["startsAt", "시작"],
+    ["endsAt", "종료"],
+  ],
+  couples: [["since", "날짜"]],
+  quests: [
+    ["name", "이름"],
+    ["startsAt", "시작"],
+    ["endsAt", "종료"],
+  ],
+  shop_entries: [["price", "가격"]],
+  gacha: [["weight", "가중치"]],
+  explore: [["weight", "가중치"]],
+  content: [["name", "이름"]],
+  menus: [["name", "이름"]],
+  emoticons: [["name", "이름"]],
+  sides: [["name", "이름"]],
+  classes: [["name", "이름"]],
+  recipes: [["name", "이름"]],
+  levels: [["exp", "필요 경험치"]],
+  popups: [["startsAt", "시작"]],
+  polls: [["createdAt", "만든 때"]],
+};
+let choicesFor = null;
+async function showListChoices() {
+  if (choicesFor === section) return;
+  choicesFor = section;
+  const sort = $<HTMLSelectElement>("recordSort");
+  sort.replaceChildren(new Option("기본 순서", ""));
+  for (const [key, label] of SORTS[section] ?? []) {
+    sort.append(new Option(`${label} ↑`, `${key}:asc`));
+    sort.append(new Option(`${label} ↓`, `${key}:desc`));
+  }
+  sort.hidden = !(SORTS[section] ?? []).length;
+  const filter = $<HTMLSelectElement>("recordFilter");
+  filter.replaceChildren();
+  filter.hidden = true;
+  if (section === "banners") {
+    filter.dataset.field = "place";
+    filter.append(
+      new Option("메인 슬라이드·인트로", ""),
+      new Option("메인 슬라이드", "main"),
+      new Option("인트로", "intro"),
+    );
+    filter.hidden = false;
+  } else if (section === "quests") {
+    filter.dataset.field = "side";
+    filter.append(new Option("모든 세력", ""));
+    const sides = await owner.query(CALLS.sides.list, { section: "sides" });
+    for (const side of sides.documents)
+      filter.append(new Option(side.data.name, side.data.name));
+    filter.hidden = !sides.documents.length;
+  }
+}
+$("recordSort").onchange = $("recordFilter").onchange = () => run(() => load());
+// The lists' 선택삭제: each chosen entry as its own 삭제 would, the history's
+// 20 a call (exp_list_delete.php, point_list_delete.php), title holdings
+// taken back by title (title_has_list_delete.php).
+$("quickRemove").onclick = () =>
+  run(async () => {
+    const picks = [
+      ...$("adminRows").querySelectorAll<HTMLInputElement>(
+        "input[data-quick]:checked",
+      ),
+    ];
+    if (!picks.length)
+      return ($("adminStatus").textContent =
+        "선택삭제 하실 항목을 하나 이상 선택하세요.");
+    if (!confirm(`선택한 ${picks.length}개를 삭제할까요? 되돌릴 수 없습니다.`))
+      return;
+    const ids = picks.map((pick) => pick.dataset.quick);
+    if (section === "history")
+      for (let at = 0; at < ids.length; at += 20)
+        await owner.mutate(CALLS.history.remove, {
+          ids: ids.slice(at, at + 20),
+        });
+    else if (models[section].holdings) {
+      const byTitle = new Map<string, string[]>();
+      for (const pick of picks)
+        byTitle.set(pick.dataset.title, [
+          ...(byTitle.get(pick.dataset.title) ?? []),
+          pick.dataset.quick,
+        ]);
+      for (const [title, characters] of byTitle)
+        await owner.mutate("admin/titles:grant", {
+          title,
+          action: "revoke",
+          characters,
+        });
+    } else
+      for (const id of ids)
+        await owner.mutate(CALLS[section].remove, { section, id });
+    $("adminStatus").textContent = `${ids.length}개를 삭제했습니다.`;
     await load();
   });
 /** What each kind of history entry was (전체 활동·구매 기록). */
@@ -203,10 +452,13 @@ export async function load({ more = false } = {}) {
   $("memberTools").hidden = section !== "members";
   $("itemCategoryLabel").hidden = section !== "items";
   $("logSearch").hidden = !["history", "inventory"].includes(section);
-  $("quickTools").hidden = !Object.hasOwn(QUICK, section);
+  $("quickTools").hidden = !Object.hasOwn(QUICK, section) && !bulkRemovable();
+  $("quickSave").hidden = !Object.hasOwn(QUICK, section);
+  $("quickRemove").hidden = !bulkRemovable();
   $("recordSearch").hidden =
     Boolean(model.holdings || model.review) ||
     ["members", "history", "inventory", "items", "wallets"].includes(section);
+  await showListChoices();
   $("logKind").hidden = section !== "history";
   // An inventory copy has no memo of its own.
   document.querySelector<HTMLOptionElement>(
@@ -266,12 +518,19 @@ export async function load({ more = false } = {}) {
       effect: $<HTMLSelectElement>("itemEffect").value,
       search: $<HTMLInputElement>("itemSearch").value,
     });
-  else
+  else {
+    const [sort, order] = $<HTMLSelectElement>("recordSort").value.split(":");
+    const filter = $<HTMLSelectElement>("recordFilter");
     page = await owner.query(CALLS[section].list, {
       section,
       after,
       search: $<HTMLInputElement>("recordText").value,
+      ...(sort ? { sort, desc: order === "desc" } : {}),
+      ...(!filter.hidden && filter.value
+        ? { filter: { field: filter.dataset.field, value: filter.value } }
+        : {}),
     });
+  }
   if (requestedSection !== section || !owner) return;
   if (!more) $("adminRows").replaceChildren();
   if (section === "members" && page.counts)
@@ -292,6 +551,13 @@ export async function load({ more = false } = {}) {
         image.className = "title-image";
         li.prepend(image);
       }
+      // title_has_list.php's 선택삭제 (회수).
+      li.prepend(
+        pickBox(`${row.characterId}`, `${row.character} · ${row.title}`, {
+          title: row.titleId,
+        }),
+        " ",
+      );
       const revoke = document.createElement("button");
       revoke.type = "button";
       revoke.textContent = "회수";
@@ -337,6 +603,8 @@ export async function load({ more = false } = {}) {
       // exp_list_delete.php and point_list_delete.php: the entry goes, and
       // what it moved is taken back.
       if (row.data.delta !== undefined || row.data.expDelta !== undefined) {
+        // exp_list.php and point_list.php's 선택삭제.
+        li.prepend(pickBox(row.id, "이 기록"), " ");
         const remove = document.createElement("button");
         remove.type = "button";
         remove.textContent = "삭제";
@@ -368,7 +636,15 @@ export async function load({ more = false } = {}) {
     // character and member; the smaller lists edit in place.
     if (Object.hasOwn(QUICK, section))
       li.append(`${row.id} `, quickFields(row));
-    else li.append(row.data.name ?? row.label ?? row.nick ?? row.id, " ");
+    else {
+      // The lists' 선택삭제 (chk[]).
+      if (bulkRemovable() && section !== "members")
+        li.append(pickBox(row.id, row.data.name ?? row.id), " ");
+      li.append(row.data.name ?? row.label ?? row.nick ?? row.id, " ");
+    }
+    // What the original's list shows in its columns.
+    const summary = rowSummary(row);
+    if (summary) li.append(summary, " ");
     if (section === "members") {
       const pick = document.createElement("input");
       pick.type = "checkbox";
@@ -393,10 +669,6 @@ export async function load({ more = false } = {}) {
     }
     if (section === "wallets")
       li.append(`${moneyText(itemNames, row.data.balance)} `);
-    if (section === "shop_entries")
-      li.append(
-        `· ${row.data.item} · ${row.data.shopCategory || "첫 분류"} · ${moneyText(itemNames, row.data.price ?? 0)}${row.data.enabled === false ? " · 진열 안 함" : ""} `,
-      );
     if (section === "inventory")
       li.append(
         `${row.ownerNick ?? row.data.owner} · ${row.characterName ?? "회원 인벤토리"} `,
