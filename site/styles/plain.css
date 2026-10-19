@@ -360,3 +360,215 @@ body.site.designed #gotoTop {
     font-size: 12px;
   }
 }
+
+/* Public plain layout: retain the owner's palette, logos, menus and banners.
+   These defaults stay in the template layer; 디자인 and 사용자 CSS win.
+   Keep every rule scoped so the original designed theme and admin stay intact. */
+body.site:not(.designed) {
+  font-size: 14px;
+  line-height: 1.7;
+  padding-inline: 24px;
+}
+body.site:not(.designed) > .top {
+  padding-top: 24px;
+}
+body.site:not(.designed) > .top h1 {
+  font-size: 22px;
+  line-height: 1.5;
+  padding-right: 110px;
+}
+body.site:not(.designed) > .top .scheme-choice {
+  top: 24px;
+}
+body.site:not(.designed) .site-menu > ul {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 12px 30px;
+  margin: 16px 0 0;
+  padding: 8px 0 17px;
+  border-bottom: 1px solid var(--rule);
+}
+body.site:not(.designed) .site-menu li {
+  margin-bottom: 0;
+}
+body.site:not(.designed) .site-menu a {
+  display: inline-block;
+  padding: 4px 0;
+  font-size: 13px;
+  line-height: 1.7;
+}
+body.site:not(.designed) .site-menu a[aria-current="page"] {
+  font-weight: bold;
+  text-decoration: underline;
+  text-underline-offset: 6px;
+}
+body.site:not(.designed) button,
+body.site:not(.designed) button[type="submit"] {
+  min-height: 32px;
+  padding: 4px 12px;
+}
+body.site:not(.designed)
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+body.site:not(.designed) select {
+  min-height: 32px;
+  height: auto;
+  padding-block: 4px;
+}
+body.site:not(.designed) textarea {
+  padding: 8px 10px;
+  line-height: 1.7;
+}
+body.site:not(.designed) h2 {
+  font-size: 22px;
+  line-height: 1.5;
+  margin: 24px 0 16px;
+}
+body.site:not(.designed) h3 {
+  font-size: 16px;
+}
+body.site:not(.designed) .section-heading {
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--rule);
+}
+body.site:not(.designed) .hint,
+body.site:not(.designed) .meta {
+  color: var(--pit);
+  font-size: 12px;
+}
+body.site:not(.designed) #homeView {
+  padding-top: 24px;
+}
+body.site:not(.designed) #banners {
+  margin-bottom: 32px;
+}
+body.site:not(.designed) .home-boxes {
+  grid-template-columns: minmax(0, 1fr) minmax(270px, 0.65fr);
+  gap: 32px 40px;
+}
+body.site:not(.designed) #welcome.home-welcome {
+  margin: 0;
+  max-width: none;
+  grid-row: auto;
+  padding: 4px 12px;
+  min-width: 0;
+  line-height: 1.9;
+}
+body.site:not(.designed) .welcome-heading {
+  font-size: 18px;
+  margin: 0 0 10px;
+}
+/* The heading is part of the plain welcome, not the owner's designed theme. */
+body.site.designed .welcome-heading {
+  display: none;
+}
+body.site:not(.designed) .home-welcome p {
+  margin: 0 0 12px;
+}
+body.site:not(.designed) .welcome-help {
+  color: var(--pit);
+  font-size: 12px;
+}
+body.site:not(.designed) .profile-card {
+  grid-column: 2;
+  gap: 14px;
+  padding: 4px 12px;
+}
+body.site:not(.designed) .profile-card .thumb {
+  flex-basis: 65px;
+  height: 100px;
+}
+body.site:not(.designed) .profile-card .name {
+  font-size: 14px;
+}
+body.site:not(.designed) .profile-card #cardDescript {
+  font-size: 12px;
+  color: var(--pit);
+  margin: 5px 0 13px;
+}
+body.site:not(.designed) .profile-card .control-group {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+body.site:not(.designed) .profile-card .control-group li {
+  flex: 0 1 auto;
+}
+body.site:not(.designed) .profile-card .control-group li + li button {
+  border-left-width: 1px;
+}
+body.site:not(.designed) .home-banner {
+  grid-column: 1 / -1;
+  padding: 0;
+  font-size: 12px;
+}
+body.site:not(.designed) #homeView .copyright {
+  margin-top: 18px;
+  font-size: 11px;
+}
+body.site:not(.designed) .board-search {
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-block: 24px;
+}
+@media (max-width: 1024px) {
+  body.site:not(.designed) > .top {
+    height: auto;
+    min-height: 58px;
+    margin-inline: -24px;
+    padding: 8px 24px;
+  }
+  body.site:not(.designed) > .top h1 {
+    padding-right: 0;
+  }
+  body.site:not(.designed) .site-menu > ul {
+    display: block;
+    padding: 24px;
+    margin: 0;
+    border: 0;
+  }
+  body.site:not(.designed) .site-menu li {
+    margin-bottom: 12px;
+  }
+}
+@media (max-width: 800px) {
+  body.site:not(.designed) {
+    padding-inline: 16px;
+  }
+  body.site:not(.designed) > .top {
+    margin-inline: -16px;
+    padding-inline: 16px;
+  }
+  body.site:not(.designed) .home-boxes {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 26px;
+  }
+  body.site:not(.designed) .profile-card {
+    grid-column: 1;
+    padding-top: 20px;
+    border-top: 1px solid var(--rule);
+  }
+}
+@media (max-width: 420px) {
+  body.site:not(.designed) > .top {
+    gap: 4px;
+  }
+  body.site:not(.designed) .home-welcome,
+  body.site:not(.designed) .profile-card {
+    padding-inline: 0;
+  }
+}
+@media (pointer: coarse) {
+  body.site:not(.designed) button,
+  body.site:not(.designed) button[type="submit"],
+  body.site:not(.designed) .site-menu a {
+    min-height: 44px;
+  }
+  body.site:not(.designed) input,
+  body.site:not(.designed) select,
+  body.site:not(.designed) textarea {
+    font-size: 16px;
+  }
+}
