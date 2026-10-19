@@ -1503,6 +1503,21 @@ test("a settlement is settled by a moderator, granting experience and money, the
     "access_denied",
   );
   moderator(site, "m-2");
+  // The staff pay at most the owner's 정산 지급 한도, none until it is set.
+  assert.equal(
+    await refusal(settle({ state: "정산완료", money: 1 })),
+    "settlement_limit",
+  );
+  setSettings(site, "community", {
+    settlementExpLimit: 5,
+    settlementMoneyLimit: 30,
+  });
+  for (const pay of [{ exp: 6 }, { money: 31 }, { exp: 5, money: 2 ** 40 }])
+    assert.equal(
+      await refusal(settle({ state: "정산완료", ...pay })),
+      "settlement_limit",
+    );
+  assert.equal(balanceOf(site, "m-1"), undefined);
   const { document: settled } = await settle({
     state: "정산완료",
     exp: 5,
@@ -1565,12 +1580,13 @@ test("a settlement is settled by a moderator, granting experience and money, the
     ),
     "own_settlement",
   );
+  // The owner pays past the limit.
   await site.mutate(
     "community/posts:settle",
-    { id: own.id, state: "정산완료", money: 5 },
+    { id: own.id, state: "정산완료", money: 500 },
     OWNER,
   );
-  assert.equal(balanceOf(site, "m-2"), 5);
+  assert.equal(balanceOf(site, "m-2"), 500);
 });
 
 test("a board search reaches every post at once and pages what it finds", async () => {

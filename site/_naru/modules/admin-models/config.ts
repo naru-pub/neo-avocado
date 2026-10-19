@@ -346,6 +346,23 @@ export const configModels: Record<string, Model> = {
         type: "number",
         default: 0,
       },
+      // Not the original's: caculate lets any admin pay any amount. Here a
+      // moderator or a board's 게시판·그룹 관리자 pays a settlement at most
+      // these; more is the site owner's to pay.
+      {
+        key: "settlementMoneyLimit",
+        label:
+          "정산 지급 한도: 화폐 (운영진·게시판 관리자가 정산글 하나에 줄 수 있는 최대, 0이면 운영자만 지급)",
+        type: "number",
+        default: 0,
+      },
+      {
+        key: "settlementExpLimit",
+        label:
+          "정산 지급 한도: 경험치 (운영진·게시판 관리자가 정산글 하나에 줄 수 있는 최대, 0이면 운영자만 지급)",
+        type: "number",
+        default: 0,
+      },
       // adm/config_form.php's 게시판 기본 설정: cf_delay_sec, cf_page_rows,
       // cf_write_pages, cf_mobile_pages, cf_link_target. A first save
       // writes the original's 30 seconds; a site saved before keeps none.

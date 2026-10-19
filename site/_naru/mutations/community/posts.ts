@@ -904,6 +904,22 @@ export async function settle(
     ctx.fail("ACCESS_DENIED", "자기 정산글에는 지급할 수 없습니다.", {
       reason: "own_settlement",
     });
+  // A moderator or board admin pays at most the owner's 정산 지급 한도;
+  // more is the site owner's.
+  if (!ctx.owner) {
+    const settings = await communitySettings(ctx);
+    const limit = (key: string) =>
+      Number.isSafeInteger(settings[key]) && settings[key] > 0
+        ? (settings[key] as number)
+        : 0;
+    if (
+      exp > limit("settlementExpLimit") ||
+      money > limit("settlementMoneyLimit")
+    )
+      ctx.fail("ACCESS_DENIED", "정산 지급 한도를 넘었습니다.", {
+        reason: "settlement_limit",
+      });
+  }
   const character = row.character_id === null ? null : String(row.character_id);
   if (exp > 0) {
     if (!character)
