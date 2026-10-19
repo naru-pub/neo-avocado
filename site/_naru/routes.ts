@@ -1,10 +1,10 @@
 // What Naru answers the paths routes.json lists with, before the page loads:
 // a board's RSS feed (bbs/rss.php) at /rss/<board>, and every other one
 // index.html with its link preview (modules/previews.ts). What a path names
-// is read in shared/places.ts, as the page's router reads it; a listed path
+// is read in modules/places.ts, as the page's router reads it; a listed path
 // that names nothing is 404.
 import { page, type RouteInput } from "./modules/previews.js";
-import { placeOf } from "./shared/places.js";
+import { placeOf } from "./modules/places.js";
 import { feed } from "./modules/rss.js";
 import type { QueryCtx } from "./modules/naru-types.js";
 

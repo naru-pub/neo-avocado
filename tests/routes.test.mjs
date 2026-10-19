@@ -518,7 +518,7 @@ test("a board's RSS feed lists what a visitor reads, while it is on and the boar
 });
 
 test("an address names the same place for the page and for Naru's routes", async () => {
-  const { placeOf } = await import("../dist/_naru/shared/places.js");
+  const { placeOf } = await import("../dist/_naru/modules/places.js");
   for (const [path, place] of [
     ["/", { kind: "index" }],
     ["/members", { kind: "members" }],

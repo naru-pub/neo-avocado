@@ -1,7 +1,7 @@
 // What the unit tests share: who calls, refusals, rows made directly, and
 // the owner's admin calls routed as the admin page routes them
 // (_naru/modules/admin-calls.ts).
-import { adminCall } from "../dist/_naru/shared/admin-calls.js";
+import { adminCall } from "../dist/_naru/modules/admin-calls.js";
 
 export const M1 = { member: "m-1" };
 export const M2 = { member: "m-2" };

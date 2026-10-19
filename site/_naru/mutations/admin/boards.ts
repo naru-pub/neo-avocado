@@ -1,5 +1,5 @@
 // 게시판 (adm/board_list.php, board_form.php): the owner saves an entry,
-// checked as its form checks it (shared/admin-model.ts), with 그룹적용 and
+// checked as its form checks it (modules/admin-model.ts), with 그룹적용 and
 // 전체적용, and copies one (board_copy.php); deleting is admin/records'.
 import {
   TABLES,
@@ -16,7 +16,7 @@ import {
   COMMENT_COPY_COLUMNS,
   POST_COPY_COLUMNS,
 } from "../../modules/boards.js";
-import { models } from "../../shared/admin-model.js";
+import { models } from "../../modules/admin-model.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
 /** Boards 그룹적용 and 전체적용 reach in one call: one write each. */

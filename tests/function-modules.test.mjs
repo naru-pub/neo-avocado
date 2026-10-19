@@ -27,7 +27,7 @@ for (const page of pages) {
 // The admin's section calls, which the admin page makes from
 // modules/admin-calls.js rather than writes out.
 const calls = await import(
-  new URL("../dist/_naru/shared/admin-calls.js", import.meta.url).href
+  new URL("../dist/_naru/modules/admin-calls.js", import.meta.url).href
 );
 for (const section of [
   ...Object.keys(calls.RECORD_CALLS),

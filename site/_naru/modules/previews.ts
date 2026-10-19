@@ -25,7 +25,7 @@ import type { Board, PostRow } from "./boards.js";
 import { characterKey, characterRow, shownCharacter } from "./characters.js";
 import { MAIN_PAGE, readablePage } from "./content.js";
 import type { QueryCtx } from "./naru-types.js";
-import { placeOf, whole, type Place } from "../shared/places.js";
+import { placeOf, whole, type Place } from "./places.js";
 
 /**
  * What Naru hands a route (routes.ts): the path asked, the address it was

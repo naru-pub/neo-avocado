@@ -1,6 +1,6 @@
-// Every admin section's plain save and delete (shared/admin-calls.ts's
+// Every admin section's plain save and delete (modules/admin-calls.ts's
 // RECORD_CALLS): `{ section, ... }`, checked as its form checks it
-// (shared/admin-model.ts), for the owner only.
+// (modules/admin-model.ts), for the owner only.
 import {
   recordSection,
   removeRecord,

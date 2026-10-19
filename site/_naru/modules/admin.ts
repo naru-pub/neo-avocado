@@ -3,7 +3,7 @@
 // (admin-model.ts's buildRecord, as the page used to check them) before they
 // are written to the section's table. The queries and mutations in admin/
 // are the owner's alone: each is made by `ownerOnly` (access.ts).
-import { buildRecord, formValues, models } from "../shared/admin-model.js";
+import { buildRecord, formValues, models } from "./admin-model.js";
 import {
   GROUP_ROLE,
   STAFF,
@@ -15,7 +15,7 @@ import {
   invalid,
 } from "./access.js";
 import { characterKey } from "./characters.js";
-import { RECORD_CALLS, type AdminCall } from "../shared/admin-calls.js";
+import { RECORD_CALLS, type AdminCall } from "./admin-calls.js";
 import type { MutationCtx, QueryCtx, SqlValue } from "./naru-types.js";
 
 /** Refuses input no form sends. */

@@ -40,7 +40,7 @@ name(ctx, args)`, by area: community, characters, economy, content and
   Cloudflare Pages' `_routes.json` form (`/logs` and `/logs/*` for a
   section), and `routes.ts` answers each as a visitor's query: index.html
   with that page's link preview (`modules/previews.ts`), or a board's RSS
-  feed. What an address names is `shared/places.ts`, which the page's
+  feed. What an address names is `modules/places.ts`, which the page's
   router reads too. A listed address that names nothing is 404, as is one
   neither listed nor a file.
 
@@ -52,15 +52,15 @@ groups `group-<id>`; a member's level 1–10 is the site's own `members` row.
 
 **The owner's admin** (`site/admin/`) calls each section's `list`, `get`,
 `save` and `remove` where it has them: `admin/records:<call>` with
-`{ section }` for those `shared/admin-calls.ts` lists as plain, which the
+`{ section }` for those `modules/admin-calls.ts` lists as plain, which the
 shared code in `modules/admin.ts` does, and `admin/<section>:<call>` for
 what a section does itself (`admin/members`, `admin/boards:save`,
 `admin/history`, …). Every one is made by `ownerOnly(fn)`, which refuses
 anyone but the owner before `fn` runs; so are the owner's calls outside
 admin/ (`economy/grants:grant`, `characters/review:reviewCharacter`,
 `characters/sheet:move`). A save takes the form's values and checks them
-with `buildRecord` (`shared/admin-model.ts`): each section's fields and its
-own rules (`check`) are in `shared/admin-models/<area>.ts`, grouped as the
+with `buildRecord` (`modules/admin-model.ts`): each section's fields and its
+own rules (`check`) are in `modules/admin-models/<area>.ts`, grouped as the
 admin menu groups them, and the page draws its forms from the same models.
 Values left out keep the record's own. Writes that go together are one
 mutation: a balance and its history entry, a character's record and its
@@ -132,7 +132,7 @@ re-exported by `modules/naru-types.ts`; the pages' client is typed by
   rule comes from.
 - One query per page view where a page would chain several reads; loops
   that called again until done are one call.
-- Shared code is written once: the owner's names (`shared/names.ts`, for
+- Shared code is written once: the owner's names (`modules/names.ts`, for
   the site's code and its pages), a reply's place (`replyPlace`), 소속·종족
   restrictions (`requireSideAndClass`).
 

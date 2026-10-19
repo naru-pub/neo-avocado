@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { testSite } from "./sql-ctx.mjs";
-import { onDisplay } from "../dist/_naru/shared/display.js";
+import { onDisplay } from "../dist/_naru/modules/display.js";
 import { GACHA_COST } from "../dist/_naru/modules/economy.js";
 import {
   M1,

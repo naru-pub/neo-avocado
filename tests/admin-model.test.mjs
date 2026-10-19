@@ -590,7 +590,7 @@ test("no page or server code names a collection: the site declares none", async 
     if (name.endsWith(".js")) files.push(`admin/${name}`);
   for (const name of await readdir(new URL("../dist/app", import.meta.url)))
     files.push(`app/${name}`);
-  for (const dir of ["modules", "shared", "queries", "mutations"])
+  for (const dir of ["modules", "queries", "mutations"])
     for (const entry of await readdir(
       new URL(`../dist/_naru/${dir}`, import.meta.url),
       { recursive: true },

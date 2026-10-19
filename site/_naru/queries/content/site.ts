@@ -17,8 +17,8 @@ import {
   backgroundMusic,
   readablePage,
 } from "../../modules/content.js";
-import { designCss, designLayout, ownerMarks } from "../../shared/design.js";
-import { imageSlotsOf, nameFieldOf, viewerOf } from "../../shared/images.js";
+import { designCss, designLayout, ownerMarks } from "../../modules/design.js";
+import { imageSlotsOf, nameFieldOf, viewerOf } from "../../modules/images.js";
 import { latestPoll } from "../../modules/polls.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
 

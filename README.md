@@ -557,18 +557,18 @@ ID가 `site_main`인 내용 페이지는 원본의 **메인화면 구성**처럼
 `ctx.visitor`)을 보고 무엇을 읽고 쓸지 정합니다.
 돈·재고·주사위처럼 회원이 마음대로 정하면 안 되는 값은 뮤테이션만 바꿉니다.
 
-| 기능                   | 화면 (`site/`)                                                         | 서버 코드 (`site/_naru/`)                                    |
-| ---------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------ |
-| 로그인·가입·닉네임     | `app/main.js`                                                          | `queries/community/`, `mutations/community/`                 |
-| 게시판·로그·댓글       | `app/logs.js`, `log-item.js`, `comments.js`, `log-form.js`, `posts.js` | `queries/community/`, `mutations/community/`                 |
-| 캐릭터                 | `app/characters.js`, `app/couples.js`                                  | `queries/characters/`, `mutations/characters/`               |
-| 상점·인벤토리·제작     | `app/shop.js`                                                          | `queries/economy/`, `mutations/economy/`                     |
-| 쪽지                   | `app/messages.js`                                                      | `queries/community/messages.js`, `mutations/community/`      |
-| 알림(호출)             | `app/calls.js`                                                         | `queries/community/calls.js`, `mutations/community/calls.js` |
-| 퀘스트·안내 페이지     | `app/content.js`                                                       | `queries/content/`                                           |
-| 디자인·메뉴·배너       | `app/site.js`                                                          | `queries/content/site.js`                                    |
-| 새 글·알림 실시간 수신 | `app/live.js`                                                          | `queries/community/inbox.js`, `posts.js`                     |
-| 운영 화면              | `admin/` (`main.js`와 영역별 모듈, `forms.js`)                         | `queries/admin/`, `mutations/admin/`, `shared/admin-models/` |
+| 기능                   | 화면 (`site/`)                                                         | 서버 코드 (`site/_naru/`)                                     |
+| ---------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------- |
+| 로그인·가입·닉네임     | `app/main.js`                                                          | `queries/community/`, `mutations/community/`                  |
+| 게시판·로그·댓글       | `app/logs.js`, `log-item.js`, `comments.js`, `log-form.js`, `posts.js` | `queries/community/`, `mutations/community/`                  |
+| 캐릭터                 | `app/characters.js`, `app/couples.js`                                  | `queries/characters/`, `mutations/characters/`                |
+| 상점·인벤토리·제작     | `app/shop.js`                                                          | `queries/economy/`, `mutations/economy/`                      |
+| 쪽지                   | `app/messages.js`                                                      | `queries/community/messages.js`, `mutations/community/`       |
+| 알림(호출)             | `app/calls.js`                                                         | `queries/community/calls.js`, `mutations/community/calls.js`  |
+| 퀘스트·안내 페이지     | `app/content.js`                                                       | `queries/content/`                                            |
+| 디자인·메뉴·배너       | `app/site.js`                                                          | `queries/content/site.js`                                     |
+| 새 글·알림 실시간 수신 | `app/live.js`                                                          | `queries/community/inbox.js`, `posts.js`                      |
+| 운영 화면              | `admin/` (`main.js`와 영역별 모듈, `forms.js`)                         | `queries/admin/`, `mutations/admin/`, `modules/admin-models/` |
 
 `app/core.js`는 모든 화면이 함께 쓰는 것(상태, 오류 표시, 편집 창)입니다.
 
@@ -581,7 +581,7 @@ mutation이 끝날 때마다 그 답을 다시 보내 줍니다.
 운영 화면은 운영자만 부를 수 있는 쿼리·뮤테이션을 씁니다. 목록·읽기·저장·삭제만 하는
 섹션은 `admin/records`가 맡고(`{ section }`을 함께 보냄), 더 하는 일이 있는 섹션은
 자기 모듈(`admin/members:list`, `admin/boards:save` 등)이 맡습니다. 저장은 양식에 적은
-값을 그대로 보내고, 서버가 양식과 같은 규칙(`_naru/shared/admin-models/`의 영역별
+값을 그대로 보내고, 서버가 양식과 같은 규칙(`_naru/modules/admin-models/`의 영역별
 양식과 규칙)으로 검사한 뒤 테이블에 씁니다.
 잔액과 그 조정 기록, 경험치와 그 기록, 여러 캐릭터의 타이틀 지급·회수는 각각 한 번의
 뮤테이션입니다.
@@ -631,7 +631,7 @@ export async function gacha(ctx, args) {
 ```
 
 `ctx.fail`은 호출을 멈추고 그때까지의 쓰기를 모두 되돌립니다. `mutate`는 그 메시지로
-오류를 던지고, `run`이 그 메시지를 화면에 그대로 보여 줍니다. 공통 코드는 `_naru/modules/`에 있고 쿼리와 뮤테이션이 정적 import합니다. 페이지도 함께 쓰는 코드(이름, 장소, 관리 화면의 모델 등)는 `_naru/shared/`에 있고, `_naru/`에서는 이 폴더만 방문자에게 공개됩니다.
+오류를 던지고, `run`이 그 메시지를 화면에 그대로 보여 줍니다. 공통 코드는 `_naru/modules/`에 있고 쿼리와 뮤테이션이 정적 import합니다. 나루는 `_naru/`의 파일을 공개하지 않으므로, 페이지도 쓰는 모듈(이름, 장소, 관리 화면의 모델 등)은 빌드가 `shared/naru/`에 한 번 더 내보내고 페이지의 import를 그쪽으로 바꿉니다(`scripts/build.mjs`).
 번들 생성은 필요하지 않습니다. 자세한 구조는 [docs/architecture.md](docs/architecture.md)를
 참고하세요.
 

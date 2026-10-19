@@ -5,7 +5,7 @@
 // by, and the profile fields every sheet is shown with. A character's sheet
 // with all its fields, for the owner's form.
 import { PAGE, invalid, offsetOf, pageOf } from "../../modules/admin.js";
-import { REVIEW_STATES } from "../../shared/admin-model.js";
+import { REVIEW_STATES } from "../../modules/admin-model.js";
 import {
   characterRow,
   definitionDocument,

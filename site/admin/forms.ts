@@ -1,8 +1,8 @@
 // The admin page's sections: their forms and checks are the server's
-// (_naru/shared/admin-model.ts, which the owner's mutations check each save
+// (_naru/modules/admin-model.ts, which the owner's mutations check each save
 // with); the menu and how a section and a member are named are the page's.
 import { rename } from "../app/names.js";
-import { models } from "../_naru/shared/admin-model.js";
+import { models } from "../_naru/modules/admin-model.js";
 
 export {
   models,
@@ -10,8 +10,8 @@ export {
   fieldValue,
   formValues,
   REVIEW_STATES,
-} from "../_naru/shared/admin-model.js";
-export type { Model, ModelField } from "../_naru/shared/admin-model.js";
+} from "../_naru/modules/admin-model.js";
+export type { Model, ModelField } from "../_naru/modules/admin-model.js";
 
 /**
  * The admin menu, in the original's groups (adm/admin.menu100–900.php), each
