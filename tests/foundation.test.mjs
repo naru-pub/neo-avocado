@@ -326,6 +326,32 @@ test("the owner is not 현재접속자, and a member before joining is nowhere",
   );
 });
 
+test("design defaults to the shared top layout and preserves an explicitly saved left menu", async () => {
+  const site = await testSite();
+  setSettings(site, "design", { enabled: true });
+  assert.equal(
+    (await site.query("content/site:site")).design.menuPosition,
+    "top",
+  );
+  setSettings(site, "design", {
+    enabled: true,
+    menuPosition: "left",
+    menuWidth: 260,
+    styles: {
+      subMenu: { background: "#123456", color: "#eeeeee", hover: "#abcdef" },
+    },
+    customCss: "body.site { letter-spacing: 1px; }",
+  });
+  const { design } = await site.query("content/site:site");
+  assert.equal(design.menuPosition, "left");
+  assert.match(design.css, /--menu-width: 260px/);
+  assert.match(design.css, /body\.site\.designed \.site-menu > ul/);
+  assert.match(design.css, /background-color: #123456/);
+  assert.match(design.css, /color: #eeeeee/);
+  assert.match(design.css, /color: #abcdef/);
+  assert.equal(design.customCss, "body.site { letter-spacing: 1px; }");
+});
+
 test("디자인 설정's styles become the design CSS, and nothing else does", async () => {
   const site = await testSite();
   setSettings(site, "design", {
@@ -477,7 +503,7 @@ test("the site frame shows only safe design values and menus/banners a reader ma
     font: "sans",
     colors: { accent: "#123456" },
     useHeader: true,
-    menuPosition: "left",
+    menuPosition: "top",
     css: ":root:has(body.site.designed) {\n  --menu-width: 200px;\n  --menu-height: 50px;\n}\n",
     customCss: "",
     ownerMarks: { prefix: "▶", suffix: "◀" },

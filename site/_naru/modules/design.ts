@@ -202,7 +202,7 @@ export function designStyles(saved: Record<string, any> = {}) {
 export function designLayout(saved: Record<string, any> = {}) {
   return {
     useHeader: saved?.useHeader !== false,
-    menuPosition: saved?.menuPosition === "top" ? "top" : "left",
+    menuPosition: saved?.menuPosition === "left" ? "left" : "top",
     // The original installs 200 and 50 (install_db.php's css_config).
     menuWidth: pixels(saved?.menuWidth, 600) || 200,
     menuHeight: pixels(saved?.menuHeight, 400) || 50,
@@ -280,7 +280,7 @@ const PARTS: Record<string, string[]> = {
   logImage: [".log .log-picture"],
   comments: [".log .log-discussion"],
   comment: [".comment"],
-  subMenu: [".tabs"],
+  subMenu: [".tabs", ".site-menu > ul"],
   // .theme-box.
   box: [
     ".card",
@@ -351,13 +351,15 @@ export function designCss(saved: Record<string, any> = {}): string {
     ]);
   if (s.subMenu) {
     css += rule(
-      [".tabs button"],
+      [".tabs button", ".site-menu > ul > li > a"],
       [s.subMenu.color && `color: ${s.subMenu.color}`],
     );
     css += rule(
       [
         ".tabs button:hover:not(:disabled)",
         '.tabs button[aria-pressed="true"]',
+        ".site-menu > ul > li > a:hover",
+        '.site-menu > ul > li > a[aria-current="page"]',
       ],
       [s.subMenu.hover && `color: ${s.subMenu.hover}`],
     );

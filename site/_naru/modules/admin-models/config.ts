@@ -665,6 +665,7 @@ export const configModels: Record<string, Model> = {
         key: "menuPosition",
         label: "메뉴 위치",
         type: "choice",
+        default: "top",
         options: [
           ["left", "좌측"],
           ["top", "상단"],
