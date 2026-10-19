@@ -3692,6 +3692,30 @@ test("다운로드 등급 keeps a file's address from readers below it; 다운�
   wallet(site, "m-2", 0);
   site.run("DELETE FROM history WHERE kind = 'download'");
   assert.equal(await refusal(download()), "not_enough");
+  // The writer's own downloads pay and take nothing, whatever the sign.
+  member(site, "m-1", { level: 3 });
+  for (const downloadPoint of [-4, 4]) {
+    board(site, "free", {
+      ...PUBLIC_BOARD,
+      kind: "text",
+      uploadCount: 2,
+      downloadLevel: 3,
+      downloadPoint,
+    });
+    wallet(site, "m-1", 0);
+    await site.mutate(
+      "community/posts:download",
+      { id: saved.id, url: pdf },
+      M1,
+    );
+    assert.equal(balanceOf(site, "m-1"), 0);
+  }
+  assert.equal(
+    site.rows(
+      "SELECT count(*) AS n FROM history WHERE owner = 'm-1' AND kind = 'download'",
+    )[0].n,
+    0,
+  );
 });
 
 test("전체 검색 사용 off keeps a board out of 최근게시물; 포인트 사용 off pays and takes nothing", async () => {

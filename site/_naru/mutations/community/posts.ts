@@ -703,14 +703,15 @@ export async function download(
     });
   // 다운로드 등급 (bo_download_level), and 다운로드 포인트
   // (bo_download_point): paid or taken on a member's first download of the
-  // file, as download.php's insert_point with its po_rel_action.
+  // file, as download.php's insert_point with its po_rel_action; never on
+  // the writer's own (download.php: $member['mb_id'] != $write['mb_id']).
   if (!downloadable(access, board))
     ctx.fail("ACCESS_DENIED", "다운로드 권한이 없습니다.", {
       reason: "download_level",
     });
   const points = await boardPoints(ctx, board, "downloadPoint");
   const member = ctx.member?.id;
-  if (points && member && !isStaff(access, board)) {
+  if (points && member && member !== row.owner && !isStaff(access, board)) {
     const paid = await one(
       ctx,
       `SELECT 1 FROM history WHERE owner = ? AND kind = 'download'
