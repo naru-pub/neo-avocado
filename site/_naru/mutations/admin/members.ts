@@ -4,6 +4,7 @@
 // 관리 saves the warnings alone. Deleting a member's record takes those
 // roles too; deleting the member (member_delete.php) takes their data.
 import {
+  MEMBER_SELECT,
   TABLES,
   checked,
   conflict,
@@ -20,7 +21,13 @@ import {
   one,
   ownerOnly,
 } from "../../modules/access.js";
-import { addHistory, saveWallet, walletOf } from "../../modules/members.js";
+import {
+  addHistory,
+  nickTaken,
+  nickValid,
+  saveWallet,
+  walletOf,
+} from "../../modules/members.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
 export const save = ownerOnly(async function save(
@@ -32,7 +39,7 @@ export const save = ownerOnly(async function save(
   }: { id?: string; values?: Record<string, unknown>; create?: boolean } = {},
 ) {
   if (typeof id !== "string" || !id) invalid(ctx);
-  const row = await one(ctx, "SELECT * FROM members WHERE member = ?", [id]);
+  const row = await one(ctx, `${MEMBER_SELECT} WHERE members.member = ?`, [id]);
   if (create ? row : !row) conflict(ctx);
   const roles = (await ctx.rolesOf([id]))[id] ?? [];
   // A new record starts from the role and groups the member already has.
@@ -43,6 +50,27 @@ export const save = ownerOnly(async function save(
   });
   await writeRow(ctx, TABLES.members, id, record.data);
   await setRolesOf(ctx, id, rolesOfData(record.data, roles));
+  // 닉네임 and 출생년도 (member_form_update.php's mb_name, mb_birth): the
+  // profile's, held to a member's own rules for a nickname; none before
+  // the member joins.
+  if (typeof row?.nick !== "string") {
+    delete record.data.nick;
+    delete record.data.birthYear;
+  } else {
+    const nick = String(record.data.nick ?? "").trim();
+    if (nick !== row.nick) {
+      if (!nickValid(nick))
+        ctx.fail(
+          "INVALID_REQUEST",
+          "닉네임은 공백없이 한글, 영문, 숫자만 입력 가능합니다.",
+          { reason: "invalid_nick" },
+        );
+      await nickTaken(ctx, nick, id);
+      await ctx.sql`UPDATE profiles SET nick = ${nick} WHERE member = ${id}`;
+    }
+    await ctx.sql`UPDATE profiles SET birth_year = ${record.data.birthYear ?? null}
+      WHERE member = ${id}`;
+  }
   return { id, data: record.data };
 });
 

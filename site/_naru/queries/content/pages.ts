@@ -1,15 +1,18 @@
 // 내용 페이지 (bbs/content.php): the owner's pages the reader's level may
 // see. Pages whose read level is 1 are public, as GnuBoard's guest level.
 import { communityAccess, invalid } from "../../modules/access.js";
-import { MAIN_PAGE, readablePage } from "../../modules/content.js";
+import { MAIN_PAGE, MENU_PAGE, readablePage } from "../../modules/content.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
 
-/** The pages the reader may see, by ID, without the home's own (site_main). */
+/**
+ * The pages the reader may see, by ID, without the home's own (site_main)
+ * and the menu's (site_menu).
+ */
 export async function contentPages(ctx: QueryCtx) {
   const access = await communityAccess(ctx);
   const { rows } = await ctx.sql<{ id: string; name: string }>`
     SELECT id, name FROM content
-    WHERE enabled != 0 AND read_level <= ${access.level} AND id != ${MAIN_PAGE}
+    WHERE enabled != 0 AND read_level <= ${access.level} AND id NOT IN (${MAIN_PAGE}, ${MENU_PAGE})
     ORDER BY id LIMIT 1000`;
   return { pages: rows.map((row) => ({ id: row.id, name: row.name })) };
 }

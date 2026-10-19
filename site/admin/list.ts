@@ -484,6 +484,7 @@ export async function load({ more = false } = {}) {
       section,
       search: $<HTMLInputElement>("memberSearch").value,
       field: $<HTMLSelectElement>("memberField").value,
+      sort: $<HTMLSelectElement>("memberSort").value,
       after,
     });
   else if (model.review) {
@@ -652,7 +653,9 @@ export async function load({ more = false } = {}) {
       pick.dataset.nick = row.nick ?? row.id;
       pick.setAttribute("aria-label", `${row.nick ?? row.id} 선택`);
       li.prepend(pick, " ");
-      li.append(`· ${memberSummary({ row, lastSeen: row.lastSeen })} `);
+      li.append(
+        `· ${memberSummary({ row, lastSeen: row.lastSeen, joinedAt: row.joinedAt })} `,
+      );
       // 보유캐릭터 (member_list.php:175-190), each opening its record.
       if (row.characters?.length) {
         li.append("· 보유캐릭터 ");
@@ -800,3 +803,6 @@ $("holdingsSearch").onkeydown = (event) => {
     run(() => load());
   }
 };
+
+// member_list.php sorts by a column (sst, sod).
+$("memberSort").onchange = () => run(() => load());

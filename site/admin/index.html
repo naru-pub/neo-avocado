@@ -96,12 +96,15 @@
             <option value="nick">닉네임·회원 번호</option>
             <option value="level">권한 (등급)</option>
             <option value="recommender">추천인</option></select
-          ><input id="memberSearch" type="search" /><button
-            id="memberFind"
-            type="button"
+          ><input id="memberSearch" type="search" /><select
+            id="memberSort"
+            aria-label="정렬"
           >
-            검색
-          </button></label
+            <option value="seen">최근 접속순</option>
+            <option value="joined">가입일순</option>
+            <option value="nick">닉네임순</option>
+            <option value="level">등급순</option></select
+          ><button id="memberFind" type="button">검색</button></label
         >
         <!-- member_list_update.php's 선택수정 (권한), 선택탈퇴 and 선택삭제. -->
         <p id="memberTools" hidden>

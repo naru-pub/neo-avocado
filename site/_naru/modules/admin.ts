@@ -853,8 +853,15 @@ export const memberData = (
   roles: readonly string[],
 ) => ({
   ...(row ? dataOf(TABLES.members, row) : {}),
+  // The profile's, where the row was read with it.
+  ...(typeof row?.nick === "string" ? { nick: row.nick } : {}),
+  ...(typeof row?.birth_year === "number" ? { birthYear: row.birth_year } : {}),
   ...accessOfRoles(roles),
 });
+
+/** A member's row read with their profile's nick, 출생년도 and 가입일. */
+export const MEMBER_SELECT = `SELECT members.*, profiles.nick, profiles.birth_year,
+  profiles.joined_at FROM members LEFT JOIN profiles ON profiles.member = members.member`;
 
 /** Writes a record's data to its row: an upsert, or a new numbered row. */
 export async function writeRow(

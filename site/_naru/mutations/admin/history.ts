@@ -22,6 +22,9 @@ interface Entry {
   delta: number | null;
   exp_delta: number | null;
   character_id: string | null;
+  kind: string;
+  item_id: string | null;
+  entry_id: string | null;
 }
 
 export const remove = ownerOnly(async function remove(
@@ -39,12 +42,26 @@ export const remove = ownerOnly(async function remove(
   for (const id of new Set(ids.map(Number))) {
     const entry = await one<Entry>(
       ctx,
-      "SELECT id, owner, delta, exp_delta, character_id FROM history WHERE id = ?",
+      "SELECT id, owner, delta, exp_delta, character_id, kind, item_id, entry_id FROM history WHERE id = ?",
       [id],
     );
     if (!entry) continue;
     await ctx.sql`DELETE FROM history WHERE id = ${id}`;
     removed += 1;
+    // A purchase's record goes as order_list_delete.php's row does: the
+    // character may buy it again within its 구매 한도 (the limit counts
+    // those rows, shop/_ajax.shop_update.php:89).
+    if (entry.kind === "buy" && entry.character_id !== null) {
+      const key = entry.entry_id ? `entry:${entry.entry_id}` : entry.item_id;
+      if (key)
+        await ctx.sql`UPDATE characters SET purchases = CASE
+            WHEN coalesce(json_extract(purchases, '$.' || json_quote(${key})), 0) > 1
+            THEN json_set(purchases, '$.' || json_quote(${key}),
+              json_extract(purchases, '$.' || json_quote(${key})) - 1)
+            ELSE json_remove(purchases, '$.' || json_quote(${key})) END,
+            version = version + 1
+          WHERE id = ${Number(entry.character_id)}`;
+    }
     if (entry.exp_delta !== null && entry.character_id !== null) {
       const character = await one<{ exp: number; points: number | null }>(
         ctx,

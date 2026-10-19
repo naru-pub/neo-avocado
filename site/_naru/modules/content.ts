@@ -16,6 +16,8 @@ export interface ContentRow {
 
 /** The page the home shows in place of its own (main.php's site_main). */
 export const MAIN_PAGE = "site_main";
+/** The page the header's menu shows in place of its own (head.php's site_menu). */
+export const MENU_PAGE = "site_menu";
 
 /**
  * Whether the reader may see a content page. The original's pages have no

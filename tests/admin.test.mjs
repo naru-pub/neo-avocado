@@ -2492,3 +2492,76 @@ test("a list reads in its 순서, sorts and narrows as asked, and finds a row by
   assert.deepEqual(ids(found), ["g1"]);
   assert.equal(found.documents[0].data.itemName, "케이크");
 });
+
+test("the owner renames a member and sets their 출생년도, held to a nickname's rules", async () => {
+  const site = await testSite();
+  profile(site, "m-1", "하나");
+  profile(site, "m-2", "둘");
+  const edit = (values) => mutate(site, "members:save", { id: "m-1", values });
+  assert.equal(
+    (await query(site, "members:get", { id: "m-1" })).data.nick,
+    "하나",
+  );
+  await edit({ nick: "새이름", birthYear: 1999 });
+  assert.deepEqual(
+    site.rows("SELECT nick, birth_year FROM profiles WHERE member = 'm-1'"),
+    [{ nick: "새이름", birth_year: 1999 }],
+  );
+  assert.equal(await refusal(edit({ nick: "둘" })), "nick_taken");
+  assert.equal(await refusal(edit({ nick: "빈 칸" })), "invalid_nick");
+  assert.equal(await refusal(edit({ birthYear: 1800 })), "invalid_input");
+  // member_list.php's 가입일, and its sort.
+  site.run("UPDATE profiles SET joined_at = 5 WHERE member = 'm-2'");
+  const listed = await query(site, "members:list", { sort: "joined" });
+  assert.deepEqual(
+    listed.documents.map((row) => row.id),
+    ["m-2", "m-1"],
+  );
+  assert.equal(listed.documents[0].joinedAt, 5);
+});
+
+test("deleting a purchase's record frees its 구매 한도, as order_list_delete.php does", async () => {
+  const site = await testSite();
+  profile(site, "m-1", "하나");
+  const hero = character(site, { owner: "m-1" });
+  site.run(
+    `UPDATE characters SET purchases = '{"cake":2,"entry:7":1}' WHERE id = ?`,
+    Number(hero),
+  );
+  site.run("INSERT INTO wallets (member, balance) VALUES ('m-1', 0)");
+  for (const [item, entry] of [
+    ["cake", null],
+    ["tea", "7"],
+  ])
+    site.run(
+      "INSERT INTO history (owner, kind, at, delta, balance, item_id, entry_id, character_id) VALUES ('m-1', 'buy', 1, -10, 0, ?, ?, ?)",
+      item,
+      entry,
+      Number(hero),
+    );
+  const ids = site
+    .rows("SELECT id FROM history ORDER BY id")
+    .map((row) => String(row.id));
+  await mutate(site, "history:remove", { ids });
+  assert.deepEqual(
+    JSON.parse(
+      site.rows(
+        "SELECT purchases FROM characters WHERE id = ?",
+        Number(hero),
+      )[0].purchases,
+    ),
+    { cake: 1 },
+  );
+});
+
+test("a site_menu page takes the menu's place, and is no 안내 page", async () => {
+  const site = await testSite();
+  site.run(
+    "INSERT INTO content (id, name, body, read_level) VALUES ('site_menu', '메뉴', '<a href=\"/members\">멤버</a>', 1)",
+  );
+  assert.equal((await site.query("content/site:site")).menuPage, true);
+  assert.deepEqual(
+    (await site.query("content/pages:contentPages")).pages.map((row) => row.id),
+    [],
+  );
+});

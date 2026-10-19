@@ -6,6 +6,14 @@ export const membersModels: Record<string, Model> = {
     label: "회원 등급·운영 역할",
     help: "가입 승인과 로그인 차단은 나루 데이터베이스의 사이트 회원 관리에서 변경합니다. 여기서는 회원 번호별 게시판 등급과 운영 역할, 커뮤니티의 접근차단일을 정합니다. 목록은 최근 접속 순으로 등급·역할·경고·탈퇴일·차단일·최종 접속을 보여 주고, 닉네임이나 회원 번호로 찾습니다. 회원 삭제는 원본처럼 닉네임은 남기고 그 회원의 쪽지·관심로그·화폐 내역·잔액·운영 역할·게시판 관리자 지정을 지웁니다(글·댓글·캐릭터는 남음). 나루 계정은 사이트가 지울 수 없으니, 로그인까지 막으려면 나루에서 차단하세요.",
     fields: [
+      // member_form.php's 닉네임 and 생년 (mb_name, mb_birth): the profile's,
+      // once the member has joined.
+      { key: "nick", label: "닉네임 (가입한 회원)", max: 20 },
+      {
+        key: "birthYear",
+        label: "출생년도 (빈칸: 없음)",
+        type: "optional-number",
+      },
       { key: "level", label: "회원 등급 (1~10)", type: "number", default: 2 },
       {
         key: "role",
@@ -48,6 +56,14 @@ export const membersModels: Record<string, Model> = {
     check(data) {
       if (data.level < 1 || data.level > 10)
         throw new Error("회원 등급은 1~10입니다.");
+      if (
+        data.birthYear !== undefined &&
+        data.birthYear !== null &&
+        (!Number.isInteger(data.birthYear) ||
+          data.birthYear < 1900 ||
+          data.birthYear > 2100)
+      )
+        throw new Error("출생년도는 1900~2100년입니다.");
     },
   },
   activity: {

@@ -39,7 +39,7 @@ export const BACKUP: Record<string, { label: string; parts: BackupPart[] }> = {
       },
       {
         table: "content",
-        where: "id = 'site_main'",
+        where: "id IN ('site_main', 'site_menu')",
         columns: [
           "id",
           "name",

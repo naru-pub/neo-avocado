@@ -14,6 +14,7 @@ import {
 } from "../../modules/access.js";
 import {
   MAIN_PAGE,
+  MENU_PAGE,
   backgroundMusic,
   readablePage,
 } from "../../modules/content.js";
@@ -239,6 +240,9 @@ export async function site(ctx: QueryCtx) {
     // 메인화면 구성 (adm/viewer_form.php): a content page site_main the
     // reader may see takes the home's place (main.php).
     main: Boolean(await readablePage(ctx, MAIN_PAGE, access)),
+    // 화면 설정's 메뉴영역 (viewer_form.php, head.php:56): a content page
+    // site_menu the reader may see takes the menu's place.
+    menuPage: Boolean(await readablePage(ctx, MENU_PAGE, access)),
     menus,
     banners,
   };

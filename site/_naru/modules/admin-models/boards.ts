@@ -379,7 +379,7 @@ export const boardsModels: Record<string, Model> = {
   },
   content: {
     label: "내용 페이지",
-    help: "안내·소개 페이지를 만듭니다. 모바일 본문이 비어 있으면 기본 본문을 표시합니다. 읽기 등급은 회원 등급 기준이고, 1이면 손님도 읽습니다. ID를 site_main으로 만들면 메인 화면을 대신하며, 본문의 {{VISUAL_SLIDE}}는 메인 슬라이드, {{OUTLOGIN}}은 회원 카드, {{LOGIN}}·{{JOIN}}은 손님에게 보이는 로그인 링크, {{LOGOUT}}·{{MYPAGE}}는 회원에게 보이는 로그아웃·마이페이지 링크가 됩니다. {{BGM}}과 {{TWITTER}}는 지워집니다(배경음악은 상단의 재생 버튼으로 듣습니다).",
+    help: "안내·소개 페이지를 만듭니다. 모바일 본문이 비어 있으면 기본 본문을 표시합니다. 읽기 등급은 회원 등급 기준이고, 1이면 손님도 읽습니다. ID를 site_main으로 만들면 메인 화면을, site_menu로 만들면 상단 메뉴(화면 설정의 메뉴영역, 모바일 본문은 모바일 메뉴영역)를 대신하며, 본문의 {{VISUAL_SLIDE}}는 메인 슬라이드, {{OUTLOGIN}}은 회원 카드, {{LOGIN}}·{{JOIN}}은 손님에게 보이는 로그인 링크, {{LOGOUT}}·{{MYPAGE}}는 회원에게 보이는 로그아웃·마이페이지 링크가 됩니다. {{BGM}}은 지워지고(배경음악은 상단의 재생 버튼으로 듣습니다), {{TWITTER}}는 커뮤니티 설정의 트위터(X) 계정 타임라인이 됩니다.",
     fields: [
       { key: "name", label: "제목", required: true, max: 120 },
       { key: "enabled", label: "공개 중", type: "checkbox", default: true },

@@ -89,7 +89,7 @@ export function sectionLabel(name, names) {
  * One member's line in 회원 관리 (adm/member_list.php): what the original's
  * columns show, from a row of admin/members:list.
  */
-export function memberSummary({ row, lastSeen }) {
+export function memberSummary({ row, lastSeen, joinedAt = null }) {
   const data = row.data;
   return [
     `등급 ${Number.isSafeInteger(data.level) ? data.level : 2}`,
@@ -99,6 +99,8 @@ export function memberSummary({ row, lastSeen }) {
     data.blocked ? `차단 ${data.blocked}` : "",
     row.deleted ? "삭제된 회원" : "",
     row.recommender ? `추천인 ${row.recommender}` : "",
+    // member_list.php's 가입일.
+    joinedAt && `가입 ${new Date(joinedAt).toLocaleDateString("ko-KR")}`,
     `최종 접속 ${lastSeen ? new Date(lastSeen).toLocaleString("ko-KR") : "기록 없음"}`,
   ]
     .filter(Boolean)

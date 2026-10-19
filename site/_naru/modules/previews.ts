@@ -23,7 +23,7 @@ import {
 } from "./boards.js";
 import type { Board, PostRow } from "./boards.js";
 import { characterKey, characterRow, shownCharacter } from "./characters.js";
-import { MAIN_PAGE, readablePage } from "./content.js";
+import { MAIN_PAGE, MENU_PAGE, readablePage } from "./content.js";
 import type { QueryCtx } from "./naru-types.js";
 import { placeOf, whole, type Place } from "./places.js";
 
@@ -334,7 +334,7 @@ export const character: Page = async (ctx, { id }, access) => {
  * no page of the list.
  */
 export const content: Page = async (ctx, { id }, access) => {
-  if (id === MAIN_PAGE) return null;
+  if (id === MAIN_PAGE || id === MENU_PAGE) return null;
   const row = await readablePage(ctx, id, access);
   if (!row) return null;
   return { title: row.name, image: https(row.header_image) };

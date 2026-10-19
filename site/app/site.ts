@@ -41,6 +41,7 @@ export async function loadSite() {
   applyNames(design);
   applyHead(design);
   renderMenus(site.menus);
+  if (site.menuPage) await showMenuPage(site.banners);
   const entering = showEntrance(site, design);
   renderBanners(site.banners, entering);
   // 팝업레이어 and 설문조사 on the main page; neither holds the page up.
@@ -178,6 +179,29 @@ async function showMainPage(enabled, banners) {
     $("mainPage"),
     banners.filter((banner) => banner.place === "main"),
   );
+}
+/**
+ * 화면 설정's 메뉴영역 (head.php:56): the owner's site_menu page in the
+ * menu's place, its 모바일 메뉴영역 on a phone, its placeholders expanded;
+ * 운영 still closes it.
+ */
+async function showMenuPage(banners) {
+  const result = await query("content/pages:contentPage", {
+    id: "site_menu",
+    mobile: window.innerWidth <= 700,
+  });
+  const nav = $("siteMenu");
+  const area = document.createElement("div");
+  area.className = "menu-content";
+  renderContent(area, result.page);
+  expandPlaceholders(
+    area,
+    banners.filter((banner) => banner.place === "main"),
+  );
+  const admin = document.createElement("ul");
+  admin.append(adminItem());
+  nav.replaceChildren(area, admin);
+  nav.hidden = false;
 }
 /** Where the member card lives on the home, for {{OUTLOGIN}} to give back. */
 const cardHome = {
@@ -324,6 +348,15 @@ const DEFAULT_MENUS = [
   mobile: true,
   memberOnly,
 }));
+/** The menu's last item: 운영, to the admin. */
+function adminItem() {
+  const item = document.createElement("li");
+  const link = document.createElement("a");
+  link.href = "/admin/";
+  link.textContent = "운영";
+  item.append(link);
+  return item;
+}
 function renderMenus(menus) {
   const nav = $("siteMenu");
   nav.replaceChildren();
@@ -352,12 +385,7 @@ function renderMenus(menus) {
     list.append(item);
   }
   // 운영 closes every menu, the owner's or the default.
-  const admin = document.createElement("li");
-  const link = document.createElement("a");
-  link.href = "/admin/";
-  link.textContent = "운영";
-  admin.append(link);
-  list.append(admin);
+  list.append(adminItem());
   nav.append(list);
   nav.hidden = false;
 }
