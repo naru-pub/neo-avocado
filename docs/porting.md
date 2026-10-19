@@ -75,8 +75,8 @@ server kept.
 
 ## Kept different, on purpose
 
-- Deleting a board keeps its posts (`board_delete.inc.php` drops them): a
-  mistaken click should not take a community's logs. Move them first.
+- Deleting a board asks whether its posts go too (`board_delete.inc.php`
+  always drops them): a mistaken click should not take a community's logs.
 - A 쪽지's recipient may clear it from their own box, where the original
   let only its sender delete it (for both, as here).
 - 멤버목록 by 소속 lists the characters of no listed 소속 under 기타, where

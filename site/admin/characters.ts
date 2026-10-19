@@ -108,6 +108,17 @@ export const reviewState = (state) => (box) =>
     revision: box.dataset.revision,
     state,
   });
+// character_list_update.php's 선택수정: each chosen row's 유형 and 상태.
+$("reviewSave").onclick = reviewChosen("reviewSave", "수정할", (box) => {
+  const row = box.closest("form") as HTMLFormElement;
+  const state = row.querySelector<HTMLSelectElement>(".review-state");
+  return owner.mutate("characters/review:reviewCharacter", {
+    character: box.value,
+    revision: box.dataset.revision,
+    type: row.querySelector<HTMLSelectElement>(".review-type").value,
+    ...(state.value !== state.dataset.was ? { state: state.value } : {}),
+  });
+});
 $("reviewApprove").onclick = reviewChosen(
   "reviewApprove",
   "승인할",
@@ -205,6 +216,15 @@ export function reviewRow(row) {
     type.append(option);
   }
   type.value = row.data.type ?? "main";
+  type.className = "review-type";
+  // character_list.php's ch_state select, for 선택수정.
+  const state = document.createElement("select");
+  state.className = "review-state";
+  state.setAttribute("aria-label", "캐릭터 상태");
+  for (const [value, label] of Object.entries(STATES))
+    state.append(new Option(label, value));
+  state.value = row.data.state ?? "submitted";
+  state.dataset.was = state.value;
   const decide = (state) =>
     run(async () => {
       for (const control of form.querySelectorAll<
@@ -316,7 +336,18 @@ export function reviewRow(row) {
   manage.className = "review-manage";
   manage.append(edit, " ", remove, " ", moveTo, move);
   form.onsubmit = (event) => event.preventDefault();
-  form.append(select, heading, " ", type, summary, sheet, ...buttons, manage);
+  form.append(
+    select,
+    heading,
+    " ",
+    type,
+    " ",
+    state,
+    summary,
+    sheet,
+    ...buttons,
+    manage,
+  );
   return form;
 }
 /**

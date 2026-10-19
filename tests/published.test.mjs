@@ -18,7 +18,9 @@ async function pages(directory = "") {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) {
       if (path !== "_naru") found.push(...(await pages(path)));
-    } else if (/\.(m?js|html)$/.test(entry.name)) found.push(path);
+    } else if (/\.(m?js|html)$/.test(entry.name))
+      // Forward slashes on every system, as the pages' imports name them.
+      found.push(path.replaceAll("\\", "/"));
   }
   return found;
 }

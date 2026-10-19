@@ -166,3 +166,36 @@ export const copy = ownerOnly(async function copy(
     WHERE posts.board = ${target}`;
   return { id: target, posts: changes };
 });
+
+/**
+ * Deletes a board's posts with what hangs off them (comments, tags, 조회수,
+ * downloads, votes, calls, 관심), as board_delete.inc.php drops a board's
+ * write table, before the board itself is deleted. Its 글쓰기 rewards are
+ * not taken back, as the original's are not.
+ */
+export const clear = ownerOnly(async function clear(
+  ctx: MutationCtx,
+  { id }: { id?: string } = {},
+) {
+  if (typeof id !== "string" || !id) invalid(ctx);
+  const posts = "SELECT id FROM posts WHERE board = ?";
+  await ctx.sql(
+    `DELETE FROM comments_search WHERE rowid IN
+     (SELECT id FROM comments WHERE post_id IN (${posts}))`,
+    [id],
+  );
+  for (const [table, column] of [
+    ["comments", "post_id"],
+    ["post_tags", "post_id"],
+    ["post_hits", "post_id"],
+    ["attachment_downloads", "post_id"],
+    ["link_hits", "post_id"],
+    ["post_votes", "post_id"],
+    ["calls", "post_id"],
+    ["favorites", "post"],
+    ["posts_search", "rowid"],
+  ])
+    await ctx.sql(`DELETE FROM ${table} WHERE ${column} IN (${posts})`, [id]);
+  const { changes } = await ctx.sql`DELETE FROM posts WHERE board = ${id}`;
+  return { posts: changes };
+});

@@ -128,11 +128,8 @@ export function boardRow(row) {
   remove.className = "danger";
   remove.onclick = () =>
     run(async () => {
-      if (!confirm("이 게시판을 삭제할까요? 글은 남습니다.")) return;
-      await owner.mutate(CALLS.boards.remove, {
-        section: "boards",
-        id: row.id,
-      });
+      if (!confirm("이 게시판을 삭제할까요?")) return;
+      await removeBoards([row.id], postsGo());
       await load();
     });
   const copy = document.createElement("button");
@@ -227,24 +224,38 @@ $("boardsSave").onclick = () =>
       await load();
     }
   });
-// 선택삭제: the chosen boards; their posts stay.
+/**
+ * board_delete.inc.php drops a board's posts with it; here the owner says
+ * whether they go, or stay to be moved later.
+ */
+const postsGo = () =>
+  confirm(
+    "게시판의 글과 댓글도 함께 삭제할까요?\n확인: 글도 삭제 (되돌릴 수 없음)\n취소: 글은 남김",
+  );
+/** Deletes boards, and their posts first when `withPosts`. */
+async function removeBoards(ids: string[], withPosts: boolean) {
+  let removed = 0;
+  try {
+    for (const id of ids) {
+      if (withPosts) await owner.mutate("admin/boards:clear", { id });
+      await owner.mutate(CALLS.boards.remove, { section: "boards", id });
+      removed++;
+    }
+  } finally {
+    $("adminStatus").textContent =
+      `게시판 ${removed}개를 삭제했습니다${withPosts ? " (글 포함)" : ""}.`;
+  }
+}
+// 선택삭제 (board_list_update.php): the chosen boards.
 $("boardsRemove").onclick = () =>
   run(async () => {
     const chosen = chosenBoards();
     if (!chosen.length)
       throw new Error("선택삭제 하실 항목을 하나 이상 체크하세요.");
-    if (
-      !confirm(`선택한 게시판 ${chosen.length}개를 삭제할까요? 글은 남습니다.`)
-    )
-      return;
-    let removed = 0;
+    if (!confirm(`선택한 게시판 ${chosen.length}개를 삭제할까요?`)) return;
     try {
-      for (const id of chosen) {
-        await owner.mutate(CALLS.boards.remove, { section: "boards", id });
-        removed++;
-      }
+      await removeBoards(chosen, postsGo());
     } finally {
-      $("adminStatus").textContent = `게시판 ${removed}개를 삭제했습니다.`;
       await load();
     }
   });

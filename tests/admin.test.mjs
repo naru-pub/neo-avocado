@@ -2565,3 +2565,32 @@ test("a site_menu page takes the menu's place, and is no 안내 page", async () 
     [],
   );
 });
+
+test("the owner deletes a board's posts with it, comments and all, when asked", async () => {
+  const site = await testSite();
+  profile(site, "m-1", "하나");
+  site.run(
+    "INSERT INTO boards (id, name) VALUES ('old', '옛'), ('keep', '남김')",
+  );
+  for (const [board, number] of [
+    ["old", 1],
+    ["old", 2],
+    ["keep", 1],
+  ])
+    site.run(
+      "INSERT INTO posts (board, number, owner, body, created_at, updated_at) VALUES (?, ?, 'm-1', '글', 0, 0)",
+      board,
+      number,
+    );
+  site.run(
+    "INSERT INTO comments (post_id, owner, body, created_at, updated_at) SELECT id, 'm-1', '댓글', 0, 0 FROM posts",
+  );
+  assert.deepEqual(await mutate(site, "boards:clear", { id: "old" }), {
+    posts: 2,
+  });
+  assert.deepEqual(
+    site.rows("SELECT board FROM posts").map((row) => row.board),
+    ["keep"],
+  );
+  assert.equal(site.rows("SELECT * FROM comments").length, 1);
+});
