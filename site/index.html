@@ -90,6 +90,41 @@
         <span class="entrance-hint">들어가기</span>
       </button>
     </dialog>
+    <!-- The entrance opens here, from what the home's route wrote in <head>
+         (_naru/modules/previews.ts), as enter.php's page arrives whole: not
+         after the scripts and the site's query, over the page already shown.
+         app/site.ts closes it again for a member, and opens it late without
+         the tag. -->
+    <script>
+      (() => {
+        const tag = document.querySelector('meta[name="neo-avocado-entrance"]');
+        if (!tag || !/^\/((home|index\.html)\/?)?$/.test(location.pathname))
+          return;
+        try {
+          // Clicked through this browser session, or a member's browser.
+          if (sessionStorage.getItem("neo-avocado-entered") === "1") return;
+          if (localStorage.getItem("neo-avocado-member") === "1") return;
+        } catch {
+          // Without storage the entrance shows on each arrival.
+        }
+        let entrance;
+        try {
+          entrance = JSON.parse(tag.content);
+        } catch {
+          return;
+        }
+        const dialog = document.getElementById("entrance");
+        const logo = document.getElementById("entranceLogo");
+        if (entrance.logo) {
+          logo.src = entrance.logo;
+          logo.hidden = false;
+        } else
+          document.getElementById("entranceTitle").textContent = entrance.title;
+        if (entrance.paper) dialog.style.setProperty("--paper", entrance.paper);
+        if (entrance.ink) dialog.style.setProperty("--ink", entrance.ink);
+        dialog.showModal?.();
+      })();
+    </script>
     <dialog id="intro" class="intro">
       <div id="introImages"></div>
       <button id="enterSite" type="button">입장하기</button>

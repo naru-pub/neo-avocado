@@ -457,7 +457,9 @@ let afterEntrance: (() => void) | null = null;
 /**
  * enter.php (index.php:57-64): a visitor, not signed in, arriving at an open
  * site's home sees its logo (or name) first, once a browser session, and
- * clicks through to the main page. Answers whether it shows.
+ * clicks through to the main page. index.html opens it on arrival, from the
+ * home's route; this settles it once the site is known. Answers whether it
+ * shows.
  */
 function showEntrance(site, design) {
   let entered = false;
@@ -467,16 +469,18 @@ function showEntrance(site, design) {
     /* Without storage the entrance shows on each arrival. */
   }
   const dialog = $<HTMLDialogElement>("entrance");
-  if (site.member || site.open === false || !arrivedHome || entered)
-    return dialog.open;
-  if (dialog.open) return true;
+  if (site.member || site.open === false || !arrivedHome || entered) {
+    // Opened on arrival for a member index.html took for a visitor.
+    dialog.close();
+    return false;
+  }
   const logo = $<HTMLImageElement>("entranceLogo");
   logo.hidden = !design.logo;
   if (design.logo) logo.src = design.logo;
   $("entranceTitle").textContent = design.logo
     ? ""
     : design.title || $("siteTitle").textContent;
-  dialog.showModal?.();
+  if (!dialog.open) dialog.showModal?.();
   return true;
 }
 $("entranceEnter").onclick = () => {

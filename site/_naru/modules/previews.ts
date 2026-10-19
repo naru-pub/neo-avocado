@@ -158,6 +158,28 @@ export function headOf(
   ].join("\n");
 }
 
+/**
+ * enter.php, as the server wrote it: the home's entrance, its logo (else the
+ * site's name) and 디자인's paper and ink, for index.html to open before the
+ * page's scripts load (its script after <dialog id="entrance">). A tag only
+ * an open site's home has, so a closed site's shows no entrance.
+ */
+export async function entranceHead(ctx: QueryCtx): Promise<string> {
+  const design = await settingsOf(ctx, "design");
+  const color = (value: unknown) =>
+    typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value : null;
+  const entrance = {
+    logo: https(design.logo),
+    title:
+      (typeof design.title === "string" && design.title.trim().slice(0, 60)) ||
+      SITE_NAME,
+    // Without 디자인 사용 the page is plain (app/site.ts), its colours too.
+    paper: design.enabled === true ? color(design.colors?.paper) : null,
+    ink: design.enabled === true ? color(design.colors?.ink) : null,
+  };
+  return `<meta name="neo-avocado-entrance" content="${escape(JSON.stringify(entrance))}" />`;
+}
+
 /** What a route answers for an address that is no page. */
 export const NOT_FOUND = Object.freeze({
   body: "Not Found",
@@ -174,10 +196,10 @@ export const CLOSED_HEAD = '<meta name="robots" content="noindex, nofollow" />';
 
 /**
  * A route: index.html with `page`'s preview (the site's own without one),
- * kept at the edge for CACHE seconds. A closed site's pages show none
- * (CLOSED_HEAD).
+ * and the home's with its entrance (entranceHead), kept at the edge for CACHE
+ * seconds. A closed site's pages show none (CLOSED_HEAD).
  */
-export function route(page?: Page) {
+export function route(page?: Page, { entrance = false } = {}) {
   return async (ctx: QueryCtx, input: RouteInput) => {
     const access = await communityAccess(ctx);
     const shown = page ? await page(ctx, input?.params ?? {}, access) : null;
@@ -192,11 +214,14 @@ export function route(page?: Page) {
         : "";
     return {
       file: "index.html",
-      head: headOf(
-        { ...site, address: site.address || origin },
-        shown,
-        input?.path ?? "/",
-      ),
+      head: [
+        headOf(
+          { ...site, address: site.address || origin },
+          shown,
+          input?.path ?? "/",
+        ),
+        ...(entrance ? [await entranceHead(ctx)] : []),
+      ].join("\n"),
       cache: CACHE,
     };
   };
@@ -349,7 +374,9 @@ const PREVIEWS: Record<Exclude<Place["kind"], "rss">, Page | undefined> = {
 export async function page(ctx: QueryCtx, input: RouteInput) {
   const place = placeOf(input?.path ?? "/");
   if (!place || place.kind === "rss") return NOT_FOUND;
-  return await route(PREVIEWS[place.kind])(ctx, {
+  // The home's, where enter.php shows (app/site.ts's arrivedHome).
+  const home = place.kind === "index" || place.kind === "home";
+  return await route(PREVIEWS[place.kind], { entrance: home })(ctx, {
     ...input,
     params: place as unknown as Record<string, string>,
   });

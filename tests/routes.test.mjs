@@ -54,8 +54,24 @@ function tags(answer) {
   for (const [, , name, content] of answer.head.matchAll(
     /<meta (name|property)="([^"]+)" content="([^"]*)" \/>/g,
   ))
-    found[name] = unescape(content);
+    if (name !== "neo-avocado-entrance") found[name] = unescape(content);
   return found;
+}
+/** The home's entrance (index.html opens it on arrival), or null without one. */
+function entranceOf(answer) {
+  const found = answer.head.match(
+    /<meta name="neo-avocado-entrance" content="([^"]*)" \/>/,
+  );
+  return found
+    ? JSON.parse(
+        found[1]
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'")
+          .replace(/&amp;/g, "&"),
+      )
+    : null;
 }
 /** The site's own preview, for `path`. */
 const generic = (path, site = {}) => ({
@@ -175,6 +191,44 @@ test("the home and the views are index.html with the site's preview, from 디자
     ],
     "https://avocado.example/members",
   );
+});
+
+test("the home tells index.html its entrance: the logo, else the name, and 디자인's colours", async () => {
+  const site = await testSite();
+  const plain = { logo: null, title: "네오 아보카도", paper: null, ink: null };
+  assert.deepEqual(entranceOf(await site.route("/")), plain);
+  assert.deepEqual(entranceOf(await site.route("/home")), plain);
+  // Only the home's: enter.php shows nowhere else.
+  for (const path of ["/members", "/logs", "/content"])
+    assert.equal(entranceOf(await site.route(path)), null, path);
+  setSettings(site, "design", {
+    title: '</script> "커뮤"',
+    logo: "https://media.naru.pub/logo.png",
+    colors: { paper: "#102030", ink: "red" },
+  });
+  const home = await site.route("/");
+  assert.ok(!home.head.includes("</script>"));
+  // Without 디자인 사용 the colours are not the page's either.
+  assert.deepEqual(entranceOf(home), {
+    logo: "https://media.naru.pub/logo.png",
+    title: '</script> "커뮤"',
+    paper: null,
+    ink: null,
+  });
+  setSettings(site, "design", {
+    enabled: true,
+    logo: "http://media.naru.pub/logo.png",
+    colors: { paper: "#102030", ink: "red" },
+  });
+  assert.deepEqual(entranceOf(await site.route("/")), {
+    logo: null,
+    title: "네오 아보카도",
+    paper: "#102030",
+    ink: null,
+  });
+  // A closed site's home has none (CLOSED).
+  setSettings(site, "community", { siteOpen: false });
+  assert.equal(entranceOf(await site.route("/")), null);
 });
 
 test("a post's preview: its title, opening text and picture, else its speaker's", async () => {

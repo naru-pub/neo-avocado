@@ -132,6 +132,13 @@ async function showAgreements() {
 async function start() {
   await connect();
   state.member = await state.naru.members.session();
+  // For index.html, which opens the entrance before the session is known.
+  try {
+    if (state.member) localStorage.setItem("neo-avocado-member", "1");
+    else localStorage.removeItem("neo-avocado-member");
+  } catch {
+    /* A member may see the entrance until the site has loaded. */
+  }
   // The site's frame is decoration: without it the default design shows.
   await loadSite().catch((error) => console.error(error));
   if (!state.member) return visit();
@@ -247,6 +254,11 @@ $("signOut").onclick = () =>
   run(async () => {
     const member = state.member;
     state.member = null;
+    try {
+      localStorage.removeItem("neo-avocado-member");
+    } catch {
+      /* Forgotten at the next arrival. */
+    }
     state.nicks.clear();
     state.charactersLoaded = false;
     state.shopLoaded = false;
