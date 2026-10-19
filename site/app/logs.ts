@@ -69,7 +69,8 @@ export function routeList() {
  * (community/posts:page).
  */
 export async function loadLogs({ page: number = 1 } = {}) {
-  if (!state.member && !state.boards.length) return $("logs").replaceChildren();
+  // Until the owner makes a board there is none to read, member or not.
+  if (!state.boards.length) return $("logs").replaceChildren();
   // 전체목록보이기 hid the list under a post; with none open, it shows.
   if ($("logFocusPanel").hidden) {
     $("logs").hidden = false;

@@ -135,6 +135,14 @@ export async function loadCharacters({ page: number = 1 } = {}) {
   $("characters").replaceChildren();
   for (const character of page.documents)
     $("characters").append(await characterItem(character));
+  // member/skin/list.skin.php's no-data line.
+  if (!page.documents.length)
+    $("characters").append(
+      Object.assign(document.createElement("li"), {
+        className: "no-data",
+        textContent: "등록된 멤버가 없습니다.",
+      }),
+    );
   state.charactersLoaded = true;
   renderPages(
     $("characterPages"),

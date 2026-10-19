@@ -476,6 +476,12 @@ dialog {
 }
 
 /* Portrait directory and expandable member profile, following member/list.skin. */
+.characters .no-data {
+  grid-column: 1 / -1;
+  padding: 30px 0;
+  list-style: none;
+  text-align: center;
+}
 .section-heading {
   padding: 10px 0;
   border-bottom: 1px solid var(--line);

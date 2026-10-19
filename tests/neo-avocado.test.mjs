@@ -963,6 +963,21 @@ test("signed out, a visitor reads only the boards the board query lists, and may
   assert.deepEqual(database.calls.at(-1), { method: "signIn" });
 });
 
+test("a member on a site without boards reads no board, and the other pages open", async () => {
+  // The original installs no boards; the owner makes them.
+  const database = fakeDatabase({ neo_avocado_boards: [], [PROFILES]: [me] });
+  const { $, settle } = await page(database);
+  assert.equal($("noPublicBoards").hidden, false);
+  assert.equal($("logForm").hidden, true);
+  // No board's posts are asked for: there is no board to ask about.
+  assert.ok(
+    !database.calls.some((call) => call.name === "community/posts:page"),
+  );
+  $("tabCharacters").onclick();
+  for (let n = 0; n < 3; n++) await settle();
+  assert.equal($("charactersView").hidden, false);
+});
+
 test("a guest posts with a name and password, and must give the password to edit or delete", async () => {
   const database = fakeDatabase({
     neo_avocado_boards: [
