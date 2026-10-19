@@ -279,11 +279,30 @@ textarea,
 select {
   border: 1px solid var(--control-line);
   border-radius: 0;
-  background: var(--paper);
+  background-color: var(--paper);
   color: var(--ink);
   padding: 5px 10px;
   min-height: 30px;
   max-width: 100%;
+}
+/* A drawn arrow in the text colour: Windows Chrome's own sits in a grey box
+   that clashes with the flat borders. Later rules set background-color, not
+   the background shorthand, so they keep it. */
+select:not([multiple]) {
+  appearance: none;
+  padding-right: 26px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position:
+    right 15px center,
+    right 10px center;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+}
+option {
+  background-color: var(--paper);
+  color: var(--ink);
 }
 textarea {
   padding: 5px;

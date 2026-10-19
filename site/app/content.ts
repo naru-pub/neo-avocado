@@ -74,6 +74,8 @@ export async function loadContentPages() {
     option.textContent = page.name;
     $("contentPage").append(option);
   }
+  // No pages: the empty picker would only sit above "등록된 안내 페이지가 없습니다".
+  $("contentPage").closest("label")!.hidden = !pages.length;
   if (
     [...$<HTMLSelectElement>("contentPage").options].some(
       (option) => option.value === previous,

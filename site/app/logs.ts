@@ -349,7 +349,12 @@ export async function loadBoards() {
   $("noPublicBoards").textContent = state.member
     ? "아직 게시판이 없습니다. 운영자가 게시판을 만들면 글을 쓸 수 있습니다."
     : "손님에게 공개된 게시판이 없습니다.";
-  $("logs").hidden = $("board").hidden = !state.boards.length;
+  // With no board, its picker's label, the links and the guest form go too.
+  $("logs").hidden = !state.boards.length;
+  $("board").closest("label")!.hidden = !state.boards.length;
+  document.querySelector<HTMLElement>("#logsView .board-links")!.hidden =
+    !state.boards.length;
+  $("guestIdentity").hidden = Boolean(state.member) || !state.boards.length;
   if (!state.boards.length) {
     $("board").replaceChildren();
     $("logForm").hidden = true;

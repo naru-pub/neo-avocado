@@ -87,7 +87,7 @@ body.site:not(.designed) .site-menu li li {
 }
 /* The account controls live on the main page's card, the tabs in the menu. */
 body.site:not(.designed) > .top .account,
-body.site:not(.designed) > .top > a[href="admin/"],
+body.site:not(.designed) > .top > a[href="/admin/"],
 body.site:not(.designed) .tabs {
   display: none;
 }
@@ -132,9 +132,12 @@ body.site:not(.designed) select {
   height: 30px;
   padding: 0 10px;
   border: 1px solid var(--line);
-  background: var(--paper);
+  background-color: var(--paper);
   color: var(--ink);
   font-size: 12px;
+}
+body.site:not(.designed) select:not([multiple]) {
+  padding-right: 26px;
 }
 body.site:not(.designed) textarea {
   padding: 5px;

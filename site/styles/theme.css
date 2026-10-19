@@ -117,7 +117,7 @@ body.site.designed > .top h1 {
 body.site.designed #siteLogo {
   max-width: 180px;
 }
-body.site.designed > .top > a[href="admin/"] {
+body.site.designed > .top > a[href="/admin/"] {
   order: 3;
   margin: 0;
   color: var(--pit);
@@ -211,7 +211,11 @@ body.site.designed input:not([type="checkbox"]):not([type="radio"]),
 body.site.designed textarea,
 body.site.designed select {
   border: 1px solid var(--input-line);
-  background: var(--input);
+  background-color: var(--input);
+  color: var(--input-ink);
+}
+body.site.designed option {
+  background-color: var(--input);
   color: var(--input-ink);
 }
 body.site.designed input::placeholder,
@@ -381,7 +385,7 @@ body.site.designed dialog {
   body.site.designed .account button {
     width: auto;
   }
-  body.site.designed > .top > a[href="admin/"] {
+  body.site.designed > .top > a[href="/admin/"] {
     display: none;
   }
   body.site.designed #menuToggle {
