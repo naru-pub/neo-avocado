@@ -117,11 +117,6 @@ body.site.designed > .top h1 {
 body.site.designed #siteLogo {
   max-width: 180px;
 }
-body.site.designed > .top > a[href="/admin/"] {
-  order: 3;
-  margin: 0;
-  color: var(--pit);
-}
 body.site.designed .account {
   order: 2;
   flex-direction: column;
@@ -384,9 +379,6 @@ body.site.designed dialog {
   }
   body.site.designed .account button {
     width: auto;
-  }
-  body.site.designed > .top > a[href="/admin/"] {
-    display: none;
   }
   body.site.designed #menuToggle {
     display: block;

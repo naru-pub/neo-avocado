@@ -87,7 +87,6 @@ body.site:not(.designed) .site-menu li li {
 }
 /* The account controls live on the main page's card, the tabs in the menu. */
 body.site:not(.designed) > .top .account,
-body.site:not(.designed) > .top > a[href="/admin/"],
 body.site:not(.designed) .tabs {
   display: none;
 }
