@@ -332,15 +332,9 @@ export async function loadBoards() {
     groups: listed,
     emoticons,
   } = await query("community/boards:boards");
-  // gr_device (G5_IS_MOBILE): a group's boards for PC or mobile only.
-  const mobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-  // bo_device the same way, a board's own within its group's.
-  state.boards = boards.filter(
-    (row) =>
-      !row.data.device ||
-      row.data.device === "both" ||
-      row.data.device === (mobile ? "mobile" : "pc"),
-  );
+  // Every board on every device: the pages fit any screen, so there is no
+  // 접속기기 (bo_device, gr_device).
+  state.boards = boards;
   state.groups = listed;
   state.emoticons = emoticons;
   // As in the original, there is nothing to read or post on until the owner

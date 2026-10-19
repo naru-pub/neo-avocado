@@ -22,7 +22,6 @@ export type BoardCtx = SqlCtx &
 /** A boards row, with its group's members_only when read with it. */
 export interface BoardRow {
   id: string;
-  group_device?: string | null;
   name: string;
   group_id: string | null;
   kind: string;
@@ -104,14 +103,11 @@ export function boardOfRow(row: BoardRow): Board {
   // A board in a members-only group (gr_use_access) carries the group's ID.
   if (row.group_id && row.group_members_only) data.membersOnly = row.group_id;
   if (row.group_id && row.group_admin) data.groupAdmin = row.group_admin;
-  // gr_device: a group's boards for PC or mobile only.
-  if (row.group_id && row.group_device && row.group_device !== "both")
-    data.device = row.group_device;
   return { id: row.id, data: data as Board["data"] };
 }
 
 const BOARD_SELECT = `SELECT boards.*, board_groups.members_only AS group_members_only,
-    board_groups.admin AS group_admin, board_groups.device AS group_device
+    board_groups.admin AS group_admin
   FROM boards LEFT JOIN board_groups ON board_groups.id = boards.group_id`;
 
 /** Every board the owner made, in ID order. */

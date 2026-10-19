@@ -186,7 +186,6 @@ test("boards and groups are saved as their forms check them, and members see the
       description: "<b>안내</b>",
       kind: "text",
       order: 0,
-      device: "both",
       linkLevel: 1,
       uploadLevel: 1,
       downloadLevel: 1,
@@ -1658,10 +1657,11 @@ test("최대값 기준 출력, 아이템 기능 and 접속기기 are saved and r
     ),
     ["potion"],
   );
+  // 접속기기 is gone: a group's or board's old device is not kept.
   await create(site, "board_groups", "m", { name: "모바일", device: "mobile" });
   await create(site, "boards", "talk", { name: "수다", group: "m" });
   const { boards } = await site.query("community/boards:boards", {}, M1);
-  assert.equal(boards.find((row) => row.id === "talk").data.device, "mobile");
+  assert.equal(boards.find((row) => row.id === "talk").data.device, undefined);
 });
 
 test("선택수정 saves a row's in-place fields and keeps the rest of the entry", async () => {

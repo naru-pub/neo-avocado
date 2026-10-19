@@ -33,18 +33,6 @@ export const boardsModels: Record<string, Model> = {
         type: "number",
         default: 0,
       },
-      // bo_device: where the board shows, within its group's.
-      {
-        key: "device",
-        label: "접속기기 (게시판이 보이는 기기)",
-        type: "choice",
-        default: "both",
-        options: [
-          ["both", "PC와 모바일"],
-          ["pc", "PC 전용"],
-          ["mobile", "모바일 전용"],
-        ],
-      },
       {
         key: "group",
         label: "게시판 그룹",
@@ -368,8 +356,6 @@ export const boardsModels: Record<string, Model> = {
         throw new Error("게시판 등급은 1~10입니다.");
       if (data.subjectLen > 255)
         throw new Error("제목 길이는 255자 이하입니다.");
-      if (!["both", "pc", "mobile"].includes(data.device ?? "both"))
-        throw new Error("접속기기를 확인하세요.");
       if (
         data.categories.length > 20 ||
         data.categories.some((name) => name.length > 40)
@@ -403,18 +389,6 @@ export const boardsModels: Record<string, Model> = {
         optional: true,
       },
       { key: "membersOnly", label: "그룹 회원만", type: "checkbox" },
-      // gr_device: where the group's boards show.
-      {
-        key: "device",
-        label: "접속기기 (그룹의 게시판이 보이는 기기)",
-        type: "choice",
-        default: "both",
-        options: [
-          ["both", "PC와 모바일"],
-          ["pc", "PC 전용"],
-          ["mobile", "모바일 전용"],
-        ],
-      },
       { key: "order", label: "정렬 순서", type: "number", default: 0 },
     ],
   },

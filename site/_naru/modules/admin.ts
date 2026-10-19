@@ -202,7 +202,6 @@ export const TABLES: Record<string, Table> = {
     ["admin", "admin", "text", null],
     ["membersOnly", "members_only", "bool", 0],
     ["order", "sort_order", "int", 0],
-    ["device", "device", "text", "both"],
   ]),
   emoticons: table(
     "emoticons",
