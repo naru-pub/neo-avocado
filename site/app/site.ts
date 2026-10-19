@@ -266,11 +266,10 @@ function expandPlaceholders(container: HTMLElement, slides) {
     node.replaceWith(...replacement);
   }
 }
-/** The site's name and logo, in the header and the copyright. */
+/** The site's name and logo, in the header. */
 function applyNames(design) {
   if (design.title) {
     $("siteTitle").textContent = design.title;
-    $("copyrightName").textContent = design.title;
     document.title = design.title;
   }
   $("siteLogo").hidden = !design.logo;
