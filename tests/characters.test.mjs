@@ -375,7 +375,7 @@ test("characters choose 소속 and 종족 from the owner's lists once there are 
     await refusal(save(site, { data: { ...data, side: "왕실" } })),
     "invalid_input",
   );
-  site.run("INSERT INTO members (member, level) VALUES ('m-1', 5)");
+  site.run("INSERT OR REPLACE INTO members (member, level) VALUES ('m-1', 5)");
   assert.equal(
     (await save(site, { data: { ...data, side: "왕실" } })).document.data.side,
     "왕실",

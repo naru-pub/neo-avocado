@@ -158,7 +158,7 @@ export async function join(
   }
   return {
     profile: await profileOf(ctx, member, { favorites: true }),
-    ...access,
+    ...(await communityAccess(ctx)),
   };
 }
 

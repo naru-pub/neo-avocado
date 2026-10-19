@@ -151,7 +151,7 @@ export function accessOfRoles(roles: readonly string[]) {
 }
 
 /**
- * A member's level (1–10, else 2), role and groups; a member who left is a
+ * A member's level (1–10, or 1 before they join), role and groups; a member who left is a
  * guest; a visitor is level 1, or 0 while the site is closed. The site's
  * owner, who is no member, is a visitor here as well.
  */
@@ -185,10 +185,12 @@ export async function communityAccess(
   return {
     member: id,
     groups,
+    // A member with no record has not joined (community/membership:join,
+    // which sets 회원가입시 권한 and asks for the rules): level 1 until then.
     level:
       Number.isInteger(row?.level) && row.level >= 1 && row.level <= 10
         ? row.level
-        : 2,
+        : 1,
     role,
   };
 }

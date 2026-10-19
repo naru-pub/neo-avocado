@@ -18,6 +18,7 @@ import {
   reasonOf,
   setSettings,
   insert,
+  joined,
   profile,
   wallet,
   balanceOf,
@@ -184,9 +185,10 @@ async function rolling(roll, action) {
   }
 }
 
-/** A site with the 로그 board. */
+/** A site with the 로그 board, and m-1, m-2 and m-3 joined. */
 async function boardSite() {
   const site = await testSite();
+  for (const id of ["m-1", "m-2", "m-3"]) joined(site, id);
   board(site, "default", LOG_BOARD);
   return site;
 }
@@ -1263,8 +1265,45 @@ test("사이트공개: visitors read the boards while the site is open, and noth
   );
 });
 
+test("a member who has not joined is level 1: no level-2 board until joining gives 회원가입시 권한 and the rules' agreement", async () => {
+  const site = await testSite();
+  board(site, "free", { name: "자유", kind: "text" });
+  setSettings(site, "community", {
+    registerLevel: 1,
+    stipulation: "서로 존중합니다.",
+  });
+  const post = () => write(site, { data: { board: "free", text: "안녕" } });
+  const level = async () =>
+    (await site.query("community/membership:membership", null, M1)).level;
+  assert.equal(await level(), 1);
+  assert.equal(await refusal(post()), "access_denied");
+  assert.deepEqual(
+    (await site.query("community/boards:boards", null, M1)).boards.map(
+      (row) => row.id,
+    ),
+    [],
+  );
+  // Joining asks for the rules and gives the owner's level, here 1 still.
+  assert.equal(
+    await refusal(
+      site.mutate("community/membership:join", { nick: "앨리스" }, M1),
+    ),
+    "not_agreed",
+  );
+  await site.mutate(
+    "community/membership:join",
+    { nick: "앨리스", agreed: true },
+    M1,
+  );
+  assert.equal(await level(), 1);
+  assert.equal(await refusal(post()), "access_denied");
+  site.run("UPDATE members SET level = 2 WHERE member = 'm-1'");
+  assert.equal(await refusal(post()), null);
+});
+
 test("a members-only board group keeps its boards to its members and moderators", async () => {
   const site = await testSite();
+  joined(site, "m-1");
   insert(site, "board_groups", { id: "staff", name: "운영", members_only: 1 });
   board(site, "plans", { name: "계획", kind: "text", group: "staff" });
   const listed = async () =>
@@ -2332,7 +2371,7 @@ test("a board's 게시판 관리자 and its group's 그룹 관리자 moderate it
   );
   // A board admin who left the community is no one's moderator.
   site.run(
-    "INSERT INTO members (member, left_on) VALUES ('m-2', '2026-10-16')",
+    "INSERT OR REPLACE INTO members (member, left_on) VALUES ('m-2', '2026-10-16')",
   );
   assert.equal(
     await reasonOf(moderate({ id: secret, notice: false })),
@@ -2776,7 +2815,7 @@ test("전체검색 finds words in every readable board's posts and comments, wit
     guest,
   ]);
   // The level-9 board is the staff's to search.
-  site.run("INSERT INTO members (member, level) VALUES ('m-2', 9)");
+  site.run("INSERT OR REPLACE INTO members (member, level) VALUES ('m-2', 9)");
   assert.equal((await search({ text: "바다" }, M2)).counts.length, 3);
   for (const text of ["바", "바다 산 숲", ""])
     assert.equal(await reasonOf(search({ text })), "invalid_search", text);

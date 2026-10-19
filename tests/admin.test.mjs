@@ -356,6 +356,8 @@ test("a member's level, warnings and note are a row; their role and groups are N
   const site = await testSite();
   profile(site, "m-1", "하나");
   profile(site, "m-2", "둘");
+  // Their records are the owner's to make here.
+  site.run("DELETE FROM members");
   await create(site, "board_groups", "writers", { name: "작가" });
   site.setRoles("m-1", ["keep"]);
   const saved = await create(site, "members", "m-1", {
@@ -1058,8 +1060,10 @@ test("activity counts each member's posts and comments on a board in a Korean da
   const main = character(site, { owner: "a", name: "초록" });
   profile(site, "a", "가", { main_character: main });
   profile(site, "b", "나");
+  // a has no community record: member false.
+  site.run("DELETE FROM members WHERE member = 'a'");
   site.run(
-    "INSERT INTO members (member, warnings, warning_note) VALUES ('b', 2, '도배')",
+    "INSERT OR REPLACE INTO members (member, warnings, warning_note) VALUES ('b', 2, '도배')",
   );
   site.run("INSERT INTO presence (member, place, at) VALUES ('a', '', 1234)");
   for (const board of ["free", "notice"])
@@ -1380,7 +1384,7 @@ test("회원 관리 finds members by 권한 and 추천인, lists their character
   profile(site, "m-2", "둘");
   profile(site, "m-3", "셋");
   site.run(
-    "INSERT INTO members (member, level, recommender) VALUES ('m-1', 2, NULL), ('m-2', 5, 'm-1'), ('m-3', 5, NULL)",
+    "INSERT OR REPLACE INTO members (member, level, recommender) VALUES ('m-1', 2, NULL), ('m-2', 5, 'm-1'), ('m-3', 5, NULL)",
   );
   character(site, { owner: "m-2", name: "용사" });
   character(site, { owner: "m-2", name: "지운", state: "deleted" });
@@ -1519,7 +1523,7 @@ test("the day's cleanup deletes only what 커뮤니티 설정 asks, once a day, 
   );
   // Five left long ago, one lately.
   site.run(
-    "INSERT INTO members (member, left_on) VALUES ('m-1', '2029-01-01'), ('m-2', '2029-01-02'), ('m-3', '2029-01-03'), ('m-4', '2029-01-04'), ('m-5', '2029-01-05'), ('m-6', '2030-02-27')",
+    "INSERT OR REPLACE INTO members (member, left_on) VALUES ('m-1', '2029-01-01'), ('m-2', '2029-01-02'), ('m-3', '2029-01-03'), ('m-4', '2029-01-04'), ('m-5', '2029-01-05'), ('m-6', '2030-02-27')",
   );
   const run = () => mutate(site, "maintenance:run");
   // Nothing asked, nothing deleted.
@@ -1638,6 +1642,7 @@ test("상점 진열 entries are saved with the items form's shop fields, for an 
 
 test("최대값 기준 출력, 아이템 기능 and 접속기기 are saved and reach the pages", async () => {
   const site = await testSite();
+  site.run("INSERT INTO members (member) VALUES ('m-1')");
   await create(site, "stat_config", "hp", {
     name: "HP",
     max: 50,
@@ -1758,7 +1763,7 @@ test("팝업레이어 show between their times, and 설문조사 take members' o
   // 2030-01-01 12:00 in Korea.
   const site = await testSite({ now: Date.parse("2030-01-01T03:00:00Z") });
   profile(site, "m-1", "하나");
-  site.run("INSERT INTO members (member, level) VALUES ('m-1', 3)");
+  site.run("INSERT OR REPLACE INTO members (member, level) VALUES ('m-1', 3)");
   await create(site, "popups", "notice", {
     subject: "공지",
     content: "<b>점검</b>",
@@ -2018,7 +2023,7 @@ test("회원관리 counts the blocked and the left, blocks from a day, and delet
   profile(site, "m-2", "둘");
   profile(site, "m-3", "셋");
   for (const member of ["m-1", "m-2", "m-3"])
-    site.run("INSERT INTO members (member) VALUES (?)", member);
+    site.run("INSERT OR REPLACE INTO members (member) VALUES (?)", member);
   await update(site, "members", "m-2", { blocked: "2026-10-16" });
   await update(site, "members", "m-3", {
     left: "2026-10-01",
@@ -2387,7 +2392,7 @@ test("menus nest two levels: a parent is a top-level menu", async () => {
 test("a deleted member stays deleted, and their characters keep their history", async () => {
   const site = await testSite();
   const hero = character(site);
-  site.run("INSERT INTO members (member, level) VALUES ('m-1', 2)");
+  site.run("INSERT OR REPLACE INTO members (member, level) VALUES ('m-1', 2)");
   site.run(
     "INSERT INTO history (owner, kind, at, delta, balance) VALUES ('m-1', 'daily', 0, 5, 5)",
   );

@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sqlOf, testSite } from "./sql-ctx.mjs";
-import { M1, M2, OWNER, refusal, setSettings } from "./helpers.mjs";
+import { M1, M2, OWNER, joined, refusal, setSettings } from "./helpers.mjs";
 
 const wallet = (site, member) =>
   site.rows(
@@ -170,7 +170,7 @@ test("a member who leaves becomes a guest until the owner clears the date", asyn
   );
 });
 
-test("membership answers level, roles, warnings and adult; staff and groups are Naru roles", async () => {
+test("membership answers level (1 before joining), roles, warnings and adult; staff and groups are Naru roles", async () => {
   const site = await testSite();
   assert.equal(
     await refusal(site.query("community/membership:membership")),
@@ -181,7 +181,7 @@ test("membership answers level, roles, warnings and adult; staff and groups are 
     { ...before, profile: before.profile },
     {
       groups: [],
-      level: 2,
+      level: 1,
       role: "member",
       warnings: 0,
       warningNote: "",
@@ -406,6 +406,7 @@ test("디자인 설정's styles become the design CSS, and nothing else does", a
 
 test("the site frame shows only safe design values and menus/banners a reader may see", async () => {
   const site = await testSite({ now: Date.parse("2030-01-01T03:00:00Z") });
+  joined(site, "m-1");
   setSettings(site, "design", {
     title: "아보카도",
     logo: "javascript:alert(1)",
@@ -594,6 +595,7 @@ test("the site's frame names money and experience and says what a character's pa
 
 test("content read levels and publication protect both metadata and selected bodies", async () => {
   const site = await testSite();
+  joined(site, "m-1");
   const page = (id, fields) =>
     site.run(
       "INSERT INTO content (id, name, body, mobile_body, enabled, read_level) VALUES (?, ?, ?, ?, ?, ?)",
@@ -632,7 +634,7 @@ test("content read levels and publication protect both metadata and selected bod
   assert.equal(await refusal(get({ id: "restricted" })), "document_not_found");
   assert.equal(await refusal(get({ id: "draft" })), "document_not_found");
   assert.equal(await refusal(get({ id: 5 })), "invalid_input");
-  site.run("INSERT INTO members (member, level) VALUES ('m-1', 5)");
+  site.run("INSERT OR REPLACE INTO members (member, level) VALUES ('m-1', 5)");
   assert.equal((await get({ id: "restricted" })).page.body, "Private");
 });
 

@@ -51,14 +51,26 @@ export function insert(site, table, row) {
 
 /**
  * A member's profile; the nickname is Hangul, letters and digits, so m-1's
- * is m1 unless given. `extra` is more columns.
+ * is m1 unless given. `extra` is more columns. Like joining, it gives the
+ * member a record at level 2 where they have none.
  */
-export const profile = (
+export function profile(
   site,
   member,
   nick = member.replace(/-/g, ""),
   extra = {},
-) => insert(site, "profiles", { member, nick, joined_at: 0, ...extra });
+) {
+  joined(site, member);
+  return insert(site, "profiles", { member, nick, joined_at: 0, ...extra });
+}
+
+/** A member's record, as joining leaves it (level 2), where they have none. */
+export const joined = (site, member, level = 2) =>
+  site.run(
+    "INSERT INTO members (member, level) VALUES (?, ?) ON CONFLICT (member) DO NOTHING",
+    member,
+    level,
+  );
 
 /** A character row, m-1's Hero unless `data` says otherwise; its ID. */
 export const character = (site, data = {}) =>

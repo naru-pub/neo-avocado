@@ -970,7 +970,7 @@ test("money to everyone leaves out level-1 members, and items go to one or every
   profile(site, "m-1", "하나");
   profile(site, "m-2", "둘");
   // adm/point_update.php:18 gives to mb_level > 1 only.
-  insert(site, "members", { member: "m-2", level: 1 });
+  site.run("INSERT OR REPLACE INTO members (member, level) VALUES ('m-2', 1)");
   const grant = (args) => site.mutate("economy/grants:grant", args, OWNER);
   const money = await grant({ kind: "money", target: "all", value: 10 });
   assert.deepEqual([money.granted, money.skipped], [1, 0]);
