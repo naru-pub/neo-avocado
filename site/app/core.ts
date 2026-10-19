@@ -3,7 +3,7 @@
 // It imports no other part but names.js, so it is always ready before them.
 
 import { NAME_DEFAULTS } from "./names.js";
-import { imageSlotsOf, viewerOf } from "../_naru/modules/images.js";
+import { imageSlotsOf, viewerOf } from "../_naru/shared/images.js";
 import type { NaruClient } from "https://sdk.naru.pub/sdk/1.1.0/naru.js";
 
 export const SHOP_PAGE = 10;

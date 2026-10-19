@@ -252,8 +252,8 @@ export async function reservedNick(
 }
 
 // The owner's names (names.ts), shared with the pages.
-export { NAME_DEFAULTS, namesOf, type Names } from "./names.js";
-import { namesOf, type Names } from "./names.js";
+export { NAME_DEFAULTS, namesOf, type Names } from "../shared/names.js";
+import { namesOf, type Names } from "../shared/names.js";
 export async function names(ctx: SqlCtx): Promise<Names> {
   return namesOf(await communitySettings(ctx));
 }

@@ -19,7 +19,7 @@ import {
   mutate,
 } from "./core.js";
 import { amountText, expText, moneyText } from "./names.js";
-import { onDisplay } from "../_naru/modules/display.js";
+import { onDisplay } from "../_naru/shared/display.js";
 import { editCharacter } from "./characters.js";
 
 async function loadShop() {

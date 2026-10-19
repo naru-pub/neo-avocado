@@ -24,7 +24,7 @@ import { showRecent, showSearch } from "./across.js";
 import { follow } from "./site.js";
 import { openCharacter } from "./characters.js";
 import { showShopCategory } from "./shop.js";
-import { placeOf, type Place } from "../_naru/modules/places.js";
+import { placeOf, type Place } from "../_naru/shared/places.js";
 
 export function openRoute(path = location.pathname) {
   showingAddress(location.pathname);

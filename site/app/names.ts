@@ -1,7 +1,7 @@
 // The owner's names for money, experience, rank, 소속 and 종족, as the
-// site's code reads them (_naru/modules/names.ts), and how pages write
+// site's code reads them (_naru/shared/names.ts), and how pages write
 // amounts in them.
-export { NAME_DEFAULTS, namesOf, type Names } from "../_naru/modules/names.js";
+export { NAME_DEFAULTS, namesOf, type Names } from "../_naru/shared/names.js";
 
 /** 1,000, as the original's number_format. */
 export function amountText(amount) {

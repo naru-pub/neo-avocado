@@ -1,7 +1,7 @@
 // 캐릭터 경험치·능력치·타이틀 (adm/character_form.php's record, exp_list.php):
 // the owner sets a character's experience, points, stat allocation and
 // damage, and titles, checked against the stat definitions and the points
-// (modules/admin-model.ts), at the version the form was opened at. A change
+// (shared/admin-model.ts), at the version the form was opened at. A change
 // of experience goes into its owner's history with the reason, in the same
 // call. The record is the character's row: it is never made or deleted
 // alone.

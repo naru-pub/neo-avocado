@@ -3,14 +3,14 @@
 // and run().
 import { type NaruClient } from "https://sdk.naru.pub/sdk/1.1.0/naru.js";
 import { type Names, NAME_DEFAULTS, namesOf, rename } from "../app/names.js";
-import { imageSlotsOf } from "../_naru/modules/images.js";
+import { imageSlotsOf } from "../_naru/shared/images.js";
 import {
   type AdminCall,
   RECORD_CALLS,
   OWN_CALLS,
   SETTINGS_SECTIONS,
   adminCall,
-} from "../_naru/modules/admin-calls.js";
+} from "../_naru/shared/admin-calls.js";
 import { renderNav } from "./main.js";
 
 export const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
@@ -38,7 +38,7 @@ export let references: Record<string, any[]> = {
   profiles: [],
 };
 /**
- * Each section's calls (modules/admin-calls.ts): its own module's, a
+ * Each section's calls (shared/admin-calls.ts): its own module's, a
  * settings form's, or admin/records', which every call names its section
  * for.
  */

@@ -1,6 +1,6 @@
 // The shop (shop/index.php): buying an item as one's approved character,
 // and the paid gacha (뽑기).
-import { onDisplay } from "../../modules/display.js";
+import { onDisplay } from "../../shared/display.js";
 import {
   activeMember,
   amount,
