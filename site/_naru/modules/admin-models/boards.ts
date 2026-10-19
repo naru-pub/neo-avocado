@@ -51,7 +51,7 @@ export const boardsModels: Record<string, Model> = {
       { key: "readLevel", label: "본문 읽기 등급", type: "number", default: 2 },
       { key: "writeLevel", label: "글쓰기 등급", type: "number", default: 2 },
       { key: "commentLevel", label: "댓글 등급", type: "number", default: 2 },
-      // bo_link_level, bo_upload_level, bo_download_level, bo_html_level.
+      // bo_link_level, bo_upload_level and bo_download_level.
       {
         key: "linkLevel",
         label: "링크 등급 (링크를 달 수 있는 등급)",
@@ -67,12 +67,6 @@ export const boardsModels: Record<string, Model> = {
       {
         key: "downloadLevel",
         label: "다운로드 등급 (첨부파일을 받을 수 있는 등급)",
-        type: "number",
-        default: 1,
-      },
-      {
-        key: "htmlLevel",
-        label: "HTML 쓰기 등급 (HTML 본문 허용일 때)",
         type: "number",
         default: 1,
       },
@@ -94,11 +88,6 @@ export const boardsModels: Record<string, Model> = {
         ],
       },
       { key: "categories", label: "분류 (쉼표로 구분)", type: "tokens" },
-      {
-        key: "html",
-        label: "HTML 본문 허용 (최대 12,000자, 표시할 때 정리)",
-        type: "checkbox",
-      },
       {
         key: "actions",
         label: "행동 허용 (글: 탐색·조합·아이템 사용, 댓글: 탐색·아이템 사용)",
@@ -343,13 +332,7 @@ export const boardsModels: Record<string, Model> = {
         ["listLevel", "readLevel", "writeLevel", "commentLevel"].some(
           (key) => data[key] < 1 || data[key] > 10,
         ) ||
-        [
-          "replyLevel",
-          "linkLevel",
-          "uploadLevel",
-          "downloadLevel",
-          "htmlLevel",
-        ].some(
+        ["replyLevel", "linkLevel", "uploadLevel", "downloadLevel"].some(
           (key) => data[key] !== undefined && (data[key] < 1 || data[key] > 10),
         )
       )

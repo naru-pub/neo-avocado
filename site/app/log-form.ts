@@ -204,21 +204,3 @@ $("logMaterials").onfocus = $("logMaterials").onpointerdown = () =>
         );
   });
 wireSpeakerChoice($("logCharacter"));
-// An uploaded picture goes into the HTML body at the cursor; the post's
-// address of it is what Naru's media library counts as using it.
-$("logInlineFile").onchange = () =>
-  run(async () => {
-    const file = $<HTMLInputElement>("logInlineFile").files?.[0];
-    if (!file) return;
-    say("그림을 올리는 중…");
-    const uploaded = await uploadMedia(file);
-    const area = $<HTMLTextAreaElement>("logText");
-    area.setRangeText(
-      `<img src="${uploaded.url}" alt="">`,
-      area.selectionStart,
-      area.selectionEnd,
-      "end",
-    );
-    $<HTMLInputElement>("logInlineFile").value = "";
-    say("그림을 넣었습니다.");
-  });

@@ -2223,7 +2223,7 @@ test("log numbers, @N links, #tags, notices first and comment counts", async () 
   assert.equal(items[0].querySelector(".pin").hidden, true);
 });
 
-test("HTML posts render sanitized, without scripts or handlers", async () => {
+test("a post's text renders as text, even one marked HTML: no member markup reaches the page", async () => {
   const database = fakeDatabase({
     [PROFILES]: [me],
     [LOGS]: [
@@ -2239,9 +2239,9 @@ test("HTML posts render sanitized, without scripts or handlers", async () => {
   });
   const { $ } = await page(database);
   const body = $("logs").querySelector(".log-text");
-  assert.equal(body.querySelector("b").textContent, "굵게");
-  assert.equal(body.querySelector("script"), null);
-  assert.equal(body.querySelector("img").hasAttribute("onerror"), false);
+  assert.equal(body.querySelector("b, img, script"), null);
+  assert.ok(body.textContent.includes("<b>굵게</b><img src="));
+  assert.equal(body.classList.contains("rich-text"), false);
 });
 
 test("멤버목록 groups approved characters under each 소속 once there are two", async () => {

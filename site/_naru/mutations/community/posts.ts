@@ -267,16 +267,15 @@ export async function write(
   const category = text(data.category ?? before?.category ?? "", 40);
   if (category && !(board.data.categories ?? []).includes(category))
     invalid(ctx);
-  // Boards with HTML on (bo_use_dhtml_editor) take sanitized-on-display
-  // HTML, from members of its HTML 쓰기 등급 (bo_html_level) on.
+  // Posts are plain text: the original's HTML editor (bo_use_dhtml_editor)
+  // is gone, so no member's HTML reaches the page. A post written as HTML
+  // before reads as its plain text (postOf) and is saved so when edited,
+  // within the length it had.
   const reaches = (level: unknown) =>
     staff || access.level >= (Number.isInteger(level) ? (level as number) : 1);
-  const format =
-    before?.format ??
-    (board.data.html === true && reaches(board.data.htmlLevel)
-      ? "html"
-      : "text");
-  let body = text(data.text ?? "", format === "html" ? HTML_LIMIT : TEXT_LIMIT);
+  const format = "text";
+  const wasHtml = previous?.format === "html";
+  let body = text(data.text ?? "", wasHtml ? HTML_LIMIT : TEXT_LIMIT);
   const image =
     data.image === before?.image
       ? (data.image ?? null)
@@ -364,8 +363,8 @@ export async function write(
       { reason: "upload_count" },
     );
   if (!image && !body) invalid(ctx);
-  // An HTML board has no length limits, as the original's editor (write.php:207).
-  if (format !== "html")
+  // A post once HTML keeps the length it had.
+  if (!wasHtml)
     checkLength(
       ctx,
       body,
@@ -446,7 +445,7 @@ export async function write(
     parsed(previous?.called, []),
   );
   body = calls.text;
-  const tags = tagsOf(format === "html" ? plainText(body) : body);
+  const tags = tagsOf(body);
   const columns: Record<string, SqlValue> = {
     title,
     category,

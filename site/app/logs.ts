@@ -165,17 +165,10 @@ export function previewOf(log) {
     log = { ...log, data: { ...log.data, title: `${title.slice(0, most)}…` } };
   const raw = log.data.text ?? "";
   if (raw.length <= 150) return log;
-  const text = log.data.format === "html" ? htmlText(raw) : raw;
   return {
     ...log,
-    data: { ...log.data, text: text.slice(0, 150), truncated: true },
+    data: { ...log.data, text: raw.slice(0, 150), truncated: true },
   };
-}
-/** The text of an HTML body, for a preview cut short. */
-export function htmlText(html) {
-  const holder = document.createElement("div");
-  holder.append(sanitizedFragment(document, html));
-  return holder.textContent.replace(/\s+/g, " ").trim();
 }
 /** Shows log No. `number` of the current board, as the skin's log link (?log=N&single=Y). */
 export async function openLogNumber(number) {
@@ -394,20 +387,14 @@ export function configureBoard() {
   );
   showCategories();
   const area = $<HTMLTextAreaElement>("logText");
-  // bo_write_max, under the text's own limit; HTML boards have none.
+  // bo_write_max, under the text's own limit.
   const most = Number(board?.data.writeMax) || 0;
-  area.maxLength = board?.data.html
-    ? 12000
-    : most > 0 && !boardStaff()
-      ? Math.min(most, 2000)
-      : 2000;
+  area.maxLength = most > 0 && !boardStaff() ? Math.min(most, 2000) : 2000;
   // bo_insert_content: a new post starts from the board's text.
   if (!area.value.trim() || area.value === area.dataset.inserted) {
     area.value = board?.data.insertContent ?? "";
     area.dataset.inserted = area.value;
   }
-  $("logHtmlHint").hidden = !board?.data.html;
-  $("logInlineImage").hidden = !board?.data.html;
   const kind = kindOf();
   // Pictures belong to image boards; questions and settlements are text.
   const pictures = !["qna", "settlement"].includes(kind);

@@ -24,8 +24,9 @@ with owner-only access.
   site cannot ask Naru which of its members are banned, so the count is
   of the community's own 접근차단일 alone.
 - **No HTML sanitizer for site code.** Queries and mutations run without
-  a DOM, so HTML a post keeps is cleaned only when shown (DOMPurify). A
-  rich-text editor that stores HTML would want a sanitizer on the server.
+  a DOM, so the owner's HTML is cleaned only when shown (DOMPurify), and
+  members' posts are plain text: letting them write HTML would want a
+  sanitizer on the server.
 
 - **Site time zone.** Korean days and schedules use hand-written offsets
   (`kstDay`, `kstStamp`, `kstStart`); a site time zone with SQL helpers

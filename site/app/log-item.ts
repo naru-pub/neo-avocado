@@ -27,7 +27,6 @@ import {
   wireSpeakerChoice,
   wireItemChoice,
 } from "./posts.js";
-import { sanitizedFragment } from "../shared/content-renderer.js";
 import { emoticonContent } from "../shared/emoticons.js";
 import {
   boardSetting,
@@ -424,12 +423,7 @@ export async function logItem(log) {
     item.querySelector(".log-text").textContent = log.data.membersOnly
       ? "멤버 공개용 로그입니다."
       : "비밀글입니다. 본문을 볼 수 없습니다.";
-  else if (log.data.format === "html" && !log.data.truncated) {
-    item.querySelector(".log-text").classList.add("rich-text");
-    item
-      .querySelector(".log-text")
-      .append(sanitizedFragment(document, log.data.text));
-  } else
+  else
     item.querySelector(".log-text").append(
       postText(log.data.text, [], {
         pictureBoard: kindOf(log.data.board) === "image",
@@ -627,10 +621,10 @@ export async function logItem(log) {
             ]),
         {
           name: "text",
-          label: current.data.format === "html" ? "본문 (HTML)" : "설명",
+          label: "설명",
           value: current.data.text,
           multiline: true,
-          max: current.data.format === "html" ? 12000 : 2000,
+          max: Math.max(2000, current.data.text?.length ?? 0),
         },
         ...[0, 1].map((n) => ({
           name: `link${n + 1}`,

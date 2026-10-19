@@ -251,7 +251,7 @@ async function postPreview(
   return {
     title:
       String(data.title ?? "").trim() || `${on.data.name} No. ${data.number}`,
-    description: opening(data.text, data.format === "html"),
+    description: opening(data.text),
     image: https(data.image) ?? https(data.speaker?.portrait),
     type: "article",
     canonical: `/post/${row.id}`,

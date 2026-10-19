@@ -1083,7 +1083,8 @@ test("a board page shows its rows a page, its 분류, and others' secret questio
   assert.equal(questions.total, 12);
   assert.equal(questions.documents[0].data.locked, true);
   assert.equal(questions.documents[0].data.text, undefined);
-  assert.equal(questions.documents[1].data.text.length, 11_007);
+  // Questions written as HTML before read as their text.
+  assert.equal(questions.documents[1].data.text.length, 11_000);
   assert.equal(questions.counts[questions.documents[0].id], undefined);
   assert.equal(
     (await listPage(site, { board: "qna", page: 2 }, M1)).documents.length,
@@ -1091,24 +1092,46 @@ test("a board page shows its rows a page, its 분류, and others' secret questio
   );
 });
 
-test("HTML boards store longer rich bodies, tag their text and preview it plainly", async () => {
+test("posts are plain text: a board saved with HTML on takes none, and an old HTML post reads as its text", async () => {
   const site = await boardSite();
-  board(site, "rich", { ...PUBLIC_BOARD, html: true });
-  const body = `<p style="color:#fff">#소식 ${"가".repeat(3000)}</p>`;
+  board(site, "rich", { ...PUBLIC_BOARD, html: true, htmlLevel: 1 });
+  const markup = `<label for="signOut"><b class="popup-layer">#소식</b></label>`;
   const { document: saved } = await write(site, {
-    data: { board: "rich", text: body, image: null },
+    data: { board: "rich", text: markup, image: null },
   });
-  assert.equal(saved.data.format, "html");
-  assert.deepEqual(saved.data.tags, ["소식"]);
-  const [row] = (await listPage(site, { board: "rich" }, M2)).documents;
-  // The whole body is read; the page previews its text.
-  assert.equal(row.data.format, "html");
-  assert.equal(row.data.text, saved.data.text);
-  // Plain boards keep their 2,000-character limit.
+  assert.equal(saved.data.format, "text");
+  assert.equal(saved.data.text, markup);
+  assert.equal(site.rows("SELECT format FROM posts")[0].format, "text");
+  // Plain posts keep their 2,000-character limit, HTML on or not.
   await assert.rejects(
     write(site, {
-      data: { text: "x".repeat(2001), image: "https://a.b/c.png" },
+      data: { board: "rich", text: "x".repeat(2001), image: null },
     }),
+  );
+  // A post written as HTML before reads as its text, and is saved as text
+  // when edited, within the length it had.
+  const old = post(site, {
+    board: "rich",
+    owner: "m-1",
+    format: "html",
+    body: `<p onclick="x()">#옛글 ${"가".repeat(3000)}</p>`,
+  });
+  const [row] = (await listPage(site, { board: "rich" }, M2)).documents.filter(
+    (entry) => entry.id === old,
+  );
+  assert.equal(row.data.format, "text");
+  assert.equal(row.data.text, `#옛글 ${"가".repeat(3000)}`);
+  const { document: opened } = await read(site, { id: old });
+  const { document: edited } = await write(site, {
+    id: old,
+    revision: opened.revision,
+    data: { ...opened.data, text: `${opened.data.text}!` },
+  });
+  assert.equal(edited.data.text, `#옛글 ${"가".repeat(3000)}!`);
+  assert.deepEqual(edited.data.tags, ["옛글"]);
+  assert.equal(
+    site.rows("SELECT format FROM posts WHERE id = ?", old)[0].format,
+    "text",
   );
 });
 
@@ -2061,7 +2084,7 @@ test("a board search finds 3-character terms by the full-text tables, shorter on
   const { site } = await roleplayWorld();
   board(site, "free", PUBLIC_BOARD);
   board(site, "other", PUBLIC_BOARD);
-  board(site, "rich", { ...PUBLIC_BOARD, html: true });
+  board(site, "rich", PUBLIC_BOARD);
   const add = (data, who = M1) =>
     write(site, { data: { board: "free", image: null, ...data } }, who);
   const { document: spring } = await add({
@@ -2100,13 +2123,13 @@ test("a board search finds 3-character terms by the full-text tables, shorter on
   );
   assert.deepEqual(await searched(site, "free", "단풍이"), []);
   assert.deepEqual(await searched(site, "other", "단풍이"), [spring.id]);
-  // An HTML post is searched by its text, not its markup.
+  // Posts are plain text: what looks like markup is searched as written.
   const { document: rich } = await add({
     board: "rich",
     text: '<p class="note">무지개 다리</p>',
   });
   assert.deepEqual(await searched(site, "rich", "무지개 다"), [rich.id]);
-  assert.deepEqual(await searched(site, "rich", "class"), []);
+  assert.deepEqual(await searched(site, "rich", "class"), [rich.id]);
   // Comments: written, edited and deleted.
   const { document: said } = await reply(
     site,
@@ -3597,17 +3620,15 @@ test("추천 and 비추천 are members' one vote each on others' posts, where th
   assert.deepEqual([listed.data.good, listed.data.nogood], [1, 0]);
 });
 
-test("링크·업로드·HTML 등급 keep links, files and HTML for the levels the board names", async () => {
+test("링크·업로드 등급 keep links and files for the levels the board names", async () => {
   const site = await boardSite();
   profile(site, "m-1", "하나");
   member(site, "m-1", { level: 2 });
   board(site, "free", {
     ...PUBLIC_BOARD,
     kind: "text",
-    html: true,
     linkLevel: 3,
     uploadLevel: 3,
-    htmlLevel: 3,
   });
   assert.equal(
     await refusal(
@@ -3626,11 +3647,6 @@ test("링크·업로드·HTML 등급 keep links, files and HTML for the levels t
     ),
     "upload_level",
   );
-  // Below HTML 쓰기 등급 a post on an HTML board is plain text.
-  const { document: plain } = await write(site, {
-    data: { board: "free", text: "<b>x</b>" },
-  });
-  assert.equal(plain.data.format, "text");
   member(site, "m-1", { level: 3 });
   const { document: rich } = await write(site, {
     data: {
@@ -3640,7 +3656,7 @@ test("링크·업로드·HTML 등급 keep links, files and HTML for the levels t
       attachments: [{ url: file }],
     },
   });
-  assert.equal(rich.data.format, "html");
+  assert.equal(rich.data.links.length, 1);
 });
 
 test("다운로드 등급 keeps a file's address from readers below it; 다운로드 포인트 charges once", async () => {

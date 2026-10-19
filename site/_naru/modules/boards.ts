@@ -361,8 +361,10 @@ export function postOf(row: PostRow): Written {
     number: row.number,
     title: row.title,
     category: row.category,
-    format: row.format,
-    text: row.body,
+    // A post written as HTML before posts became plain text reads as its
+    // text; no member's HTML reaches the page.
+    format: "text",
+    text: row.format === "html" ? htmlAsText(row.body) : row.body,
     image: row.image,
     secret: row.secret !== 0,
     membersOnly: row.members_only !== 0,
@@ -742,7 +744,7 @@ export const downloadable = (access: Access, board: Board | null) =>
       ? board.data.downloadLevel
       : 1);
 
-/** Body limits: plain logs as before, HTML posts like content pages. */
+/** Body limits: posts, and a post written as HTML before, as content pages. */
 export const TEXT_LIMIT = 2000;
 export const HTML_LIMIT = 12000;
 /** A comment's length: a textarea, as the original's (mmb/write_comment.php). */
@@ -755,6 +757,17 @@ export const plainText = (value: unknown): string =>
     .replace(/&nbsp;/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+
+/**
+ * A post written as HTML before posts became plain text, as its text: the
+ * markup gone and the common entities read.
+ */
+export const htmlAsText = (value: unknown): string =>
+  plainText(value).replace(
+    /&(amp|lt|gt|quot|#39);/g,
+    (_, name: string) =>
+      ({ amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'" })[name]!,
+  );
 
 export const MAX_TAGS = 5;
 const TAG = /#([0-9a-zA-Z가-힣_]{1,30})/g;
