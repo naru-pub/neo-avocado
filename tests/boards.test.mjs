@@ -3077,6 +3077,45 @@ test("a secret comment is read by the staff and the two writers alone, and found
   );
 });
 
+test("a 게시판 관리자 changes no writer above their own level, the owner's included", async () => {
+  const site = await boardSite();
+  profile(site, "m-1", "하나");
+  profile(site, "m-2", "둘");
+  board(site, "free", { ...PUBLIC_BOARD, name: "자유" });
+  site.run("UPDATE boards SET admin = 'm-2' WHERE id = 'free'");
+  // m-1 above the board's admin (write_update.php:333, delete.php:27).
+  site.run("UPDATE members SET level = 5 WHERE member = 'm-1'");
+  const higher = post(site, { board: "free", owner: "m-1", body: "높은" });
+  const said = comment(site, {
+    post_id: Number(higher),
+    owner: "m-1",
+    body: "댓글",
+  });
+  // The site owner's, as 최고관리자 (level 10): no member, no password.
+  const owners = post(site, { board: "free", owner: null, body: "운영" });
+  const edit = (id) => write(site, { id, data: { text: "고침" } }, M2);
+  assert.equal(await refusal(edit(higher)), "higher_level");
+  assert.equal(await refusal(edit(owners)), "higher_level");
+  assert.equal(
+    await refusal(site.mutate("community/posts:remove", { id: higher }, M2)),
+    "higher_level",
+  );
+  assert.equal(
+    await refusal(reply(site, { id: said, data: { text: "고침" } }, M2)),
+    "higher_level",
+  );
+  assert.equal(
+    await refusal(site.mutate("community/comments:remove", { id: said }, M2)),
+    "higher_level",
+  );
+  // At the same level it passes, and a 게시물 운영자 is above the rule.
+  site.run("UPDATE members SET level = 5 WHERE member = 'm-2'");
+  assert.equal(await reasonOf(edit(higher)), "ok");
+  site.run("UPDATE members SET level = 2 WHERE member = 'm-2'");
+  moderator(site, "m-2");
+  assert.equal(await reasonOf(edit(owners)), "ok");
+});
+
 test("답변글 sit under what they answer, at 글답변 권한, and keep a post with replies", async () => {
   const site = await boardSite();
   board(site, "free", { ...PUBLIC_BOARD, kind: "text", replyLevel: 2 });
@@ -3130,6 +3169,10 @@ test("답변글 sit under what they answer, at 글답변 권한, and keep a post
     "Re: 둘째 글 (2)",
     "Re: 둘째 글",
   ]);
+  // 공지에는 답변할 수 없습니다 (write_update.php:147).
+  site.run("UPDATE posts SET notice = 1 WHERE id = ?", Number(second.id));
+  assert.equal(await refusal(say("Re: 공지", second.id)), "notice_reply");
+  site.run("UPDATE posts SET notice = 0 WHERE id = ?", Number(second.id));
   // A post with replies stays, but for the staff.
   assert.equal(
     await refusal(site.mutate("community/posts:remove", { id: first.id }, M1)),
@@ -3425,10 +3468,18 @@ test("댓글 답변 sit under the comment they answer, five deep, and keep a com
   for (let n = 3; n <= 5; n += 1) deep = await say(`깊이 ${n}`, deep.id);
   assert.equal(deep.data.depth, 5);
   assert.equal(await refusal(say("여섯", deep.id)), "reply_depth");
-  // A comment with replies stays, but for the staff.
+  // A comment with replies stays as it is, but for the staff.
   assert.equal(
     await refusal(site.mutate("community/comments:remove", { id: a.id }, M1)),
     "has_replies",
+  );
+  assert.equal(
+    await refusal(reply(site, { id: a.id, data: { text: "가 고침" } }, M1)),
+    "has_replies",
+  );
+  assert.equal(
+    await reasonOf(reply(site, { id: deep.id, data: { text: "고침" } }, M1)),
+    "ok",
   );
   assert.equal(
     await reasonOf(site.mutate("community/comments:remove", { id: b.id }, M1)),

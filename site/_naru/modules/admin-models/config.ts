@@ -517,8 +517,9 @@ export const configModels: Record<string, Model> = {
         type: "checkbox",
       },
       {
+        // ad_use_money (금액 사용): also 마이페이지's 화폐관리.
         key: "viewerMoney",
-        label: "캐릭터 보기에 오너의 소지금 보이기",
+        label: "금액 사용 (화폐 관리, 캐릭터 보기의 오너 소지금)",
         type: "checkbox",
       },
       // 기타 항목명 설정 (cf_money, cf_money_pice, cf_exp_name, cf_exp_pice,

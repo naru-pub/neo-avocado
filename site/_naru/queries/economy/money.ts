@@ -1,5 +1,5 @@
 // 화폐관리 (mypage/money/): the member's own money ledger.
-import { signedIn, invalid } from "../../modules/access.js";
+import { signedIn, invalid, moneyInUse } from "../../modules/access.js";
 import { historyPage } from "../../modules/members.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
 
@@ -12,6 +12,7 @@ export async function ledger(
   args: { after?: string | null; size?: number } | null,
 ) {
   const me = signedIn(ctx);
+  await moneyInUse(ctx);
   const { after = null, size = 20 } = args ?? {};
   if (
     (after !== null && typeof after !== "string") ||

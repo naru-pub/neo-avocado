@@ -507,6 +507,10 @@ export async function write(
         !(await postReadable(ctx, parent, access, ctx.member?.id, board))
       )
         invalid(ctx);
+      if (parent.notice)
+        ctx.fail("INVALID_REQUEST", "공지에는 답변할 수 없습니다.", {
+          reason: "notice_reply",
+        });
       requireBoard(ctx, board, access, "reply");
       ({ thread, replyPath } = await replyPlace(
         ctx,

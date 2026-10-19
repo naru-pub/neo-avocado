@@ -145,6 +145,14 @@ export async function write(
   body = calls.text;
   let row: CommentRow;
   let speaker = previous ? parsed<any>(previous.speaker, null) : null;
+  // 이 댓글와 관련된 답변댓글이 존재하므로 수정 할 수 없습니다
+  // (bbs/write_comment_update.php:313), but for the staff.
+  if (previous && !isStaff(access, board) && (await hasReplies(ctx, previous)))
+    ctx.fail(
+      "CONFLICT",
+      "이 댓글과 관련된 답변댓글이 존재하므로 수정할 수 없습니다.",
+      { reason: "has_replies" },
+    );
   if (previous)
     row = (
       await ctx.sql<CommentRow>`UPDATE comments SET body = ${body}, called = ${JSON.stringify(calls.called)},
@@ -211,6 +219,23 @@ export async function write(
   return { document: commentOf(row) };
 }
 
+/** Whether a comment has replies (답변댓글) under it. */
+async function hasReplies(ctx: MutationCtx, comment: CommentRow) {
+  return Boolean(
+    await one(
+      ctx,
+      `SELECT 1 FROM comments WHERE thread = ? AND length(reply_path) > ?
+       AND substr(reply_path, 1, ?) = ? LIMIT 1`,
+      [
+        comment.thread ?? comment.id,
+        comment.reply_path.length,
+        comment.reply_path.length,
+        comment.reply_path,
+      ],
+    ),
+  );
+}
+
 /** Deletes a comment, taking back what it was paid. */
 export async function remove(
   ctx: MutationCtx,
@@ -225,20 +250,7 @@ export async function remove(
   const board = post ? await boardOf(ctx, post.board) : null;
   // 이 코멘트와 관련된 답변코멘트가 존재하므로 삭제 할 수 없습니다
   // (bbs/delete_comment.php:41), but for the staff.
-  if (
-    !isStaff(access, board) &&
-    (await one(
-      ctx,
-      `SELECT 1 FROM comments WHERE thread = ? AND length(reply_path) > ?
-       AND substr(reply_path, 1, ?) = ? LIMIT 1`,
-      [
-        previous.thread ?? previous.id,
-        previous.reply_path.length,
-        previous.reply_path.length,
-        previous.reply_path,
-      ],
-    ))
-  )
+  if (!isStaff(access, board) && (await hasReplies(ctx, previous)))
     ctx.fail(
       "CONFLICT",
       "이 코멘트와 관련된 답변코멘트가 존재하므로 삭제 할 수 없습니다.",

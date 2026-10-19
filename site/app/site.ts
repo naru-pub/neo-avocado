@@ -50,6 +50,8 @@ export async function loadSite() {
   setMusic(site.bgm);
   state.alarmSound = site.alarmSound === true;
   state.combining = site.recipes !== false;
+  // 금액 사용 off: 화폐관리 is not in 마이페이지 (mypage/_head.php:19).
+  $("myMoneyTab").hidden = site.money !== true;
   if (site.paging) state.paging = { ...state.paging, ...site.paging };
   state.counter = design.enabled ? (design.counter ?? "") : "";
   state.ownerMarks = design.ownerMarks ?? { prefix: "▶", suffix: "◀" };

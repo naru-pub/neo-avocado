@@ -53,6 +53,19 @@ export async function settingsOf(
 /** 커뮤니티 설정 (adm/community_form.php). */
 export const communitySettings = (ctx: SqlCtx) => settingsOf(ctx, "community");
 
+/**
+ * 금액 사용 (ad_use_money, kept as viewerMoney): off, 화폐관리 is no page
+ * of the site's (mypage/money/_head.php:5), as the original installs it.
+ */
+export async function moneyInUse(
+  ctx: SqlCtx & { fail: (...args: any[]) => never },
+) {
+  if ((await communitySettings(ctx)).viewerMoney !== true)
+    ctx.fail("ACCESS_DENIED", "사용할 수 없는 페이지 입니다.", {
+      reason: "money_off",
+    });
+}
+
 /** What a caller may do in the community: their level and role. */
 export interface Access {
   level: number;

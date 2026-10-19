@@ -6,7 +6,7 @@ import type { Access } from "./access.js";
 import { accessOf, boardOf, commentRow, isStaff, postRow } from "./boards.js";
 import type { CommentRow, PostRow } from "./boards.js";
 import type { GuestCredentials, MutationCtx } from "./naru-types.js";
-import { invalid, reservedNick } from "./access.js";
+import { invalid, one, reservedNick } from "./access.js";
 import { nickTaken, nickValid } from "./members.js";
 
 /** A guest writer: the name they post under and their password's hash. */
@@ -39,11 +39,31 @@ async function boardIdOf(
 }
 
 /**
+ * The level of who wrote a post or comment: a member's, the site owner's 10
+ * (최고관리자, whose rows name no member and keep no password), and a
+ * guest's 0, as get_member finds no one.
+ */
+async function writerLevel(
+  ctx: MutationCtx,
+  row: PostRow | CommentRow,
+): Promise<number> {
+  if (!row.owner) return row.guest_hash ? 0 : 10;
+  const member = await one<{ level: number }>(
+    ctx,
+    "SELECT level FROM members WHERE member = ?",
+    [row.owner],
+  );
+  return member?.level ?? 1;
+}
+
+/**
  * Checks a write to a post or comment and returns the writer's access, the
  * row as it is now (null for a new one) and, for a guest, their name. A
  * member changes their own, and a moderator anyone's; the site's owner
  * changes any without a password. A board's 게시판 관리자 and its group's
- * 그룹 관리자 are its moderators. A guest proves a post is theirs with its
+ * 그룹 관리자 are its moderators, but not over a writer of a higher level
+ * than theirs (bbs/write_update.php:322-335, delete.php,
+ * write_comment_update.php and delete_comment.php). A guest proves a post is theirs with its
  * password (bbs/password_check.php), checked against the hash its row keeps
  * (ten wrong tries an hour for each, by `post:<id>` or `comment:<id>`).
  */
@@ -113,14 +133,23 @@ export async function startWrite<T extends "post" | "comment">(
       await nickTaken(ctx, name.trim(), "");
       guest = { name: name.trim(), hash: await ctx.passwords.hash(password) };
     }
-  } else if (
-    previous &&
-    previous.owner !== ctx.member.id &&
-    !isStaff(access, await boardOf(ctx, await boardIdOf(ctx, kind, previous)))
-  )
-    ctx.fail("ACCESS_DENIED", "직접 쓴 것만 고치거나 지울 수 있습니다.", {
-      reason: "not_owned",
-    });
+  } else if (previous && previous.owner !== ctx.member.id) {
+    if (
+      !isStaff(access, await boardOf(ctx, await boardIdOf(ctx, kind, previous)))
+    )
+      ctx.fail("ACCESS_DENIED", "직접 쓴 것만 고치거나 지울 수 있습니다.", {
+        reason: "not_owned",
+      });
+    if (
+      access.role !== "moderator" &&
+      (await writerLevel(ctx, previous)) > access.level
+    )
+      ctx.fail(
+        "ACCESS_DENIED",
+        `자신의 권한보다 높은 권한의 회원이 작성한 ${kind === "post" ? "글" : "댓글"}은 고치거나 지울 수 없습니다.`,
+        { reason: "higher_level" },
+      );
+  }
   if (revision && previous && String(previous.version) !== revision)
     ctx.fail(
       "CONFLICT",

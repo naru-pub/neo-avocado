@@ -222,6 +222,8 @@ export async function site(ctx: QueryCtx) {
       : null,
     // 관리자 아이콘 (ico_admin): the site owner's mark on their comments.
     adminIcon: https(settings.adminIcon),
+    // 금액 사용 (ad_use_money): whether 마이페이지 has 화폐관리.
+    money: settings.viewerMoney === true,
     // 조합(레시피)사용 (cf_5): whether a post offers 조합.
     recipes: settings.recipes !== false,
     // 한페이지당 라인수, 페이지 표시 수 and 새창 링크.

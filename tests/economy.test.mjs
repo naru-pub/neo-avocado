@@ -839,6 +839,13 @@ test("화폐관리 sends money to a character's owner, records both sides and te
   wallet(site, "m-1", 1500);
   const send = (character, amount) =>
     mutate(site, "money:send", { character, amount });
+  // Without 금액 사용 (ad_use_money) there is no 화폐관리.
+  assert.equal(await refusal(send(theirs, 10)), "money_off");
+  assert.equal(
+    await refusal(site.query("economy/money:ledger", null, M1)),
+    "money_off",
+  );
+  setSettings(site, "community", { viewerMoney: true });
   assert.equal(await refusal(send(theirs, 2000)), "not_enough");
   assert.equal(await refusal(send(mine, 10)), "no_recipient");
   assert.equal(await refusal(send(theirs, 0)), "invalid_input");
@@ -1227,7 +1234,7 @@ test("a member who left, or whom the owner blocked or deleted, sends, gives, tra
   profile(site, "m-2", "친구");
   const hero = character(site, { owner: "m-2", state: "approved" });
   item(site, "seed", { name: "씨앗", price: 1, sell_price: 1 });
-  setSettings(site, "community", { loginReward: 7 });
+  setSettings(site, "community", { loginReward: 7, viewerMoney: true });
   const calls = () => {
     const mine = own(site, { item_id: "seed", name: "씨앗" });
     return {

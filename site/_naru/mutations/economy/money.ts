@@ -1,5 +1,11 @@
 // 화폐관리 (mypage/money/): sending money to another member.
-import { activeMember, amount, lacking, names } from "../../modules/access.js";
+import {
+  activeMember,
+  amount,
+  lacking,
+  moneyInUse,
+  names,
+} from "../../modules/access.js";
 import { pay, record, wallet } from "../../modules/economy.js";
 import { characterRow } from "../../modules/characters.js";
 import { sendNote } from "../../modules/mail.js";
@@ -17,6 +23,7 @@ export async function send(
   args: { character?: string; amount?: number },
 ) {
   const me = await activeMember(ctx);
+  await moneyInUse(ctx);
   const { character, amount: value } = args ?? {};
   const sent = amount(value, "Money sent");
   if (!sent)
