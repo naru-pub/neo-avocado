@@ -1,7 +1,7 @@
 /* AvocadoEdition's design, as its installer seeds the design manager
    (install/install_db.php → css_config) and adm/design_form_css.php renders it:
    a dark patterned page, white text, #29c7c9 as the point colour, a 200px
-   optional menu on the left (menu_pos "left"), translucent black boxes, black
+   menu fixed on the left (menu_pos "left"), translucent black boxes, black
    inputs and buttons. It applies when the owner turns 디자인 사용 on
    (body.designed), as the original's design CSS does; their 디자인 settings
    override these variables. Without it the page is plain (plain.css). */
@@ -11,7 +11,6 @@
   --paper: #333333;
   --ink: #ffffff;
   --line: #555555;
-  --rule: var(--line);
   --surface: rgba(0, 0, 0, 0.5);
   --input: #000000;
   --input-ink: #eeeeee;
@@ -23,9 +22,15 @@
   background: var(--paper);
 }
 body.site.designed {
+  max-width: none;
+  margin: 0;
+  padding: 0;
   color: var(--ink);
   /* The page shows the fixed layer below (body.site.designed::before). */
   background: transparent;
+  font-family: "Dotum", "돋움", "Apple SD Gothic Neo", sans-serif;
+  font-size: 12px;
+  line-height: 1.5em;
 }
 /* html.single:before: a fixed layer under the page, so the pattern never ends.
    skin/member/basic/img/bak_admin_login_top_pattern.png is a 4px weave. */
@@ -81,122 +86,102 @@ body.site.designed *::-webkit-scrollbar-thumb {
   border-radius: 6em;
 }
 
-/* Appearance only: geometry comes from the shared public layout. */
+/* Header: logo and menu in a fixed column (#header, #logo, #gnb). */
 body.site.designed > .top {
-  background-color: var(--surface);
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 50;
+  width: var(--menu-width);
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 0 0 20px;
+  border: 0;
+  background-color: rgba(0, 0, 0, 0.5);
   background-image: var(--site-header-background, none);
+  text-align: center;
+}
+body.site.designed > .top h1 {
+  justify-content: center;
+  margin: 0;
+  padding: 20px 10px;
+  color: var(--ink);
+  font-size: 18px;
+}
+body.site.designed #siteLogo {
+  max-width: 180px;
+}
+body.site.designed .account {
+  order: 2;
+  flex-direction: column;
+  padding: 0 15px;
+}
+body.site.designed .account button {
+  width: 100%;
+}
+body.site.designed #whoami {
+  color: var(--avocado);
+}
+body.site.designed .site-menu {
+  order: 1;
+}
+body.site.designed .site-menu > ul {
+  display: block;
+  padding: 20px 0;
+  border: 0;
+  text-align: center;
+  line-height: 1.5em;
+}
+body.site.designed .site-menu li {
+  display: block;
+  margin-bottom: 20px;
 }
 body.site.designed .site-menu a {
   color: var(--ink);
+  font-size: 14px;
+  font-weight: normal;
 }
 body.site.designed .site-menu a:hover,
 body.site.designed .site-menu a[aria-current="page"] {
   color: var(--avocado);
+  text-decoration: none;
 }
-/* Explicit 좌측 menu retains the original sidebar and menu-width setting.
-   Without it, header, navigation and content use plain.css's shared layout. */
-@media (min-width: 1025px) {
-  body.site.designed.menu-left {
-    max-width: none;
-    padding-inline: 0;
-  }
-
-  body.site.designed.menu-left > .top {
-    position: fixed;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    z-index: 50;
-    width: var(--menu-width);
-    min-height: 0;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: flex-start;
-    gap: 10px;
-    padding: 0 0 20px;
-    border: 0;
-    background-color: rgba(0, 0, 0, 0.5);
-    background-image: var(--site-header-background, none);
-    text-align: center;
-  }
-  body.site.designed.menu-left > .top h1 {
-    justify-content: center;
-    margin: 0;
-    padding: 20px 10px;
-    color: var(--ink);
-    font-size: 18px;
-  }
-  body.site.designed.menu-left #siteLogo {
-    max-width: 180px;
-  }
-  body.site.designed.menu-left .account {
-    order: 2;
-    flex-direction: column;
-    padding: 0 15px;
-  }
-  body.site.designed.menu-left .account button {
-    width: 100%;
-  }
-  body.site.designed.menu-left #whoami {
-    color: var(--avocado);
-  }
-  body.site.designed.menu-left .site-menu {
-    order: 1;
-  }
-  body.site.designed.menu-left .site-menu > ul {
-    display: block;
-    padding: 20px 0;
-    border: 0;
-    text-align: center;
-    line-height: 1.5em;
-  }
-  body.site.designed.menu-left .site-menu li {
-    display: block;
-    margin-bottom: 20px;
-  }
-  body.site.designed.menu-left .site-menu a {
-    color: var(--ink);
-    font-size: 14px;
-    font-weight: normal;
-  }
-  body.site.designed.menu-left .site-menu a:hover,
-  body.site.designed.menu-left .site-menu a[aria-current="page"] {
-    color: var(--avocado);
-    text-decoration: none;
-  }
-  body.site.designed.menu-left .site-menu li ul {
-    padding: 8px 0 0;
-  }
-  body.site.designed.menu-left .site-menu li li {
-    margin-bottom: 8px;
-  }
-  body.site.designed.menu-left .site-menu li li a {
-    font-size: 12px;
-    opacity: 0.8;
-  }
-  body.site.designed.menu-left #menuToggle {
-    display: none;
-  }
-
-  /* Body: the content column beside the menu (#body .fix-layout). */
-  body.site.designed.menu-left
-    > :not(.top):not(dialog):not(template):not(script) {
-    box-sizing: border-box;
-    max-width: 1000px;
-    margin-left: calc(
-      var(--menu-width) + max(10px, (100% - var(--menu-width) - 1000px) / 2)
-    );
-    margin-right: auto;
-    padding-left: 10px;
-    padding-right: 10px;
-  }
-  body.site.designed.menu-left > main,
-  body.site.designed.menu-left > #welcome {
-    padding-top: 30px;
-  }
+body.site.designed .site-menu li ul {
+  padding: 8px 0 0;
 }
+body.site.designed .site-menu li li {
+  margin-bottom: 8px;
+}
+body.site.designed .site-menu li li a {
+  font-size: 12px;
+  opacity: 0.8;
+}
+body.site.designed #menuToggle {
+  display: none;
+}
+
+/* Body: the content column beside the menu (#body .fix-layout). */
+body.site.designed > :not(.top):not(dialog):not(template):not(script) {
+  box-sizing: border-box;
+  max-width: 1000px;
+  margin-left: calc(
+    var(--menu-width) + max(10px, (100% - var(--menu-width) - 1000px) / 2)
+  );
+  margin-right: auto;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+body.site.designed > main,
+body.site.designed > #welcome {
+  padding-top: 30px;
+}
+
 /* Boxes (.theme-box: box_style) and status lines. */
 body.site.designed .card,
 body.site.designed [role="status"]:not(:empty),
@@ -237,7 +222,7 @@ body.site.designed input[type="checkbox"] {
 }
 body.site.designed button {
   height: auto;
-  min-height: 32px;
+  min-height: 28px;
   border: 1px solid #000000;
   background: #000000;
   color: #ffffff;
@@ -368,17 +353,81 @@ body.site.designed dialog {
   color: var(--ink);
 }
 
-/* Shared mobile drawer; keep the enabled design's own menu background. */
+/* Mobile (≤1024px): a 50px bar on top, the menu sliding in from the right. */
 @media (max-width: 1024px) {
   body.site.designed > .top {
-    background-color: var(--paper);
+    bottom: auto;
+    right: 0;
+    width: auto;
+    height: 50px;
+    overflow: visible;
+    flex-direction: row;
+    align-items: center;
+    padding: 0 60px 0 10px;
+  }
+  body.site.designed > .top h1 {
+    padding: 0;
+    font-size: 16px;
+  }
+  body.site.designed #siteLogo {
+    max-height: 36px;
+  }
+  body.site.designed .account {
+    flex-direction: row;
+    margin-left: auto;
+    padding: 0;
+  }
+  body.site.designed .account button {
+    width: auto;
+  }
+  body.site.designed #menuToggle {
+    display: block;
+    position: absolute;
+    top: 5px;
+    right: 10px;
+    width: 40px;
+    height: 40px;
+    border-radius: 100%;
+    font-size: 18px;
   }
   body.site.designed .site-menu {
-    background: var(--paper);
+    position: fixed;
+    top: 0;
+    right: -280px;
+    bottom: 0;
+    z-index: 60;
+    width: 280px;
+    overflow-y: auto;
+    background: rgba(0, 0, 0, 0.85);
   }
+  body.site.open-gnb .site-menu {
+    right: 0;
+  }
+  body.site.designed > :not(.top):not(dialog):not(template):not(script) {
+    margin-left: auto;
+  }
+  body.site.designed > main,
+  body.site.designed > #welcome {
+    padding-top: 70px;
+  }
+  body.site.designed > #status {
+    margin-top: 60px;
+  }
+}
+@media (max-width: 1024px) {
+  body.site.designed .tabs {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+  }
+  body.site.designed .tabs button {
+    flex: none;
+    white-space: nowrap;
+  }
+}
+@media (max-width: 1024px) {
   body.site.open-gnb #menuToggle {
     position: fixed;
-    right: 10px;
     z-index: 70;
   }
 }
@@ -404,11 +453,70 @@ body.site.designed.no-header > main,
 body.site.designed.no-header > #welcome {
   padding-top: 20px;
 }
-/* 상단 uses the shared header; its saved height remains a minimum so
-   long titles, nested menus and touch targets can wrap without clipping. */
+/* 메뉴위치 상단 (menu_pos top): a bar of menu_height across the top, the
+   logo at its left and the menu beside it, over the content column. */
 @media (min-width: 1025px) {
   body.site.designed.menu-top > .top {
-    min-height: var(--menu-height, 50px);
+    position: relative;
+    bottom: auto;
+    right: 0;
+    width: auto;
+    height: var(--menu-height);
+    min-height: var(--menu-height);
+    overflow: visible;
+    flex-direction: row;
+    align-items: center;
+    padding: 0 20px;
+  }
+  body.site.designed.menu-top > .top h1 {
+    padding: 0;
+  }
+  body.site.designed.menu-top #siteLogo {
+    max-height: var(--menu-height);
+  }
+  body.site.designed.menu-top .site-menu {
+    order: 0;
+    margin-left: auto;
+  }
+  body.site.designed.menu-top .site-menu > ul {
+    display: flex;
+    gap: 20px;
+    padding: 0;
+  }
+  body.site.designed.menu-top .site-menu li {
+    position: relative;
+    margin: 0;
+  }
+  body.site.designed.menu-top .site-menu li ul {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 55;
+    min-width: 120px;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.85);
+    text-align: left;
+  }
+  body.site.designed.menu-top .site-menu li:hover > ul,
+  body.site.designed.menu-top .site-menu li:focus-within > ul {
+    display: block;
+  }
+  body.site.designed.menu-top .account {
+    order: 1;
+    flex-direction: row;
+    padding: 0;
+  }
+  body.site.designed.menu-top .account button {
+    width: auto;
+  }
+  body.site.designed.menu-top
+    > :not(.top):not(dialog):not(template):not(script) {
+    margin-left: auto;
+  }
+  body.site.designed.menu-top > main,
+  body.site.designed.menu-top > #welcome {
+    padding-top: 20px;
   }
 }
 /* mmb_counter: the owner's visitor counter above a picture board's logs. */

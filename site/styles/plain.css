@@ -1,12 +1,11 @@
-/* Shared public layout, with the plain palette when 디자인 사용 is off (no
+/* AvocadoEdition with 디자인 사용 off, as a fresh install shows it (no
    data/css/_design.config.css; css/default.css, style.css and main.css alone):
    a white 1000px page, the logo top left, the menu as a centred list of plain
    links, bordered buttons, browser fonts and link colours, the black slide
    strip on the main page with the member's card beside a welcome, and a TOP
    corner. Unlike the original it is responsive: below 1024px the header is a
-   bar with a menu button, and the boxes stack. theme.css supplies the enabled
-   design's appearance and explicit left-menu layout without changing this
-   shared default layout. */
+   bar with a menu button, and the boxes stack. theme.css replaces all of this
+   when the owner turns 디자인 사용 on (body.designed). */
 :root:has(body.site:not(.designed)) {
   --avocado: #0000ee;
   --pit: #555555;
@@ -43,62 +42,62 @@
   --rule: #333;
   --corner: #3a3b40;
 }
-body.site {
+body.site:not(.designed) {
   line-height: 1.5em;
   /* Room for the TOP corner, so it never covers the last line. */
   padding-bottom: 90px;
 }
-body.site a {
+body.site:not(.designed) a {
   color: var(--avocado);
   text-decoration: none;
 }
 
 /* Header (#header .fix-layout): the logo, then the menu (#no_design_gnb). */
-body.site > .top {
+body.site:not(.designed) > .top {
   display: block;
   min-height: 0;
   padding: 15px 0 0;
   border: 0;
 }
-body.site > .top h1 {
+body.site:not(.designed) > .top h1 {
   margin: 0;
   font-size: 24px;
 }
-body.site > .top h1 a {
+body.site:not(.designed) > .top h1 a {
   color: var(--ink);
 }
-body.site .site-menu > ul {
+body.site:not(.designed) .site-menu > ul {
   display: block;
   padding: 20px 0;
   border: 0;
   text-align: center;
 }
-body.site .site-menu li {
+body.site:not(.designed) .site-menu li {
   display: block;
   margin-bottom: 20px;
 }
-body.site .site-menu a {
+body.site:not(.designed) .site-menu a {
   font-weight: normal;
 }
-body.site .site-menu li ul {
+body.site:not(.designed) .site-menu li ul {
   padding: 8px 0 0;
 }
-body.site .site-menu li li {
+body.site:not(.designed) .site-menu li li {
   margin-bottom: 8px;
 }
 /* The account controls live on the main page's card, the tabs in the menu. */
-body.site > .top .account,
-body.site .tabs {
+body.site:not(.designed) > .top .account,
+body.site:not(.designed) .tabs {
   display: none;
 }
-body.site #menuToggle {
+body.site:not(.designed) #menuToggle {
   display: none;
 }
 /* 화면 모드 sits in the header's top right corner. */
-body.site > .top {
+body.site:not(.designed) > .top {
   position: relative;
 }
-body.site > .top .scheme-choice {
+body.site:not(.designed) > .top .scheme-choice {
   position: absolute;
   top: 15px;
   right: 0;
@@ -109,13 +108,13 @@ body.site.designed .scheme-choice {
 }
 
 /* Boxes (.theme-box) and buttons (.ui-btn): no fill, a 1px border. */
-body.site .card {
+body.site:not(.designed) .card {
   border: 0;
   border-bottom: 1px solid var(--rule);
   background: none;
 }
-body.site button,
-body.site button[type="submit"] {
+body.site:not(.designed) button,
+body.site:not(.designed) button[type="submit"] {
   min-height: 28px;
   padding: 0 15px;
   border: 1px solid currentColor;
@@ -123,11 +122,12 @@ body.site button[type="submit"] {
   color: var(--avocado);
   font-size: 12px;
 }
-body.site button:disabled {
+body.site:not(.designed) button:disabled {
   opacity: 0.3;
 }
-body.site input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
-body.site select {
+body.site:not(.designed)
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+body.site:not(.designed) select {
   height: 30px;
   padding: 0 10px;
   border: 1px solid var(--line);
@@ -135,25 +135,25 @@ body.site select {
   color: var(--ink);
   font-size: 12px;
 }
-body.site select:not([multiple]) {
+body.site:not(.designed) select:not([multiple]) {
   padding-right: 26px;
 }
-body.site textarea {
+body.site:not(.designed) textarea {
   padding: 5px;
   border: 1px solid var(--line);
   background: var(--paper);
   color: var(--ink);
 }
-body.site h2 {
+body.site:not(.designed) h2 {
   font-size: 18px;
 }
 
 /* Main page (main.css): the black slide strip, then the boxes. */
-body.site #homeView {
+body.site:not(.designed) #homeView {
   padding: 50px 0 0;
 }
-body.site #banners,
-body.site #banners[hidden] {
+body.site:not(.designed) #banners,
+body.site:not(.designed) #banners[hidden] {
   display: block;
   min-height: 100px;
   margin: 0 0 20px;
@@ -270,7 +270,7 @@ body.site.designed #gotoTop {
 
 /* Narrow screens: a header bar with a menu button and a sliding menu. */
 @media (max-width: 1024px) {
-  body.site > .top {
+  body.site:not(.designed) > .top {
     position: sticky;
     top: 0;
     z-index: 40;
@@ -283,27 +283,27 @@ body.site.designed #gotoTop {
     background: var(--paper);
     border-bottom: 1px solid var(--rule);
   }
-  body.site > .top h1 {
+  body.site:not(.designed) > .top h1 {
     font-size: 18px;
   }
   /* Title, then 화면 모드, music and the menu button at the edge. */
-  body.site > .top .scheme-choice {
+  body.site:not(.designed) > .top .scheme-choice {
     position: static;
     order: 2;
     margin-left: auto;
   }
-  body.site > .top .bgm-player {
+  body.site:not(.designed) > .top .bgm-player {
     order: 3;
     margin-left: 8px;
   }
-  body.site #menuToggle {
+  body.site:not(.designed) #menuToggle {
     order: 4;
     margin-left: 8px;
   }
-  body.site > .top .bar-equalizer {
+  body.site:not(.designed) > .top .bar-equalizer {
     display: none;
   }
-  body.site #menuToggle {
+  body.site:not(.designed) #menuToggle {
     display: block;
     min-height: 40px;
     width: 40px;
@@ -312,7 +312,7 @@ body.site.designed #gotoTop {
     color: var(--ink);
     font-size: 20px;
   }
-  body.site .site-menu {
+  body.site:not(.designed) .site-menu {
     position: fixed;
     top: 0;
     right: 0;
@@ -325,18 +325,18 @@ body.site.designed #gotoTop {
     transform: translateX(100%);
     transition: transform 0.3s ease;
   }
-  body.site.open-gnb .site-menu {
+  body.site:not(.designed).open-gnb .site-menu {
     transform: none;
   }
   /* Under the header (whose menu sits above it), over everything else. */
-  body.site.open-gnb::after {
+  body.site:not(.designed).open-gnb::after {
     content: "";
     position: fixed;
     inset: 0;
     z-index: 35;
     background: rgba(0, 0, 0, 0.5);
   }
-  body.site #homeView {
+  body.site:not(.designed) #homeView {
     padding-top: 20px;
   }
 }
@@ -361,26 +361,26 @@ body.site.designed #gotoTop {
   }
 }
 
-/* Shared public hierarchy: both modes use the same sizing and spacing.
-   All defaults stay in the template layer; 디자인 and 사용자 CSS win.
-   The admin has its own stylesheet and never uses body.site. */
-body.site {
+/* Public plain layout: retain the owner's palette, logos, menus and banners.
+   These defaults stay in the template layer; 디자인 and 사용자 CSS win.
+   Keep every rule scoped so the original designed theme and admin stay intact. */
+body.site:not(.designed) {
   font-size: 14px;
   line-height: 1.7;
   padding-inline: 24px;
 }
-body.site > .top {
+body.site:not(.designed) > .top {
   padding-top: 24px;
 }
-body.site > .top h1 {
+body.site:not(.designed) > .top h1 {
   font-size: 22px;
   line-height: 1.5;
   padding-right: 110px;
 }
-body.site > .top .scheme-choice {
+body.site:not(.designed) > .top .scheme-choice {
   top: 24px;
 }
-body.site .site-menu > ul {
+body.site:not(.designed) .site-menu > ul {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
@@ -390,63 +390,64 @@ body.site .site-menu > ul {
   padding: 8px 0 17px;
   border-bottom: 1px solid var(--rule);
 }
-body.site .site-menu li {
+body.site:not(.designed) .site-menu li {
   margin-bottom: 0;
 }
-body.site .site-menu a {
+body.site:not(.designed) .site-menu a {
   display: inline-block;
   padding: 4px 0;
   font-size: 13px;
   line-height: 1.7;
 }
-body.site .site-menu a[aria-current="page"] {
+body.site:not(.designed) .site-menu a[aria-current="page"] {
   font-weight: bold;
   text-decoration: underline;
   text-underline-offset: 6px;
 }
-body.site button,
-body.site button[type="submit"] {
-  min-height: 32px;
+body.site:not(.designed) button,
+body.site:not(.designed) button[type="submit"] {
+  min-height: 36px;
   padding: 4px 12px;
 }
-body.site input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
-body.site select {
-  min-height: 32px;
+body.site:not(.designed)
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+body.site:not(.designed) select {
+  min-height: 36px;
   height: auto;
   padding-block: 4px;
 }
-body.site textarea {
+body.site:not(.designed) textarea {
   padding: 8px 10px;
   line-height: 1.7;
 }
-body.site h2 {
+body.site:not(.designed) h2 {
   font-size: 22px;
   line-height: 1.5;
   margin: 24px 0 16px;
 }
-body.site h3 {
+body.site:not(.designed) h3 {
   font-size: 16px;
 }
-body.site .section-heading {
+body.site:not(.designed) .section-heading {
   padding-bottom: 16px;
   border-bottom: 1px solid var(--rule);
 }
-body.site .hint,
-body.site .meta {
+body.site:not(.designed) .hint,
+body.site:not(.designed) .meta {
   color: var(--pit);
   font-size: 12px;
 }
-body.site #homeView {
+body.site:not(.designed) #homeView {
   padding-top: 24px;
 }
-body.site #banners {
+body.site:not(.designed) #banners {
   margin-bottom: 32px;
 }
-body.site .home-boxes {
+body.site:not(.designed) .home-boxes {
   grid-template-columns: minmax(0, 1fr) minmax(270px, 0.65fr);
   gap: 32px 40px;
 }
-body.site #welcome.home-welcome {
+body.site:not(.designed) #welcome.home-welcome {
   margin: 0;
   max-width: none;
   grid-row: auto;
@@ -454,54 +455,60 @@ body.site #welcome.home-welcome {
   min-width: 0;
   line-height: 1.9;
 }
-body.site .welcome-heading {
+body.site:not(.designed) .welcome-heading {
   font-size: 18px;
   margin: 0 0 10px;
 }
-body.site .home-welcome p {
+/* The heading is part of the plain welcome, not the owner's designed theme. */
+body.site.designed .welcome-heading {
+  display: none;
+}
+body.site:not(.designed) .home-welcome p {
   margin: 0 0 12px;
 }
-body.site .welcome-help {
+body.site:not(.designed) .welcome-help {
+  display: block;
+  margin-top: 12px;
   color: var(--pit);
   font-size: 12px;
 }
-body.site .profile-card {
+body.site:not(.designed) .profile-card {
   grid-column: 2;
   gap: 14px;
   padding: 4px 12px;
 }
-body.site .profile-card .thumb {
+body.site:not(.designed) .profile-card .thumb {
   flex-basis: 65px;
   height: 100px;
 }
-body.site .profile-card .name {
+body.site:not(.designed) .profile-card .name {
   font-size: 14px;
 }
-body.site .profile-card #cardDescript {
+body.site:not(.designed) .profile-card #cardDescript {
   font-size: 12px;
   color: var(--pit);
   margin: 5px 0 13px;
 }
-body.site .profile-card .control-group {
+body.site:not(.designed) .profile-card .control-group {
   flex-wrap: wrap;
   gap: 6px;
 }
-body.site .profile-card .control-group li {
+body.site:not(.designed) .profile-card .control-group li {
   flex: 0 1 auto;
 }
-body.site .profile-card .control-group li + li button {
+body.site:not(.designed) .profile-card .control-group li + li button {
   border-left-width: 1px;
 }
-body.site .home-banner {
+body.site:not(.designed) .home-banner {
   grid-column: 1 / -1;
   padding: 0;
   font-size: 12px;
 }
-body.site #homeView .copyright {
+body.site:not(.designed) #homeView .copyright {
   margin-top: 18px;
   font-size: 11px;
 }
-body.site .board-search {
+body.site:not(.designed) .board-search {
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
@@ -509,61 +516,227 @@ body.site .board-search {
   margin-block: 24px;
 }
 @media (max-width: 1024px) {
-  body.site > .top {
+  body.site:not(.designed) > .top {
     height: auto;
     min-height: 58px;
     margin-inline: -24px;
     padding: 8px 24px;
   }
-  body.site > .top h1 {
+  body.site:not(.designed) > .top h1 {
     padding-right: 0;
   }
-  body.site .site-menu > ul {
+  body.site:not(.designed) .site-menu > ul {
     display: block;
     padding: 24px;
     margin: 0;
     border: 0;
   }
-  body.site .site-menu li {
+  body.site:not(.designed) .site-menu li {
     margin-bottom: 12px;
   }
 }
 @media (max-width: 800px) {
-  body.site {
+  body.site:not(.designed) {
     padding-inline: 16px;
   }
-  body.site > .top {
+  body.site:not(.designed) > .top {
     margin-inline: -16px;
     padding-inline: 16px;
   }
-  body.site .home-boxes {
+  body.site:not(.designed) .home-boxes {
     grid-template-columns: minmax(0, 1fr);
     gap: 26px;
   }
-  body.site .profile-card {
+  body.site:not(.designed) .profile-card {
     grid-column: 1;
     padding-top: 20px;
     border-top: 1px solid var(--rule);
   }
 }
 @media (max-width: 420px) {
-  body.site > .top {
+  body.site:not(.designed) > .top {
     gap: 4px;
   }
-  body.site .home-welcome,
-  body.site .profile-card {
+  body.site:not(.designed) .home-welcome,
+  body.site:not(.designed) .profile-card {
     padding-inline: 0;
   }
 }
 @media (pointer: coarse) {
-  body.site button,
-  body.site button[type="submit"],
-  body.site .site-menu a {
+  body.site:not(.designed) button,
+  body.site:not(.designed) button[type="submit"],
+  body.site:not(.designed) .site-menu a {
     min-height: 44px;
   }
-  body.site input,
-  body.site select,
-  body.site textarea {
+  body.site:not(.designed) input,
+  body.site:not(.designed) select,
+  body.site:not(.designed) textarea {
     font-size: 16px;
   }
+}
+
+/* Public forms share a vertical rhythm. Use layout-only defaults here;
+   the design layer still owns colors, borders, corners and text styles. */
+body.site:not(.designed) :where(form.card, fieldset.card) {
+  padding: 20px;
+  margin-block: 24px;
+  min-width: 0;
+}
+body.site:not(.designed) :where(form, fieldset) label {
+  margin-block: 16px;
+}
+body.site:not(.designed) :where(form, fieldset) label:first-child {
+  margin-top: 0;
+}
+body.site:not(.designed) label > :where(input, select, textarea) {
+  margin-top: 6px;
+}
+body.site:not(.designed)
+  label
+  > :where(select, textarea, input:not([type="checkbox"]):not([type="radio"])) {
+  display: block;
+  width: 100%;
+}
+body.site:not(.designed)
+  :where(input:not([type="checkbox"]):not([type="radio"]), select) {
+  min-height: 36px;
+}
+body.site:not(.designed) :where(input, select, textarea, button) {
+  vertical-align: middle;
+}
+body.site:not(.designed) input:is([type="checkbox"], [type="radio"]) {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: auto;
+  margin: 0;
+}
+body.site:not(.designed)
+  label:not([hidden]):has(> input:is([type="checkbox"], [type="radio"])) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+}
+body.site:not(.designed)
+  :where(.log-options, .comment-form, .board-search)
+  label {
+  margin: 0;
+}
+body.site:not(.designed) .log-options {
+  gap: 12px 20px;
+  margin-block: 16px;
+  min-width: 0;
+}
+body.site:not(.designed) :where(form, fieldset) > :is(h2, h3):first-child {
+  margin-top: 0;
+  margin-bottom: 20px;
+}
+body.site:not(.designed) :where(form, fieldset) .hint {
+  margin-block: 6px 16px;
+}
+body.site:not(.designed) form > button[type="submit"] {
+  margin-top: 8px;
+}
+body.site:not(.designed) .view-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+  margin-block: 20px;
+}
+body.site:not(.designed) .view-tools > :is(label, p) {
+  margin: 0;
+}
+body.site:not(.designed) .view-tools > label {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+body.site:not(.designed) .view-tools label > select {
+  width: auto;
+  max-width: 100%;
+  margin: 0;
+}
+body.site:not(.designed) .board-links {
+  font-size: 12px;
+}
+body.site:not(.designed) .form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-top: 24px;
+}
+body.site:not(.designed) .comment-form {
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+body.site:not(.designed) .comment-form > button[type="submit"] {
+  margin: 0;
+}
+body.site:not(.designed) .comment-actions:not([hidden]) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+body.site:not(.designed) .board-search label > input {
+  margin: 0;
+}
+body.site:not(.designed) .board-search > :is(select, input, button) {
+  margin: 0;
+}
+body.site:not(.designed) .sub-tabs {
+  align-items: center;
+  row-gap: 12px;
+  margin-block: 16px 24px;
+}
+body.site:not(.designed) #shopCategories {
+  gap: 8px;
+}
+body.site:not(.designed) #shopCategories button + button {
+  border-left-width: 1px;
+}
+body.site:not(.designed) .account-info {
+  padding-inline: 0;
+  gap: 12px 24px;
+}
+body.site:not(.designed) #editor {
+  padding: 24px;
+}
+@media (max-width: 500px) {
+  body.site:not(.designed) :where(form.card, fieldset.card) {
+    padding: 16px;
+  }
+  body.site:not(.designed) .view-tools {
+    gap: 12px;
+  }
+  body.site:not(.designed) .view-tools > label {
+    flex: 1 1 100%;
+  }
+  body.site:not(.designed) .view-tools label > select {
+    flex: 1 1 140px;
+  }
+  body.site:not(.designed) .account-info {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+  body.site:not(.designed) .account-info dd {
+    margin-bottom: 12px;
+  }
+  body.site:not(.designed) #editor {
+    padding: 16px;
+  }
+}
+/* A hidden conditional field must stay hidden despite label layout rules. */
+body.site:not(.designed) label[hidden] {
+  display: none;
+}
+body.site:not(.designed) .view-tools label > select {
+  min-width: 160px;
 }

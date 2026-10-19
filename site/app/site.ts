@@ -61,10 +61,6 @@ export async function loadSite() {
     "menu-top",
     design.enabled && design.menuPosition === "top",
   );
-  document.body.classList.toggle(
-    "menu-left",
-    design.enabled && design.menuPosition === "left",
-  );
   // The template's styles are the `template` layer (index.html), 디자인's
   // the `design` layer after it, and 사용자 CSS none: unlayered rules beat
   // every layer's, so the owner's need no !important or matching selectors.

@@ -1249,17 +1249,6 @@ test("디자인 설정 adds its CSS, hides the header or tops the menu, and show
   assert.equal($("boardCounter").querySelector("script"), null);
 });
 
-test("the saved left menu opts into the sidebar instead of the shared top layout", async () => {
-  const database = fakeDatabase({ [PROFILES]: [me] });
-  database.site = {
-    design: { enabled: true, font: "sans", colors: {}, menuPosition: "left" },
-  };
-  const { window, settle } = await page(database);
-  await settle();
-  assert.ok(window.document.body.classList.contains("menu-left"));
-  assert.equal(window.document.body.classList.contains("menu-top"), false);
-});
-
 test("logs are read a page at a time, newest first, and comments only when opened", async () => {
   const logs = Array.from({ length: 17 }, (_, n) => ({
     id: `log-${n}`,
