@@ -232,15 +232,6 @@ body.site:not(.designed) #banners[hidden] {
 .profile-card .control-group li + li button {
   border-left-width: 0;
 }
-.home-banner {
-  grid-column: 2;
-  padding: 10px;
-  text-align: center;
-  overflow-wrap: anywhere;
-}
-.home-banner p {
-  margin: 0 0 4px;
-}
 #homeView .copyright {
   margin: 30px 0 0;
   text-align: center;
@@ -347,8 +338,7 @@ body.site.designed #gotoTop {
     grid-template-columns: 1fr;
   }
   .home-welcome,
-  .profile-card,
-  .home-banner {
+  .profile-card {
     grid-column: 1;
     grid-row: auto;
   }
@@ -498,11 +488,6 @@ body.site:not(.designed) .profile-card .control-group li {
 }
 body.site:not(.designed) .profile-card .control-group li + li button {
   border-left-width: 1px;
-}
-body.site:not(.designed) .home-banner {
-  grid-column: 1 / -1;
-  padding: 0;
-  font-size: 12px;
 }
 body.site:not(.designed) #homeView .copyright {
   margin-top: 18px;

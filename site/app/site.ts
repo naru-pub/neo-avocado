@@ -165,7 +165,6 @@ async function showMainPage(enabled, banners) {
   // The card a previous {{OUTLOGIN}} moved returns home first.
   cardHome.parent.insertBefore($("profileCard"), cardHome.next);
   $("mainPage").hidden = !enabled;
-  $("homeDefault").hidden = enabled;
   if (enabled) $("banners").hidden = true;
   if (!enabled) return;
   const result = await query("content/pages:contentPage", {
@@ -350,6 +349,13 @@ function renderMenus(menus) {
     }
     list.append(item);
   }
+  // 운영 closes every menu, the owner's or the default.
+  const admin = document.createElement("li");
+  const link = document.createElement("a");
+  link.href = "/admin/";
+  link.textContent = "운영";
+  admin.append(link);
+  list.append(admin);
   nav.append(list);
   nav.hidden = false;
 }
