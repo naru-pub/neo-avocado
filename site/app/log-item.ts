@@ -259,28 +259,32 @@ export async function logItem(log) {
             ["copy", "복사 (댓글과 함께)"],
           ],
         },
-        {
-          name: "board",
-          label: "게시판",
-          value: log.data.board ?? "default",
-          // bbs/move.php: a 게시판·그룹 관리자 moves to boards they administer.
-          options: state.boards
-            .filter((row) => boardStaff(row.id))
-            .map((row) => [row.id, row.data.name]),
-        },
+        // bbs/move.php's boards, checked one or more: a 게시판·그룹 관리자
+        // moves to boards they administer. 답변글 go with their post.
+        ...state.boards
+          .filter((row) => boardStaff(row.id))
+          .map((row) => ({
+            name: `board:${row.id}`,
+            label: `${row.data.name}${row.id === (log.data.board ?? "default") ? " (현재)" : ""}`,
+            type: "checkbox",
+          })),
       ],
-      async ({ how, board }) => {
-        if (how === "copy") {
-          await mutate("community/boards:copyPost", { id: log.id, board });
-          say("복사했습니다.");
-          if (board === (log.data.board ?? "default")) await loadLogs();
-          return;
-        }
-        await mutate("community/boards:moderatePost", {
-          id: log.id,
-          board,
-        });
-        item.remove();
+      async ({ how, ...checked }) => {
+        const boards = Object.entries(checked)
+          .filter(([, on]) => on)
+          .map(([name]) => name.slice("board:".length));
+        if (!boards.length)
+          throw Object.assign(new Error("게시판을 하나 이상 골라 주세요."), {
+            details: { reason: "no_board" },
+          });
+        await mutate(
+          how === "copy"
+            ? "community/boards:copyPost"
+            : "community/boards:movePosts",
+          { id: log.id, boards },
+        );
+        say(how === "copy" ? "복사했습니다." : "이동했습니다.");
+        await loadLogs();
       },
     );
   const image = item.querySelector<HTMLImageElement>(".log-image");

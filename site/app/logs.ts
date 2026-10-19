@@ -426,6 +426,9 @@ export function configureBoard() {
   $<HTMLSelectElement>("logCategory").required = kind === "settlement";
   // Guests write secret posts too, opened again with their password.
   $("logSecretLabel").classList.remove("member-only");
+  // 공지 as it is written, for the board's staff (write.skin.php).
+  $("logNoticeLabel").hidden = !boardStaff() || Boolean(state.replyTo);
+  $<HTMLInputElement>("logNotice").checked = false;
   $("logForm").hidden =
     board?.data.enabled === false ||
     (!boardStaff() && state.level < (board?.data.writeLevel ?? 2));

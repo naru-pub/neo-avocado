@@ -860,7 +860,7 @@ export const memoOf = (board: Board | null, number: unknown, what: string) =>
   `${board?.data.name ?? "게시판"} ${number ?? ""} ${what}`;
 
 /**
- * Pays a member the board's reward for a post or comment (insert_point with
+ * Pays a member the board's reward, or takes its charge when negative, for a post or comment (insert_point with
  * bo_write_point or bo_comment_point, bbs/write_update.php:309,
  * write_comment_update.php:200) in the community's money, with a history
  * row; returns what was paid, which the post or comment keeps as `reward`.
@@ -870,11 +870,17 @@ export async function payReward(
   reward: unknown,
   memo: string,
 ): Promise<number> {
-  const paid = Number.isSafeInteger(reward) && (reward as number) > 0;
+  const paid = Number.isSafeInteger(reward) && reward !== 0;
   if (!paid || !ctx.member) return 0;
   if ((await communitySettings(ctx)).usePoint === false) return 0;
   const member = ctx.member.id;
   const balance = (await walletOf(ctx, member)).balance + (reward as number);
+  // A negative one is a charge: a member who cannot pay it does not write
+  // (write.php:51, write_comment_update.php:76).
+  if (balance < 0)
+    ctx.fail("CONFLICT", await lacking(ctx, "moneyName"), {
+      reason: "not_enough",
+    });
   if (!Number.isSafeInteger(balance))
     throw new Error("Balance is outside its allowed range.");
   await saveWallet(ctx, member, balance);
@@ -905,17 +911,18 @@ export async function canRepay(ctx: BoardCtx, member: string, owed: number) {
 /**
  * Takes back the reward a post or comment was paid, from its author, when it
  * is deleted (bbs/delete.php:78, delete_comment.php:63), down to nothing:
- * a balance never goes below zero here.
+ * a balance never goes below zero here. What it charged is given back.
  */
 export async function takeBackReward(
   ctx: BoardCtx,
   row: { owner: string | null; reward: number },
   memo: string,
 ) {
-  if (!Number.isSafeInteger(row.reward) || row.reward <= 0 || !row.owner)
+  if (!Number.isSafeInteger(row.reward) || row.reward === 0 || !row.owner)
     return;
   const before = (await walletOf(ctx, row.owner)).balance;
-  const taken = Math.min(row.reward, before);
+  // A charge (a negative reward) is given back, as delete_point drops it.
+  const taken = row.reward < 0 ? row.reward : Math.min(row.reward, before);
   if (!taken) return;
   const balance = before - taken;
   await saveWallet(ctx, row.owner, balance);

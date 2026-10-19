@@ -102,6 +102,8 @@ export interface PostInput {
   files?: string[];
   /** 답변 (bbs/write.php w=r): the post this one answers, on a new post. */
   replyTo?: string;
+  /** 공지 (write.skin.php's notice checkbox): the staff's, not a 답변글's. */
+  notice?: boolean;
   /** A plain board's 첨부파일: uploads, as media.upload answered them. */
   attachments?: {
     url: string;
@@ -468,6 +470,10 @@ export async function write(
     attachments: JSON.stringify(attachments),
     updated_at: ctx.now,
   };
+  // 공지 (write_update.php:141): the staff pin a post as they write it,
+  // but not a 답변글; others' asking is ignored, as the form shows them none.
+  if (staff && typeof data.notice === "boolean" && data.replyTo === undefined)
+    Object.assign(columns, { notice: data.notice });
   // 췩 (mmb/write_update.skin.php:46-55): its writer's edit finishes a log
   // still being written, and it takes the time it is finished.
   if (
@@ -834,6 +840,25 @@ export async function remove(
     `${rewards}
      UPDATE wallets SET balance = balance - min(balance, rewards.reward)
      FROM rewards WHERE wallets.member = rewards.owner`,
+    [previous.id],
+  );
+  // What their comments were charged (a negative 댓글쓰기 포인트) is given
+  // back, as delete_point drops it.
+  const charges = `WITH charges AS MATERIALIZED (
+    SELECT owner, -sum(reward) AS charge FROM comments
+    WHERE post_id = ? AND reward < 0 GROUP BY owner)`;
+  await ctx.sql(
+    `${charges}
+     INSERT INTO history (owner, kind, at, delta, balance, memo)
+     SELECT wallets.member, 'board', ?, charges.charge, wallets.balance + charges.charge, ?
+     FROM charges JOIN wallets ON wallets.member = charges.owner
+     ORDER BY wallets.member`,
+    [previous.id, ctx.now, memoOf(board, previous.number, "댓글삭제")],
+  );
+  await ctx.sql(
+    `${charges}
+     UPDATE wallets SET balance = balance + charges.charge
+     FROM charges WHERE wallets.member = charges.owner`,
     [previous.id],
   );
   // Their full-text rows go with them (posts_search, comments_search).

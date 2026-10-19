@@ -3861,3 +3861,120 @@ test("nicknames are unique whatever their case, of Hangul, letters and digits, a
   );
   assert.equal(mine.data.createdAt, new Date(site.now).toISOString());
 });
+
+test("a negative 글쓰기·댓글쓰기 포인트 charges the writer, who must afford it, and comes back on delete", async () => {
+  const site = await boardSite();
+  board(site, "free", {
+    ...PUBLIC_BOARD,
+    writeReward: -100,
+    commentReward: -10,
+  });
+  profile(site, "m-1", "하나");
+  profile(site, "m-2", "둘");
+  wallet(site, "m-1", 50);
+  wallet(site, "m-2", 5);
+  const say = () => write(site, { data: { board: "free", text: "글" } });
+  assert.equal(await refusal(say()), "not_enough");
+  wallet(site, "m-1", 150);
+  const { document: made } = await say();
+  assert.equal(balanceOf(site, "m-1"), 50);
+  // A commenter short of the charge cannot comment; one who pays it can.
+  const answer = (who) =>
+    reply(site, { data: { logId: made.id, text: "댓글" } }, who);
+  assert.equal(await refusal(answer(M2)), "not_enough");
+  wallet(site, "m-2", 30);
+  await answer(M2);
+  assert.equal(balanceOf(site, "m-2"), 20);
+  // Deleting the post gives back what it and its comments were charged.
+  await site.mutate("community/posts:remove", { id: made.id }, M1);
+  assert.equal(balanceOf(site, "m-1"), 150);
+  assert.equal(balanceOf(site, "m-2"), 30);
+});
+
+test("the staff pin a post as they write it; a member's asking is ignored", async () => {
+  const site = await boardSite();
+  board(site, "free", { ...PUBLIC_BOARD });
+  site.run("UPDATE boards SET admin = 'm-2' WHERE id = 'free'");
+  profile(site, "m-1", "하나");
+  profile(site, "m-2", "둘");
+  const say = (who) =>
+    write(site, { data: { board: "free", text: "공지", notice: true } }, who);
+  assert.equal((await say(M2)).document.data.notice, true);
+  assert.equal((await say(M1)).document.data.notice, false);
+});
+
+test("이동 and 복사 take a post's 답변글 along, to every board checked", async () => {
+  const site = await boardSite();
+  board(site, "free", { ...PUBLIC_BOARD, kind: "text", replyLevel: 2 });
+  board(site, "two", { ...PUBLIC_BOARD, name: "둘째", kind: "text" });
+  board(site, "three", { ...PUBLIC_BOARD, name: "셋째", kind: "text" });
+  profile(site, "m-1", "하나");
+  moderator(site, "m-2");
+  profile(site, "m-2", "둘");
+  const say = async (title, replyTo) =>
+    (
+      await write(site, {
+        data: {
+          board: "free",
+          title,
+          text: title,
+          ...(replyTo ? { replyTo } : {}),
+        },
+      })
+    ).document;
+  const root = await say("처음");
+  const answer = await say("Re: 처음", root.id);
+  const c1 = (await reply(site, { data: { logId: answer.id, text: "댓글" } }))
+    .document;
+  await reply(site, {
+    data: { logId: answer.id, text: "댓글 답", replyTo: c1.id },
+  });
+  const titles = async (board) =>
+    (await listPage(site, { board }, M2)).documents.map((row) => [
+      row.data.title,
+      row.data.depth ?? 0,
+    ]);
+  // Copying a reply copies its whole thread, replies under their copied post.
+  await site.mutate(
+    "community/boards:copyPost",
+    { id: answer.id, boards: ["two", "three"] },
+    M2,
+  );
+  for (const board of ["two", "three"])
+    assert.deepEqual(await titles(board), [
+      ["처음", 0],
+      ["Re: 처음", 1],
+    ]);
+  const copied = (await listPage(site, { board: "two" }, M2)).documents[1];
+  assert.deepEqual(
+    (await commentsOf(site, copied.id, M2)).map((row) => [
+      row.data.text,
+      row.data.depth ?? 0,
+    ]),
+    [
+      ["댓글", 0],
+      ["댓글 답", 1],
+    ],
+  );
+  // Moving to two boards moves the thread to the first and copies it to the
+  // other, as move_update.php copies to each and deletes the original.
+  await site.mutate(
+    "community/boards:movePosts",
+    { id: root.id, boards: ["three", "two"] },
+    M2,
+  );
+  assert.deepEqual(await titles("free"), []);
+  assert.equal((await titles("three")).length, 4);
+  assert.equal((await titles("two")).length, 4);
+  // A member moves nothing.
+  assert.equal(
+    await refusal(
+      site.mutate(
+        "community/boards:movePosts",
+        { id: root.id, board: "free" },
+        M1,
+      ),
+    ),
+    "access_denied",
+  );
+});

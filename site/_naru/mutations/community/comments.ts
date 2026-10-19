@@ -258,8 +258,12 @@ export async function remove(
     );
   // 댓글쓰기 포인트 goes back (bbs/delete_comment.php:63), in full from a
   // writer deleting their own.
-  if (previous.reward > 0) {
-    if (previous.owner && ctx.member?.id === previous.owner)
+  if (previous.reward !== 0) {
+    if (
+      previous.reward > 0 &&
+      previous.owner &&
+      ctx.member?.id === previous.owner
+    )
       await canRepay(ctx, previous.owner, previous.reward);
     await takeBackReward(
       ctx,

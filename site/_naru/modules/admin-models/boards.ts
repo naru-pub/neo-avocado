@@ -264,14 +264,16 @@ export const boardsModels: Record<string, Model> = {
       },
       {
         key: "writeReward",
-        label: "글쓰기 보상 (화폐, 글을 지우면 회수)",
-        type: "number",
+        label:
+          "글쓰기 포인트 (화폐, 음수면 차감하고 모자라면 쓸 수 없음, 글을 지우면 되돌림)",
+        type: "signed",
         default: 0,
       },
       {
         key: "commentReward",
-        label: "댓글쓰기 보상 (화폐, 댓글을 지우면 회수)",
-        type: "number",
+        label:
+          "댓글쓰기 포인트 (화폐, 음수면 차감하고 모자라면 쓸 수 없음, 댓글을 지우면 되돌림)",
+        type: "signed",
         default: 0,
       },
       // bo_insert_content, bo_write_min/max, bo_comment_min/max.

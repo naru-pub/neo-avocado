@@ -9,6 +9,7 @@ import {
   say,
   uploadMedia,
   mutate,
+  boardStaff,
 } from "./core.js";
 import { showNewPost } from "./live.js";
 import { wireItemChoice, postInventory, wireSpeakerChoice } from "./posts.js";
@@ -43,6 +44,9 @@ $("logAttachments").addEventListener("change", () => {
 export function startReply(log) {
   state.replyTo = log.id;
   $("logReplying").hidden = false;
+  // 공지에는 답변할 수 없고, a 답변글 is no notice.
+  $("logNoticeLabel").hidden = true;
+  $<HTMLInputElement>("logNotice").checked = false;
   $("logReplyingTitle").textContent =
     `답변: ${log.data.title || `${log.data.number ?? ""}번 글`}`;
   const title = $<HTMLInputElement>("logTitle");
@@ -53,6 +57,7 @@ export function startReply(log) {
 export function endReply() {
   state.replyTo = null;
   $("logReplying").hidden = true;
+  $("logNoticeLabel").hidden = !boardStaff();
 }
 $("cancelReply").onclick = () => {
   if ($<HTMLInputElement>("logTitle").value.startsWith("Re:"))
@@ -168,6 +173,9 @@ $("logForm").onsubmit = (event) => {
         ...(action === "explore" ? { action } : {}),
         ...(used ? { item: used } : {}),
         ...(state.replyTo ? { replyTo: state.replyTo } : {}),
+        ...($<HTMLInputElement>("logNotice").checked && !state.replyTo
+          ? { notice: true }
+          : {}),
       },
       ...(guest ? { guest } : {}),
     });

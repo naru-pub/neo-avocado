@@ -16,7 +16,7 @@ import {
   savePostSearch,
 } from "../../modules/boards.js";
 import { profileOf } from "../../modules/members.js";
-import type { PostRow } from "../../modules/boards.js";
+import type { Board, PostRow } from "../../modules/boards.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
 /**
@@ -72,69 +72,238 @@ async function withMoveLog(ctx: MutationCtx, row: PostRow, verb: string) {
 }
 
 /**
- * 복사 (bbs/move.php?sw=copy): a copy of a post on another board (or its
- * own), at that board's next number, with its tags, comments and 조회수,
- * the copy's line added, paying and taking back nothing. A copied 답변글
- * stands alone. For the same staff as a move.
+ * A post and its 답변글 (bbs/move_update.php works on every row of a
+ * wr_num): the thread's first post, then its replies in their order.
  */
-export async function copyPost(
+async function threadOf(ctx: MutationCtx, row: PostRow) {
+  const root = row.thread ?? row.id;
+  return (
+    await ctx.sql<PostRow>(
+      `${POST_SELECT} WHERE id = ? OR thread = ? ORDER BY thread IS NOT NULL, reply_path, id`,
+      [root, root],
+    )
+  ).rows;
+}
+
+/** The next number on a board. */
+async function nextNumber(ctx: MutationCtx, board: string) {
+  return (
+    await one<{ next: number }>(
+      ctx,
+      "SELECT coalesce(max(number), 0) + 1 AS next FROM posts WHERE board = ?",
+      [board],
+    )
+  ).next;
+}
+
+/** A row's 분류 where the board has it, else none. */
+const categoryOn = (board: Board, row: PostRow) =>
+  row.category && (board.data.categories ?? []).includes(row.category)
+    ? row.category
+    : "";
+
+/**
+ * Copies a thread to a board, each post at its next number with its tags,
+ * 조회수 and comments, the copy's line added, paying and taking back
+ * nothing; the replies stay replies of the copied post. Returns the copy of
+ * `first`.
+ */
+async function copyThread(
   ctx: MutationCtx,
-  args: { id?: string; board?: string },
+  posts: PostRow[],
+  board: Board,
+  first: PostRow,
 ) {
-  const { id, board } = args ?? {};
-  const access = await accessOf(ctx);
-  const row = await postRow(ctx, id);
-  if (!isStaff(access, row ? await boardOf(ctx, row.board) : null))
-    ctx.fail("ACCESS_DENIED", "권한이 없습니다.", { reason: "access_denied" });
-  if (!row)
-    ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {
-      reason: "document_not_found",
-    });
-  const target = await destination(ctx, access, row, board);
-  const body = await withMoveLog(ctx, row, "복사");
   const kept = POST_COPY_COLUMNS.filter(
     (column) =>
       !["number", "category", "body", "reply_path", "notice"].includes(column),
   );
-  const copy = (
-    await ctx.sql<PostRow>(
-      `INSERT INTO posts (board, number, category, body, ${kept.join(", ")}, reward)
-       SELECT ?, ?, ?, ?, ${kept.join(", ")}, 0 FROM posts WHERE id = ? RETURNING *`,
-      [target.board.id, target.number, target.category, body, row.id],
-    )
-  ).rows[0];
-  await ctx.sql`INSERT INTO post_tags (post_id, tag)
-    SELECT ${copy.id}, tag FROM post_tags WHERE post_id = ${row.id}`;
-  await ctx.sql`INSERT INTO post_hits (post_id, hits)
-    SELECT ${copy.id}, hits FROM post_hits WHERE post_id = ${row.id}`;
-  await savePostSearch(ctx, copy, true);
-  await ctx.sql(
-    `INSERT INTO comments (post_id, ${COMMENT_COPY_COLUMNS.join(", ")}, reward)
-     SELECT ?, ${COMMENT_COPY_COLUMNS.join(", ")}, 0 FROM comments
-     WHERE post_id = ? ORDER BY id`,
-    [copy.id, row.id],
-  );
-  await ctx.sql`INSERT INTO comments_search (rowid, body)
-    SELECT id, body FROM comments WHERE post_id = ${copy.id}`;
+  let root: number | null = null;
+  let copied: PostRow | null = null;
+  for (const row of posts) {
+    const body = await withMoveLog(ctx, row, "복사");
+    const copy = (
+      await ctx.sql<PostRow>(
+        `INSERT INTO posts (board, number, category, body, ${kept.join(", ")}, reward, thread, reply_path)
+         SELECT ?, ?, ?, ?, ${kept.join(", ")}, 0, ?, reply_path FROM posts WHERE id = ? RETURNING *`,
+        [
+          board.id,
+          await nextNumber(ctx, board.id),
+          categoryOn(board, row),
+          body,
+          row.thread === null ? null : root,
+          row.id,
+        ],
+      )
+    ).rows[0];
+    if (row.thread === null) root = copy.id;
+    if (row.id === first.id) copied = copy;
+    await ctx.sql`INSERT INTO post_tags (post_id, tag)
+      SELECT ${copy.id}, tag FROM post_tags WHERE post_id = ${row.id}`;
+    await ctx.sql`INSERT INTO post_hits (post_id, hits)
+      SELECT ${copy.id}, hits FROM post_hits WHERE post_id = ${row.id}`;
+    await savePostSearch(ctx, copy, true);
+    // The comments, their 댓글 답변 kept under the copies they answer.
+    const comments = (
+      await ctx.sql<{ id: number; thread: number | null }>(
+        "SELECT id, thread FROM comments WHERE post_id = ? ORDER BY id",
+        [row.id],
+      )
+    ).rows;
+    const copies = new Map<number, number>();
+    for (const comment of comments) {
+      const made = (
+        await ctx.sql<{ id: number }>(
+          `INSERT INTO comments (post_id, ${COMMENT_COPY_COLUMNS.join(", ")}, reward, thread, reply_path)
+           SELECT ?, ${COMMENT_COPY_COLUMNS.join(", ")}, 0, ?, reply_path FROM comments
+           WHERE id = ? RETURNING id`,
+          [
+            copy.id,
+            comment.thread === null
+              ? null
+              : (copies.get(comment.thread) ?? null),
+            comment.id,
+          ],
+        )
+      ).rows[0];
+      copies.set(comment.id, made.id);
+    }
+    await ctx.sql`INSERT INTO comments_search (rowid, body)
+      SELECT id, body FROM comments WHERE post_id = ${copy.id}`;
+  }
+  return copied as PostRow;
+}
+
+/** Moves a thread to a board, each post at its next number there. */
+async function moveThread(ctx: MutationCtx, posts: PostRow[], board: Board) {
+  for (const row of posts) {
+    const body = await withMoveLog(ctx, row, "이동");
+    await ctx.sql`UPDATE posts SET board = ${board.id},
+      number = ${await nextNumber(ctx, board.id)},
+      category = ${categoryOn(board, row)}, body = ${body},
+      version = version + 1 WHERE id = ${row.id}`;
+    await savePostSearch(ctx, { ...row, body }, false);
+  }
+}
+
+/**
+ * The posts a moderator asks to move or copy (`id`, or `ids` checked on a
+ * list, bbs/move.php's chk_wr_id[]) and the boards to (`boards`, its
+ * chk_bo_table[], or one `board`): each post with its 답변글, on boards the
+ * moderator may move to (destination).
+ */
+async function transferArgs(
+  ctx: MutationCtx,
+  args: { id?: string; ids?: string[]; board?: string; boards?: string[] },
+) {
+  const { id, ids, board, boards } = args ?? {};
+  const asked = ids ?? (id === undefined ? [] : [id]);
+  const targets = boards ?? (board === undefined ? [] : [board]);
+  if (
+    !Array.isArray(asked) ||
+    !Array.isArray(targets) ||
+    !asked.length ||
+    asked.length > TRANSFER_LIMIT ||
+    !targets.length ||
+    targets.length > TRANSFER_LIMIT ||
+    new Set(targets).size !== targets.length
+  )
+    invalid(ctx);
+  const access = await accessOf(ctx);
+  const threads = new Map<number, { first: PostRow; posts: PostRow[] }>();
+  for (const asking of asked) {
+    const row = await postRow(ctx, asking);
+    if (!isStaff(access, row ? await boardOf(ctx, row.board) : null))
+      ctx.fail("ACCESS_DENIED", "권한이 없습니다.", {
+        reason: "access_denied",
+      });
+    if (!row)
+      ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {
+        reason: "document_not_found",
+      });
+    const root = row.thread ?? row.id;
+    if (!threads.has(root))
+      threads.set(root, { first: row, posts: await threadOf(ctx, row) });
+  }
+  const destinations: Board[] = [];
+  for (const target of targets)
+    for (const { posts } of threads.values())
+      for (const row of posts)
+        destinations.push((await destination(ctx, access, row, target)).board);
+  const unique = [
+    ...new Map(destinations.map((row) => [row.id, row])).values(),
+  ];
+  return { threads: [...threads.values()], boards: unique };
+}
+
+/** How many posts or boards one move or copy takes (a list's page). */
+const TRANSFER_LIMIT = 50;
+
+/**
+ * 복사 (bbs/move.php?sw=copy): copies of the posts asked, each with its
+ * 답변글 and comments, on each board asked (its own too). For the same
+ * staff as a move.
+ */
+export async function copyPost(
+  ctx: MutationCtx,
+  args: { id?: string; ids?: string[]; board?: string; boards?: string[] },
+) {
+  const { threads, boards } = await transferArgs(ctx, args);
+  let document = null;
+  for (const board of boards)
+    for (const { first, posts } of threads) {
+      const copy = await copyThread(ctx, posts, board, first);
+      document ??= postOf(
+        (await ctx.sql<PostRow>(`${POST_SELECT} WHERE id = ?`, [copy.id]))
+          .rows[0],
+      );
+    }
+  return { document };
+}
+
+/**
+ * 이동 (bbs/move.php?sw=move): the posts asked, each with its 답변글, to
+ * the first board asked, and copies to the others, as move_update.php
+ * copies to every board checked and deletes the original. Moderators may
+ * move only to boards they could post on, and a board's 게시판·그룹 관리자
+ * only to boards they administer too (bbs/move.php lists those); the owner
+ * (admin.call) may move anywhere.
+ */
+export async function movePosts(
+  ctx: MutationCtx,
+  args: { id?: string; ids?: string[]; board?: string; boards?: string[] },
+) {
+  const { threads, boards } = await transferArgs(ctx, args);
+  const [first, ...others] = boards;
+  for (const board of others)
+    for (const thread of threads)
+      await copyThread(ctx, thread.posts, board, thread.first);
+  for (const { posts } of threads)
+    if (posts[0].board !== first.id) await moveThread(ctx, posts, first);
   return {
     document: postOf(
-      (await ctx.sql<PostRow>(`${POST_SELECT} WHERE id = ?`, [copy.id]))
-        .rows[0],
+      (
+        await ctx.sql<PostRow>(`${POST_SELECT} WHERE id = ?`, [
+          threads[0].first.id,
+        ])
+      ).rows[0],
     ),
   };
 }
 
 /**
- * Pins a post as a notice or moves it to another board, where it takes the
- * next number. Moderators may move only to boards they could post on, and a
- * board's 게시판·그룹 관리자 only to boards they administer too (bbs/move.php
- * lists those); the owner (admin.call) may do either.
+ * Pins a post as a notice (공지), or unpins it; or moves it to another board
+ * with its 답변글 (movePosts).
  */
 export async function moderatePost(
   ctx: MutationCtx,
   args: { id?: string; notice?: boolean; board?: string },
 ) {
   const { id, notice, board } = args ?? {};
+  if (board !== undefined) {
+    const moved = await postRow(ctx, id);
+    if (moved && board !== moved.board) await movePosts(ctx, { id, board });
+  }
   const access = await accessOf(ctx);
   const row = await postRow(ctx, id);
   if (!isStaff(access, row ? await boardOf(ctx, row.board) : null))
@@ -143,29 +312,11 @@ export async function moderatePost(
     ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {
       reason: "document_not_found",
     });
-  let pinned = row.notice !== 0;
   if (notice !== undefined) {
     if (typeof notice !== "boolean") invalid(ctx);
-    pinned = notice;
+    await ctx.sql`UPDATE posts SET notice = ${notice}, version = version + 1
+      WHERE id = ${row.id}`;
   }
-  let target = row.board;
-  let number = row.number;
-  let category = row.category;
-  let body = row.body;
-  if (board !== undefined && board !== row.board) {
-    ({ number, category } = await destination(ctx, access, row, board));
-    target = board;
-    body = await withMoveLog(ctx, row, "이동");
-  }
-  // A post moved to another board stands alone there: not a 답변글 of a
-  // thread it left.
-  const alone = target !== row.board;
-  await ctx.sql`UPDATE posts SET notice = ${pinned}, board = ${target}, number = ${number},
-    category = ${category}, body = ${body},
-    thread = CASE WHEN ${alone} THEN NULL ELSE thread END,
-    reply_path = CASE WHEN ${alone} THEN '' ELSE reply_path END,
-    version = version + 1 WHERE id = ${row.id}`;
-  if (body !== row.body) await savePostSearch(ctx, { ...row, body }, false);
   return {
     document: postOf(
       (await ctx.sql<PostRow>(`${POST_SELECT} WHERE id = ?`, [row.id])).rows[0],
