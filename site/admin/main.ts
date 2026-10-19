@@ -123,6 +123,7 @@ export function renderNav() {
     return details;
   });
   $("adminNav").replaceChildren(...groups);
+  $("adminTitle").textContent = sectionLabel(section, itemNames);
 }
 $("adminSignIn").onclick = () =>
   // The site has no collections: the owner manages it through admin/'s
@@ -132,6 +133,7 @@ $("adminSignOut").onclick = () =>
   run(async () => {
     await owner.signOut();
     setOwner(null);
+    $("adminSignOut").hidden = true;
     $("adminWorkspace").hidden = true;
     $("adminWelcome").hidden = false;
   });
@@ -142,6 +144,7 @@ await run(async () => {
   setOwner(await naru.auth.session());
   if (!owner) return;
   $("adminWelcome").hidden = true;
+  $("adminSignOut").hidden = false;
   $("adminWorkspace").hidden = false;
   await loadNames();
   await openAddress();

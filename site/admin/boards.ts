@@ -31,6 +31,7 @@ export async function groupMembers(group) {
         const remove = document.createElement("button");
         remove.type = "button";
         remove.textContent = "삭제";
+        remove.className = "danger";
         remove.onclick = () =>
           run(async () => {
             await owner.mutate("admin/board_groups:setMember", {
@@ -123,6 +124,7 @@ export function boardRow(row) {
   const remove = document.createElement("button");
   remove.type = "button";
   remove.textContent = "삭제";
+  remove.className = "danger";
   remove.onclick = () =>
     run(async () => {
       if (!confirm("이 게시판을 삭제할까요? 글은 남습니다.")) return;

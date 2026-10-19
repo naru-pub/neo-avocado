@@ -293,6 +293,7 @@ export async function load({ more = false } = {}) {
       const revoke = document.createElement("button");
       revoke.type = "button";
       revoke.textContent = "회수";
+      revoke.className = "danger";
       revoke.onclick = () =>
         run(async () => {
           revoke.disabled = true;
@@ -337,6 +338,7 @@ export async function load({ more = false } = {}) {
         const remove = document.createElement("button");
         remove.type = "button";
         remove.textContent = "삭제";
+        remove.className = "danger";
         remove.onclick = () =>
           run(async () => {
             if (
@@ -410,6 +412,7 @@ export async function load({ more = false } = {}) {
     remove.type = "button";
     remove.hidden = Boolean(model.noDelete) || !CALLS[section].remove;
     remove.textContent = "삭제";
+    remove.className = "danger";
     remove.onclick = () =>
       run(async () => {
         if (!confirm("이 자료를 삭제할까요?")) return;

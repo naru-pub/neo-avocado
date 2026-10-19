@@ -5,24 +5,52 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>네오 아보카도 운영</title>
     <link rel="stylesheet" href="../styles/style.css" />
+    <!-- adm/css/admin.css's font, and its look (admin.css). -->
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@100..900&display=swap"
+    />
+    <link rel="stylesheet" href="admin.css" />
     <script src="../shared/scheme.js"></script>
   </head>
   <body class="admin-page">
-    <header class="top">
-      <h1>커뮤니티 운영</h1>
-      <a href="../">커뮤니티로</a>
-      <!-- adm/admin.head.php's developer_guide link. -->
-      <a
-        href="https://github.com/naru-pub/neo-avocado"
-        target="_blank"
-        rel="noopener"
-        >개발 안내</a
-      >
-      <select id="schemeChoice" class="scheme-choice" aria-label="화면 모드">
-        <option value="">시스템</option>
-        <option value="light">라이트</option>
-        <option value="dark">다크</option>
-      </select>
+    <!-- adm/admin.head.php's header: the title, then 로그아웃, 홈 and the
+         developer guide as icons. -->
+    <header class="admin-header">
+      <h1><a href="#/">네오 아보카도 Management</a></h1>
+      <div class="admin-header-tools">
+        <select id="schemeChoice" class="scheme-choice" aria-label="화면 모드">
+          <option value="">시스템</option>
+          <option value="light">라이트</option>
+          <option value="dark">다크</option>
+        </select>
+        <button
+          id="adminSignOut"
+          type="button"
+          title="운영자 로그아웃"
+          aria-label="운영자 로그아웃"
+          hidden
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M10 4H5v16h5M15 8l4 4-4 4M19 12H9" />
+          </svg>
+        </button>
+        <a href="../" target="_blank" title="커뮤니티로" aria-label="커뮤니티로"
+          ><svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 11l8-7 8 7M6 9.5V20h12V9.5M10 20v-6h4v6" /></svg
+        ></a>
+        <a
+          href="https://github.com/naru-pub/neo-avocado"
+          target="_blank"
+          rel="noopener"
+          title="개발 안내"
+          aria-label="개발 안내"
+          ><svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M5 4h11a2 2 0 0 1 2 2v14H7a2 2 0 0 1-2-2zM5 18a2 2 0 0 1 2-2h11M9 8h5"
+            /></svg
+        ></a>
+      </div>
     </header>
     <p id="adminStatus" role="status"></p>
     <section id="adminWelcome">
@@ -37,7 +65,8 @@
       <!-- adm/admin.head.php's side menu, in its groups. -->
       <nav id="adminNav" aria-label="관리 메뉴"></nav>
       <div id="adminPane">
-        <button id="adminSignOut" type="button">운영자 로그아웃</button>
+        <!-- admin.head.php's pageTitle: the section open. -->
+        <h2 id="adminTitle" class="page-title"></h2>
         <p id="adminHelp"></p>
         <label id="holdingsSearchLabel" hidden
           >캐릭터·타이틀 검색<input id="holdingsSearch" type="search" /><button
