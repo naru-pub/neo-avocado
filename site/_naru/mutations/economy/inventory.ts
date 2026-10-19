@@ -1,6 +1,12 @@
 // What a member does with what they hold (inventory/): selling, gifts,
 // crafting, moving a copy between their characters, and using an item.
-import { amount, lacking, signedIn, invalid } from "../../modules/access.js";
+import {
+  activeMember,
+  amount,
+  lacking,
+  signedIn,
+  invalid,
+} from "../../modules/access.js";
 import {
   draw,
   give,
@@ -37,7 +43,7 @@ function notOwned(ctx: MutationCtx): never {
 
 /** Selling consumes exactly one owned item; prices always come from the catalog. */
 export async function sell(ctx: MutationCtx, args: { inventory?: string }) {
-  signedIn(ctx);
+  await activeMember(ctx);
   const owned = await ownedItem(ctx, args?.inventory);
   if (!owned) notOwned(ctx);
   const item = await itemById(ctx, owned.data.item);
@@ -80,7 +86,7 @@ export async function gift(
     memo?: string;
   },
 ) {
-  const me = signedIn(ctx);
+  const me = await activeMember(ctx);
   const { inventory, recipient, character = null, memo = "" } = args ?? {};
   const owned = await ownedItem(ctx, inventory);
   if (!owned) notOwned(ctx);

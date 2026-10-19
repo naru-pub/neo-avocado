@@ -1,5 +1,5 @@
 // 화폐관리 (mypage/money/): sending money to another member.
-import { amount, lacking, names, signedIn } from "../../modules/access.js";
+import { activeMember, amount, lacking, names } from "../../modules/access.js";
 import { pay, record, wallet } from "../../modules/economy.js";
 import { characterRow } from "../../modules/characters.js";
 import { sendNote } from "../../modules/mail.js";
@@ -16,7 +16,7 @@ export async function send(
   ctx: MutationCtx,
   args: { character?: string; amount?: number },
 ) {
-  const me = signedIn(ctx);
+  const me = await activeMember(ctx);
   const { character, amount: value } = args ?? {};
   const sent = amount(value, "Money sent");
   if (!sent)

@@ -2,6 +2,7 @@
 // bbs/member_leave.php). Being a member of the Naru site is Naru's; this is
 // the community's own record of them.
 import {
+  activeMember,
   amountOf,
   communityAccess,
   communityAmount,
@@ -51,18 +52,7 @@ export async function join(
     recommender?: string;
   } = {},
 ) {
-  const member = signedIn(ctx);
-  const access = await communityAccess(ctx);
-  if (access.deleted)
-    ctx.fail("ACCESS_DENIED", "삭제된 회원입니다.", { reason: "deleted" });
-  if (access.blocked)
-    ctx.fail("ACCESS_DENIED", "접근이 차단된 회원입니다.", {
-      reason: "blocked",
-    });
-  if (access.left)
-    ctx.fail("ACCESS_DENIED", "탈퇴한 회원입니다. 운영자에게 문의해 주세요.", {
-      reason: "left",
-    });
+  const member = await activeMember(ctx);
   const name = text(nick, 20, true);
   if (!nickValid(name))
     ctx.fail(

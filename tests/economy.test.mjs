@@ -1220,3 +1220,45 @@ test("상점 진열 sells an item again on its own terms: its price, stock, cate
     "purchase_limit",
   );
 });
+
+test("a member who left, or whom the owner blocked or deleted, sends, gives, trades and earns nothing", async () => {
+  const site = await testSite();
+  profile(site, "m-1", "나");
+  profile(site, "m-2", "친구");
+  const hero = character(site, { owner: "m-2", state: "approved" });
+  item(site, "seed", { name: "씨앗", price: 1, sell_price: 1 });
+  setSettings(site, "community", { loginReward: 7 });
+  const calls = () => {
+    const mine = own(site, { item_id: "seed", name: "씨앗" });
+    return {
+      send: () => mutate(site, "money:send", { character: hero, amount: 1 }),
+      gift: () =>
+        mutate(site, "inventory:gift", { inventory: mine, recipient: "m-2" }),
+      sell: () => mutate(site, "inventory:sell", { inventory: mine }),
+      buy: () => mutate(site, "shop:buy", { item: "seed" }),
+      gacha: () => mutate(site, "shop:gacha", {}),
+    };
+  };
+  for (const [state, change] of [
+    ["left", "left_on = '2026-10-01'"],
+    ["blocked", "blocked_on = '2026-10-01'"],
+    ["deleted", "deleted_at = 1"],
+  ]) {
+    site.run(
+      `UPDATE members SET left_on = NULL, blocked_on = NULL, deleted_at = NULL, ${change} WHERE member = 'm-1'`,
+    );
+    wallet(site, "m-1", 100);
+    for (const [name, call] of Object.entries(calls()))
+      assert.equal(await refusal(call()), state, `${state}: ${name}`);
+    await site.mutate("community/presence:seen", { where: "home" }, M1);
+    assert.equal(balanceOf(site, "m-1"), 100, state);
+  }
+  // Back in the community, they may again.
+  site.run(
+    "UPDATE members SET left_on = NULL, blocked_on = NULL, deleted_at = NULL",
+  );
+  await site.mutate("community/presence:seen", { where: "home" }, M1);
+  assert.equal(balanceOf(site, "m-1"), 107);
+  await calls().send();
+  assert.equal(balanceOf(site, "m-2"), 1);
+});

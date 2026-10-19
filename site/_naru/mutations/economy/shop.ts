@@ -2,12 +2,12 @@
 // and the paid gacha (뽑기).
 import { onDisplay } from "../../modules/display.js";
 import {
+  activeMember,
   amount,
   lacking,
   names,
   one,
   restrictedFor,
-  signedIn,
 } from "../../modules/access.js";
 import {
   GACHA_COST,
@@ -46,7 +46,7 @@ export async function buy(
     materials?: string[];
   },
 ) {
-  signedIn(ctx);
+  await activeMember(ctx);
   const { item, entry, character = null, materials = [] } = args ?? {};
   let listing = await itemById(ctx, item);
   // 상점 진열 (avo_shop): an entry sells its item on its own terms, and
@@ -211,7 +211,7 @@ export async function gacha(
   ctx: MutationCtx,
   args: { character?: string | null },
 ) {
-  signedIn(ctx);
+  await activeMember(ctx);
   const { character = null } = args ?? {};
   if (character && !(await ownCharacter(ctx, character)))
     ctx.fail("INVALID_REQUEST", "캐릭터를 확인해 주세요.", {

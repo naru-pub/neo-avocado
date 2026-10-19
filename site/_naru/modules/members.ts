@@ -1,7 +1,13 @@
 // Members' rows in the site's tables: profiles, 관심 posts, wallets and
 // history. Queries and mutations use them; a profile and a history row keep
 // the shape pages know ({ id, data }).
-import { communityAmount, kstDay, one, parsed } from "./access.js";
+import {
+  communityAccess,
+  communityAmount,
+  kstDay,
+  one,
+  parsed,
+} from "./access.js";
 import type { SqlCtx } from "./access.js";
 import type { QueryCtx, SqlValue } from "./naru-types.js";
 
@@ -295,14 +301,9 @@ export async function loginReward(
   const current = await walletOf(ctx, member);
   const today = kstDay(ctx.now);
   if (current.lastDaily === today) return null;
-  if (
-    await one(
-      ctx,
-      "SELECT 1 FROM members WHERE member = ? AND left_on IS NOT NULL",
-      [member],
-    )
-  )
-    return null;
+  // A member who left, or whom the owner blocked or deleted, is a guest.
+  const access = await communityAccess(ctx);
+  if (access.left || access.blocked || access.deleted) return null;
   const reward = await communityAmount(ctx, "loginReward");
   const balance = current.balance + reward;
   await saveWallet(ctx, member, balance, today);
