@@ -191,6 +191,11 @@ test("the home and the views are index.html with the site's preview, from 디자
     ],
     "https://avocado.example/members",
   );
+  // Without the owner's picture, Naru's icon, at the site's address.
+  assert.equal(
+    tags(await site.route("/members"))["og:image"],
+    "https://avocado.example/og-image.png",
+  );
 });
 
 test("the home tells index.html its entrance: the logo, else the name, and 디자인's colours", async () => {

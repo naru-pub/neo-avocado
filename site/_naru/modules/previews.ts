@@ -66,6 +66,8 @@ export const SITE_NAME = "네오 아보카도";
 export const SITE_DESCRIPTION = "자캐 커뮤니티입니다.";
 /** The most of a page's text a description shows. */
 const DESCRIPTION = 150;
+/** Naru's icon, the preview's picture until the owner sets one (og-image.png). */
+const TEMPLATE_IMAGE = "/og-image.png";
 
 /** An HTTPS address, or null (what pages show as pictures). */
 function https(value: unknown): string | null {
@@ -140,7 +142,10 @@ export function headOf(
 ): string {
   const title = page?.title?.trim() || "";
   const description = page?.description?.trim() || site.description;
-  const image = page?.image || site.image;
+  const image =
+    page?.image ||
+    site.image ||
+    (site.address ? `${site.address}${TEMPLATE_IMAGE}` : null);
   const url = `${site.address}${page?.canonical ?? pathOf(path)}`;
   const meta = (attribute: string, name: string, content: string) =>
     `<meta ${attribute}="${name}" content="${escape(content)}" />`;
