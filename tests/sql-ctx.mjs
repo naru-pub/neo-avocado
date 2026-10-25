@@ -292,7 +292,6 @@ export async function testSite({
               roles: Object.freeze(rolesOf(member)),
             }),
       owner: member === null && owner === true,
-      visitor: member === null && owner !== true,
       now: site.now,
       fail(code, message, details) {
         throw new NaruFail(code, message, details);

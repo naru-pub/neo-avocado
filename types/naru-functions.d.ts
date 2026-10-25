@@ -65,19 +65,17 @@ export interface SqlResult<Row> {
  * `sql`. Anyone may call one, signed in or not, so its code decides what
  * each caller may see. A query's `sql` only reads. A call runs in one
  * transaction, for tens of milliseconds in 32 MiB, makes at most 100
- * database operations and 1,000 URL parses, reads at most 500,000 rows in
- * all, and returns at most 1 MiB of JSON. Every method's promise must be
+ * database operations, 1,000 URL parses and 2,000 Math.random() draws,
+ * reads at most 500,000 rows in all, and returns at most 1 MiB of JSON. Every method's promise must be
  * used (awaited, returned or chained), or the call fails.
  */
 export interface QueryCtx {
   /** The signed-in member, or null for the owner and visitors. */
   readonly member: CallingMember | null;
-  /** The site's owner called. */
+  /** The site's owner called. A visitor, signed in to nothing, has neither. */
   readonly owner: boolean;
   /** The site's owner's Naru login, whoever calls: the site's own name. */
   readonly ownerName: string;
-  /** No one is signed in. */
-  readonly visitor: boolean;
   /** The call's time in milliseconds, fixed for the whole call. */
   readonly now: number;
   /**
@@ -127,7 +125,7 @@ export interface QueryCtx {
   ): Promise<SqlResult<Row>>;
   /** Members' roles, by ID: at most 100 IDs a call; a member without any has []. */
   rolesOf(members: string[]): Promise<Record<string, string[]>>;
-  /** The types Naru Media stores (the browser SDK's `MEDIA_TYPES`). */
+  /** The types Naru Media stores: an upload of any other is refused. */
   media: { readonly types: readonly string[] };
   /**
    * Guests' passwords, kept by the site as hashes. `verify` allows ten wrong
@@ -155,7 +153,11 @@ export interface MutationCtx extends QueryCtx {
    * mutation returns: on their devices if they allowed the site there, or in
    * the app's inbox until they do. Unknown, pending and banned members are
    * skipped, and the site is not told who has the app. `path` (default "/")
-   * is a page of this site, opened when the notification is tapped.
+   * is a page of this site, opened when the notification is tapped. A title
+   * longer than 100 characters or a body longer than 500 is cut to fit.
+   * Notifications are best effort: one Naru cannot queue is dropped, and the
+   * mutation goes on. Member ids that are not ids, a blank title or another
+   * site's address still throw.
    */
   notify(
     members: string[],
