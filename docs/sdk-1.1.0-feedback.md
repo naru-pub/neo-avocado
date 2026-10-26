@@ -43,8 +43,7 @@ with owner-only access.
 ## What worked well
 
 One-statement SQL with bound values, mutations as transactions with
-`ctx.fail` details, `ctx.passwords` for guests, `ctx.setRoles` for the
-community's moderators and members-only groups, and live queries that answer
+`ctx.fail` details, `ctx.passwords` for guests, and live queries that answer
 again when a mutation writes what they read each replaced a workaround of
 the collection design. naru-dev runs the real edge Worker, so the
 end-to-end suite tests the site as it will run.

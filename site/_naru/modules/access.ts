@@ -7,15 +7,11 @@ import type { QueryCtx, SqlValue } from "./naru-types.js";
  * or mutation's ctx has them.
  */
 export interface SqlCtx {
-  readonly member: {
-    readonly id: string;
-    readonly roles?: readonly string[];
-  } | null;
+  readonly member: { readonly id: string } | null;
   readonly owner?: boolean;
   /** The call's time, when the ctx has one (queries' and mutations' do). */
   readonly now?: number;
   sql: QueryCtx["sql"];
-  rolesOf?: QueryCtx["rolesOf"];
 }
 
 /** The first row of a statement, or null. */
@@ -127,9 +123,9 @@ export const CLOSED_ACCESS: Access = Object.freeze({
   closed: true,
 });
 
-/** The Naru role a moderator (게시물 운영자) has. */
+/** The role a moderator (게시물 운영자) has. */
 export const STAFF = "staff";
-/** The Naru role of a members-only board group's members. */
+/** The role of a members-only board group's members. */
 export const GROUP_ROLE = "group-";
 
 /**
@@ -141,16 +137,26 @@ export async function siteOpen(ctx: SqlCtx): Promise<boolean> {
   return (await communitySettings(ctx)).siteOpen !== false;
 }
 
-/**
- * A member's roles: the caller's own from ctx, anyone else's by asking
- * Naru.
- */
+/** Members' roles (member_roles), sorted, by ID: [] for a member with none. */
+export async function rolesOfMembers(
+  ctx: SqlCtx,
+  ids: readonly string[],
+): Promise<Record<string, string[]>> {
+  const roles = new Map(ids.map((id) => [id, [] as string[]]));
+  if (roles.size) {
+    const { rows } = await ctx.sql<{ member: string; role: string }>(
+      `SELECT member, role FROM member_roles
+       WHERE member IN (SELECT value FROM json_each(?)) ORDER BY member, role`,
+      [JSON.stringify([...roles.keys()])],
+    );
+    for (const { member, role } of rows) roles.get(member)?.push(role);
+  }
+  return Object.fromEntries(roles);
+}
+
+/** A member's roles (member_roles), sorted. */
 export async function rolesOf(ctx: SqlCtx, id: string): Promise<string[]> {
-  if (ctx.member?.id === id && ctx.member.roles?.length)
-    return [...ctx.member.roles];
-  if (!ctx.rolesOf)
-    return [...(ctx.member?.id === id ? (ctx.member.roles ?? []) : [])];
-  return (await ctx.rolesOf([id]))[id] ?? [];
+  return (await rolesOfMembers(ctx, [id]))[id];
 }
 
 /** The community role and board groups that `roles` give. */

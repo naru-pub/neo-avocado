@@ -13,6 +13,7 @@ import {
   parsed,
   requireOwner,
   invalid,
+  rolesOf,
 } from "./access.js";
 import { characterKey } from "./characters.js";
 import { RECORD_CALLS, type AdminCall } from "./admin-calls.js";
@@ -837,17 +838,21 @@ export function rolesOfData(
   ].sort();
 }
 
-/** Gives a member these roles, unless they have them already. */
+/** Gives a member these roles (member_roles), unless they have them already. */
 export async function setRolesOf(
   ctx: MutationCtx,
   member: string,
   roles: string[],
 ) {
-  const before = [...((await ctx.rolesOf([member]))[member] ?? [])].sort();
-  if (roles.join() !== before.join()) await ctx.setRoles(member, roles);
+  const after = [...new Set(roles)].sort();
+  if (after.join() === (await rolesOf(ctx, member)).join()) return;
+  await ctx.sql`DELETE FROM member_roles WHERE member = ${member}`;
+  if (after.length)
+    await ctx.sql`INSERT INTO member_roles (member, role)
+      SELECT ${member}, value FROM json_each(${JSON.stringify(after)})`;
 }
 
-/** A member's record: the row's fields, with the role and groups their Naru roles give. */
+/** A member's record: the row's fields, with the role and groups their roles give. */
 export const memberData = (
   row: Record<string, SqlValue> | null,
   roles: readonly string[],
@@ -1052,15 +1057,7 @@ export async function removeRecord(
         "이 그룹에 속한 게시판이 있으므로 삭제할 수 없습니다.",
         { reason: "group_has_boards" },
       );
-    const { rows } = await ctx.sql<{ member: string }>`
-      SELECT member FROM _naru_member_roles WHERE role = ${`${GROUP_ROLE}${key}`}`;
-    for (const { member } of rows) {
-      const roles = (await ctx.rolesOf([member]))[member] ?? [];
-      await ctx.setRoles(
-        member,
-        roles.filter((role) => role !== `${GROUP_ROLE}${key}`),
-      );
-    }
+    await ctx.sql`DELETE FROM member_roles WHERE role = ${`${GROUP_ROLE}${key}`}`;
   }
   await ctx.sql(`DELETE FROM ${t.table} WHERE ${t.key} = ?`, [key]);
   return null;

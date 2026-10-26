@@ -10,7 +10,12 @@ import {
   offsetOf,
   pageOf,
 } from "../../modules/admin.js";
-import { one, ownerOnly } from "../../modules/access.js";
+import {
+  one,
+  ownerOnly,
+  rolesOf,
+  rolesOfMembers,
+} from "../../modules/access.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
 
 /**
@@ -75,7 +80,10 @@ export const list = ownerOnly(async function list(
       offset,
     ],
   );
-  const roles = await ctx.rolesOf(rows.map((row) => String(row.member)));
+  const roles = await rolesOfMembers(
+    ctx,
+    rows.map((row) => String(row.member)),
+  );
   const counts = await one<{ total: number; blocked: number; left: number }>(
     ctx,
     `SELECT count(*) AS total, coalesce(sum(blocked_on IS NOT NULL), 0) AS blocked,
@@ -111,5 +119,5 @@ export const get = ownerOnly(async function get(
   if (typeof id !== "string") return null;
   const row = await one(ctx, `${MEMBER_SELECT} WHERE members.member = ?`, [id]);
   if (!row) return null;
-  return { id, data: memberData(row, (await ctx.rolesOf([id]))[id] ?? []) };
+  return { id, data: memberData(row, await rolesOf(ctx, id)) };
 });

@@ -220,15 +220,14 @@ test("membership answers level (1 before joining), roles, warnings and adult; st
       favorites: [],
     },
   });
-  // A rule's ctx carries no roles: they are asked of Naru.
+  // Roles are the site's own (member_roles), read with ctx.sql alone.
   const { communityAccess } = await import("../dist/_naru/modules/access.js");
   const { sqlOf } = await import("./sql-ctx.mjs");
   const access = await communityAccess({
-    member: { id: "m-1", roles: [] },
+    member: { id: "m-1" },
     sql: sqlOf(site.db, "query"),
-    rolesOf: async (ids) => ({ [ids[0]]: ["staff"] }),
   });
-  assert.equal(access.role, "moderator");
+  assert.deepEqual([access.role, access.groups], ["moderator", ["writers"]]);
 });
 
 test("visits record where members are and count each Korean day, bounded", async () => {

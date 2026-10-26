@@ -45,10 +45,11 @@ name(ctx, args)`, by area: community, characters, economy, content and
   neither listed nor a file.
 
 **Anyone may call any query or mutation**, visitors included, so each
-decides from `ctx.member` (`{ id, roles }` or null), `ctx.owner` and
+decides from `ctx.member` (`{ id }` or null), `ctx.owner` and
 `ctx.visitor` what the caller may read and do (`modules/access.ts`,
-`boards.ts`). Moderators are the Naru role `staff`, members-only board
-groups `group-<id>`; a member's level 1–10 is the site's own `members` row.
+`boards.ts`). Roles are the site's own `member_roles (member, role)`:
+moderators have `staff`, members-only board groups' members `group-<id>`;
+a member's level 1–10 is the site's own `members` row.
 
 **The owner's admin** (`site/admin/`) calls each section's `list`, `get`,
 `save` and `remove` where it has them: `admin/records:<call>` with
@@ -76,9 +77,9 @@ re-exported by `modules/naru-types.ts`; the pages' client is typed by
   (values are bound, never spliced) or `ctx.sql(text, values)`, answering
   `{ rows, changes }`. Booleans bind as 1 and 0. A query only reads.
   Refused: PRAGMA, ATTACH, triggers, transactions, `WITH RECURSIVE`, and
-  Naru's own tables, but for its views `_naru_member_roles (member, role)`
-  and `_naru_uploads (id, url, member, name, type, size, created_at)`,
-  which statements read and join.
+  Naru's own tables, but for its view
+  `_naru_uploads (id, url, member, name, type, size, created_at)`, which
+  statements read and join.
 - Limits: a statement binds at most 100 values and returns at most 1,000
   rows and 1 MiB, and is stopped after 3 seconds; a call reads at most
   500,000 rows. A mutation is one transaction: a throw, `ctx.fail` or a
@@ -87,8 +88,7 @@ re-exported by `modules/naru-types.ts`; the pages' client is typed by
   receives (`AUTH_REQUIRED`, `ACCESS_DENIED`, `NOT_FOUND`, `CONFLICT`,
   `INVALID_REQUEST`, `RATE_LIMITED`, …); messages are Korean, for visitors,
   and `details.reason` is what tests and pages check.
-- `ctx.rolesOf([ids])`, and in mutations `ctx.setRoles(member, roles)`.
-  `ctx.media.types` is what Naru Media stores; a post's new 첨부파일 must be
+- `ctx.media.types` is what Naru Media stores; a post's new 첨부파일 must be
   the writer's own upload in `_naru_uploads`, whose name, size and type it
   keeps.
 - Guests: `ctx.passwords.hash(password)` in mutations, and

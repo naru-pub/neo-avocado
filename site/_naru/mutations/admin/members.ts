@@ -20,6 +20,7 @@ import {
   kstDay,
   one,
   ownerOnly,
+  rolesOf,
 } from "../../modules/access.js";
 import {
   addHistory,
@@ -41,7 +42,7 @@ export const save = ownerOnly(async function save(
   if (typeof id !== "string" || !id) invalid(ctx);
   const row = await one(ctx, `${MEMBER_SELECT} WHERE members.member = ?`, [id]);
   if (create ? row : !row) conflict(ctx);
-  const roles = (await ctx.rolesOf([id]))[id] ?? [];
+  const roles = await rolesOf(ctx, id);
   // A new record starts from the role and groups the member already has.
   const record = await checked(ctx, "members", {
     id,
@@ -80,7 +81,7 @@ export const remove = ownerOnly(async function remove(
 ) {
   if (typeof id !== "string" || !id) invalid(ctx);
   await ctx.sql`DELETE FROM members WHERE member = ${id}`;
-  const roles = (await ctx.rolesOf([id]))[id] ?? [];
+  const roles = await rolesOf(ctx, id);
   await setRolesOf(ctx, id, rolesOfData({}, roles));
   return null;
 });
@@ -157,7 +158,7 @@ export const deleteMember = ownerOnly(async function deleteMember(
   await ctx.sql`DELETE FROM drafts WHERE owner = ${id}`;
   await ctx.sql`UPDATE board_groups SET admin = NULL WHERE admin = ${id}`;
   await ctx.sql`UPDATE boards SET admin = NULL WHERE admin = ${id}`;
-  const roles = (await ctx.rolesOf([id]))[id] ?? [];
+  const roles = await rolesOf(ctx, id);
   await setRolesOf(ctx, id, rolesOfData({}, roles));
   return { id, deleted: true };
 });

@@ -1,7 +1,7 @@
 // 게시판 그룹's 접근회원 (adm/boardgroupmember_update.php); saving and deleting
 // a group are admin/records'.
 import { invalid, setRolesOf } from "../../modules/admin.js";
-import { GROUP_ROLE, one, ownerOnly } from "../../modules/access.js";
+import { GROUP_ROLE, one, ownerOnly, rolesOf } from "../../modules/access.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
 /**
@@ -38,7 +38,7 @@ export const setMember = ownerOnly(async function setMember(
       reason: "no_member",
     });
   const role = `${GROUP_ROLE}${group}`;
-  const roles = ((await ctx.rolesOf([member.member]))[member.member] ?? [])
+  const roles = (await rolesOf(ctx, member.member))
     .filter((name) => name !== role)
     .concat(remove ? [] : [role])
     .sort();

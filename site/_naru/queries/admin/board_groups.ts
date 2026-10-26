@@ -24,7 +24,7 @@ export const members = ownerOnly(async function members(
     invalid(ctx);
   const { rows } = await ctx.sql<{ id: string; nick: string }>`
     SELECT roles.member AS id, profiles.nick
-    FROM _naru_member_roles AS roles
+    FROM member_roles AS roles
     JOIN profiles ON profiles.member = roles.member
     WHERE roles.role = ${`${GROUP_ROLE}${group}`} AND roles.member > ${after ?? ""}
       AND profiles.deleted_at IS NULL
