@@ -13,7 +13,7 @@
 // returns; ctx.fail's coded error; ctx.notify (site.notifications, kept
 // only if the mutation returns); Naru's view of uploads (_naru_uploads, a
 // table here, which a test fills with site.upload); members' roles in the
-// site's member_roles (site.setRoles); ctx.media.types; guest
+// site's member_roles (site.setRoles); guest
 // passwords (hashed here as a plain marker, not a real hash); a
 // statement's limits (100 bound values, 1,000 rows). What it does not: Naru's checks on names, a call's limits,
 // and the 3-second statement time.
@@ -65,22 +65,6 @@ export async function migrations() {
     ),
   );
 }
-
-/** What Naru Media stores (Naru's ctx.media.types). */
-export const MEDIA_TYPES = Object.freeze([
-  "image/avif",
-  "image/gif",
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "audio/mpeg",
-  "audio/ogg",
-  "audio/opus",
-  "audio/wav",
-  "application/pdf",
-  "application/zip",
-  "text/plain",
-]);
 
 /** Naru's view site SQL reads, kept here as a plain table. */
 const NARU_VIEWS = `
@@ -284,7 +268,6 @@ export async function testSite({
         throw new NaruFail(code, message, details);
       },
       sql,
-      media: Object.freeze({ types: MEDIA_TYPES }),
       passwords,
       ...(kind === "mutation"
         ? {

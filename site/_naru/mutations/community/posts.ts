@@ -154,7 +154,7 @@ async function attachmentsOf(
     const url = file.url as string;
     const added = uploads.get(url);
     const upload = kept.get(url) ?? (added && own(added) ? added : undefined);
-    if (!upload || !ctx.media.types.includes(upload.type)) return invalid(ctx);
+    if (!upload) return invalid(ctx);
     // bf_content: a file's 설명, where the board takes them.
     const note = text(file.note ?? "", 255);
     return {

@@ -88,8 +88,8 @@ re-exported by `modules/naru-types.ts`; the pages' client is typed by
   receives (`AUTH_REQUIRED`, `ACCESS_DENIED`, `NOT_FOUND`, `CONFLICT`,
   `INVALID_REQUEST`, `RATE_LIMITED`, …); messages are Korean, for visitors,
   and `details.reason` is what tests and pages check.
-- `ctx.media.types` is what Naru Media stores; a post's new 첨부파일 must be
-  the writer's own upload in `_naru_uploads`, whose name, size and type it
+- A post's new 첨부파일 must be the writer's own upload in `_naru_uploads`
+  (which holds only what Naru Media stores), whose name, size and type it
   keeps.
 - Guests: `ctx.passwords.hash(password)` in mutations, and
   `ctx.passwords.verify(password, hash, key)`, ten wrong tries an hour per
