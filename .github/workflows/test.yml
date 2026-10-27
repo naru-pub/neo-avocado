@@ -1,8 +1,9 @@
 name: Test
 
 # The sources are TypeScript; Naru publishes their build. Every push is
-# type-checked and tested; a push to main also builds the site and deploys
-# it to Naru through its GitHub Actions deploy (scripts/deploy-naru.mjs).
+# type-checked and tested; a push to main also builds the site, publishes it
+# as the template's next version, and deploys landing/ to the Naru site
+# neo-avocado through its GitHub Actions deploy (scripts/deploy-naru.mjs).
 on:
   push:
   pull_request:
@@ -42,4 +43,24 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - run: node scripts/deploy-naru.mjs dist neo-avocado
+      # The community (dist/) is the 네오 아보카도 template's next version,
+      # offered to every site that installed it: the template whose GitHub
+      # source on its post is naru-pub/neo-avocado, main, dist, posted by the
+      # Naru account neo-avocado. Until that post exists, this step does
+      # nothing.
+      - uses: naru-pub/actions/deploy@v1
+        with:
+          dir: dist
+          template-owner: neo-avocado
+          # Naru's own preview would be the entrance page: the template's
+          # files alone have no community to show (scripts/screenshots.mjs).
+          preview: docs/template-preview.jpg
+      # neo-avocado.naru.pub itself is the landing page and installation
+      # guide. It keeps the community's migrations, which the site has
+      # applied and so cannot drop, and with them its tables; no routes,
+      # queries or mutations, so nothing of the community is served.
+      - run: |
+          mkdir -p "$RUNNER_TEMP/landing/_naru"
+          cp -R landing/. "$RUNNER_TEMP/landing/"
+          cp -R dist/_naru/migrations "$RUNNER_TEMP/landing/_naru/"
+      - run: node scripts/deploy-naru.mjs "$RUNNER_TEMP/landing" neo-avocado

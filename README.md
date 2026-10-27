@@ -7,8 +7,8 @@
 ## 처음 설치하기
 
 **필요한 것**: 사이트 데이터베이스는 나루 서포터 플랜에 포함되어 있습니다.
-회원으로 로그인하는 사람도 서포터 플랜이 있어야 하며, 예외가 필요한 커뮤니티는
-나루 운영자에게 문의해 주세요.
+회원으로 로그인하는 사람은 나루 계정만 있으면 되고, 서포터만 받으려면 나루의
+데이터베이스 → 사이트 회원에서 켭니다.
 
 1. **사이트에 설치합니다.** 둘 중 하나를 고르세요.
    - 나루 게시판의 네오 아보카도 템플릿에서 **적용하기**를 누르고, 적용할 폴더를
@@ -50,9 +50,16 @@
 - 사이트로 올라가는 것은 `site/` 폴더입니다. 소스는 TypeScript(`.ts`)이고, `npm run build`가
   `site/`를 같은 경로의 JavaScript로 `dist/`에 만들며, 나루에는 이 `dist/`가 올라갑니다
   (구조는 [docs/architecture.md](docs/architecture.md)). main에 푸시하면 GitHub
-  Actions가 검사한 뒤 `dist/`를 나루의 GitHub Actions 배포로 올립니다
-  (`scripts/deploy-naru.mjs`). 나루 배포 설정에 이 저장소와 `refs/heads/main`의
-  GitHub Actions 배포 대상이 있어야 합니다.
+  Actions가 검사한 뒤 `dist/`를 네오 아보카도 템플릿의 다음 버전으로 올리고(나루
+  계정 neo-avocado가 게시판에 올린, GitHub 소스가 이 저장소·`main`·`dist`인 템플릿.
+  그 글이 생기기 전에는 아무것도 하지 않습니다), `landing/`을 나루 사이트
+  neo-avocado에 올립니다(`scripts/deploy-naru.mjs`). 나루 배포 설정에 이 저장소와
+  `refs/heads/main`의 GitHub Actions 배포 대상이 있어야 합니다.
+- `landing/`은 neo-avocado.naru.pub, 소개와 설치 안내 페이지입니다. 이 사이트에
+  쌓인 테이블은 그대로 두려고, 함께 올리는 `_naru/`에는 마이그레이션만 있습니다.
+  화면 사진은 `PLAYWRIGHT_MODULE=… node scripts/screenshots.mjs [주소]`가
+  운영 중인 커뮤니티를 손님으로 찍어 `landing/screenshots/`(라이트·다크, 데스크톱·
+  휴대폰)와 템플릿 미리보기 `docs/template-preview.jpg`로 만듭니다.
 - 검사: `npm run typecheck`, `npm test`(빌드 후 `dist/`를 검사), `npm run lint`
 - 로컬 나루(naru-dev)에서 실제 Chromium으로 전체 흐름:
   `NARU_REPO_PATH=… PLAYWRIGHT_MODULE=… npm run test:e2e`(다른 빌드와 동시에 돌리지 않음)
