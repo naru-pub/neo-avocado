@@ -3,18 +3,15 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>네오 아보카도 — 나루에서 여는 자캐 커뮤니티</title>
+    <title>네오 아보카도</title>
     <meta
       name="description"
-      content="네오 아보카도는 아보카도 에디션을 나루로 옮긴 자캐 커뮤니티 템플릿이에요. 내 나루 주소에 설치해서 캐릭터, 로그, 상점까지 그대로 운영하세요."
+      content="아보카도 에디션을 나루로 옮긴 자캐 커뮤니티 템플릿."
     />
-    <meta
-      property="og:title"
-      content="네오 아보카도 — 나루에서 여는 자캐 커뮤니티"
-    />
+    <meta property="og:title" content="네오 아보카도" />
     <meta
       property="og:description"
-      content="아보카도 에디션의 자캐 커뮤니티를 내 나루 주소에서. 설치 방법을 안내해 드려요."
+      content="아보카도 에디션을 나루로 옮긴 자캐 커뮤니티 템플릿."
     />
     <meta property="og:image" content="og-image.png" />
     <meta name="color-scheme" content="light dark" />
@@ -22,317 +19,98 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <header class="top">
-      <a href="/" class="brand">네오 아보카도</a>
-      <nav aria-label="바로가기">
-        <a href="#install">설치하기</a>
-        <a href="#faq">자주 묻는 질문</a>
-        <a href="https://github.com/naru-pub/neo-avocado">소스</a>
-      </nav>
+    <header>
+      <h1>네오 아보카도</h1>
+      <p>
+        <a href="https://github.com/tateck-develop/AvocadoEdition"
+          >아보카도 에디션</a
+        >을 나루로 옮긴 자캐 커뮤니티 템플릿.
+      </p>
     </header>
 
     <main>
-      <section class="hero">
-        <p class="eyebrow">아보카도 에디션을 나루에서</p>
-        <h1>자캐 커뮤니티를 내 나루 주소에서 여세요</h1>
-        <p class="lead">
-          네오 아보카도는 그누보드 기반의
-          <a href="https://github.com/tateck-develop/AvocadoEdition"
-            >아보카도 에디션</a
-          >을 나루로 옮긴 자캐 커뮤니티 템플릿이에요. PHP 호스팅 없이
-          <strong>내주소.naru.pub</strong>에서 캐릭터 신청부터 로그, 상점까지
-          그대로 운영할 수 있어요.
-        </p>
-        <div class="actions">
-          <a class="button primary" href="#install">설치 방법 보기</a>
-          <a class="button" href="https://naru.pub/signup">나루 가입하기</a>
-        </div>
-        <div class="hero-shots">
-          <picture>
-            <source
-              srcset="screenshots/members-dark.jpg"
-              media="(prefers-color-scheme: dark)"
-            />
-            <img
-              class="desktop"
-              src="screenshots/members.jpg"
-              width="1280"
-              height="800"
-              alt="네오 아보카도의 멤버 목록. 승인된 캐릭터 두부와 비둘기가 그림과 함께 보여요."
-            />
-          </picture>
-          <picture>
-            <source
-              srcset="screenshots/members-mobile-dark.jpg"
-              media="(prefers-color-scheme: dark)"
-            />
-            <img
-              class="phone"
-              src="screenshots/members-mobile.jpg"
-              width="390"
-              height="844"
-              alt="휴대폰에서 본 멤버 목록"
-            />
-          </picture>
-        </div>
+      <section class="shots">
+        <picture>
+          <source
+            srcset="screenshots/members-dark.jpg"
+            media="(prefers-color-scheme: dark)"
+          />
+          <img
+            src="screenshots/members.jpg"
+            width="1280"
+            height="800"
+            alt="멤버 목록"
+          />
+        </picture>
+        <picture>
+          <source
+            srcset="screenshots/character-dark.jpg"
+            media="(prefers-color-scheme: dark)"
+          />
+          <img
+            src="screenshots/character.jpg"
+            width="1280"
+            height="800"
+            loading="lazy"
+            alt="캐릭터 프로필"
+          />
+        </picture>
+        <picture>
+          <source
+            srcset="screenshots/log-dark.jpg"
+            media="(prefers-color-scheme: dark)"
+          />
+          <img
+            src="screenshots/log.jpg"
+            width="1280"
+            height="800"
+            loading="lazy"
+            alt="로그와 주사위"
+          />
+        </picture>
+        <picture>
+          <source
+            srcset="screenshots/home-dark.jpg"
+            media="(prefers-color-scheme: dark)"
+          />
+          <img
+            src="screenshots/home.jpg"
+            width="1280"
+            height="800"
+            loading="lazy"
+            alt="메인 화면"
+          />
+        </picture>
       </section>
 
-      <section aria-labelledby="tour-title">
-        <h2 id="tour-title">둘러보기</h2>
-        <div class="tour">
-          <figure>
-            <picture>
-              <source
-                srcset="screenshots/character-dark.jpg"
-                media="(prefers-color-scheme: dark)"
-              />
-              <img
-                src="screenshots/character.jpg"
-                width="1280"
-                height="800"
-                loading="lazy"
-                alt="캐릭터 두부의 프로필. 소속과 종족, 능력치, 커플이 보여요."
-              />
-            </picture>
-            <figcaption>캐릭터 프로필</figcaption>
-          </figure>
-          <figure>
-            <picture>
-              <source
-                srcset="screenshots/log-dark.jpg"
-                media="(prefers-color-scheme: dark)"
-              />
-              <img
-                src="screenshots/log.jpg"
-                width="1280"
-                height="800"
-                loading="lazy"
-                alt="잡담 게시판의 로그. 주사위 결과와 댓글이 달려 있어요."
-              />
-            </picture>
-            <figcaption>로그와 주사위</figcaption>
-          </figure>
-          <figure>
-            <picture>
-              <source
-                srcset="screenshots/home-dark.jpg"
-                media="(prefers-color-scheme: dark)"
-              />
-              <img
-                src="screenshots/home.jpg"
-                width="1280"
-                height="800"
-                loading="lazy"
-                alt="커뮤니티 메인 화면. 안내와 손님 로그인 상자가 보여요."
-              />
-            </picture>
-            <figcaption>메인 화면</figcaption>
-          </figure>
-          <figure>
-            <picture>
-              <source
-                srcset="screenshots/entrance-dark.jpg"
-                media="(prefers-color-scheme: dark)"
-              />
-              <img
-                src="screenshots/entrance.jpg"
-                width="1280"
-                height="800"
-                loading="lazy"
-                alt="커뮤니티 이름과 들어가기 버튼만 있는 입장 화면"
-              />
-            </picture>
-            <figcaption>입장 화면</figcaption>
-          </figure>
-        </div>
-        <p class="note">
-          화면은 실제로 운영하던 네오 아보카도를 손님으로 본 모습이에요.
+      <section>
+        <h2>기능</h2>
+        <p>
+          캐릭터 신청·승인, 로그 게시판, 주사위, 탐색·조합, 능력치·경험치,
+          상점·인벤토리, 쪽지·호출, 운영 화면.
         </p>
       </section>
 
-      <section aria-labelledby="features-title">
-        <h2 id="features-title">네오 아보카도로 할 수 있는 것</h2>
-        <ul class="features">
+      <section>
+        <h2>설치</h2>
+        <ol>
           <li>
-            <h3>캐릭터 신청과 승인</h3>
-            <p>
-              추가 항목을 둔 캐릭터 신청서, 메인·서브·NPC, 운영진 승인까지.
-              관계와 커플, 의상, 타이틀도 붙여요.
-            </p>
+            <a href="https://naru.pub/signup">나루</a> 가입,
+            <a href="https://naru.pub/supporter">서포터 플랜</a>.
           </li>
           <li>
-            <h3>로그 게시판</h3>
-            <p>
-              그림 로그와 댓글, 주사위, 호출, 비밀글, 로그 번호와 해시태그.
-              손님도 이름과 비밀번호로 글을 쓸 수 있어요.
-            </p>
+            <a href="https://naru.pub/board">나루 게시판</a>의 네오 아보카도
+            템플릿을 사이트 맨 위(/)에 적용.
           </li>
-          <li>
-            <h3>탐색과 조합</h3>
-            <p>글 안에서 탐색하고, 아이템을 쓰고, 레시피로 조합해요.</p>
-          </li>
-          <li>
-            <h3>능력치와 경험치</h3>
-            <p>능력치 배분과 회복, 경험치와 랭킹을 운영진이 관리해요.</p>
-          </li>
-          <li>
-            <h3>상점과 인벤토리</h3>
-            <p>
-              화폐, 출석, 뽑기, 판매와 선물. 화폐와 소속, 종족의 이름은
-              커뮤니티에 맞게 바꿔요.
-            </p>
-          </li>
-          <li>
-            <h3>쪽지와 알림</h3>
-            <p>
-              쪽지와 호출, 댓글 알림이 실시간으로 오고, 나루 앱(iOS, Android,
-              macOS)으로도 받아요.
-            </p>
-          </li>
-          <li>
-            <h3>운영 화면</h3>
-            <p>
-              원본처럼 환경설정·회원·게시판·캐릭터·아이템·기타 관리로 묶인 운영
-              화면에서 커뮤니티를 꾸리고 꾸며요.
-            </p>
-          </li>
-          <li>
-            <h3>공유하기 좋은 주소</h3>
-            <p>
-              페이지마다 주소가 있어 링크를 나눌 수 있고, 링크 미리보기와 게시판
-              RSS도 나와요.
-            </p>
-          </li>
-        </ul>
-      </section>
-
-      <section id="install" aria-labelledby="install-title">
-        <h2 id="install-title">설치하기</h2>
-        <ol class="steps">
-          <li>
-            <h3>나루에 가입해요</h3>
-            <p>
-              <a href="https://naru.pub/signup">naru.pub</a>에서 원하는 주소를
-              정하면, 그 주소가 내 사이트가 돼요. 커뮤니티는
-              <strong>내주소.naru.pub</strong>에서 열려요.
-            </p>
-          </li>
-          <li>
-            <h3>서포터 플랜에 가입해요</h3>
-            <p>
-              네오 아보카도는 나루의 데이터베이스를 써서, 설치하는 사람에게
-              <a href="https://naru.pub/supporter">서포터 플랜</a>이 필요해요.
-              커뮤니티에 들어오는 회원은 서포터가 아니어도 돼요.
-            </p>
-          </li>
-          <li>
-            <h3>템플릿을 사이트 맨 위에 설치해요</h3>
-            <p>
-              <a href="https://naru.pub/board">나루 게시판</a>의 네오 아보카도
-              템플릿에서 <strong>내 사이트에 적용</strong>을 누르고, 적용할 곳을
-              <strong>사이트 맨 위(/)</strong>로 골라요. 서버 코드가 든
-              <code>_naru/</code> 폴더는 맨 위에 있어야 동작해요.
-            </p>
-            <p class="hint">
-              사이트에 원래 있던 파일 중 겹치는 것은 <code>/.backup/</code>에
-              보관돼요.
-            </p>
-          </li>
-          <li>
-            <h3>운영자로 로그인해요</h3>
-            <p>
-              <strong>내주소.naru.pub/admin/</strong>에서 운영자 로그인을
-              눌러요. <strong>커뮤니티 설정</strong> 한 화면에 사이트 전체
-              설정이 있어요.
-            </p>
-          </li>
-          <li>
-            <h3>가입 방식을 정해요</h3>
-            <p>
-              나루의 <a href="https://naru.pub/database">데이터베이스</a> →
-              사이트 회원에서 누구나 가입, 운영자 승인 후 이용, 신규 가입 중단
-              중 하나를 고르고, 필요하면 이메일을 인증한 계정이나 서포터만
-              받도록 해요.
-            </p>
-          </li>
-          <li>
-            <h3>게시판부터 만들어요</h3>
-            <p>
-              원본처럼 처음에는 게시판이 없어요. 로그를 올릴 게시판을 만들고,
-              등급과 캐릭터 추가 항목, 디자인과 메뉴, 안내 페이지를 꾸며요.
-            </p>
-          </li>
-          <li>
-            <h3>업데이트해요</h3>
-            <p>
-              새 버전은 <a href="https://naru.pub/templates">설치한 템플릿</a>
-              에서 업데이트해요. 커뮤니티의 글과 회원은 그대로고, 직접 고친
-              파일은 보관한 뒤 바꿔요.
-            </p>
-          </li>
+          <li><code>/admin/</code>에서 운영자 로그인, 게시판 만들기.</li>
         </ol>
-      </section>
-
-      <section id="faq" aria-labelledby="faq-title">
-        <h2 id="faq-title">자주 묻는 질문</h2>
-        <dl class="faq">
-          <div>
-            <dt>아보카도 에디션과 무엇이 같고 다른가요?</dt>
-            <dd>
-              커뮤니티가 하는 일은 대부분 옮겼어요. 옮긴 것과 옮기지 않은 것,
-              일부러 다르게 한 것은
-              <a
-                href="https://github.com/naru-pub/neo-avocado/blob/main/docs/porting.md"
-                >이식 문서</a
-              >에 정리해 두었어요.
-            </dd>
-          </div>
-          <div>
-            <dt>회원도 서포터 플랜이 필요한가요?</dt>
-            <dd>
-              아니요. 설치하는 사람만 필요해요. 회원은 나루 계정만 있으면 되고,
-              운영자가 원하면 서포터만 받도록 바꿀 수 있어요.
-            </dd>
-          </div>
-          <div>
-            <dt>얼마나 담을 수 있나요?</dt>
-            <dd>
-              사이트마다 그림 같은 미디어는 250 MiB, 파일 10,000개까지, 글과
-              캐릭터 같은 데이터는 100 MiB까지예요. 그림 로그가 많은 커뮤니티는
-              미디어 용량을 먼저 살펴 주세요.
-            </dd>
-          </div>
-          <div>
-            <dt>데이터는 어떻게 보관되나요?</dt>
-            <dd>
-              업데이트가 데이터베이스를 바꾸기 전에 나루가 복원 지점을 남겨요.
-              나루 제어판의 데이터베이스 → 복원 지점에서 내려받거나 되돌릴 수
-              있어요.
-            </dd>
-          </div>
-          <div>
-            <dt>소스를 볼 수 있나요?</dt>
-            <dd>
-              네오 아보카도는 GPL-3.0 오픈 소스예요.
-              <a href="https://github.com/naru-pub/neo-avocado"
-                >naru-pub/neo-avocado</a
-              >에서 볼 수 있어요.
-            </dd>
-          </div>
-          <div>
-            <dt>문의는 어디로 하나요?</dt>
-            <dd><a href="https://x.com/naru_pub">@naru_pub</a>으로 주세요.</dd>
-          </div>
-        </dl>
+        <p>회원은 나루 계정만 있으면 됩니다.</p>
       </section>
     </main>
 
-    <footer class="bottom">
-      <p>
-        네오 아보카도 ·
-        <a href="https://github.com/naru-pub/neo-avocado">GitHub</a> ·
-        <a href="https://naru.pub">나루</a>
-      </p>
+    <footer>
+      <a href="https://github.com/naru-pub/neo-avocado">GitHub</a> ·
+      <a href="https://naru.pub">나루</a> · GPL-3.0
     </footer>
   </body>
 </html>

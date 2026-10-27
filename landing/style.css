@@ -1,327 +1,91 @@
+/* The community's own plain look (site/styles/style.css): its neutral
+   palette, Dotum at 12px, 1px lines, square boxes. */
 :root {
-  /* Avocado: a deep leaf green on a warm off-white, the pit's brown for
-     the phone's frame. The community itself stays black and white. */
-  --ground: oklch(0.985 0.008 110);
-  --card: oklch(0.997 0.004 110);
-  --ink: oklch(0.26 0.03 130);
-  --muted: oklch(0.52 0.03 130);
-  --line: oklch(0.91 0.015 120);
-  --accent: oklch(0.5 0.11 135);
-  --accent-ink: oklch(0.99 0.005 110);
-  --soft: oklch(0.94 0.03 115);
-  --pit: oklch(0.42 0.06 55);
-  --shadow:
-    0 2px 4px oklch(0.6 0.05 130 / 0.08),
-    0 24px 48px -16px oklch(0.4 0.06 130 / 0.25);
   color-scheme: light;
+  --paper: #fff;
+  --ink: #333;
+  --pit: #777;
+  --line: #ddd;
+  --surface: #f7f7f7;
+  font-family: "Dotum", "돋움", "Apple SD Gothic Neo", sans-serif;
+  font-size: 12px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --ground: oklch(0.2 0.02 135);
-    --card: oklch(0.25 0.025 135);
-    --ink: oklch(0.96 0.01 110);
-    --muted: oklch(0.76 0.03 120);
-    --line: oklch(1 0 0 / 12%);
-    --accent: oklch(0.8 0.13 125);
-    --accent-ink: oklch(0.22 0.03 135);
-    --soft: oklch(0.32 0.04 130);
-    --pit: oklch(0.55 0.06 55);
-    --shadow:
-      0 2px 4px oklch(0 0 0 / 0.2), 0 24px 48px -16px oklch(0 0 0 / 0.5);
     color-scheme: dark;
+    --paper: #18191b;
+    --ink: #e4e4e4;
+    --pit: #9a9a9a;
+    --line: #3a3b3e;
+    --surface: #222326;
   }
 }
 
-* {
-  box-sizing: border-box;
-}
-
 body {
-  margin: 0;
-  background: var(--ground);
+  margin: 0 auto;
+  max-width: 1000px;
+  padding: 0 16px;
+  background: var(--paper);
   color: var(--ink);
-  font-family:
-    "Pretendard Variable", "Apple SD Gothic Neo", "Noto Sans KR", system-ui,
-    sans-serif;
-  font-size: 16px;
-  line-height: 1.7;
+  line-height: 1.6;
   word-break: keep-all;
 }
 
 a {
-  color: var(--accent);
-  text-underline-offset: 3px;
+  color: inherit;
 }
 
-code {
-  background: var(--soft);
-  padding: 0 4px;
-  border-radius: 4px;
-  font-size: 0.92em;
-}
-
-.top,
-main,
-.bottom {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 0 20px;
-}
-
-.top {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-top: 20px;
-  padding-bottom: 20px;
-}
-
-.brand {
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  font-size: 24px;
-  color: var(--accent);
-  text-decoration: none;
-}
-
-.top nav {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  font-size: 15px;
-}
-
-.top nav a {
-  color: var(--ink);
-  text-decoration: none;
-}
-
-.top nav a:hover {
-  color: var(--accent);
-}
-
-section {
-  padding: 48px 0;
-  border-top: 1px solid var(--line);
-}
-
-.hero {
-  border-top: 0;
-  padding-top: 40px;
-}
-
-.eyebrow {
-  margin: 0;
-  color: var(--accent);
-  font-weight: 700;
-  font-size: 14px;
+header,
+section,
+footer {
+  border-bottom: 1px solid var(--line);
+  padding: 16px 0;
 }
 
 h1 {
-  margin: 8px 0 16px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  font-size: clamp(32px, 6vw, 52px);
-  line-height: 1.25;
+  margin: 0 0 4px;
+  font-size: 18px;
 }
 
 h2 {
-  margin: 0 0 24px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  font-size: 28px;
+  margin: 0 0 8px;
+  font-size: 12px;
 }
 
-h3 {
-  margin: 0 0 6px;
-  font-size: 17px;
+p,
+ol {
+  margin: 0;
 }
 
-.lead {
-  max-width: 640px;
-  font-size: 18px;
-  color: var(--muted);
+ol {
+  padding-left: 18px;
 }
 
-.lead strong {
-  color: var(--ink);
+code {
+  background: var(--surface);
 }
 
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 24px;
+.shots {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
 }
 
-.button {
-  display: inline-flex;
-  align-items: center;
-  min-height: 46px;
-  padding: 0 22px;
-  border: 2px solid var(--accent);
-  border-radius: 999px;
-  color: var(--accent);
-  font-weight: 700;
-  text-decoration: none;
+@media (max-width: 600px) {
+  .shots {
+    grid-template-columns: 1fr;
+  }
 }
 
-.button.primary {
-  background: var(--accent);
-  color: var(--accent-ink);
-}
-
-.hero-shots {
-  position: relative;
-  margin-top: 40px;
-  padding-right: 56px;
-}
-
-.hero-shots img,
-.tour img {
+.shots img {
   display: block;
   width: 100%;
   height: auto;
   border: 1px solid var(--line);
-  border-radius: 14px;
-  box-shadow: var(--shadow);
 }
 
-.hero-shots .phone {
-  position: absolute;
-  right: 0;
-  bottom: -24px;
-  width: 22%;
-  border-radius: 22px;
-  border-width: 4px;
-  border-color: var(--pit);
-}
-
-.tour {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 24px;
-}
-
-.tour figure {
-  margin: 0;
-}
-
-.tour figcaption {
-  margin-top: 10px;
-  font-weight: 700;
-}
-
-.features {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 16px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.features li {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 20px;
-}
-
-.features p,
-.steps p,
-.faq dd {
-  margin: 0;
-  color: var(--muted);
-}
-
-.note {
-  margin: 20px 0 0;
-  color: var(--muted);
-  font-size: 15px;
-}
-
-.steps {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  counter-reset: step;
-  display: grid;
-  gap: 16px;
-}
-
-.steps li {
-  counter-increment: step;
-  position: relative;
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 20px 20px 20px 72px;
-}
-
-.steps li::before {
-  content: counter(step);
-  position: absolute;
-  left: 20px;
-  top: 18px;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: var(--accent-ink);
-  display: grid;
-  place-items: center;
-  font-weight: 700;
-}
-
-.steps strong {
-  color: var(--ink);
-}
-
-.steps .hint {
-  margin-top: 8px;
-  font-size: 14px;
-}
-
-.faq {
-  margin: 0;
-  display: grid;
-  gap: 20px;
-}
-
-.faq dt {
-  font-weight: 700;
-  margin-bottom: 4px;
-}
-
-.bottom {
-  padding-top: 24px;
-  padding-bottom: 40px;
-  border-top: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 14px;
-}
-
-@media (max-width: 520px) {
-  .hero-shots {
-    padding-right: 32px;
-  }
-
-  .hero-shots .phone {
-    width: 30%;
-    border-radius: 14px;
-    border-width: 3px;
-  }
-
-  .steps li {
-    padding: 64px 18px 18px;
-  }
-
-  .steps li::before {
-    left: 18px;
-    top: 16px;
-  }
+footer {
+  border-bottom: 0;
+  color: var(--pit);
 }

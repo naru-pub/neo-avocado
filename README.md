@@ -57,9 +57,9 @@
   `refs/heads/main`의 GitHub Actions 배포 대상이 있어야 합니다.
 - `landing/`은 neo-avocado.naru.pub, 소개와 설치 안내 페이지입니다. 이 사이트에
   쌓인 테이블은 그대로 두려고, 함께 올리는 `_naru/`에는 마이그레이션만 있습니다.
-  화면 사진은 `PLAYWRIGHT_MODULE=… node scripts/screenshots.mjs [주소]`가
-  운영 중인 커뮤니티를 손님으로 찍어 `landing/screenshots/`(라이트·다크, 데스크톱·
-  휴대폰)와 템플릿 미리보기 `docs/template-preview.jpg`로 만듭니다.
+  화면 사진은 `PLAYWRIGHT_MODULE=… node scripts/screenshots.mjs <주소>`가
+  운영 중인 커뮤니티를 손님으로 찍어 `landing/screenshots/`(라이트·다크)와 템플릿
+  미리보기 `docs/template-preview.jpg`로 만듭니다.
 - 검사: `npm run typecheck`, `npm test`(빌드 후 `dist/`를 검사), `npm run lint`
 - 로컬 나루(naru-dev)에서 실제 Chromium으로 전체 흐름:
   `NARU_REPO_PATH=… PLAYWRIGHT_MODULE=… npm run test:e2e`(다른 빌드와 동시에 돌리지 않음)
