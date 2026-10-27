@@ -8,6 +8,7 @@
 // <style> element's textContent; it applies with 디자인 사용 on.
 
 import { imageUrl } from "./access.js";
+import type { Data } from "./json.js";
 
 /** A colour the original's text fields take: #rgb…#rrggbbaa, rgb(), rgba(), transparent. */
 const COLOR =
@@ -107,7 +108,7 @@ const CORNERS = ["topLeft", "topRight", "bottomRight", "bottomLeft"] as const;
  * puts around the log writer's name on their own comments, design or not
  * (list.skin.php:20-23 reads them either way). The original installs ▶ and ◀.
  */
-export function ownerMarks(saved: Record<string, any> = {}) {
+export function ownerMarks(saved: Data = {}) {
   const owner = saved?.styles?.ownerName ?? {};
   const mark = (value: unknown, installed: string) =>
     typeof value === "string" ? value.trim().slice(0, 20) : installed;
@@ -115,13 +116,13 @@ export function ownerMarks(saved: Record<string, any> = {}) {
 }
 
 /** What a design's styles are, every value checked; what is not set is left out. */
-export function designStyles(saved: Record<string, any> = {}) {
+export function designStyles(saved: Data = {}) {
   const given =
     saved?.styles && typeof saved.styles === "object" ? saved.styles : {};
   const group = (key: string) =>
     given[key] && typeof given[key] === "object" ? given[key] : {};
-  const styles: Record<string, Record<string, any>> = {};
-  const keep = (key: string, value: Record<string, any>) => {
+  const styles: Record<string, Data> = {};
+  const keep = (key: string, value: Data) => {
     const set = Object.fromEntries(
       Object.entries(value).filter(
         ([, entry]) =>
@@ -201,7 +202,7 @@ export function designStyles(saved: Record<string, any> = {}) {
 }
 
 /** The menu's layout (menu_pos, menu_width, menu_height) and 헤더사용 (use_header). */
-export function designLayout(saved: Record<string, any> = {}) {
+export function designLayout(saved: Data = {}) {
   return {
     useHeader: saved?.useHeader !== false,
     menuPosition: saved?.menuPosition === "top" ? "top" : "left",
@@ -229,7 +230,7 @@ const media = (query: string, text: string) =>
 const DESKTOP = "(min-width: 1025px)";
 const MOBILE = "(max-width: 1024px)";
 
-function background(g: Record<string, any> | undefined) {
+function background(g: Data | undefined) {
   if (!g) return [];
   return [
     g.image && `background-image: ${url(g.image)}`,
@@ -240,20 +241,20 @@ function background(g: Record<string, any> | undefined) {
     g.fixed && `background-attachment: ${g.fixed}`,
   ];
 }
-function box(g: Record<string, any> | undefined) {
+function box(g: Data | undefined) {
   if (!g) return [];
   return [
     g.background && `background-color: ${g.background}`,
     g.color && `color: ${g.color}`,
     // design_form_css.php writes a side only when it is checked.
-    ...(g.borderSides ?? []).flatMap((side) => [
+    ...(g.borderSides ?? []).flatMap((side: string) => [
       g.borderColor && `border-${side}-color: ${g.borderColor}`,
       g.borderStyle && `border-${side}-style: ${g.borderStyle}`,
       g.borderWidth !== undefined && `border-${side}-width: ${g.borderWidth}px`,
     ]),
   ];
 }
-function corners(g: Record<string, any> | undefined) {
+function corners(g: Data | undefined) {
   if (!g) return [];
   return [
     g.topLeft !== undefined && `border-top-left-radius: ${g.topLeft}px`,
@@ -264,7 +265,7 @@ function corners(g: Record<string, any> | undefined) {
       `border-bottom-left-radius: ${g.bottomLeft}px`,
   ];
 }
-const text = (g: Record<string, any> | undefined) =>
+const text = (g: Data | undefined) =>
   g ? [g.color && `color: ${g.color}`, g.size && `font-size: ${g.size}px`] : [];
 
 /** Where each part of the original's design is in neo-avocado's page. */
@@ -309,7 +310,7 @@ const PARTS: Record<string, string[]> = {
  * menu's sizes, and a rule for each part the owner set; what they left
  * blank keeps the seeded design (theme.css).
  */
-export function designCss(saved: Record<string, any> = {}): string {
+export function designCss(saved: Data = {}): string {
   const s = designStyles(saved);
   const layout = designLayout(saved);
   // menu_width and menu_height: the menu column's width, the top bar's height.
@@ -462,7 +463,7 @@ const image = (value: unknown): string | null => {
  * page's route writes it into index.html's <head> (previews.ts), so the first
  * paint already has it.
  */
-export function designLook(saved: Record<string, any> = {}) {
+export function designLook(saved: Data = {}) {
   const enabled = saved.enabled === true;
   const layout = designLayout(saved);
   const font = ["serif", "mono"].includes(saved.font) ? saved.font : null;

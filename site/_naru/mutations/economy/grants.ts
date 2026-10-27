@@ -70,8 +70,9 @@ export const grant = ownerOnly(async function grant(
 ) {
   const { kind, target, name = "", value, memo = "", item } = args ?? {};
   if (
-    !["money", "exp", "item"].includes(kind) ||
-    !["one", "all"].includes(target) ||
+    (kind !== "money" && kind !== "exp" && kind !== "item") ||
+    (target !== "one" && target !== "all") ||
+    value === undefined ||
     !Number.isSafeInteger(value) ||
     value === 0
   )

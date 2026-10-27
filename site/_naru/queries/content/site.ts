@@ -91,7 +91,7 @@ export async function site(ctx: QueryCtx) {
   const access = await communityAccess(ctx);
   const saved = await settingsOf(ctx, "design");
   const look = designLook(saved);
-  const colors = {};
+  const colors: Record<string, string> = {};
   for (const key of COLORS)
     if (/^#[0-9a-f]{6}$/i.test(saved.colors?.[key] ?? ""))
       colors[key] = saved.colors[key];

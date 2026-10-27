@@ -73,7 +73,8 @@ export async function callHistory(
     if (post && !boards.has(post.board))
       boards.set(post.board, await boardOf(ctx, post.board));
     if (
-      !(await postReadable(ctx, post, access, member, boards.get(post?.board)))
+      !post ||
+      !(await postReadable(ctx, post, access, member, boards.get(post.board)))
     )
       continue;
     documents.push({
@@ -94,7 +95,7 @@ export async function callHistory(
   }
   return {
     documents,
-    nextCursor: rows.length > size ? String(page.at(-1).id) : null,
+    nextCursor: rows.length > size ? String(page[page.length - 1].id) : null,
     unread: await callsUnread(ctx),
   };
 }

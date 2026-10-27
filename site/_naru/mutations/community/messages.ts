@@ -107,7 +107,7 @@ export async function sendMessage(
 export async function readMessage(ctx: MutationCtx, args: { id?: string }) {
   signedIn(ctx);
   const row = await ownMessage(ctx, args?.id);
-  if (row.recipient === ctx.member.id && row.read_at === null) {
+  if (row.recipient === signedIn(ctx) && row.read_at === null) {
     await ctx.sql`UPDATE messages SET read_at = ${ctx.now} WHERE id = ${row.id}`;
     row.read_at = ctx.now;
   }

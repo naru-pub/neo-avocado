@@ -3,16 +3,49 @@
 import { sanitizedFragment } from "../shared/content-renderer.js";
 import { $, formatTime, mutate, query, run, say, state } from "./core.js";
 
-let current = null;
+/** A poll, as content/polls:latest answers it. */
+export interface Poll {
+  id: string;
+  subject: string;
+  answers: string[];
+  counts: number[];
+  voted: number | null;
+  canVote: boolean;
+  point: number;
+  level: number;
+  etc: string;
+  comments: {
+    id: string;
+    nick: string;
+    idea: string;
+    at: string;
+    mine: boolean;
+  }[];
+}
+/** A 팝업레이어, as the site's frame answers it. */
+export interface Popup {
+  id: string;
+  device: string;
+  subject: string;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  content: string;
+  disableHours: number;
+}
+let current: Poll | null = null;
 let showingResults = false;
 
 /**
  * The newest poll in use, as the main page shows it: the site frame's on
  * arrival, read again after a vote.
  */
-export async function loadPoll(given = undefined) {
+export async function loadPoll(given: Poll | null | undefined = undefined) {
   const { poll } =
-    given === undefined ? await query("content/polls:latest") : { poll: given };
+    given === undefined
+      ? await query<{ poll: Poll | null }>("content/polls:latest")
+      : { poll: given };
   current = poll;
   $("pollBox").hidden = !poll;
   if (!poll) return;
@@ -21,6 +54,7 @@ export async function loadPoll(given = undefined) {
 }
 function renderPoll() {
   const poll = current;
+  if (!poll) return;
   const total = poll.counts.reduce((sum, n) => sum + n, 0);
   const results = showingResults || poll.voted !== null;
   $("pollAnswers").replaceChildren(
@@ -100,6 +134,7 @@ $("pollForm").onsubmit = (event) => {
       'input[name="pollChoice"]:checked',
     );
     if (!picked) return say("항목을 선택하세요.");
+    if (!current) return;
     await mutate("content/polls:vote", {
       id: current.id,
       choice: Number(picked.value),
@@ -112,19 +147,19 @@ $("pollEtcForm").onsubmit = (event) => {
   event.preventDefault?.();
   run(async () => {
     const idea = $<HTMLInputElement>("pollEtcText").value.trim();
-    if (!idea) return;
+    if (!idea || !current) return;
     await mutate("content/polls:comment", { id: current.id, idea });
     $<HTMLInputElement>("pollEtcText").value = "";
     await loadPoll();
   });
 };
 
-const POPUP_KEY = (id) => `neo-avocado-popup-${id}`;
+const POPUP_KEY = (id: string) => `neo-avocado-popup-${id}`;
 /**
  * The 팝업레이어 between their times, for this device, but those a reader
  * put off for their hours (hd_pops_ cookies).
  */
-export function showPopups(popups = []) {
+export function showPopups(popups: Popup[] = []) {
   const mobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
   const box = $("popups");
   box.replaceChildren();

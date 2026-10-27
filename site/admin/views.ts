@@ -1,12 +1,14 @@
 // 관리자메인 and the owner's reports (접속자 집계, 활동량), drawn as tables
 // with their filters.
 
+import type { Fields } from "../shared/calls.js";
 import {
   $,
   CALLS,
   itemNames,
   loadReferences,
-  owner,
+  ownerMutate,
+  ownerQuery,
   reportFilters,
   run,
   setCursor,
@@ -74,19 +76,21 @@ export function mainView() {
 /* ---------------------------------------------------------- reports --- */
 
 /** A labelled control for a report's filter bar. */
-export function control(text, element) {
+export function control(text: string, element: HTMLElement) {
   const label = document.createElement("label");
   label.append(text, element);
   return label;
 }
-export function dateInput(value) {
+export function dateInput(value: string) {
   const input = document.createElement("input");
   input.type = "date";
   input.value = value;
   return input;
 }
 /** A plain table of `rows` under `headings`. */
-export function table(headings, rows) {
+/** A table cell's content: text, a number, or an element. */
+export type Cell = string | number | boolean | null | undefined | Node;
+export function table(headings: string[], rows: Cell[][]) {
   const element = document.createElement("table");
   element.className = "report";
   const head = element.createTHead().insertRow();
@@ -116,15 +120,15 @@ export function table(headings, rows) {
 export function today() {
   return koreanDay(Date.now());
 }
-export function daysAgo(days) {
+export function daysAgo(days: number) {
   return koreanDay(Date.now() - days * 24 * 3600 * 1000);
 }
 
 /** 접속자 집계 (adm/visit_list.php and its tabs), and deleting old days. */
 export function visitsView() {
   const [fromDay, toDay, breakdown] = reportFilters;
-  const day = (value, fallback) =>
-    /^\d{4}-\d{2}-\d{2}$/.test(value ?? "") ? value : fallback;
+  const day = (value: string | undefined, fallback: string) =>
+    value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : fallback;
   const from = dateInput(day(fromDay, daysAgo(6)));
   const to = dateInput(day(toDay, today()));
   const by = document.createElement("select");
@@ -141,13 +145,18 @@ export function visitsView() {
     by.value = breakdown;
   const draw = async () => {
     adminRoute(["visits", from.value, to.value, by.value]);
-    const report = await owner.query("admin/visits:report", {
+    const report = await ownerQuery<{
+      rows: { label: string; count: number }[];
+      total: number;
+      members: number;
+      guests: number;
+    }>("admin/visits:report", {
       from: from.value,
       to: to.value,
       by: by.value,
     });
     const top = Math.max(1, ...report.rows.map((row) => row.count));
-    const bar = (count) => {
+    const bar = (count: number) => {
       const meter = document.createElement("meter");
       meter.max = top;
       meter.value = count;
@@ -167,7 +176,7 @@ export function visitsView() {
   prune.onclick = () =>
     run(async () => {
       if (!from.value) return;
-      const { older } = await owner.query("admin/visits:report", {
+      const { older } = await ownerQuery("admin/visits:report", {
         from: from.value,
         to: to.value,
         by: by.value,
@@ -178,7 +187,7 @@ export function visitsView() {
       }
       if (!confirm(`${from.value} 이전 ${older}일의 접속 기록을 지울까요?`))
         return;
-      const { deleted } = await owner.mutate("admin/visits:prune", {
+      const { deleted } = await ownerMutate("admin/visits:prune", {
         before: from.value,
       });
       $("adminStatus").textContent = `${deleted}일의 접속 기록을 지웠습니다.`;
@@ -208,8 +217,8 @@ export async function activityView() {
   const [chosen, fromDay, toDay] = reportFilters.map((value) =>
     value === "all" ? "" : value,
   );
-  const day = (value, fallback) =>
-    /^\d{4}-\d{2}-\d{2}$/.test(value ?? "") ? value : fallback;
+  const day = (value: string | undefined, fallback: string) =>
+    value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : fallback;
   if ([...board.options].some((option) => option.value === chosen))
     board.value = chosen;
   const from = dateInput(day(fromDay, daysAgo(29)));
@@ -219,13 +228,13 @@ export async function activityView() {
   show.textContent = "보기";
   const output = document.createElement("div");
   // 100 members a page, 더 보기 for the next, each after the last one read.
-  let rows = [];
+  let rows: Fields[] = [];
   const cursor = null;
   const draw = async ({ more = false } = {}) => {
     // "all" stands for every board, which has no ID of its own.
     adminRoute(["activity", board.value || "all", from.value, to.value]);
     // Counted by the server's SQL.
-    const page = await owner.query("admin/activity:report", {
+    const page = await ownerQuery("admin/activity:report", {
       board: board.value,
       from: from.value,
       to: to.value,
@@ -267,7 +276,7 @@ export async function activityView() {
               if (!Number.isSafeInteger(count) || count < 0)
                 throw new Error("누적 경고는 0 이상의 정수입니다.");
               // The warnings alone: the member's other settings stay.
-              await owner.mutate(CALLS.members.save, {
+              await ownerMutate(CALLS.members.save, {
                 id: row.id,
                 values: { warnings: count, warningNote: note.value.trim() },
                 create: !row.member,

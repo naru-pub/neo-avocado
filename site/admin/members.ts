@@ -1,5 +1,5 @@
 // 회원관리's own: daily maintenance and the members' bulk actions.
-import { $, owner, run } from "./core.js";
+import { $, ownerMutate, run } from "./core.js";
 import { load } from "./list.js";
 
 /**
@@ -9,7 +9,7 @@ import { load } from "./list.js";
 export async function maintain() {
   const total = { visits: 0, messages: 0, members: 0 };
   for (let calls = 0; calls < 50; calls += 1) {
-    const result = await owner.mutate("admin/maintenance:run");
+    const result = await ownerMutate("admin/maintenance:run");
     if (!result.ran) break;
     total.visits += result.visits;
     total.messages += result.messages;
@@ -32,7 +32,7 @@ export const pickedMembers = () =>
       "input[data-member]:checked",
     ),
   ].map((box) => ({ id: box.dataset.member, nick: box.dataset.nick }));
-export const memberBulk = (action) =>
+export const memberBulk = (action: "level" | "leave") =>
   run(async () => {
     const picked = pickedMembers();
     if (!picked.length)
@@ -47,7 +47,7 @@ export const memberBulk = (action) =>
       )
     )
       return;
-    const { changed } = await owner.mutate("admin/members:bulk", {
+    const { changed } = await ownerMutate("admin/members:bulk", {
       ids: picked.map((member) => member.id),
       action,
       ...(action === "level" ? { level } : {}),
@@ -73,7 +73,7 @@ $("membersDelete").onclick = () =>
     let deleted = 0;
     for (const member of picked) {
       $("adminStatus").textContent = `${member.nick} 삭제 중…`;
-      const result = await owner.mutate("admin/members:deleteMember", {
+      const result = await ownerMutate("admin/members:deleteMember", {
         id: member.id,
       });
       if (result.deleted) deleted += 1;

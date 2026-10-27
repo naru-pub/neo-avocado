@@ -19,6 +19,7 @@ import {
   names,
   one,
   parsed,
+  signedIn,
   siteOpen,
   text,
 } from "./access.js";
@@ -46,7 +47,7 @@ export const FIELD_TYPES = ["text", "textarea", "select", "url", "image"];
 /** public: every member; owner: the character's owner and the site owner; admin: the site owner. */
 export const FIELD_VISIBILITY = ["public", "owner", "admin"];
 
-const FIELD_LIMITS = {
+const FIELD_LIMITS: Record<string, number> = {
   text: 200,
   textarea: 2000,
   select: 100,
@@ -237,7 +238,12 @@ export async function fieldCatalogue(ctx: SqlCtx): Promise<FieldDefinition[]> {
           ? row.visibility
           : "public",
         required: row.required !== 0,
-        size: Number.isSafeInteger(row.size) && row.size > 0 ? row.size : 0,
+        size:
+          row.size !== undefined &&
+          Number.isSafeInteger(row.size) &&
+          row.size > 0
+            ? row.size
+            : 0,
       };
     });
 }
@@ -268,7 +274,7 @@ export function fieldVisible(
   if (definition.visibility === "public") return true;
   return (
     definition.visibility === "owner" &&
-    Boolean(ctx.member) &&
+    ctx.member !== null &&
     owner === ctx.member.id
   );
 }
@@ -364,7 +370,7 @@ function fieldValue(
   definition: FieldDefinition,
   value: unknown,
 ): string | null {
-  const refuse = () =>
+  const refuse = (): never =>
     ctx.fail(
       "INVALID_REQUEST",
       `프로필 항목 "${definition.label || definition.code}"을(를) 확인해 주세요.`,
@@ -456,9 +462,10 @@ export async function memberSheet(
     );
   // 메인·서브·NPC (ch_type) is the admin's: a member's form keeps it hidden
   // and a new one is main (character_form.php:77,96), whatever they send.
-  const kept = CHARACTER_TYPES.includes(previous?.type)
-    ? previous.type
-    : "main";
+  const kept =
+    previous?.type && CHARACTER_TYPES.includes(previous.type)
+      ? previous.type
+      : "main";
   const type = owner ? (data.type ?? kept) : kept;
   if (!CHARACTER_TYPES.includes(type)) invalid(ctx);
   const prior = previous?.state ?? null;
@@ -566,7 +573,7 @@ async function checkPeriod(
   const limit = Number.isSafeInteger(settings.characterLimit)
     ? settings.characterLimit
     : CHARACTER_LIMIT;
-  if (limit > 0 && (await characterCount(ctx, ctx.member.id)) >= limit)
+  if (limit > 0 && (await characterCount(ctx, signedIn(ctx))) >= limit)
     ctx.fail("CONFLICT", `캐릭터는 ${limit}명까지 만들 수 있습니다.`, {
       reason: "character_limit",
       limit,
@@ -690,7 +697,7 @@ export async function saveSheet(
     ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {
       reason: "document_not_found",
     });
-  if (previous && !ctx.owner && previous.owner !== ctx.member.id)
+  if (previous && !ctx.owner && previous.owner !== signedIn(ctx))
     ctx.fail("ACCESS_DENIED", "직접 쓴 것만 고치거나 지울 수 있습니다.", {
       reason: "not_owned",
     });
@@ -728,7 +735,7 @@ export async function saveSheet(
     fields: JSON.stringify(sheet.fields),
   };
   // 두상, 흉상, 전신 (ch_thumb, ch_head, ch_body): an address or an upload's.
-  for (const key of ["image", "head", "body"])
+  for (const key of ["image", "head", "body"] as const)
     if (Object.hasOwn(data, key) && data[key] !== previous?.[key])
       values[key] = data[key] ? imageUrl(data[key]) : null;
   let row: CharacterRow;
@@ -743,7 +750,7 @@ export async function saveSheet(
   } else {
     // The starting points are the owner's (initialStatPoints) until the
     // record is first written; see characterState.
-    const owner = member ? member.id : ctx.member.id;
+    const owner = member ? member.id : signedIn(ctx);
     const columns = ["owner", "created_at", ...Object.keys(values)];
     row = (
       await ctx.sql<CharacterRow>(
@@ -756,7 +763,7 @@ export async function saveSheet(
   if (member) await claimMain(ctx, member, row.id);
   else if (!previous && !ctx.owner) {
     // A member's first character is their 대표 (character_form_update.php:120).
-    const profile = await profileOf(ctx, ctx.member.id);
+    const profile = await profileOf(ctx, signedIn(ctx));
     if (profile) await claimMain(ctx, profile, row.id);
   }
   return { row, catalogue: sheet.catalogue };
@@ -879,16 +886,21 @@ async function rankBonus(ctx: SqlCtx, exp: number) {
   );
 }
 
+/** One stat of a character, as its row keeps it (any part may be missing). */
+interface StatEntry {
+  allocated?: number;
+  max?: number;
+  damage?: number;
+  current?: number;
+}
+
 /** A character's official record, as old code and pages know it. */
 export interface Progress {
   owner: string;
   character: string;
   points: number;
   exp: number;
-  stats: Record<
-    string,
-    { allocated: number; max: number; damage: number; current: number }
-  >;
+  stats: Record<string, Required<StatEntry>>;
   titles: string[];
   activeTitle: string | null;
   purchases: Record<string, number>;
@@ -953,8 +965,8 @@ export async function characterState(
     );
   amount(points, "Stat points");
   amount(row.exp, "Experience");
-  const saved = parsed(row.stats, {});
-  const stats = {};
+  const saved = parsed<Record<string, StatEntry>>(row.stats, {});
+  const stats: Record<string, Required<StatEntry>> = {};
   for (const definition of definitions) {
     const key = definition.id;
     if (!fieldCode(key)) throw new Error("Invalid stat identifier.");

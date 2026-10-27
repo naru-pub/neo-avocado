@@ -67,7 +67,7 @@ export const charactersModels: Record<string, Model> = {
         throw new Error("단일 선택 항목에는 선택지를 입력하세요.");
       if (
         data.options.length > 30 ||
-        data.options.some((name) => name.length > 100)
+        data.options.some((name: string) => name.length > 100)
       )
         throw new Error("선택지는 30개 이하, 각 100자 이하입니다.");
       if (data.type !== "select") data.options = [];

@@ -13,16 +13,20 @@ import {
   $,
   clearPrivateViews,
   edit,
+  type Fields,
   memberSettings,
   movedSinceOpening,
   mutate,
+  naruClient,
   opening,
   query,
+  type Row,
   run,
   say,
   show,
   showAdmission,
   showTab,
+  signedInMember,
   standing,
   state,
 } from "./core.js";
@@ -53,6 +57,7 @@ async function connect() {
 $("checkAdmission").onclick = () => run(start);
 $("editProfile").onclick = () => {
   const profile = state.profile;
+  if (!profile) return;
   edit(
     "프로필 수정",
     [
@@ -94,7 +99,7 @@ $("editProfile").onclick = () => {
         commentAlerts,
         birthYear: birthYear ? Number(birthYear) : null,
       });
-      state.nicks.set(state.member.id, Promise.resolve(nick));
+      state.nicks.set(signedInMember().id, Promise.resolve(nick));
       show(saved);
       await loadLogs();
       if (state.charactersLoaded) await loadCharacters();
@@ -106,7 +111,7 @@ const RESERVED = "이미 예약된 단어로 사용할 수 없는 닉네임입�
  * Whether a nickname is reserved (cf_prohibit_id, lib/register.lib.php);
  * profiles:update and membership:join refuse it too. The owner may.
  */
-function reserved(community, nick) {
+function reserved(community: Fields, nick: string) {
   if (state.owner) return false;
   return String(community.reservedNicks ?? "")
     .split(",")
@@ -130,7 +135,7 @@ async function showAgreements() {
 }
 async function start() {
   await connect();
-  state.member = await state.naru.members.session();
+  state.member = await naruClient().members.session();
   // For index.html, which opens the entrance before the session is known.
   try {
     if (state.member) localStorage.setItem("neo-avocado-member", "1");
@@ -141,14 +146,15 @@ async function start() {
   // The site's frame is decoration: without it the default design shows.
   await loadSite().catch((error) => console.error(error));
   if (!state.member) return visit();
-  let status;
+  let status: Fields;
   try {
     status = await query("community/membership:membership");
   } catch (error) {
     // Naru's refusal says when the site has not approved this member yet.
-    if (!standing(error)) throw error;
+    const refused = standing(error);
+    if (!refused) throw error;
     show();
-    return showAdmission(standing(error));
+    return showAdmission(refused);
   }
   state.admission = "approved";
   // 회원 삭제, 접근차단 and 탈퇴: the community's own, apart from Naru's.
@@ -195,7 +201,7 @@ async function visit() {
   if (state.boards.length) listen();
   if (!movedSinceOpening()) await openRoute(arrivedAt);
 }
-$("signIn").onclick = () => run(() => state.naru.members.signIn());
+$("signIn").onclick = () => run(() => naruClient().members.signIn());
 // The main page, as the original lands on main.php; the logo leads back.
 $("tabHome").onclick = () => showTab("home");
 $("homeLink").onclick = (event) => {
@@ -216,7 +222,7 @@ $("gotoTop").onclick = (event) => {
  * without one, 캐릭터 생성 while the owner allows it, or that it is not the
  * time (outlogin.skin.2.php).
  */
-async function showMainCharacter(profile) {
+async function showMainCharacter(profile: Row | null) {
   const id = profile?.data.mainCharacter;
   const character = id
     ? await query("characters/sheet:sheet", { id }).then(
@@ -265,7 +271,7 @@ $("signOut").onclick = () =>
     clearPrivateViews();
     // The page becomes a visitor's at once; revoking the sign-in follows.
     await visit();
-    await member.signOut();
+    await member?.signOut();
     say("로그아웃했습니다.");
   });
 $("profileForm").onsubmit = (event) => {
@@ -286,7 +292,7 @@ $("profileForm").onsubmit = (event) => {
         : {}),
     });
     const profile = joined.profile;
-    state.nicks.set(state.member.id, Promise.resolve(nick));
+    state.nicks.set(signedInMember().id, Promise.resolve(nick));
     show(profile);
     showMainCharacter(profile).catch((error) => console.error(error));
     await loadBoards();

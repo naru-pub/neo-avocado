@@ -49,6 +49,6 @@ export async function quests(
         ),
       }))
       .filter((quest) => scheduled(quest, ctx.now)),
-    nextCursor: rows.length > PAGE ? page.at(-1).id : null,
+    nextCursor: rows.length > PAGE ? page[page.length - 1].id : null,
   };
 }

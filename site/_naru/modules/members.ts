@@ -9,7 +9,9 @@ import {
   kstDay,
   one,
   parsed,
+  signedIn,
 } from "./access.js";
+import type { Data } from "./json.js";
 import type { QueryCtx, SqlValue } from "./naru-types.js";
 
 /** A profile as pages and old code read it. */
@@ -181,7 +183,7 @@ export async function saveWallet(
 }
 
 /** A history entry's columns, by the names old code and pages use. */
-const HISTORY_COLUMNS = {
+const HISTORY_COLUMNS: Record<string, string> = {
   owner: "owner",
   kind: "kind",
   at: "at",
@@ -201,14 +203,11 @@ const HISTORY_COLUMNS = {
 const NUMBERED = new Set(["inventory", "character"]);
 
 /** Adds a history row; what has no column of its own goes in details. */
-export async function addHistory(
-  ctx: SqlCtx,
-  entry: Record<string, any>,
-): Promise<number> {
+export async function addHistory(ctx: SqlCtx, entry: Data): Promise<number> {
   const columns: string[] = [];
   const places: string[] = [];
   const values: SqlValue[] = [];
-  const details = {};
+  const details: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(entry)) {
     if (value === undefined) continue;
     if (Object.hasOwn(HISTORY_COLUMNS, key)) {
@@ -244,7 +243,7 @@ export type HistoryRow = Record<string, SqlValue> & {
 
 /** A history row as pages read it: { id, data } with the entry's own names. */
 export function historyOfRow(row: HistoryRow) {
-  const data: Record<string, any> = parsed(row.details, {});
+  const data: Data = parsed(row.details, {});
   for (const [key, column] of Object.entries(HISTORY_COLUMNS))
     if (row[column] !== null && row[column] !== undefined)
       data[key] = NUMBERED.has(key) ? String(row[column]) : row[column];
@@ -285,7 +284,7 @@ export async function historyPage(
   const documents = rows.slice(0, size).map(historyOfRow);
   return {
     documents,
-    nextCursor: rows.length > size ? documents.at(-1).id : null,
+    nextCursor: rows.length > size ? documents[documents.length - 1].id : null,
   };
 }
 
@@ -298,7 +297,7 @@ export async function historyPage(
 export async function loginReward(
   ctx: SqlCtx & { now: number },
 ): Promise<number | null> {
-  const member = ctx.member.id;
+  const member = signedIn(ctx);
   const current = await walletOf(ctx, member);
   const today = kstDay(ctx.now);
   if (current.lastDaily === today) return null;

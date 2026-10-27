@@ -29,7 +29,7 @@ import {
 } from "../../modules/relations.js";
 
 /** What a list may narrow to: 신청자 (editing or submitted), 승인. */
-const FILTERS = {
+const FILTERS: Record<string, string> = {
   applicants: "state IN ('editing', 'submitted')",
   approved: "state = 'approved'",
 };

@@ -33,6 +33,6 @@ export const members = ownerOnly(async function members(
   const members = rows.slice(0, PAGE);
   return {
     members,
-    nextCursor: rows.length > PAGE ? members.at(-1).id : null,
+    nextCursor: rows.length > PAGE ? members[members.length - 1].id : null,
   };
 });

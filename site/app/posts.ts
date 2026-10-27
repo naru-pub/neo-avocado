@@ -1,16 +1,24 @@
 // How a post or comment is shown: its text, dice and the character it speaks as.
 
-import { emoticonContent } from "../shared/emoticons.js";
+import { type Emoticon, emoticonContent } from "../shared/emoticons.js";
 import { openCharacter } from "./characters.js";
-import { nickOf, ownCharacters, query, run, state } from "./core.js";
+import {
+  type Fields,
+  nickOf,
+  ownCharacters,
+  query,
+  type Row,
+  run,
+  state,
+} from "./core.js";
 import { openLogNumber, searchTag } from "./logs.js";
 import { writeTo } from "./messages.js";
 
 // 댓글 주사위: 굴린 값을 페이지가 정하면 누구나 원하는 눈을 적을 수 있다.
 // 대신 서버가 댓글에 붙이는 ID에서 읽는다. ID는 회원이 고를 수 없으므로,
 // 같은 댓글은 누가 언제 보든 같은 눈이 나온다.
-export function diceOf(id) {
-  const roll = (seed) => {
+export function diceOf(id: string) {
+  const roll = (seed: number) => {
     let hash = seed;
     for (const char of id) {
       hash ^= char.charCodeAt(0);
@@ -21,7 +29,7 @@ export function diceOf(id) {
   return [roll(2166136261), roll(3141592653)];
 }
 /** A post's dice: rolled by the server since the roleplay port, else from its ID. */
-export function diceText(row) {
+export function diceText(row: Row) {
   const [first, second] =
     Array.isArray(row.data.rolls) && row.data.rolls.length === 2
       ? row.data.rolls
@@ -36,7 +44,11 @@ const POST_PART =
  * new one, extend/mmb.lib.php:15), [[nick]] calls, @N links to a log on
  * the same board and #tag searches. The rest stays text (and emoticons).
  */
-export function postText(text, emoticons = [], { pictureBoard = false } = {}) {
+export function postText(
+  text: unknown,
+  emoticons: readonly Emoticon[] = [],
+  { pictureBoard = false } = {},
+) {
   const fragment = document.createDocumentFragment();
   for (const part of String(text ?? "").split(POST_PART)) {
     if (!part) continue;
@@ -78,7 +90,7 @@ export function postText(text, emoticons = [], { pictureBoard = false } = {}) {
   return fragment;
 }
 /** Who wrote a post: the character it was posted as, with title and outfit, then the nickname. */
-export async function speakerLabel(row) {
+export async function speakerLabel(row: Row) {
   const fragment = document.createDocumentFragment();
   // 익명 (wr_noname): readers get no author; the author and staff, a mark.
   if (row.data.anonymous === true && !row.data.owner && !row.data.guest) {
@@ -99,7 +111,7 @@ export async function speakerLabel(row) {
           className: "send-memo",
           textContent: nick,
           title: "쪽지 보내기",
-          onclick: (event) => {
+          onclick: (event: MouseEvent) => {
             event.preventDefault();
             run(() => writeTo(writer));
           },
@@ -158,7 +170,7 @@ export async function speakerLabel(row) {
   return fragment;
 }
 /** What an in-post action did, as the mmb skin's action logs (log.S, log.item). */
-export function actionItem(action) {
+export function actionItem(action: Fields) {
   const line = document.createElement("p");
   line.className = "post-action";
   const image =
@@ -204,7 +216,7 @@ export function actionItem(action) {
   return line;
 }
 /** Fills a "post as" select with the member's characters the first time it is used. */
-export function wireSpeakerChoice(select) {
+export function wireSpeakerChoice(select: HTMLSelectElement) {
   const fill = () =>
     run(async () => {
       if (select.dataset.loaded) return;
@@ -227,7 +239,7 @@ export function wireSpeakerChoice(select) {
  * that the owner lets them (it_use_mmb_able, it_use_recepi).
  */
 export async function postInventory() {
-  state.speakers ??= await ownCharacters();
+  const speakers = (state.speakers ??= await ownCharacters());
   if (!state.postItems) {
     const { inventory, items } = await query("economy/inventory:inventory", {
       all: true,
@@ -235,16 +247,16 @@ export async function postInventory() {
     for (const item of items) state.itemCatalog.set(item.id, item);
     state.postItems = inventory;
   }
-  return state.postItems.map((row) => ({
+  return (state.postItems ?? []).map((row) => ({
     row,
     item: state.itemCatalog.get(row.data.item)?.data ?? null,
     owner:
-      state.speakers.find((character) => character.id === row.data.character)
-        ?.data.name ?? null,
+      speakers.find((character) => character.id === row.data.character)?.data
+        .name ?? null,
   }));
 }
 /** Fills an in-post item select with what the member may use in posts. */
-export function wireItemChoice(select) {
+export function wireItemChoice(select: HTMLSelectElement) {
   select.onfocus = select.onpointerdown = () =>
     run(async () => {
       if (select.dataset.loaded) return;

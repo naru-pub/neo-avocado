@@ -5,7 +5,7 @@
 // by SQL: the hours and the rest are JSON maps a day keeps, opened with
 // json_each(visits.<column>) row by row.
 
-import { one, ownerOnly } from "../../modules/access.js";
+import { only, ownerOnly } from "../../modules/access.js";
 import { invalid } from "../../modules/admin.js";
 import type { QueryCtx, SqlValue } from "../../modules/naru-types.js";
 
@@ -41,14 +41,14 @@ export const report = ownerOnly(async function report(
   // Within the range; '9999' is after every day.
   const range: SqlValue[] = [from, to || "9999"];
   const within = "day >= ? AND day <= ?";
-  const totals = await one<{ total: number; guests: number }>(
+  const totals = await only<{ total: number; guests: number }>(
     ctx,
     `SELECT coalesce(sum(total), 0) AS total, coalesce(sum(guests), 0) AS guests FROM visits WHERE ${within}`,
     range,
   );
   // Each day's members (a JSON map of member to visits): how many different
   // ones visited.
-  const members = await one<{ count: number }>(
+  const members = await only<{ count: number }>(
     ctx,
     `SELECT count(DISTINCT j.key) AS count FROM visits, json_each(visits.members) AS j WHERE ${within}`,
     range,
@@ -94,7 +94,7 @@ export const report = ownerOnly(async function report(
   }
   const older = from
     ? (
-        await one<{ count: number }>(
+        await only<{ count: number }>(
           ctx,
           "SELECT count(*) AS count FROM visits WHERE day < ?",
           [from],

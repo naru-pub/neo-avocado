@@ -1,9 +1,9 @@
 // 커플목록 (couple/): every couple the owner registered, with both
 // characters' pictures and names and the day it began.
-import { $, query, run, showTab } from "./core.js";
+import { $, query, type Row, run, showTab } from "./core.js";
 
 /** One side of a couple: the character's picture (or initial) and name, linked. */
-function partner(character) {
+function partner(character: Row | null) {
   const side = document.createElement("div");
   side.className = "partner";
   const picture = document.createElement("div");
@@ -31,25 +31,27 @@ async function loadCouples() {
   // Both sides come with each couple, null where a character is gone.
   const { couples } = await query("characters/couples:list");
   $("coupleList").replaceChildren(
-    ...couples.map((couple) => {
-      const item = document.createElement("li");
-      const heart = document.createElement("span");
-      heart.className = "heart";
-      heart.textContent = "♥";
-      item.append(partner(couple.first), heart, partner(couple.second));
-      if (couple.data.since) {
-        const since = document.createElement("p");
-        since.className = "since";
-        // How many days, the first counted (couple/index.php's ceil).
-        const days = Math.ceil(
-          (Date.now() - Date.parse(`${couple.data.since}T00:00:00+09:00`)) /
-            86400000,
-        );
-        since.textContent = `${couple.data.since} ~${Number.isFinite(days) && days > 0 ? ` · D+${days}` : ""}`;
-        item.append(since);
-      }
-      return item;
-    }),
+    ...couples.map(
+      (couple: Row & { first: Row | null; second: Row | null }) => {
+        const item = document.createElement("li");
+        const heart = document.createElement("span");
+        heart.className = "heart";
+        heart.textContent = "♥";
+        item.append(partner(couple.first), heart, partner(couple.second));
+        if (couple.data.since) {
+          const since = document.createElement("p");
+          since.className = "since";
+          // How many days, the first counted (couple/index.php's ceil).
+          const days = Math.ceil(
+            (Date.now() - Date.parse(`${couple.data.since}T00:00:00+09:00`)) /
+              86400000,
+          );
+          since.textContent = `${couple.data.since} ~${Number.isFinite(days) && days > 0 ? ` · D+${days}` : ""}`;
+          item.append(since);
+        }
+        return item;
+      },
+    ),
   );
   if (!couples.length) {
     const empty = document.createElement("li");

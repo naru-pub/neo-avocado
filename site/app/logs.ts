@@ -2,6 +2,8 @@
 // opened alone, choosing a board and what it allows, and emoticons.
 
 import { sanitizedFragment } from "../shared/content-renderer.js";
+import type { Emoticon } from "../shared/emoticons.js";
+import { callError } from "../shared/errors.js";
 import {
   $,
   boardStaff,
@@ -9,12 +11,14 @@ import {
   pageTitle,
   preloadNicks,
   query,
+  type Row,
   renderPages,
   route,
   run,
   say,
   showTab,
   state,
+  within,
 } from "./core.js";
 import { showNewPost, watchBoard } from "./live.js";
 // The writing form, which wires its own controls as it loads.
@@ -27,7 +31,11 @@ import {
 } from "./log-item.js";
 
 /** A board's own number setting, else the original's default. */
-export function boardSetting(id, key, fallback) {
+export function boardSetting(
+  id: string | null | undefined,
+  key: string,
+  fallback: number,
+): number {
   const value = state.boards.find((row) => row.id === (id ?? "default"))?.data[
     key
   ];
@@ -38,7 +46,7 @@ export const uploadCountOf = (id = state.board) =>
   boardSetting(id, "uploadCount", 1);
 export const imageWidthOf = (id = state.board) =>
   boardSetting(id, "imageWidth", 600);
-export const isNew = (log) => {
+export const isNew = (log: Row) => {
   const hours = boardSetting(log.data.board, "newHours", 24);
   const at = Date.parse(log.createdAt ?? "");
   const age = Date.now() - at;
@@ -117,7 +125,7 @@ export async function loadLogs({ page: number = 1 } = {}) {
     const item = await logItem(kindOf() === "qna" ? log : previewOf(log));
     if (log.data.notice) item.classList.add("notice");
     if (typeof page.counts[log.id] === "number")
-      item.querySelector(".comments summary").textContent =
+      within(item, ".comments summary").textContent =
         `댓글 (${page.counts[log.id]})`;
     $("logs").append(item);
   }
@@ -142,7 +150,7 @@ export function showCategories() {
   nav.replaceChildren(
     ...["", ...categories].map((name) => {
       const link = document.createElement("a");
-      link.href = `/${["logs", state.board, ...(name ? ["category", name] : [])].map(encodeURIComponent).join("/")}`;
+      link.href = `/${["logs", state.board, ...(name ? ["category", name] : [])].map((part) => encodeURIComponent(part)).join("/")}`;
       link.textContent = name || "전체";
       if ((state.category ?? "") === name)
         link.setAttribute("aria-current", "page");
@@ -165,7 +173,7 @@ export function showCategories() {
  * A listed post shows the start of its text (150 characters, an HTML body as
  * plain text); "본문 보기" reads the whole post.
  */
-export function previewOf(log) {
+export function previewOf(log: Row): Row {
   // 제목 길이 (bo_subject_len): a list's titles cut short (cut_str's …).
   const most = boardSetting(log.data.board, "subjectLen", 60);
   const title = log.data.title ?? "";
@@ -179,7 +187,7 @@ export function previewOf(log) {
   };
 }
 /** Shows log No. `number` of the current board, as the skin's log link (?log=N&single=Y). */
-export async function openLogNumber(number) {
+export async function openLogNumber(number: number | string) {
   const log = await query("community/posts:post", {
     board: state.board,
     number,
@@ -198,7 +206,13 @@ export async function openLogNumber(number) {
  * /post/<id>, which survives a move to another board; with `comment`, its
  * comments open at that comment (/post/<id>/comment/<id>).
  */
-export async function openPost(id, { comment = null, log = null } = {}) {
+export async function openPost(
+  id: string,
+  {
+    comment = null,
+    log = null,
+  }: { comment?: string | null; log?: Row | null } = {},
+) {
   const post = log ?? (await query("community/posts:post", { id })).document;
   const board = post.data.board ?? "default";
   showTab("logs");
@@ -219,10 +233,11 @@ export async function openPost(id, { comment = null, log = null } = {}) {
     try {
       await countView(post.id, { always: true });
     } catch (error) {
-      if (error?.details?.reason === "read_point") {
+      const failure = callError(error);
+      if (failure?.details?.reason === "read_point") {
         $("logFocus").replaceChildren();
         $("logFocusPanel").hidden = true;
-        say(error.message);
+        say(failure.message ?? "");
         return;
       }
     }
@@ -245,7 +260,7 @@ export async function openPost(id, { comment = null, log = null } = {}) {
     replace: true,
   });
   if (comment) {
-    const found = await item.showComment(comment);
+    const found = await item.showComment?.(comment);
     if (!found) say("댓글을 찾을 수 없습니다.");
   }
   (
@@ -260,7 +275,7 @@ $("closeFocus").onclick = () => {
   route(logsPath(), { replace: true });
 };
 /** Lists the current board's logs with `tag` (mmb's hash search). */
-export async function searchTag(tag) {
+export async function searchTag(tag: string) {
   showTab("logs");
   state.tag = tag;
   state.upTo = null;
@@ -313,7 +328,7 @@ $("searchMore").onclick = () => run(() => showSearch({ more: true }));
  * and 오너(코) (mmb/list.skin.php:200-204); the others' 제목, 내용,
  * 제목+내용, 글쓴이 and 글쓴이(코) (basic/list.skin.php:134-143).
  */
-function fillSearchFields(kind) {
+function fillSearchFields(kind: string) {
   const select = $<HTMLSelectElement>("boardSearchField");
   const fields =
     kind === "image"
@@ -402,12 +417,13 @@ export async function loadBoards() {
     state.board = state.boards[0].id;
   // Boards under their group's name (adm/boardgroup_list), ungrouped first.
   const groups = listed;
-  const option = (row) => new Option(row.data.name, row.id);
-  const grouped = (row) => groups.some((group) => group.id === row.data.group);
+  const option = (row: Row) => new Option(row.data.name, row.id);
+  const grouped = (row: Row) =>
+    groups.some((group: Row) => group.id === row.data.group);
   $("board").replaceChildren(
     ...state.boards.filter((row) => !grouped(row)).map(option),
     ...groups
-      .map((group) => {
+      .map((group: Row) => {
         const boards = state.boards.filter(
           (row) => row.data.group === group.id,
         );
@@ -417,7 +433,10 @@ export async function loadBoards() {
         set.append(...boards.map(option));
         return set;
       })
-      .filter(Boolean),
+      .filter(
+        (set: HTMLOptGroupElement | null): set is HTMLOptGroupElement =>
+          set !== null,
+      ),
   );
   $<HTMLSelectElement>("board").value = state.board;
   configureBoard();
@@ -459,14 +478,14 @@ export function configureBoard() {
   $("logImageLabel").hidden = !pictures || uploads === 0;
   $("logImageUrlLabel").hidden = !pictures || uploads === 0;
   // 업로드 등급 and 링크 등급 (bo_upload_level, bo_link_level).
-  const reaches = (key) =>
+  const reaches = (key: string) =>
     boardStaff() ||
     state.owner ||
     state.level >= boardSetting(state.board, key, 1);
   $("logAttachmentsLabel").hidden =
     kind !== "text" || uploads === 0 || !reaches("uploadLevel");
   for (const id of ["logLink1", "logLink2"])
-    $(id).closest("label").hidden = !reaches("linkLevel");
+    ($(id).closest("label") as HTMLLabelElement).hidden = !reaches("linkLevel");
   // 리스트에서 파일 사용 (bo_use_list_file): off, files show on a post alone.
   $("logs").classList.toggle(
     "no-list-file",
@@ -504,11 +523,13 @@ export function configureBoard() {
     : "";
   $("logActions").hidden = !state.member || board?.data.actions !== true;
   // 조합(레시피)사용 (cf_5) off: 조합 is not offered.
-  const combine = $("logAction").querySelector<HTMLOptionElement>(
+  const combine = within<HTMLOptionElement>(
+    $("logAction"),
     'option[value="combine"]',
   );
   combine.hidden = combine.disabled = !state.combining;
-  $("logMaterials").closest("label").hidden = !state.combining;
+  ($("logMaterials").closest("label") as HTMLLabelElement).hidden =
+    !state.combining;
 }
 $("board").onchange = () =>
   run(async () => {
@@ -523,13 +544,13 @@ $("board").onchange = () =>
     await loadLogs();
   });
 /** The emoticons, read with the boards (community/boards:boards). */
-export async function loadEmoticons() {
+export async function loadEmoticons(): Promise<Emoticon[]> {
   if (state.emoticons !== null) return state.emoticons;
   const member = state.member;
   const { emoticons } = await query("community/boards:boards");
   if (state.member !== member) return [];
   state.emoticons = emoticons;
-  return state.emoticons;
+  return emoticons;
 }
 
 // Writes to the shared state from the other modules.
@@ -541,7 +562,7 @@ const picked = () =>
       ".log-pick:not([hidden]) input:checked",
     ),
   ].map((box) => box.value);
-const pickedOrSay = (what) => {
+const pickedOrSay = (what: string) => {
   const ids = picked();
   if (!ids.length) say(`${what}할 글을 하나 이상 선택하세요.`);
   return ids;

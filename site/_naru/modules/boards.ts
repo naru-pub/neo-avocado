@@ -11,9 +11,11 @@ import {
   communitySettings,
   lacking,
   one,
+  only,
   parsed,
   siteOpen,
 } from "./access.js";
+import type { Data } from "./json.js";
 import { addHistory, saveWallet, walletOf } from "./members.js";
 import type { QueryCtx, SqlValue } from "./naru-types.js";
 
@@ -54,7 +56,7 @@ export interface BoardRow {
 /** A board as pages read it: the admin's fields by their names. */
 export interface Board {
   id: string;
-  data: Record<string, any> & {
+  data: Data & {
     name: string;
     kind: string;
     enabled: boolean;
@@ -96,9 +98,9 @@ export const BOARD_COLUMNS = {
 const BOARD_FLAGS = new Set(["enabled", "anonymous"]);
 
 export function boardOfRow(row: BoardRow): Board {
-  const data: Record<string, any> = parsed(row.options, {});
+  const data: Data = parsed(row.options, {});
   for (const [field, column] of Object.entries(BOARD_COLUMNS)) {
-    const value = row[column];
+    const value = row[column as keyof BoardRow];
     if (value === null || value === undefined) continue;
     data[field] = BOARD_FLAGS.has(field) ? value !== 0 : value;
   }
@@ -165,8 +167,8 @@ export function requireBoard(
   board: Board | null,
   access: Access,
   ...actions: BoardAction[]
-) {
-  if (!actions.every((action) => boardAllowed(board, access, action)))
+): asserts board is Board {
+  if (!board || !actions.every((action) => boardAllowed(board, access, action)))
     ctx.fail("ACCESS_DENIED", "권한이 없습니다.", { reason: "access_denied" });
 }
 
@@ -311,7 +313,7 @@ export interface CommentRow {
 /** A post or comment as pages read it. */
 export interface Written {
   id: string;
-  data: Record<string, any>;
+  data: Data;
   revision: string;
   createdAt: string;
   createdBy: null;
@@ -323,16 +325,13 @@ export const TAGS =
 /** A post with its tags and 조회수. */
 export const POST_SELECT = `SELECT posts.*, ${TAGS} FROM posts`;
 
-const list = (text: unknown): any[] => {
-  const value = parsed<any>(text, []);
+const list = <T = Data>(text: unknown): T[] => {
+  const value = parsed<unknown>(text, []);
   return Array.isArray(value) ? value : [];
 };
 
 /** What posts and comments share, as pages read them. */
-function writtenOf(
-  row: PostRow | CommentRow,
-  data: Record<string, any>,
-): Written {
+function writtenOf(row: PostRow | CommentRow, data: Data): Written {
   const actions = list(row.actions);
   Object.assign(data, {
     owner: row.owner,
@@ -387,7 +386,7 @@ export function postOf(row: PostRow): Written {
       : {}),
     ...(row.link_hits !== undefined && list(row.links).length
       ? {
-          linkHits: list(row.links).map((url) =>
+          linkHits: list<string>(row.links).map((url) =>
             Number(parsed<Record<string, number>>(row.link_hits, {})[url] ?? 0),
           ),
         }
@@ -433,7 +432,7 @@ export async function replyPlace(
       reason: "reply_depth",
     });
   const thread = parent.thread ?? parent.id;
-  const { n } = await one<{ n: number }>(
+  const { n } = await only<{ n: number }>(
     ctx,
     `SELECT count(*) AS n FROM ${table} WHERE thread = ?
      AND length(reply_path) = ? AND substr(reply_path, 1, ?) = ?`,
@@ -607,7 +606,7 @@ export function presentPost(
     for (const key of ["speaker", "character", "guest"]) delete data[key];
   }
   if (data.membersOnly === true && !member && !staff) {
-    const shown = {};
+    const shown: Record<string, unknown> = {};
     for (const key of [
       "board",
       "number",
@@ -717,8 +716,12 @@ export async function readablePost(
   const access = await accessOf(ctx);
   const row = await postRow(ctx, id);
   const board = row ? await boardOf(ctx, row.board) : null;
-  if (!(await postReadable(ctx, row, access, ctx.member?.id, board)))
-    ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {
+  if (
+    !row ||
+    !board ||
+    !(await postReadable(ctx, row, access, ctx.member?.id, board))
+  )
+    return ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {
       reason: "document_not_found",
     });
   return { access, row, board };
@@ -742,7 +745,7 @@ export async function boardPoints(
 export const downloadable = (access: Access, board: Board | null) =>
   isStaff(access, board) ||
   access.level >=
-    (Number.isInteger(board?.data.downloadLevel)
+    (board && Number.isInteger(board.data.downloadLevel)
       ? board.data.downloadLevel
       : 1);
 
@@ -776,7 +779,7 @@ const TAG = /#([0-9a-zA-Z가-힣_]{1,30})/g;
 
 /** A post's hashtags (mmb autolink's #tag), at most five. */
 export function tagsOf(text: unknown): string[] {
-  const tags = [];
+  const tags: string[] = [];
   for (const match of String(text ?? "").matchAll(TAG))
     if (!tags.includes(match[1]) && tags.length < MAX_TAGS) tags.push(match[1]);
   return tags;

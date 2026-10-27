@@ -1,6 +1,6 @@
 // Live updates: new posts, unread messages and notifications as they happen.
 
-import { $, caller, state, subscribe } from "./core.js";
+import { $, caller, type Fields, state, subscribe } from "./core.js";
 
 /**
  * The mail notice on the tab, and on the main page's card how many are
@@ -13,10 +13,10 @@ export function showUnread(count: number) {
   $("cardUnread").hidden = !unread;
   $("cardMessages").classList.toggle("point", unread);
 }
-export function showCalls(unread) {
+export function showCalls(unread: boolean) {
   $("tabCalls").textContent = unread ? "알림 · 새 알림" : "알림";
 }
-export function showNewPost(id) {
+export function showNewPost(id: string | null) {
   state.newPost = id;
   $("tabLogs").textContent = id ? "로그 · 새 글" : "로그";
 }
@@ -108,16 +108,16 @@ const store = (key: string, value: string) => {
 };
 /** What has chimed on this page, so an answer repeated does not ring again. */
 const chimed = { memo: 0, call: 0 };
-export function showAlarms(memo, call) {
-  const memoShown = Boolean(memo) && Number(memo.id) > stored(CLOSED.memo);
-  const callShown = Boolean(call) && Number(call.id) > stored(CLOSED.call);
+export function showAlarms(memo: Fields | null, call: Fields | null) {
+  const memoShown = memo !== null && Number(memo.id) > stored(CLOSED.memo);
+  const callShown = call !== null && Number(call.id) > stored(CLOSED.call);
   $("memoAlarm").hidden = !memoShown;
   $("callAlarm").hidden = !callShown;
   $("alarmSoundChoice").hidden = !state.alarmSound || !(memoShown || callShown);
   $<HTMLInputElement>("alarmSoundOn").checked =
     stored("neo-avocado-alarm-quiet") === 0;
   let ring = false;
-  if (memoShown) {
+  if (memo && memoShown) {
     $("memoAlarmText").textContent =
       `${memo.nick}님으로부터 쪽지가 도착하였습니다.`;
     $<HTMLAnchorElement>("memoAlarmOpen").href =
@@ -129,7 +129,7 @@ export function showAlarms(memo, call) {
     if (Number(memo.id) > chimed.memo) ring = true;
     chimed.memo = Math.max(chimed.memo, Number(memo.id));
   }
-  if (callShown) {
+  if (call && callShown) {
     $("callAlarmText").textContent =
       `${call.nick}님이 ${call.kind === "comment" ? "내 글에 댓글을 남겼습니다" : "호출하셨습니다"}. [ 확인하지 않은 알림 ${call.count}건 ]`;
     $<HTMLAnchorElement>("callAlarmOpen").href =
@@ -156,10 +156,15 @@ let audio: AudioContext | null = null;
 function chime() {
   if (!state.alarmSound || stored("neo-avocado-alarm-quiet")) return;
   // Autoplay: only after the member has touched the page.
-  const activation = (navigator as any).userActivation;
+  // Older Safari has neither userActivation nor an unprefixed AudioContext.
+  const activation = (
+    navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }
+  ).userActivation;
   if (activation && !activation.hasBeenActive) return;
   const Context =
-    globalThis.AudioContext ?? (globalThis as any).webkitAudioContext;
+    globalThis.AudioContext ??
+    (globalThis as { webkitAudioContext?: typeof AudioContext })
+      .webkitAudioContext;
   if (!Context) return;
   try {
     audio ??= new Context();

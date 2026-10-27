@@ -1,6 +1,6 @@
 // 옷장 (mypage/character/closet.php): a character's outfits, each a 전신,
 // and the one it wears.
-import { imageUrl, text } from "../../modules/access.js";
+import { imageUrl, signedIn, text } from "../../modules/access.js";
 import type { CharacterRow } from "../../modules/characters.js";
 import {
   characterKey,
@@ -11,10 +11,11 @@ import type { MutationCtx } from "../../modules/naru-types.js";
 import type { OutfitRow } from "../../modules/relations.js";
 import { outfitOf } from "../../modules/relations.js";
 
-const notOwned = (ctx: MutationCtx) =>
-  ctx.fail("ACCESS_DENIED", "내 캐릭터만 바꿀 수 있습니다.", {
+function notOwned(ctx: MutationCtx): never {
+  return ctx.fail("ACCESS_DENIED", "내 캐릭터만 바꿀 수 있습니다.", {
     reason: "not_owned",
   });
+}
 
 /** One of the caller's outfits, or null. */
 async function ownOutfit(ctx: MutationCtx, id: unknown) {
@@ -38,7 +39,7 @@ export async function outfit(
   if (!owned) notOwned(ctx);
   const { rows } = await ctx.sql<OutfitRow>`
     INSERT INTO wardrobe (owner, character_id, name, image)
-    VALUES (${ctx.member.id}, ${owned.id}, ${text(name, 80, true)}, ${imageUrl(image)})
+    VALUES (${signedIn(ctx)}, ${owned.id}, ${text(name, 80, true)}, ${imageUrl(image)})
     RETURNING *`;
   return { document: outfitOf(rows[0]) };
 }

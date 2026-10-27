@@ -3,10 +3,12 @@
 import {
   $,
   boardStaff,
+  type Fields,
   formatTime,
   guestCredentials,
   mutate,
   query,
+  type Row,
   run,
   say,
   showTab,
@@ -43,7 +45,7 @@ $("logAttachments").addEventListener("change", () => {
   notes.hidden = !notes.childElementCount;
 });
 /** Opens the log form to answer `log` (bbs/write.php?w=r), titled Re:. */
-export function startReply(log) {
+export function startReply(log: Row) {
   state.replyTo = log.id;
   $("logReplying").hidden = false;
   // 공지에는 답변할 수 없고, a 답변글 is no notice.
@@ -240,7 +242,7 @@ export async function listDrafts() {
   $("logDraftCount").textContent = String(drafts.length);
   const list = $("logDraftList");
   list.replaceChildren(
-    ...drafts.map((draft) => {
+    ...drafts.map((draft: Fields) => {
       const item = document.createElement("li");
       const open = document.createElement("button");
       open.type = "button";

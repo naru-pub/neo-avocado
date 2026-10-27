@@ -2,7 +2,7 @@
 // characters or takes it back (title_has_list.php), each in one call;
 // saving one is admin/records'.
 
-import { one, ownerOnly } from "../../modules/access.js";
+import { one, only, ownerOnly } from "../../modules/access.js";
 import { invalid } from "../../modules/admin.js";
 import { characterKey } from "../../modules/characters.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
@@ -20,7 +20,7 @@ export const remove = ownerOnly(async function remove(
   { id }: { id?: string } = {},
 ) {
   if (typeof id !== "string" || !id) invalid(ctx);
-  const { count } = await one<{ count: number }>(
+  const { count } = await only<{ count: number }>(
     ctx,
     `SELECT count(*) AS count FROM (${HOLDERS})`,
     [id, id],
@@ -58,7 +58,7 @@ export const grant = ownerOnly(async function grant(
     allApproved?: boolean;
   } = {},
 ) {
-  if (!["grant", "revoke"].includes(action))
+  if (action !== "grant" && action !== "revoke")
     ctx.fail("INVALID_REQUEST", "지급 또는 회수를 선택하세요.", {
       reason: "invalid_input",
     });
@@ -73,7 +73,7 @@ export const grant = ownerOnly(async function grant(
       reason: "no_title",
     });
   if (allApproved) {
-    const { count } = await one<{ count: number }>(
+    const { count } = await only<{ count: number }>(
       ctx,
       "SELECT count(*) AS count FROM characters WHERE state = 'approved'",
     );
@@ -106,7 +106,7 @@ export const grant = ownerOnly(async function grant(
       reason: "no_character",
     });
   const named = JSON.stringify(keys);
-  const { count } = await one<{ count: number }>(
+  const { count } = await only<{ count: number }>(
     ctx,
     `SELECT count(*) AS count FROM characters WHERE id IN (${NAMED})`,
     [named],

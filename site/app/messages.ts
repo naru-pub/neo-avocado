@@ -3,17 +3,21 @@
 import { openCharacter } from "./characters.js";
 import {
   $,
+  type Fields,
   formatTime,
   mutate,
   nickOf,
   query,
+  type Row,
   renderPages,
   route,
   run,
   say,
   showTab,
+  signedInMember,
   state,
   suggestNames,
+  within,
 } from "./core.js";
 import { moneyText } from "./names.js";
 
@@ -25,8 +29,7 @@ $("tabMessages").onclick = () =>
 $("refreshMessages").onclick = () => run(() => loadMailbox());
 $("messageForm").onsubmit = async (event) => {
   event.preventDefault();
-  const button =
-    $("messageForm").querySelector<HTMLButtonElement>('[type="submit"]');
+  const button = within<HTMLButtonElement>($("messageForm"), '[type="submit"]');
   button.disabled = true;
   await run(async () => {
     const recipients = await recipientsNamed(
@@ -48,7 +51,7 @@ $("messageForm").onsubmit = async (event) => {
  * The members named by nickname, as the original's memo form takes member IDs
  * (bbs/memo_form.php): one read for up to 20, instead of listing everyone.
  */
-async function recipientsNamed(text) {
+async function recipientsNamed(text: string) {
   const nicks = [
     ...new Set(
       text
@@ -58,11 +61,13 @@ async function recipientsNamed(text) {
     ),
   ];
   // Worded for the page as a function's refusal is (run() shows it).
-  const refuse = (message) =>
+  const refuse = (message: string) =>
     Object.assign(new Error(message), { details: { reason: "recipients" } });
   if (!nicks.length || nicks.length > 20)
     throw refuse("받는 회원 닉네임을 1~20개 적어 주세요.");
-  const { profiles } = await query("community/profiles:find", { nicks });
+  const { profiles } = await query<{
+    profiles: { id: string; nick: string }[];
+  }>("community/profiles:find", { nicks });
   const missing = nicks.filter(
     (nick) => !profiles.some((profile) => profile.nick === nick),
   );
@@ -76,7 +81,7 @@ async function loadMessageCost() {
     `회원 한 명당 ${moneyText(state.names, settings.messageCost ?? 0)}`;
 }
 /** A main character's 두상, small, beside a correspondent's name. */
-function characterThumb(character) {
+function characterThumb(character: Fields) {
   return Object.assign(document.createElement("img"), {
     className: "memo-thumb",
     src: character.image,
@@ -136,8 +141,8 @@ async function loadMailbox(page = 1) {
 }
 
 /** One message of a conversation, with its 삭제 button. */
-function messageItem(message) {
-  const mine = message.data.from === state.member.id;
+function messageItem(message: Row) {
+  const mine = message.data.from === signedInMember().id;
   const item = document.createElement("li");
   item.className = mine ? "mine" : "theirs";
   item.id = `message-${message.id}`;
@@ -193,7 +198,7 @@ function messageItem(message) {
  * show; 이전 쪽지 더 보기 reads the 50 before the oldest shown. Opening it
  * reads what they sent.
  */
-async function openConversation(partner, focus = null) {
+async function openConversation(partner: string, focus: string | null = null) {
   const result = await query("community/messages:conversation", { partner });
   if (result.unread)
     await mutate("community/messages:readConversation", { partner });
@@ -278,7 +283,7 @@ async function openConversation(partner, focus = null) {
 }
 
 /** 쪽지 to one member (the member list's button, memo_form.php?me_recv_mb_id). */
-export async function writeTo(member) {
+export async function writeTo(member: string) {
   showTab("messages");
   await Promise.all([loadMessageCost(), loadMailbox()]);
   $<HTMLInputElement>("messageTo").value = await nickOf(member);
@@ -288,14 +293,16 @@ export async function writeTo(member) {
 /**
  * A message's address (/messages/<id>): its conversation, at it.
  */
-export async function openMessage(id) {
+export async function openMessage(id: string) {
   showTab("messages");
   await loadMessageCost();
   const { document: message } = await mutate("community/messages:readMessage", {
     id,
   });
   const partner =
-    message.data.from === state.member.id ? message.data.to : message.data.from;
+    message.data.from === signedInMember().id
+      ? message.data.to
+      : message.data.from;
   await openConversation(partner, message.id);
   route(["messages", id], { replace: true });
   return message;

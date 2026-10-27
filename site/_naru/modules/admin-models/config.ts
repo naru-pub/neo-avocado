@@ -4,18 +4,19 @@ import {
   kstStamp,
   type Model,
   type ModelField,
+  type Options,
   schedule,
   viewLevel,
 } from "./shared.js";
 
 /** design_form.php's 배경반복, 배경위치, 배경크기 and 고정, blank first. */
-const REPEAT_CHOICES = [
+const REPEAT_CHOICES: Options = [
   ["", "반복"],
   ["no-repeat", "반복없음"],
   ["repeat-x", "가로반복"],
   ["repeat-y", "세로반복"],
 ];
-const POSITION_CHOICES = [
+const POSITION_CHOICES: Options = [
   ["", "왼쪽 상단"],
   ["left center", "왼쪽 중단"],
   ["left bottom", "왼쪽 하단"],
@@ -26,7 +27,7 @@ const POSITION_CHOICES = [
   ["right center", "오른쪽 중단"],
   ["right bottom", "오른쪽 하단"],
 ];
-const SIZE_CHOICES = [
+const SIZE_CHOICES: Options = [
   ["", "원본크기"],
   ["contain", "맞춤"],
   ["cover", "꽉참"],
@@ -88,7 +89,7 @@ function backgroundFields(name: keyof typeof BACKGROUNDS): ModelField[] {
             options: [
               ["", "스크롤"],
               ["fixed", "고정"],
-            ],
+            ] as Options,
           },
         ]
       : []),

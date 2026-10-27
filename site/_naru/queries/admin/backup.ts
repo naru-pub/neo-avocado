@@ -41,6 +41,9 @@ export const rows = ownerOnly(async function rows(
   return {
     table,
     rows: page.map(({ backup_rowid, ...row }) => row),
-    next: found.length > BACKUP_ROWS ? Number(page.at(-1).backup_rowid) : null,
+    next:
+      found.length > BACKUP_ROWS
+        ? Number(page[page.length - 1].backup_rowid)
+        : null,
   };
 });

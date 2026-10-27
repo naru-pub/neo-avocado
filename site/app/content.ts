@@ -3,7 +3,7 @@
 import { renderContent } from "../shared/content-renderer.js";
 import { $, pageTitle, query, route, run, showTab, state } from "./core.js";
 
-let questCursor = null;
+let questCursor: string | null = null;
 async function loadQuests(more = false) {
   const page = await query("content/quests:quests", {
     type: $<HTMLSelectElement>("questType").value,

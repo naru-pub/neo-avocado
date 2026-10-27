@@ -112,6 +112,8 @@ export async function conversations(ctx: QueryCtx, args: { page?: number }) {
     total,
     documents: rows.map((row) => {
       const message = last.get(row.last);
+      if (!message)
+        throw new Error("A conversation's last message is missing.");
       return {
         partner: row.partner,
         character: characters.get(row.partner) ?? null,

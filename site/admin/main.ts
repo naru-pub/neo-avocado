@@ -5,11 +5,13 @@ import { connectNaru } from "../shared/connect.js";
 import { openCharacterForm } from "./characters.js";
 import {
   $,
+  type AdminRow,
   CALLS,
   itemNames,
   loadNames,
   naru,
   owner,
+  ownerQuery,
   routing,
   run,
   section,
@@ -32,7 +34,10 @@ import "./members.js";
 import "./views.js";
 import "./tools.js";
 
-export function adminRoute(parts, { replace = true } = {}) {
+export function adminRoute(
+  parts: readonly (string | number | null | undefined)[],
+  { replace = true } = {},
+) {
   if (routing) return;
   const hash = `#/${parts
     .filter((part) => part !== "" && part !== null && part !== undefined)
@@ -81,7 +86,10 @@ export async function openAddress() {
     const open = model.review ? openCharacterForm : openForm;
     if (entry === "new") return open();
     if (!CALLS[section]?.get) return;
-    const row = await owner.query(CALLS[section].get, { section, id: entry });
+    const row = await ownerQuery<AdminRow | null>(CALLS[section].get, {
+      section,
+      id: entry,
+    });
     if (!row) {
       $("adminStatus").textContent = "자료를 찾을 수 없습니다.";
       return;
@@ -123,10 +131,10 @@ export function renderNav() {
 $("adminSignIn").onclick = () =>
   // The site has no collections: the owner manages it through admin/'s
   // queries and mutations.
-  run(() => naru.auth.signIn());
+  run(() => naru?.auth.signIn());
 $("adminSignOut").onclick = () =>
   run(async () => {
-    await owner.signOut();
+    await owner?.signOut();
     setOwner(null);
     $("adminSignOut").hidden = true;
     $("adminWorkspace").hidden = true;
@@ -135,7 +143,7 @@ $("adminSignOut").onclick = () =>
 await run(async () => {
   setNaru(await connectNaru());
   renderNav();
-  setOwner(await naru.auth.session());
+  setOwner((await naru?.auth.session()) ?? null);
   if (!owner) return;
   $("adminWelcome").hidden = true;
   $("adminSignOut").hidden = false;

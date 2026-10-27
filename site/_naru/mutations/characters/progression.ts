@@ -39,7 +39,10 @@ export async function allocateStats(
     state.definitions.some((row) => !Object.hasOwn(allocation, row.id))
   )
     invalid(ctx);
-  const stats = {};
+  const stats: Record<
+    string,
+    { allocated: number; max: number; damage: number; current: number }
+  > = {};
   let spent = 0;
   for (const definition of state.definitions) {
     const count = amount(allocation[definition.id], "Allocation");

@@ -9,17 +9,20 @@ import {
   boardStaff,
   type EditField,
   edit,
+  type Fields,
   formatTime,
   guestCredentials,
   mine,
   mutate,
   preloadNicks,
   query,
+  type Row,
   run,
   say,
   state,
   uploadMedia,
   withGuestPassword,
+  within,
 } from "./core.js";
 import { startReply } from "./log-form.js";
 import {
@@ -44,8 +47,8 @@ import {
 } from "./posts.js";
 
 /** 2026-10-16 15:11:33, as the original prints a comment's wr_datetime. */
-export function fullTime(at) {
-  const time = new Date(at);
+export function fullTime(at: string | number | undefined) {
+  const time = new Date(at ?? Number.NaN);
   if (Number.isNaN(time.getTime())) return "";
   const kst = new Date(time.getTime() + 9 * 60 * 60 * 1000).toISOString();
   return `${kst.slice(0, 10)} ${kst.slice(11, 19)}`;
@@ -55,13 +58,13 @@ export function fullTime(at) {
  * covered until clicked, 로그접기 (or a picture taller than the board's
  * height) folded with OPEN, and 리플창 아래로.
  */
-export function presentOptions(item, log) {
+export function presentOptions(item: HTMLElement, log: Row) {
   if (log.data.locked) return;
   const board = state.boards.find(
     (row) => row.id === (log.data.board ?? "default"),
   );
   item.classList.toggle("wide", log.data.wide === true);
-  const picture = item.querySelector(".log-picture");
+  const picture = within(item, ".log-picture");
   const fold = () => {
     if (picture.classList.contains("foldable")) return;
     picture.classList.add("foldable", "folded");
@@ -76,7 +79,7 @@ export function presentOptions(item, log) {
     picture.append(toggle);
   };
   if (log.data.fold === true) fold();
-  const image = item.querySelector(".log-image");
+  const image = item.querySelector<HTMLImageElement>(".log-image");
   // bo_gallery_height, 600 unless the owner sets it (board_form.php:95).
   const height = Number(board?.data.foldHeight ?? 600) || 0;
   if (image && height > 0) {
@@ -102,12 +105,12 @@ export function presentOptions(item, log) {
   }
 }
 /** The options in a post's edit dialog, as its board allows them. */
-export function optionEdits(current) {
+export function optionEdits(current: Row): EditField[] {
   if (kindOf(current.data.board) !== "image") return [];
   const board = state.boards.find(
     (row) => row.id === (current.data.board ?? "default"),
   );
-  const box = (name, label) => ({
+  const box = (name: string, label: string) => ({
     name,
     label,
     type: "checkbox",
@@ -128,8 +131,8 @@ export function optionEdits(current) {
  * form offers them again (write.skin.php:196,290,319): dice, 탐색 or 조합,
  * and an item, for the writer's own post on a board that allows actions.
  */
-export function actionEdits(current) {
-  const fields: any[] = [];
+export function actionEdits(current: Row) {
+  const fields: EditField[] = [];
   if (!current.data.dice)
     fields.push({ name: "dice", label: "주사위", type: "checkbox" });
   const board = state.boards.find(
@@ -145,14 +148,18 @@ export function actionEdits(current) {
   const actions = Array.isArray(current.data.actions)
     ? current.data.actions
     : [];
-  if (!actions.some((row) => ["explore", "combine"].includes(row?.type))) {
+  if (
+    !actions.some((row: Fields | null) =>
+      ["explore", "combine"].includes(row?.type),
+    )
+  ) {
     fields.push({
       name: "action",
       label: "행동",
       options: [
         ["", "일반 행동"],
         ["explore", "탐색"],
-        ...(state.combining ? [["combine", "조합"]] : []),
+        ...(state.combining ? [["combine", "조합"] as const] : []),
       ],
     });
     for (const n of [1, 2, 3])
@@ -162,7 +169,7 @@ export function actionEdits(current) {
         options: [["", "재료 없음"]],
       });
   }
-  if (!actions.some((row) => row?.type === "use"))
+  if (!actions.some((row: Fields | null) => row?.type === "use"))
     fields.push({
       name: "item",
       label: "사용할 아이템",
@@ -171,12 +178,14 @@ export function actionEdits(current) {
   return fields;
 }
 /** Fills the edit dialog's material and item choices from the post's character's inventory. */
-export async function fillActionEdits(character) {
+export async function fillActionEdits(character: string | null | undefined) {
   const fields = $("editorFields");
   const materials = [1, 2, 3]
-    .map((n) => fields.querySelector(`[name="material${n}"]`))
-    .filter(Boolean);
-  const used = fields.querySelector('[name="item"]');
+    .map((n) =>
+      fields.querySelector<HTMLSelectElement>(`[name="material${n}"]`),
+    )
+    .filter((select): select is HTMLSelectElement => select !== null);
+  const used = fields.querySelector<HTMLSelectElement>('[name="item"]');
   if (!character || (!materials.length && !used)) return;
   for (const { row, item } of await postInventory()) {
     if (row.data.character !== character || !item) continue;
@@ -247,11 +256,11 @@ export function transferDialog(
   );
 }
 
-export async function logItem(log) {
+export async function logItem(log: Row) {
   // A post's card, with what opens one of its comments.
-  const item = $<HTMLTemplateElement>(
-    "logTemplate",
-  ).content.firstElementChild.cloneNode(true) as HTMLElement & {
+  const item = (
+    $<HTMLTemplateElement>("logTemplate").content.firstElementChild as Element
+  ).cloneNode(true) as HTMLElement & {
     showComment?: (id: string) => Promise<boolean>;
   };
   item.dataset.id = log.id;
@@ -259,12 +268,13 @@ export async function logItem(log) {
   const number = document.createElement("a");
   number.href = `/post/${encodeURIComponent(log.id)}`;
   number.textContent = log.data.number ? `No. ${log.data.number}` : "링크";
-  item
-    .querySelector(".log-number")
-    .replaceChildren(log.data.notice ? "공지 · " : "", number);
+  within(item, ".log-number").replaceChildren(
+    log.data.notice ? "공지 · " : "",
+    number,
+  );
   // 새글 아이콘 (bo_new): a post newer than the board's hours.
   if (isNew(log))
-    item.querySelector(".log-number").append(
+    within(item, ".log-number").append(
       Object.assign(document.createElement("span"), {
         className: "new-mark",
         title: "새 글",
@@ -273,15 +283,15 @@ export async function logItem(log) {
     );
   // 19금's mark (list.log.skin.php:114).
   if (log.data.adult)
-    item.querySelector(".log-number").append(
+    within(item, ".log-number").append(
       Object.assign(document.createElement("span"), {
         className: "adult-mark",
         title: "19금",
         textContent: " ■",
       }),
     );
-  const pin = item.querySelector<HTMLButtonElement>(".pin");
-  const move = item.querySelector<HTMLButtonElement>(".move");
+  const pin = within<HTMLButtonElement>(item, ".pin");
+  const move = within<HTMLButtonElement>(item, ".move");
   pin.hidden = move.hidden = !boardStaff(log.data.board) || log.data.locked;
   pin.textContent = log.data.notice ? "공지 해제" : "공지로";
   pin.onclick = () =>
@@ -300,14 +310,14 @@ export async function logItem(log) {
   move.textContent = "이동·복사";
   move.onclick = () => transferDialog([log.id], log.data.board ?? "default");
   // list.skin.php's chk_wr_id[], for 선택삭제·복사·이동.
-  const pick = item.querySelector<HTMLElement>(".log-pick");
+  const pick = within<HTMLElement>(item, ".log-pick");
   pick.hidden = move.hidden;
-  pick.querySelector("input").value = log.id;
-  const image = item.querySelector<HTMLImageElement>(".log-image");
+  within<HTMLInputElement>(pick, "input").value = log.id;
+  const image = within<HTMLImageElement>(item, ".log-image");
   if (log.data.image && !log.data.locked) image.src = log.data.image;
   else image.remove();
   // A plain board's further pictures, and its pictures' width (bo_image_width).
-  const files = item.querySelector<HTMLElement>(".log-files");
+  const files = within<HTMLElement>(item, ".log-files");
   if (!log.data.locked && Array.isArray(log.data.files))
     for (const url of log.data.files)
       if (typeof url === "string" && url.startsWith("https://"))
@@ -338,7 +348,7 @@ export async function logItem(log) {
       if (width) picture.style.maxWidth = `min(100%, ${width}px)`;
   }
   // wr_link1, wr_link2: the mmb skin's LINK, in a new window.
-  const links = item.querySelector<HTMLElement>(".log-links");
+  const links = within<HTMLElement>(item, ".log-links");
   if (!log.data.locked && Array.isArray(log.data.links))
     for (const [n, url] of log.data.links.entries())
       if (typeof url === "string" && /^https?:\/\//.test(url)) {
@@ -441,36 +451,32 @@ export async function logItem(log) {
         item.replaceWith(await logItem(opened));
       });
     };
-    item
-      .querySelector(".log-text")
-      .replaceChildren(
-        kindOf(log.data.board) === "qna"
-          ? "비밀 질문입니다. "
-          : "비밀글입니다. ",
-        form,
-      );
+    within(item, ".log-text").replaceChildren(
+      kindOf(log.data.board) === "qna" ? "비밀 질문입니다. " : "비밀글입니다. ",
+      form,
+    );
   } else if (log.data.locked)
-    item.querySelector(".log-text").textContent = log.data.membersOnly
+    within(item, ".log-text").textContent = log.data.membersOnly
       ? "멤버 공개용 로그입니다."
       : "비밀글입니다. 본문을 볼 수 없습니다.";
   else
-    item.querySelector(".log-text").append(
+    within(item, ".log-text").append(
       postText(log.data.text, [], {
         pictureBoard: kindOf(log.data.board) === "image",
       }),
     );
   if (log.data.dice && !log.data.locked) {
-    item.querySelector<HTMLElement>(".log-dice").hidden = false;
-    item.querySelector<HTMLElement>(".log-dice").textContent = diceText(log);
+    within<HTMLElement>(item, ".log-dice").hidden = false;
+    within<HTMLElement>(item, ".log-dice").textContent = diceText(log);
   }
   if (!log.data.locked)
     for (const action of Array.isArray(log.data.actions)
       ? log.data.actions
       : [])
-      item.querySelector<HTMLElement>(".log-dice").before(actionItem(action));
+      within<HTMLElement>(item, ".log-dice").before(actionItem(action));
   presentOptions(item, log);
   // 관심 (mmb's favorite): a member keeps the post in 관심로그.
-  const favorite = item.querySelector<HTMLButtonElement>(".fav");
+  const favorite = within<HTMLButtonElement>(item, ".fav");
   const marked = () => (state.profile?.data.favorites ?? []).includes(log.id);
   favorite.hidden = !state.member || Boolean(log.data.locked);
   favorite.setAttribute("aria-pressed", String(marked()));
@@ -481,20 +487,20 @@ export async function logItem(log) {
       });
       if (state.profile) {
         const others = (state.profile.data.favorites ?? []).filter(
-          (id) => id !== log.id,
+          (id: string) => id !== log.id,
         );
         state.profile.data.favorites = on ? [log.id, ...others] : others;
       }
       favorite.setAttribute("aria-pressed", String(on));
       say(on ? "관심로그에 담았습니다." : "관심로그에서 뺐습니다.");
     });
-  item.querySelector(".log-title").textContent =
+  within(item, ".log-title").textContent =
     `${log.data.writing ? "[작성 중] " : ""}${log.data.settlement ? `[${log.data.settlement.state}] ` : ""}${log.data.secret ? "🔒 " : ""}${log.data.title ?? ""}${log.data.category ? ` · ${log.data.category}` : ""}`;
   if (log.data.writing) item.classList.add("writing");
   // 인기글 (bo_hot): from so many views, the list's icon_hot.
   const hot = boardSetting(log.data.board, "hot", 100);
   if (hot > 0 && typeof log.data.hits === "number" && log.data.hits >= hot)
-    item.querySelector(".log-title").append(
+    within(item, ".log-title").append(
       Object.assign(document.createElement("span"), {
         className: "hot",
         textContent: " 인기",
@@ -512,7 +518,8 @@ export async function logItem(log) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = `vote ${kind}`;
-    const show = (n) => (button.textContent = `${label} ${n ?? 0}`);
+    const show = (n: number | null | undefined) =>
+      (button.textContent = `${label} ${n ?? 0}`);
     show(log.data[kind]);
     button.disabled = !state.member || mine(log);
     button.onclick = () =>
@@ -524,7 +531,7 @@ export async function logItem(log) {
         show(counts[kind]);
         say(`${label}했습니다.`);
       });
-    item.querySelector(".meta").append(" ", button);
+    within(item, ".meta").append(" ", button);
   }
   if (log.data.settlement) item.classList.add("settled");
   // 답변글 (wr_reply): under what they answer, a step in for each level.
@@ -533,7 +540,7 @@ export async function logItem(log) {
     item.style.setProperty("--depth", String(Math.min(log.data.depth, 10)));
   }
   // 답변 (view.skin.php:113) on a plain board, at 글답변 권한.
-  const reply = item.querySelector<HTMLButtonElement>(".reply");
+  const reply = within<HTMLButtonElement>(item, ".reply");
   reply.hidden =
     kindOf(log.data.board) !== "text" ||
     Boolean(log.data.locked) ||
@@ -542,21 +549,21 @@ export async function logItem(log) {
       !state.owner &&
       state.level < boardSetting(log.data.board, "replyLevel", 2));
   reply.onclick = () => startReply(log);
-  item.querySelector(".author").replaceChildren(await speakerLabel(log));
-  item.querySelector("time").textContent = formatTime(log.createdAt);
+  within(item, ".author").replaceChildren(await speakerLabel(log));
+  within(item, "time").textContent = formatTime(log.createdAt);
   // 조회 (basic/list.skin.php:99, view.skin.php:32), on a plain board.
   if (kindOf(log.data.board) === "text" && typeof log.data.hits === "number")
-    item.querySelector("time").after(
+    within(item, "time").after(
       Object.assign(document.createElement("span"), {
         className: "hits",
         textContent: ` · 조회 ${log.data.hits}`,
       }),
     );
-  const remove = item.querySelector<HTMLButtonElement>(".delete");
+  const remove = within<HTMLButtonElement>(item, ".delete");
   const guestPost = !state.member && Boolean(log.data.guest);
   const moderating = boardStaff(log.data.board);
   remove.hidden = !mine(log) && !moderating && !guestPost;
-  const change = item.querySelector<HTMLButtonElement>(".edit");
+  const change = within<HTMLButtonElement>(item, ".edit");
   change.hidden =
     Boolean(log.data.locked) || (!mine(log) && !moderating && !guestPost);
   // A settled request stays as it was settled (caculate's wr_10).
@@ -610,7 +617,7 @@ export async function logItem(log) {
       );
     change.after(" ", settle);
   }
-  const beginEdit = (current) =>
+  const beginEdit = (current: Row) =>
     edit(
       "로그 수정",
       [
@@ -636,7 +643,7 @@ export async function logItem(log) {
               state.boards.find(
                 (row) => row.id === (current.data.board ?? "default"),
               )?.data.categories ?? []
-            ).map((name) => [name, name]),
+            ).map((name: string) => [name, name] as const),
           ],
         },
         ...(guestPost
@@ -693,8 +700,8 @@ export async function logItem(log) {
           Object.entries(rest).filter(([key]) => !key.startsWith("drop:")),
         );
         let attachments = (current.data.attachments ?? [])
-          .filter((file) => !rest[`drop:${file.url}`])
-          .map(({ url, name, size, type, note }) => ({
+          .filter((file: Fields) => !rest[`drop:${file.url}`])
+          .map(({ url, name, size, type, note }: Fields) => ({
             url,
             name,
             size,
@@ -751,7 +758,7 @@ export async function logItem(log) {
         item.replaceWith(await logItem(saved));
       },
     );
-  const openEdit = (current) => {
+  const openEdit = (current: Row) => {
     beginEdit(current);
     run(() => fillActionEdits(current.data.character));
   };
@@ -772,7 +779,7 @@ export async function logItem(log) {
           await logItem({ ...full, data: { ...full.data, truncated: false } }),
         );
       });
-    item.querySelector(".log-text").after(expand);
+    within(item, ".log-text").after(expand);
   }
   remove.onclick = () =>
     guestPost
@@ -786,22 +793,22 @@ export async function logItem(log) {
           item.remove();
         });
   // 댓글은 펼쳤을 때 처음 읽는다.
-  const comments = item.querySelector<HTMLDetailsElement>(".comments");
+  const comments = within<HTMLDetailsElement>(item, ".comments");
   comments.hidden = Boolean(log.data.locked);
-  let cursor;
-  const load = (more) =>
+  let cursor: string | null = null;
+  const load = (more: boolean) =>
     run(async () => {
       const page = await query("community/comments:list", {
         post: log.id,
         after: more ? cursor : null,
       });
       await preloadNicks(page.documents);
-      const list = item.querySelector(".comment-list");
+      const list = within(item, ".comment-list");
       if (!more) list.replaceChildren();
       for (const comment of page.documents)
         list.append(await commentItem(comment, log));
       cursor = page.nextCursor;
-      item.querySelector<HTMLButtonElement>(".more-comments").hidden = !cursor;
+      within<HTMLButtonElement>(item, ".more-comments").hidden = !cursor;
     });
   // The first page of comments, read once: opening them and a link to one
   // of them (which opens them too) share the read.
@@ -823,12 +830,11 @@ export async function logItem(log) {
     found?.classList.add("linked");
     return Boolean(found);
   };
-  item.querySelector<HTMLButtonElement>(".more-comments").onclick = () =>
-    load(true);
-  const form = item.querySelector<HTMLFormElement>(".comment-form");
-  form.querySelector<HTMLButtonElement>(".cancel-reply").onclick = () => {
+  within<HTMLButtonElement>(item, ".more-comments").onclick = () => load(true);
+  const form = within<HTMLFormElement>(item, ".comment-form");
+  within<HTMLButtonElement>(form, ".cancel-reply").onclick = () => {
     delete form.dataset.replyTo;
-    form.querySelector<HTMLElement>(".comment-replying").hidden = true;
+    within<HTMLElement>(form, ".comment-replying").hidden = true;
   };
   const picker = document.createElement("details");
   const summary = document.createElement("summary");
@@ -844,17 +850,14 @@ export async function logItem(log) {
         for (const row of definitions) {
           const button = document.createElement("button");
           button.type = "button";
-          button.title = row.data.name;
-          button.setAttribute("aria-label", row.data.name);
-          button.append(
-            emoticonContent(document, row.data.name, [row]),
-            row.data.name,
-          );
+          const name = String(row.data.name);
+          button.title = name;
+          button.setAttribute("aria-label", name);
+          button.append(emoticonContent(document, name, [row]), name);
           button.onclick = () => {
-            const input =
-              form.querySelector<HTMLTextAreaElement>(".comment-text");
+            const input = within<HTMLTextAreaElement>(form, ".comment-text");
             input.setRangeText(
-              row.data.name,
+              name,
               input.selectionStart,
               input.selectionEnd,
               "end",
@@ -868,19 +871,18 @@ export async function logItem(log) {
       });
   };
 
-  const speakerChoice =
-    form.querySelector<HTMLSelectElement>(".comment-character");
-  const actionChoice = form.querySelector<HTMLSelectElement>(".comment-action");
-  const itemChoice = form.querySelector<HTMLSelectElement>(".comment-item");
+  const speakerChoice = within<HTMLSelectElement>(form, ".comment-character");
+  const actionChoice = within<HTMLSelectElement>(form, ".comment-action");
+  const itemChoice = within<HTMLSelectElement>(form, ".comment-item");
   wireSpeakerChoice(speakerChoice);
   wireItemChoice(itemChoice);
   const board = state.boards.find(
     (row) => row.id === (log.data.board ?? "default"),
   );
   // 익명 (write_comment.php:51) where the board allows it.
-  form.querySelector<HTMLElement>(".comment-anonymous").hidden =
+  within<HTMLElement>(form, ".comment-anonymous").hidden =
     !state.member || board?.data.anonymous !== true;
-  form.querySelector<HTMLElement>(".comment-actions").hidden =
+  within<HTMLElement>(form, ".comment-actions").hidden =
     !state.member || !board?.data.actions;
   const staff = boardStaff(log.data.board) || state.owner;
   form.hidden =
@@ -891,18 +893,20 @@ export async function logItem(log) {
   form.onsubmit = (event) => {
     event.preventDefault?.();
     run(async () => {
-      const text = form
-        .querySelector<HTMLTextAreaElement>(".comment-text")
-        .value.trim();
-      const dice =
-        form.querySelector<HTMLInputElement>(".comment-dice").checked;
+      const text = within<HTMLTextAreaElement>(
+        form,
+        ".comment-text",
+      ).value.trim();
+      const dice = within<HTMLInputElement>(form, ".comment-dice").checked;
       const character = speakerChoice.value;
       const action = actionChoice.value;
       const used = itemChoice.value;
-      const anonymous = form.querySelector<HTMLInputElement>(
+      const anonymous = within<HTMLInputElement>(
+        form,
         ".comment-anonymous-check",
       ).checked;
-      const secret = form.querySelector<HTMLInputElement>(
+      const secret = within<HTMLInputElement>(
+        form,
         ".comment-secret-check",
       ).checked;
       if (!text && !dice && !action && !used) return;
@@ -924,19 +928,16 @@ export async function logItem(log) {
       if (form.dataset.replyTo) {
         // A reply sits under what it answers: the list is read again.
         delete form.dataset.replyTo;
-        form.querySelector<HTMLElement>(".comment-replying").hidden = true;
+        within<HTMLElement>(form, ".comment-replying").hidden = true;
         first = load(false);
         await first;
       } else
-        item
-          .querySelector(".comment-list")
-          .append(await commentItem(saved, log));
-      form.querySelector<HTMLTextAreaElement>(".comment-text").value = "";
-      form.querySelector<HTMLInputElement>(".comment-dice").checked = false;
-      form.querySelector<HTMLInputElement>(".comment-anonymous-check").checked =
+        within(item, ".comment-list").append(await commentItem(saved, log));
+      within<HTMLTextAreaElement>(form, ".comment-text").value = "";
+      within<HTMLInputElement>(form, ".comment-dice").checked = false;
+      within<HTMLInputElement>(form, ".comment-anonymous-check").checked =
         false;
-      form.querySelector<HTMLInputElement>(".comment-secret-check").checked =
-        false;
+      within<HTMLInputElement>(form, ".comment-secret-check").checked = false;
       actionChoice.value = "";
       if (used || action) {
         // The inventory changed: read it again when next needed.
@@ -953,7 +954,7 @@ export async function logItem(log) {
  * write.skin.php's picture in edit mode: a replacement file (members) or
  * address, and on a plain board, where a picture is optional, 로그 삭제.
  */
-export function pictureEdits(current): EditField[] {
+export function pictureEdits(current: Row): EditField[] {
   const board = current.data.board ?? "default";
   const kind = kindOf(board);
   if (["qna", "settlement"].includes(kind)) return [];
@@ -982,19 +983,19 @@ export function pictureEdits(current): EditField[] {
   ];
 }
 /** A file's size as get_filesize shows it: 1.2M, 34.5K or 120. */
-export function sizeText(size) {
+export function sizeText(size: unknown) {
   const bytes = Number(size) || 0;
   if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(1)}M`;
   if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)}K`;
   return `${bytes}`;
 }
 /** A plain board's 첨부파일 in edit mode: each one's 삭제, and one to add. */
-export function attachmentEdits(current): EditField[] {
+export function attachmentEdits(current: Row): EditField[] {
   const board = current.data.board ?? "default";
   if (kindOf(board) !== "text") return [];
   const files = current.data.attachments ?? [];
   return [
-    ...files.map((file) => ({
+    ...files.map((file: Fields) => ({
       name: `drop:${file.url}`,
       label: `첨부파일 삭제: ${file.name}`,
       type: "checkbox",
@@ -1016,7 +1017,7 @@ export function attachmentEdits(current): EditField[] {
   ];
 }
 /** 윗글 and 아래글 (view.skin.php) under a plain board's post shown alone. */
-export async function showNeighbors(post) {
+export async function showNeighbors(post: Row) {
   const nav = $("logNeighbors");
   nav.replaceChildren();
   nav.hidden = true;
@@ -1044,7 +1045,7 @@ export async function showNeighbors(post) {
  * 조회수: a post opened on its own counts once until the browser closes
  * (bbs/board.php:116's ss_view_ session), and never holds the page up.
  */
-export async function countView(id, { always = false } = {}) {
+export async function countView(id: string, { always = false } = {}) {
   const key = `neo-avocado:viewed:${id}`;
   let seen = false;
   try {

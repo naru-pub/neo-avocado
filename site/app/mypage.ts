@@ -5,6 +5,7 @@
 import { openCharacterForm } from "./characters.js";
 import {
   $,
+  type Fields,
   formatTime,
   memberSettings,
   mutate,
@@ -12,6 +13,7 @@ import {
   ownCharacters,
   preloadNicks,
   query,
+  type Row,
   renderPages,
   run,
   STATE_NAMES,
@@ -21,6 +23,7 @@ import {
   showTab,
   state,
   suggestNames,
+  within,
 } from "./core.js";
 import { configureBoard, openLogNumber } from "./logs.js";
 import { expText, moneyText } from "./names.js";
@@ -91,11 +94,11 @@ async function loadMyPage() {
   $("myMainCharacter").replaceChildren(...(characters.length ? [main] : []));
   // Each card's 랭킹 and 경험치 where the owner shows them (ad_use_rank,
   // ad_use_exp; mypage/character/index.php:64-73).
-  const statuses = new Map<string, any>(
+  const statuses = new Map<string, Fields | null>(
     state.viewer.rank || state.viewer.exp
       ? await Promise.all(
           characters.map(
-            async (character): Promise<[string, any]> => [
+            async (character): Promise<[string, Fields | null]> => [
               character.id,
               // A card without them still shows.
               await query("characters/progression:characterStatus", {
@@ -163,7 +166,7 @@ async function loadMyPage() {
 $("newCharacter").onclick = () => run(() => openCharacterForm());
 
 /** A comment's writer as 나의로그 names them: the character, else the nick. */
-async function commenterOf(comment) {
+async function commenterOf(comment: Row) {
   if (comment.data.speaker?.name) return comment.data.speaker.name;
   if (comment.data.guest?.name) return comment.data.guest.name;
   if (comment.data.owner) return await nickOf(comment.data.owner);
@@ -177,15 +180,17 @@ async function commenterOf(comment) {
  */
 async function loadMyLogs(page = 1) {
   const result = await query("community/posts:mine", { page });
-  await preloadNicks(result.documents.flatMap((log) => log.comments ?? []));
+  await preloadNicks(
+    result.documents.flatMap((log: Fields) => log.comments ?? []),
+  );
   const posts = result.documents
-    .map((log) => ({
+    .map((log: Row) => ({
       board: state.boards.find(
         (row) => row.id === (log.data.board ?? "default"),
       ),
       log,
     }))
-    .filter((post) => post.board);
+    .filter((post: { board?: Row }) => post.board);
   const items = [];
   for (const { board, log } of posts) {
     const item = document.createElement("li");
@@ -248,7 +253,7 @@ async function loadMyLogs(page = 1) {
 }
 
 /** 경험치 내역 (member/exp.php): what the owner gave or took, and why. */
-let expCursor = null;
+let expCursor: string | null = null;
 async function loadMyExp({ more = false } = {}) {
   const [page, characters] = await Promise.all([
     query("economy/history:history", {
@@ -286,7 +291,7 @@ async function loadMyFavorites(page = 1) {
     size: state.paging.rows,
   });
   $("myFavorites").replaceChildren(
-    ...result.documents.map((log) => {
+    ...result.documents.map((log: Row) => {
       const board = state.boards.find(
         (row) => row.id === (log.data.board ?? "default"),
       );
@@ -318,7 +323,7 @@ async function loadMyFavorites(page = 1) {
   );
 }
 /** 화폐관리's ledger (mypage/money/index.php): 획득 and 사용, 20 a page. */
-let moneyCursor = null;
+let moneyCursor: string | null = null;
 let moneyGained = 0;
 let moneySpent = 0;
 async function loadMyMoney({ more = false } = {}) {
@@ -326,7 +331,7 @@ async function loadMyMoney({ more = false } = {}) {
     after: more ? moneyCursor : null,
     size: state.paging.rows,
   });
-  const body = $("moneyLedger").querySelector("tbody");
+  const body = within($("moneyLedger"), "tbody");
   if (!more) {
     body.replaceChildren();
     moneyGained = moneySpent = 0;
@@ -362,7 +367,7 @@ async function loadMyMoney({ more = false } = {}) {
   $("moreMoney").hidden = !page.nextCursor;
 }
 /** What each kind of record was, where it has no memo of its own. */
-const HISTORY_KINDS = {
+const HISTORY_KINDS: Record<string, string> = {
   adjust: "운영자 조정",
   daily: "첫 로그인",
   signup: "회원가입 축하",

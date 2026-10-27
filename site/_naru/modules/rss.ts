@@ -84,7 +84,7 @@ export async function feed(ctx: QueryCtx, input: RouteInput) {
       ? "익명의 누군가"
       : post.guest_name !== null
         ? `${post.guest_name} (손님)`
-        : (nicks.get(post.owner) ?? "");
+        : ((post.owner && nicks.get(post.owner)) ?? "");
   const items = posts.map((post) => {
     const link = `${origin}/post/${post.id}`;
     const text = (

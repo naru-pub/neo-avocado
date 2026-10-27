@@ -5,17 +5,19 @@ import {
   edit,
   mine,
   mutate,
+  type Row,
   run,
   state,
   withGuestPassword,
+  within,
 } from "./core.js";
 import { fullTime } from "./log-item.js";
 import { kindOf, loadEmoticons } from "./logs.js";
 import { actionItem, diceText, postText, speakerLabel } from "./posts.js";
 
 /** Who wrote a post or comment, as far as the reader is shown. */
-export const writerOf = (row) => row.createdBy ?? row.data.owner ?? null;
-export async function commentItem(comment, log) {
+export const writerOf = (row: Row) => row.createdBy ?? row.data.owner ?? null;
+export async function commentItem(comment: Row, log: Row) {
   const item = document.createElement("li");
   item.className = "comment";
   item.dataset.id = comment.id;
@@ -131,12 +133,12 @@ export async function commentItem(comment, log) {
       const form = commentForm();
       if (!form) return;
       form.dataset.replyTo = comment.id;
-      const note = form.querySelector<HTMLElement>(".comment-replying");
+      const note = within(form, ".comment-replying");
       note.hidden = false;
-      note.querySelector("span").textContent = `${
+      within(note, "span").textContent = `${
         item.querySelector(".author")?.textContent ?? ""
       }님께 답변`;
-      form.querySelector<HTMLTextAreaElement>(".comment-text").focus();
+      within(form, ".comment-text").focus();
     };
     item.append(" ", answer);
   }

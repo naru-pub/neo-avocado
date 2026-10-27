@@ -2,18 +2,25 @@
 // (adm/visit_list.php and its breakdowns). A browser counts once a Korean
 // day, as the original's visit cookie does; a member also reports where they
 // are as they move between pages. Nothing polls.
-import { invalid, kstDay, one, parsed } from "../../modules/access.js";
+import {
+  invalid,
+  kstDay,
+  one,
+  parsed,
+  signedIn,
+} from "../../modules/access.js";
+import type { Data } from "../../modules/json.js";
 import { loginReward } from "../../modules/members.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
 /** What a page may report: anything else counts as 기타, so counts stay few. */
-const KNOWN = {
+const KNOWN: Record<string, readonly string[]> = {
   browser: ["Chrome", "Safari", "Firefox", "Edge", "Samsung", "Whale"],
   os: ["Windows", "macOS", "iOS", "Android", "Linux"],
   device: ["PC", "모바일", "태블릿"],
 };
-const known = (kind: keyof typeof KNOWN, value: string | undefined): string =>
-  KNOWN[kind].includes(value) ? value : "기타";
+const known = (kind: string, value: string | undefined): string =>
+  value !== undefined && KNOWN[kind].includes(value) ? value : "기타";
 /** Referring sites, up to 200 a day; the rest count as 기타. */
 const site = (counts: Record<string, number> = {}, value: unknown) =>
   typeof value === "string" &&
@@ -68,7 +75,7 @@ export async function seen(
   // 현재접속자 leaves out the site's owner (bbs/current_connect.php:11).
   if (joined && !ctx.owner)
     await ctx.sql`
-      INSERT INTO presence (member, place, at) VALUES (${ctx.member.id}, ${where}, ${ctx.now})
+      INSERT INTO presence (member, place, at) VALUES (${signedIn(ctx)}, ${where}, ${ctx.now})
       ON CONFLICT (member) DO UPDATE SET place = excluded.place, at = excluded.at`;
   // The day's first page pays the login reward, as the original's first
   // login of the day does (common.php:401); any later page that day finds
@@ -78,11 +85,7 @@ export async function seen(
   if (visit !== true) return null;
   const day = kstDay(ctx.now);
   const hour = String(new Date(ctx.now + 9 * 3600 * 1000).getUTCHours());
-  const row = await one<Record<string, any>>(
-    ctx,
-    "SELECT * FROM visits WHERE day = ?",
-    [day],
-  );
+  const row = await one<Data>(ctx, "SELECT * FROM visits WHERE day = ?", [day]);
   const counts = Object.fromEntries(
     MAPS.map((key) => [key, parsed<Record<string, number>>(row?.[key], {})]),
   ) as Record<(typeof MAPS)[number], Record<string, number>>;

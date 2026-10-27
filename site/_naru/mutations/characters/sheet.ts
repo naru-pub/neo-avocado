@@ -3,7 +3,7 @@
 // any member's, as the original's admin (adm/character_form.php,
 // character_delete.php).
 
-import { ownerOnly } from "../../modules/access.js";
+import { ownerOnly, signedIn } from "../../modules/access.js";
 import type { SheetInput } from "../../modules/characters.js";
 import {
   characterRow,
@@ -46,8 +46,11 @@ export async function save(
   }
   if (!ctx.member)
     ctx.fail("ACCESS_DENIED", "권한이 없습니다.", { reason: "access_denied" });
-  const character = await characterRow(ctx, sheet.id);
-  const { owned, item } = await profileTicket(ctx, ticket, character);
+  const { owned, item, character } = await profileTicket(
+    ctx,
+    ticket,
+    await characterRow(ctx, sheet.id),
+  );
   const { row, catalogue } = await saveSheet(
     ctx,
     {
@@ -80,7 +83,7 @@ export async function remove(ctx: MutationCtx, { id }: { id?: string } = {}) {
     ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {
       reason: "document_not_found",
     });
-  if (!ctx.owner && row.owner !== ctx.member.id)
+  if (!ctx.owner && row.owner !== signedIn(ctx))
     ctx.fail("ACCESS_DENIED", "직접 쓴 것만 고치거나 지울 수 있습니다.", {
       reason: "not_owned",
     });

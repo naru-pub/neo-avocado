@@ -16,7 +16,7 @@ import {
   STAFF,
 } from "./access.js";
 import { type AdminCall, RECORD_CALLS } from "./admin-calls.js";
-import { buildRecord, formValues, models } from "./admin-model.js";
+import { buildRecord, type Data, formValues, models } from "./admin-model.js";
 import { characterKey } from "./characters.js";
 import type { MutationCtx, QueryCtx, SqlValue } from "./naru-types.js";
 
@@ -61,7 +61,7 @@ interface Table {
   /** What a read selects besides the row's columns. */
   select?: string;
   /** Fields made from the row beyond its columns. */
-  read?: (row: Record<string, SqlValue>, data: Record<string, any>) => void;
+  read?: (row: Record<string, SqlValue>, data: Data) => void;
 }
 
 const table = (
@@ -420,7 +420,7 @@ const empty = (value: unknown) =>
   value === undefined || value === null || value === "";
 
 /** The column values a record's data keeps, by column. */
-export function rowOf(t: Table, data: Record<string, any>) {
+export function rowOf(t: Table, data: Data) {
   const row: Record<string, SqlValue> = {};
   for (const [field, column, kind, fallback] of t.columns) {
     const value = data?.[field];
@@ -451,7 +451,7 @@ export function rowOf(t: Table, data: Record<string, any>) {
   }
   if (t.extra) {
     const known = new Set(t.columns.map(([field]) => field));
-    const extra = {};
+    const extra: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(data ?? {}))
       if (!known.has(key) && value !== undefined) extra[key] = value;
     row[t.extra] = JSON.stringify(extra);
@@ -461,7 +461,7 @@ export function rowOf(t: Table, data: Record<string, any>) {
 
 /** A row as its record's data. */
 export function dataOf(t: Table, row: Record<string, SqlValue>) {
-  const data: Record<string, any> = t.extra ? parsed(row[t.extra], {}) : {};
+  const data: Data = t.extra ? parsed(row[t.extra], {}) : {};
   for (const [field, column, kind, fallback] of t.columns) {
     const value = row[column];
     if (value === null || value === undefined) continue;
@@ -590,7 +590,7 @@ export async function listRecords(
     );
     values.push(...[...named, ...items].map(() => containing(term)));
   }
-  if (filterColumn) {
+  if (filterColumn && typeof filter?.value === "string") {
     clauses.push(`${filterColumn} = ?`);
     values.push(filter.value);
   }
@@ -652,7 +652,7 @@ export async function allRows(
 }
 
 /** A form's pick lists, as `buildRecord` and the page read them: { id, data }. */
-export type References = Record<string, { id: string; data: any }[]>;
+export type References = Record<string, { id: string; data: Data }[]>;
 
 /** The owner's lists the forms pick from, those named. */
 export async function catalogues(
@@ -663,7 +663,7 @@ export async function catalogues(
   const read = async (
     name: string,
     text: string,
-    data: (row) => any,
+    data: (row: Record<string, SqlValue>) => Data,
     keys = ["id"],
   ) => {
     if (names.includes(name))
@@ -796,9 +796,9 @@ export async function checked(
   }: {
     id: string;
     values: unknown;
-    current: { id?: string; data: Record<string, any> } | null;
+    current: { id?: string; data: Data } | null;
   },
-): Promise<{ id: string; data: Record<string, any> }> {
+): Promise<{ id: string; data: Data }> {
   if (!values || typeof values !== "object" || Array.isArray(values))
     invalid(ctx);
   const references = await catalogues(ctx, NEEDS[section] ?? []);
@@ -813,7 +813,7 @@ export async function checked(
   } catch (error) {
     return ctx.fail(
       "INVALID_REQUEST",
-      String(error?.message ?? "입력 내용을 확인해 주세요."),
+      error instanceof Error ? error.message : "입력 내용을 확인해 주세요.",
       { reason: "invalid_input" },
     );
   }
@@ -821,7 +821,7 @@ export async function checked(
 
 /** A member's roles after their record is saved: its role and groups, the others kept. */
 export function rolesOfData(
-  data: Record<string, any>,
+  data: Data,
   before: readonly string[] = [],
 ): string[] {
   return [
@@ -874,7 +874,7 @@ export async function writeRow(
   ctx: MutationCtx,
   t: Table,
   key: SqlValue,
-  data: Record<string, any>,
+  data: Data,
 ): Promise<Record<string, SqlValue>> {
   const row = rowOf(t, data);
   const columns = Object.keys(row);
@@ -969,7 +969,7 @@ export async function saveRecord(
 /** A recipe's materials, rows of their own: replaced by the form's. */
 async function saveIngredients(
   ctx: MutationCtx,
-  { id, data }: { id: string; data: Record<string, any> },
+  { id, data }: { id: string; data: Data },
 ) {
   await ctx.sql`DELETE FROM recipe_ingredients WHERE recipe_id = ${id}`;
   for (const entry of data.ingredients ?? [])
@@ -1005,7 +1005,7 @@ async function renameChoice(
         [from],
       );
       for (const row of rows) {
-        const value = parsed<Record<string, any>>(row.value, {});
+        const value = parsed<Data>(row.value, {});
         value[key] = (value[key] as string[]).map((name) =>
           name === from ? to : name,
         );
@@ -1073,7 +1073,7 @@ export function settingsKeyOf(ctx: QueryCtx, section: unknown): string {
 }
 
 /** A settings section's record ({ id: its form's fixed ID, data }), or null. */
-export async function settingsRecord(ctx: QueryCtx, section: string) {
+export async function settingsRecord(ctx: QueryCtx, section: unknown) {
   const key = settingsKeyOf(ctx, section);
   const row = await one<{ value: string }>(
     ctx,
@@ -1081,7 +1081,7 @@ export async function settingsRecord(ctx: QueryCtx, section: string) {
     [key],
   );
   return row
-    ? { id: models[section].fixedId, data: parsed(row.value, {}) }
+    ? { id: models[section as string].fixedId, data: parsed(row.value, {}) }
     : null;
 }
 
@@ -1098,7 +1098,7 @@ export function kstStart(day: unknown): number | null {
  * exploration), with its name and the version a save checks.
  */
 export function stateOf(row: Record<string, SqlValue>) {
-  const data: Record<string, any> = {
+  const data: Data = {
     exp: row.exp,
     stats: parsed(row.stats, {}),
     purchases: parsed(row.purchases, {}),

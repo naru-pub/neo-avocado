@@ -1,11 +1,14 @@
 // 기타관리's tools: 데이터 백업·복원 and the owner's grants.
 import { moneyText } from "../app/names.js";
+import type { Fields } from "../shared/calls.js";
 import {
   $,
+  type AdminRow,
   CALLS,
   itemNames,
   loadReferences,
-  owner,
+  ownerMutate,
+  ownerQuery,
   references,
   run,
 } from "./core.js";
@@ -28,7 +31,7 @@ export async function backupView() {
   status.setAttribute("role", "status");
   const list = document.createElement("ul");
   list.className = "backup-list";
-  const categories = await owner.query("admin/backup:categories");
+  const categories = await ownerQuery<Fields[]>("admin/backup:categories");
   for (const category of categories) {
     const item = document.createElement("li");
     const keep = document.createElement("button");
@@ -45,7 +48,7 @@ export async function backupView() {
             let table = "";
             do {
               status.textContent = `${category.label} 백업 중… (${rows.length}행)`;
-              const page = await owner.query("admin/backup:rows", {
+              const page = await ownerQuery("admin/backup:rows", {
                 category: category.id,
                 part,
                 after,
@@ -92,7 +95,7 @@ export async function backupView() {
       run(async () => {
         const file = choose.files?.[0];
         if (!file) return (status.textContent = "복원할 백업 파일을 고르세요.");
-        let backup;
+        let backup: Fields;
         try {
           backup = JSON.parse(await file.text());
         } catch {
@@ -119,7 +122,7 @@ export async function backupView() {
             // The first call empties the category's rows of the table.
             do {
               status.textContent = `${category.label} 복원 중… (${done}/${all.length}행)`;
-              await owner.mutate("admin/backup:restore", {
+              await ownerMutate("admin/backup:restore", {
                 category: category.id,
                 part,
                 clear: done === 0,
@@ -178,13 +181,13 @@ export async function grantsView() {
   const itemLabel = control("아이템", item);
   const valueLabel = control("", value);
   const describe = () => {
-    nameLabel.firstChild.textContent =
+    (nameLabel.firstChild as Text).textContent =
       kind.value === "money" ? "회원 닉네임" : "캐릭터 이름";
     nameLabel.hidden = target.value === "all";
     name.required = target.value === "one";
     itemLabel.hidden = kind.value !== "item";
     item.required = kind.value === "item";
-    valueLabel.firstChild.textContent =
+    (valueLabel.firstChild as Text).textContent =
       kind.value === "item" ? "개수 (1~100)" : "양 (깎으려면 음수)";
   };
   kind.onchange = target.onchange = describe;
@@ -207,12 +210,12 @@ export async function grantsView() {
   const log = document.createElement("ul");
   log.className = "grant-log";
   const showLog = async () => {
-    const page = await owner.query(CALLS.history.list, {
+    const page = await ownerQuery(CALLS.history.list, {
       actor: "grant",
       size: 20,
     });
     log.replaceChildren(
-      ...page.documents.map((row) => {
+      ...page.documents.map((row: AdminRow) => {
         const item = document.createElement("li");
         const who =
           references.profiles.find((profile) => profile.id === row.data.owner)
@@ -255,17 +258,14 @@ export async function grantsView() {
       submit.disabled = true;
       try {
         // One call gives to everyone it names.
-        const { granted, skipped } = await owner.mutate(
-          "economy/grants:grant",
-          {
-            kind: kind.value,
-            target: target.value,
-            name: name.value.trim(),
-            value: amount,
-            memo: memo.value.trim(),
-            ...(kind.value === "item" ? { item: item.value } : {}),
-          },
-        );
+        const { granted, skipped } = await ownerMutate("economy/grants:grant", {
+          kind: kind.value,
+          target: target.value,
+          name: name.value.trim(),
+          value: amount,
+          memo: memo.value.trim(),
+          ...(kind.value === "item" ? { item: item.value } : {}),
+        });
         status.textContent = `${granted}명 지급${skipped ? `, ${skipped}명은 가진 것보다 많이 깎을 수 없어 건너뜀` : ""}. 끝났습니다.`;
         await showLog();
       } finally {

@@ -15,7 +15,7 @@ import type { QueryCtx } from "../../modules/naru-types.js";
 
 // Searched as adm/inventory_list.php: `field` (nick, character or item)
 // holding `text`.
-const FIELDS = {
+const FIELDS: Record<string, string> = {
   nick: "inventory.owner IN (SELECT member FROM profiles WHERE nick LIKE ? ESCAPE '\\' LIMIT 100)",
   character:
     "inventory.character_id IN (SELECT id FROM characters WHERE name LIKE ? ESCAPE '\\' LIMIT 100)",

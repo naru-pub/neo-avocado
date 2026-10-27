@@ -133,7 +133,7 @@ export async function join(
     }
     // The recommender's 추천인 포인트 (register_form_update.php:248).
     const points = recommender ? amountOf(settings, "recommendReward") : 0;
-    if (points) {
+    if (points && recommender) {
       const balance = (await walletOf(ctx, recommender)).balance + points;
       await saveWallet(ctx, recommender, balance);
       await addHistory(ctx, {

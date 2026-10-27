@@ -1,3 +1,4 @@
+import type { Data } from "./json.js";
 // The character pictures, shared by the queries and mutations and the pages,
 // which read this file as it is published.
 
@@ -13,7 +14,7 @@ export const IMAGE_SLOTS = Object.freeze([
   { slot: "head", key: "head", label: "흉상", use: false },
   { slot: "body", key: "body", label: "전신", use: false },
 ]);
-export function imageSlotsOf(profile: Record<string, any> | null = {}) {
+export function imageSlotsOf(profile: Data | null = {}) {
   return IMAGE_SLOTS.map(({ slot, key, label, use }) => ({
     slot,
     key,
@@ -38,7 +39,7 @@ export function imageSlotsOf(profile: Record<string, any> | null = {}) {
  * asked for (ad_use_name is a hidden 1), named and explained as the owner
  * says, "이름" until then.
  */
-export function nameFieldOf(profile: Record<string, any> | null = {}) {
+export function nameFieldOf(profile: Data | null = {}) {
   return {
     label:
       (typeof profile?.nameLabel === "string" &&
@@ -63,7 +64,7 @@ export const VIEWER_SWITCHES = Object.freeze([
   "titles",
   "closet",
 ]);
-export function viewerOf(profile: Record<string, any> | null = {}) {
+export function viewerOf(profile: Data | null = {}) {
   return Object.fromEntries(
     VIEWER_SWITCHES.map((key) => [
       key,

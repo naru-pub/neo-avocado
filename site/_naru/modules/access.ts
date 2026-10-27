@@ -23,8 +23,19 @@ export async function one<Row = Record<string, SqlValue>>(
   return ((await ctx.sql<Row>(text, values)).rows[0] ?? null) as Row | null;
 }
 
+/** An aggregate's one row (a count, a sum, the next number), which it always has. */
+export async function only<Row = Record<string, SqlValue>>(
+  ctx: SqlCtx,
+  text: string,
+  values: SqlValue[] = [],
+): Promise<Row> {
+  const row = await one<Row>(ctx, text, values);
+  if (!row) throw new Error(`No row from ${text}`);
+  return row;
+}
+
 /** A JSON column's object, or `fallback` when it is not one. */
-export function parsed<T = Record<string, any>>(text: unknown, fallback: T): T {
+export function parsed<T = Data>(text: unknown, fallback: T): T {
   if (typeof text !== "string") return fallback;
   try {
     const value = JSON.parse(text);
@@ -38,7 +49,7 @@ export function parsed<T = Record<string, any>>(text: unknown, fallback: T): T {
 export async function settingsOf(
   ctx: SqlCtx,
   key: "community" | "profile" | "design",
-): Promise<Record<string, any>> {
+): Promise<Data> {
   const row = await one<{ value: string }>(
     ctx,
     "SELECT value FROM settings WHERE key = ?",
@@ -53,9 +64,7 @@ export const communitySettings = (ctx: SqlCtx) => settingsOf(ctx, "community");
  * 금액 사용 (ad_use_money, kept as viewerMoney): off, 화폐관리 is no page
  * of the site's (mypage/money/_head.php:5), as the original installs it.
  */
-export async function moneyInUse(
-  ctx: SqlCtx & { fail: (...args: any[]) => never },
-) {
+export async function moneyInUse(ctx: SqlCtx & Pick<QueryCtx, "fail">) {
   if ((await communitySettings(ctx)).viewerMoney !== true)
     ctx.fail("ACCESS_DENIED", "사용할 수 없는 페이지 입니다.", {
       reason: "money_off",
@@ -80,9 +89,14 @@ export interface Access {
 }
 
 /** Refuses a visitor (or the site's owner): the call is a member's. */
-export function signedIn(ctx: SqlCtx & Pick<QueryCtx, "fail">): string {
-  if (!ctx.member)
-    ctx.fail("AUTH_REQUIRED", "로그인해 주세요.", { reason: "sign_in" });
+export function signedIn(
+  ctx: Pick<SqlCtx, "member"> & Partial<Pick<QueryCtx, "fail">>,
+): string {
+  if (!ctx.member) {
+    ctx.fail?.("AUTH_REQUIRED", "로그인해 주세요.", { reason: "sign_in" });
+    // A helper's ctx without fail: its caller has checked for a member.
+    throw new Error("Not signed in.");
+  }
   return ctx.member.id;
 }
 
@@ -207,7 +221,7 @@ export async function communityAccess(
     // A member with no record has not joined (community/membership:join,
     // which sets 회원가입시 권한 and asks for the rules): level 1 until then.
     level:
-      Number.isInteger(row?.level) && row.level >= 1 && row.level <= 10
+      row && Number.isInteger(row.level) && row.level >= 1 && row.level <= 10
         ? row.level
         : 1,
     role,
@@ -250,7 +264,7 @@ export const RESERVED_NICKS =
   "admin,administrator,관리자,운영자,어드민,주인장,webmaster,웹마스터,sysop,시삽,시샵,manager,매니저,메니저,root,루트,su,guest,방문객";
 
 /** The reserved words of community settings, or the original's list. */
-export const reservedNicksOf = (settings: Record<string, any>) =>
+export const reservedNicksOf = (settings: Data) =>
   typeof settings.reservedNicks === "string"
     ? settings.reservedNicks
     : RESERVED_NICKS;
@@ -273,6 +287,7 @@ export async function reservedNick(
 // The owner's names (names.ts), shared with the pages.
 export { NAME_DEFAULTS, type Names, namesOf } from "./names.js";
 
+import type { Data } from "./json.js";
 import { type Names, namesOf } from "./names.js";
 export async function names(ctx: SqlCtx): Promise<Names> {
   return namesOf(await communitySettings(ctx));
@@ -302,7 +317,7 @@ export function invalid(ctx: Pick<QueryCtx, "fail">): never {
 }
 
 /** A whole, non-negative amount the owner set in 커뮤니티 설정, else 0. */
-export function amountOf(settings: Record<string, any>, key: string): number {
+export function amountOf(settings: Data, key: string): number {
   // 포인트 사용 (cf_use_point) off: insert_point pays and takes nothing.
   if (settings.usePoint === false) return 0;
   const value = settings[key];
@@ -321,7 +336,7 @@ export async function communityAmount(
  * rules a new member agrees to and the reserved nicknames), and nothing else
  * the admin keeps there.
  */
-export function memberSettings(settings: Record<string, any>) {
+export function memberSettings(settings: Data) {
   return {
     initialStatPoints: settings.initialStatPoints ?? 0,
     messageCost: settings.messageCost ?? 0,
@@ -353,7 +368,7 @@ export function memberSettings(settings: Record<string, any>) {
  * as they read before), 페이지 표시 수 (cf_write_pages 10, cf_mobile_pages
  * 5) and 새창 링크 (cf_link_target, _blank).
  */
-export function pagingOf(settings: Record<string, any>) {
+export function pagingOf(settings: Data) {
   const within = (value: unknown, fallback: number, most: number) =>
     Number.isSafeInteger(value) && (value as number) >= 1
       ? Math.min(value as number, most)
@@ -397,8 +412,9 @@ export function scheduled(
   const start = kstStamp(data.startsAt),
     end = kstStamp(data.endsAt);
   return (
-    (!data.startsAt || (Number.isFinite(start) && now >= start)) &&
-    (!data.endsAt || (Number.isFinite(end) && now < end))
+    (!data.startsAt ||
+      (start !== null && Number.isFinite(start) && now >= start)) &&
+    (!data.endsAt || (end !== null && Number.isFinite(end) && now < end))
   );
 }
 

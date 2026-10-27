@@ -2,39 +2,59 @@
 // run(), the site's queries and mutations, and the edit dialog.
 // It imports no other part but names.js, so it is always ready before them.
 
-import type { NaruClient } from "https://sdk.naru.pub/sdk/1.1.0/naru.js";
+import type {
+  Json,
+  Live,
+  Member,
+  NaruClient,
+} from "https://sdk.naru.pub/sdk/1.1.0/naru.js";
 import { imageSlotsOf, viewerOf } from "../_naru/modules/images.js";
+import type { Args, Fields, Row, RowPage } from "../shared/calls.js";
+import type { Emoticon } from "../shared/emoticons.js";
+import { callError } from "../shared/errors.js";
+
+export type { Args, Fields, Row, RowPage };
+
 import { NAME_DEFAULTS } from "./names.js";
 
 export const SHOP_PAGE = 10;
-export const STATE_NAMES = {
+export const STATE_NAMES: Record<string, string> = {
   editing: "수정 중",
   submitted: "신청",
   approved: "승인",
   deleted: "삭제",
 };
-export const TYPE_NAMES = { main: "메인", sub: "서브", npc: "NPC" };
+export const TYPE_NAMES: Record<string, string> = {
+  main: "메인",
+  sub: "서브",
+  npc: "NPC",
+};
 export const CHARACTER_PAGE = 20;
 export const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
   document.getElementById(id) as T;
+/** An element of `root` the page made itself (by its class), as `$` is by ID. */
+export const within = <T extends Element = HTMLElement>(
+  root: ParentNode,
+  selector: string,
+) => root.querySelector(selector) as T;
 const initialState = {
   naru: null as NaruClient | null,
-  member: null,
-  nicks: new Map(),
+  member: null as Member | null,
+  nicks: new Map<string, Promise<string>>(),
   charactersLoaded: false,
   shopLoaded: false,
   // The chosen character's inventory, as last read: buying and crafting
   // take their materials from it.
-  inventoryRows: [],
-  itemCatalog: new Map(),
-  profile: null,
-  recipes: [],
-  inventoryCharacter: null,
+  inventoryRows: [] as Row[],
+  itemCatalog: new Map<string, Row>(),
+  profile: null as Row | null,
+  recipes: [] as Row[],
+  inventoryCharacter: null as string | null,
   // The shop's chosen character's official record: buying needs it approved.
-  shopCharacter: null,
-  ownCharacters: [],
-  historyCursor: null,
-  admission: null,
+  shopCharacter: null as Fields | null,
+  ownCharacters: [] as Row[],
+  historyCursor: null as string | null,
+  admission: null as string | null,
   // 사이트공개 (cf_open), from the site's frame: off, visitors see nothing.
   siteOpen: true,
   // 기타 항목명 설정: the owner's names for money, experience, 소속, 종족.
@@ -49,11 +69,11 @@ const initialState = {
   // 「작성자」 원글 작성자's 접두문자 and 접미문자, around the log writer's name.
   ownerMarks: { prefix: "▶", suffix: "◀" },
   // 관리자 아이콘: the owner's picture for the site owner's comments.
-  adminIcon: null,
+  adminIcon: null as string | null,
   // 소속 icons by name (get_side_icon).
-  sideIcons: {},
+  sideIcons: {} as Record<string, string>,
   // cf_twitter: the account {{TWITTER}} shows.
-  twitter: null,
+  twitter: null as string | null,
   // 커뮤니티 설정's 쪽지·호출 알림음: the arrival popups may chime.
   alarmSound: false,
   // 조합(레시피)사용: whether a post offers 조합.
@@ -68,50 +88,50 @@ const initialState = {
   adult: false,
   // 경고내역: the owner's warnings, from the member's own record.
   warnings: { count: 0, note: "" },
-  emoticons: null,
-  boards: [],
+  emoticons: null as Emoticon[] | null,
+  boards: [] as Row[],
   // The board groups (community/boards:boards), for the group pickers.
-  groups: [] as { id: string; data: Record<string, any> }[],
+  groups: [] as Row[],
   board: "default",
-  tag: null,
+  tag: null as string | null,
   // 로그번호: the list from this log number down.
-  upTo: null,
+  upTo: null as number | null,
   // 답변: the post the log form answers.
-  replyTo: null,
+  replyTo: null as string | null,
   // The board list's 분류 (sca), while one is chosen.
-  category: null,
+  category: null as string | null,
   // The board search (skins' 검색), while it is shown.
-  search: null,
+  search: null as string | null,
   // The board list's page, for its address.
   logPage: 1,
-  live: null,
+  live: null as Live | null,
   // The board whose newest post the page keeps in view (live.js).
   boardWatch: null as {
     board: string;
     reader: unknown;
     handle: { close(): void };
   } | null,
-  newPost: null,
-  ownPosts: new Set(),
+  newPost: null as string | null,
+  ownPosts: new Set<string>(),
   // The member's characters for posting, and items for in-post use: read on
   // first use, forgotten when they may have changed.
-  speakers: null,
-  postItems: null,
-  fieldCatalogue: null,
-  callCursor: null,
+  speakers: null as Row[] | null,
+  postItems: null as Row[] | null,
+  fieldCatalogue: null as Row[] | null,
+  callCursor: null as string | null,
 };
 /** What the page reads later and keeps here, absent until then. */
 interface LaterState {
   // The owner's 소속 and 종족 lists (characters.js).
-  sides?: any[];
-  classes?: any[];
+  sides?: Row[];
+  classes?: Row[];
   // The shop's categories, the chosen one and its greeting (shop.js).
   shopCategories?: string[];
   shopCategory?: string;
   shopGreeting?: string;
 }
 export const state: typeof initialState & LaterState = initialState;
-const MESSAGES = {
+const MESSAGES: Record<string, string> = {
   AUTH_REQUIRED: "로그인이 끝났습니다. 다시 회원 로그인해 주세요.",
   ACCESS_DENIED: "권한이 없습니다.",
   RATE_LIMITED: "잠시 뒤에 다시 해 주세요.",
@@ -124,45 +144,51 @@ const MESSAGES = {
  * message (it passes a reason in its details), or the unique field a write
  * hit.
  */
-function siteMessage(error) {
-  if (error?.details?.unique === "nick") return "이미 쓰는 닉네임입니다.";
-  return error?.details?.reason ? error.message : undefined;
+function siteMessage(error: unknown) {
+  const failure = callError(error);
+  if (failure?.details?.unique === "nick") return "이미 쓰는 닉네임입니다.";
+  return failure?.details?.reason ? failure.message : undefined;
 }
-export function say(message) {
+/** The words for a failed call: the site's own, else Naru's code's. */
+const failureMessage = (error: unknown) =>
+  siteMessage(error) ?? MESSAGES[callError(error)?.code ?? ""];
+export function say(message: string) {
   $("status").textContent = message;
 }
 /**
  * Uploads a file as the member. Its address is kept in the site's tables,
  * which Naru's media library searches to mark uploads no row names.
  */
-export async function uploadMedia(file) {
+export async function uploadMedia(file: File | Blob) {
+  if (!state.member) throw new Error("회원 로그인이 필요합니다.");
   return await state.member.media.upload(file);
 }
 /**
  * "pending" or "banned" when Naru refused the member because the site has not
  * approved them (or has banned them); null for any other error.
  */
-export const standing = (error) =>
-  (error?.code === "ACCESS_DENIED" && error.details?.membership) || null;
-export async function run(action) {
+export const standing = (error: unknown) => {
+  const failure = callError(error);
+  return (
+    (failure?.code === "ACCESS_DENIED" && failure.details?.membership) || null
+  );
+};
+export async function run(action: () => unknown) {
   try {
     await action();
   } catch (error) {
     console.error(error);
-    if (error?.code === "AUTH_REQUIRED") {
+    if (callError(error)?.code === "AUTH_REQUIRED") {
       state.member = null;
       clearPrivateViews();
       show();
     }
-    if (state.member && standing(error)) {
-      showAdmission(standing(error));
+    const status = standing(error);
+    if (state.member && status) {
+      showAdmission(status);
       return;
     }
-    say(
-      siteMessage(error) ??
-        MESSAGES[error?.code] ??
-        "요청을 처리하지 못했습니다.",
-    );
+    say(failureMessage(error) ?? "요청을 처리하지 못했습니다.");
   }
 }
 export function clearPrivateViews() {
@@ -191,11 +217,11 @@ export function clearPrivateViews() {
   $<HTMLTextAreaElement>("messageBody").value = "";
   $("tabMessages").textContent = "쪽지";
 }
-export const formatTime = (value) =>
+export const formatTime = (value: string | number | Date | undefined) =>
   new Intl.DateTimeFormat("ko-KR", {
     dateStyle: "medium",
     timeStyle: "short",
-  }).format(new Date(value));
+  }).format(new Date(value ?? Number.NaN));
 /**
  * Whether the member moderates a board: the staff (and the site's owner),
  * or its 게시판 관리자 or its group's 그룹 관리자 (bo_admin, gr_admin).
@@ -208,63 +234,87 @@ export function boardStaff(boardId: string | null | undefined = state.board) {
     me && board && (board.data.admin === me || board.data.groupAdmin === me),
   );
 }
-export const mine = (document) =>
+export const mine = (document: Row) =>
   state.member !== null &&
   (document.createdBy ?? document.data.owner) === state.member.id;
 /** The member's own characters, oldest first (characters/sheet:mine). */
 export const ownCharacters = async () =>
-  (await query("characters/sheet:mine")).documents;
+  (await query<RowPage>("characters/sheet:mine")).documents;
 /** Resolve the distinct authors for a page in bounded batches before rendering. */
-export async function preloadNicks(rows) {
+export async function preloadNicks(rows: Row[]) {
   const member = state.member;
   const missing: string[] = [
     ...new Set<string>(rows.map((row) => row.createdBy ?? row.data.owner)),
   ].filter((id) => id && !state.nicks.has(id));
   for (let offset = 0; offset < missing.length; offset += 100) {
     const ids = missing.slice(offset, offset + 100);
-    const { nicks } = await query("community/profiles:nicks", { ids });
+    const { nicks } = await query<{ nicks: Record<string, string> }>(
+      "community/profiles:nicks",
+      { ids },
+    );
     if (state.member !== member) return;
     for (const id of ids)
       state.nicks.set(id, Promise.resolve(nicks[id] ?? "이름 없음"));
   }
 }
 /** 글쓴이의 닉네임. 처음 보는 회원만 한 번 묻는다. */
-export async function nickOf(memberId) {
+export async function nickOf(memberId: string | null | undefined) {
   if (!memberId) return "운영자";
-  if (!state.nicks.has(memberId))
-    state.nicks.set(
-      memberId,
-      query("community/profiles:nicks", { ids: [memberId] }).then(
-        ({ nicks }) => nicks[memberId] ?? "이름 없음",
-        () => "이름 없음",
-      ),
+  let nick = state.nicks.get(memberId);
+  if (!nick) {
+    nick = query<{ nicks: Record<string, string> }>(
+      "community/profiles:nicks",
+      { ids: [memberId] },
+    ).then(
+      ({ nicks }) => nicks[memberId] ?? "이름 없음",
+      () => "이름 없음",
     );
-  return state.nicks.get(memberId);
+    state.nicks.set(memberId, nick);
+  }
+  return nick;
 }
 /**
  * The community settings members' pages need (content/site:settings), or
  * none while they cannot be read.
  */
-export const memberSettings = (): Promise<Record<string, any>> =>
-  query("content/site:settings").catch(() => ({}));
+export const memberSettings = (): Promise<Fields> =>
+  query<Fields>("content/site:settings").catch(() => ({}));
+/** The visitor's client, once the page has connected to Naru. */
+export function naruClient(): NaruClient {
+  if (!state.naru) throw new Error("나루에 아직 연결하지 않았습니다.");
+  return state.naru;
+}
+/** The signed-in member, where only a member gets this far. */
+export function signedInMember(): Member {
+  if (!state.member) throw new Error("회원 로그인이 필요합니다.");
+  return state.member;
+}
 /** Who calls queries and mutations: the signed-in member, else the visitor's client. */
-export const caller = () => state.member ?? state.naru;
+export const caller = () => {
+  const client = state.member ?? state.naru;
+  if (!client) throw new Error("나루에 아직 연결하지 않았습니다.");
+  return client;
+};
 /**
  * Runs one of the site's queries (_naru/queries/<module>.ts) as whoever is
  * reading: the member, or a visitor. The query's code decides what each sees.
  */
-export const query = <R = any>(name: string, args: any = null): Promise<R> =>
-  caller().query(name, args);
-/** Runs one of the site's mutations (_naru/mutations/<module>.ts), in one transaction. */
-export const mutate = <R = any>(name: string, args: any = null): Promise<R> =>
-  caller().mutate(name, args);
-/** A query's answer, kept current while the page holds it (`close()` ends it). */
-export const subscribe = <R = any>(
+export const query = <R = Fields>(
   name: string,
-  args: any,
+  args: Args = null,
+): Promise<R> => caller().query<R>(name, args as Json);
+/** Runs one of the site's mutations (_naru/mutations/<module>.ts), in one transaction. */
+export const mutate = <R = Fields>(
+  name: string,
+  args: Args = null,
+): Promise<R> => caller().mutate<R>(name, args as Json);
+/** A query's answer, kept current while the page holds it (`close()` ends it). */
+export const subscribe = <R = Fields>(
+  name: string,
+  args: Args,
   onResult: (result: R) => void,
-  onError?: (error: any) => void,
-) => caller().subscribe(name, args, onResult, { onError });
+  onError?: (error: unknown) => void,
+) => caller().subscribe<R>(name, args as Json, onResult, { onError });
 /** The name and password a visitor posts with (bbs/write.php's wr_name, wr_password). */
 export function guestCredentials() {
   const name = $<HTMLInputElement>("guestName").value.trim();
@@ -279,7 +329,10 @@ export function guestCredentials() {
   return { name, password };
 }
 /** Asks a visitor for a guest post's password, then runs `action` with it. */
-export function withGuestPassword(title, action) {
+export function withGuestPassword(
+  title: string,
+  action: (credentials: { password: string }) => unknown,
+) {
   edit(
     title,
     [
@@ -294,7 +347,7 @@ export function withGuestPassword(title, action) {
     ({ password }) => action({ password }),
   );
 }
-export function showAdmission(status) {
+export function showAdmission(status: string) {
   state.admission = status;
   state.charactersLoaded = false;
   state.shopLoaded = false;
@@ -302,7 +355,7 @@ export function showAdmission(status) {
   $("community").hidden = true;
   $("profileSetup").hidden = true;
   $("admissionPanel").hidden = false;
-  const [title, description] = {
+  const admissions: Record<string, [string, string]> = {
     banned: ["접근 차단", "이 커뮤니티에서 차단되었습니다."],
     blocked: ["접근 차단", "운영자가 이 커뮤니티의 접근을 차단했습니다."],
     deleted: [
@@ -314,13 +367,18 @@ export function showAdmission(status) {
       "탈퇴한 회원",
       "탈퇴한 회원입니다. 다시 이용하려면 운영자에게 문의해 주세요.",
     ],
-  }[status] ?? ["가입 승인 대기", "운영자의 가입 승인이 필요합니다."];
+  };
+  const [title, description] = admissions[status] ?? [
+    "가입 승인 대기",
+    "운영자의 가입 승인이 필요합니다.",
+  ];
   $("admissionTitle").textContent = title;
   $("admissionDescription").textContent = description;
-  $("admissionId").textContent = `가입 문의용 회원 번호: ${state.member.id}`;
+  $("admissionId").textContent =
+    `가입 문의용 회원 번호: ${state.member?.id ?? ""}`;
   $("editProfile").hidden = true;
 }
-export function show(profile?) {
+export function show(profile?: Row | null) {
   $("admissionPanel").hidden = true;
   const member = state.member;
   document.body.classList.toggle("visitor", !member);
@@ -349,11 +407,11 @@ export function show(profile?) {
 export interface EditField {
   name: string;
   label: string;
-  value?: any;
+  value?: unknown;
   type?: string;
   accept?: string;
   // [value, text] pairs; makes the field a select.
-  options?: ReadonlyArray<ReadonlyArray<any>>;
+  options?: ReadonlyArray<readonly [value: string | number, text: string]>;
   multiline?: boolean;
   required?: boolean;
   max?: number;
@@ -376,14 +434,14 @@ export function suggestNames(
   options.id = `nameSuggestions${(suggestions += 1)}`;
   input.after(options);
   input.setAttribute("list", options.id);
-  let timer = null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   let asked = "";
   input.addEventListener("input", () => {
     clearTimeout(timer);
     timer = setTimeout(async () => {
       if (!state.member) return;
       const parts = list ? input.value.split(",") : [input.value];
-      const text = parts.at(-1).trim();
+      const text = (parts.at(-1) ?? "").trim();
       const before = list
         ? parts
             .slice(0, -1)
@@ -393,10 +451,9 @@ export function suggestNames(
       if (!text || text === asked || text.length > 40) return;
       asked = text;
       try {
-        const { names } = await query("community/profiles:suggest", {
-          kind,
-          text,
-        });
+        const { names } = await query<{
+          names: { name: string; detail: string | null }[];
+        }>("community/profiles:suggest", { kind, text });
         options.replaceChildren(
           ...names.map(({ name, detail }) =>
             Object.assign(document.createElement("option"), {
@@ -419,7 +476,7 @@ export function suggestNames(
 export function edit(
   title: string,
   fields: EditField[],
-  save: (values: Record<string, any>) => unknown,
+  save: (values: Fields) => unknown,
 ) {
   $("editorTitle").textContent = title;
   $("editorStatus").textContent = "";
@@ -437,13 +494,13 @@ export function edit(
     if (field.options) {
       for (const [value, text] of field.options) {
         const option = document.createElement("option");
-        option.value = value;
+        option.value = String(value);
         option.textContent = text;
         input.append(option);
       }
     }
     if (field.type === "checkbox") input.checked = Boolean(field.value);
-    else if (field.type !== "file") input.value = field.value ?? "";
+    else if (field.type !== "file") input.value = String(field.value ?? "");
     input.required = Boolean(field.required);
     if (field.max) input.maxLength = field.max;
     if (field.min !== undefined) input.min = String(field.min);
@@ -457,8 +514,9 @@ export function edit(
   }
   $("editorForm").onsubmit = async (event) => {
     event.preventDefault();
-    const button =
-      $("editorForm").querySelector<HTMLButtonElement>('[type="submit"]');
+    const button = $("editorForm").querySelector<HTMLButtonElement>(
+      '[type="submit"]',
+    ) as HTMLButtonElement;
     button.disabled = true;
     try {
       await save(
@@ -476,9 +534,8 @@ export function edit(
       $<HTMLDialogElement>("editor").close();
     } catch (error) {
       $("editorStatus").textContent =
-        siteMessage(error) ??
-        MESSAGES[error?.code] ??
-        error.message ??
+        failureMessage(error) ??
+        callError(error)?.message ??
         "저장하지 못했습니다.";
     } finally {
       button.disabled = false;
@@ -494,7 +551,7 @@ export function stopLive() {
   state.boardWatch = null;
 }
 /** Where a member is, as 현재접속자 shows it, for each view. */
-const PLACES = {
+const PLACES: Record<string, string> = {
   home: "메인",
   logs: "로그",
   characters: "멤버목록",
@@ -548,7 +605,7 @@ function client() {
   return { browser, os, device };
 }
 let lastVisit = 0;
-let lastPlace = null;
+let lastPlace: string | null = null;
 /**
  * Tells Naru where the visitor is (현재접속자, 접속자집계): on the first
  * page, then when they move on, at most every 30 seconds. Never polls.
@@ -564,7 +621,7 @@ function firstVisitToday() {
   }
   return true;
 }
-export function noteVisit(place) {
+export function noteVisit(place: string) {
   if (!state.naru) return;
   const now = Date.now();
   if (place === lastPlace || (lastVisit && now - lastVisit < 30_000)) return;
@@ -618,7 +675,7 @@ export const addressOf = (path: string | string[]) =>
     .filter((part) => part !== "")
     .map(encodeURIComponent)
     .join("/")}`;
-export function route(path, { replace = false } = {}) {
+export function route(path: string | string[], { replace = false } = {}) {
   if (routing) return;
   moved = true;
   // A list is taken part by part, so a tag or search with "/" stays one.
@@ -628,7 +685,7 @@ export function route(path, { replace = false } = {}) {
   history[replace ? "replaceState" : "pushState"](null, "", address);
 }
 /** While an address is being opened, the page does not write one back. */
-export async function opening(action) {
+export async function opening<T>(action: () => Promise<T> | T) {
   routing = true;
   try {
     return await action();
@@ -637,7 +694,7 @@ export async function opening(action) {
   }
 }
 /** A view's own address. */
-function viewPath(name) {
+function viewPath(name: string) {
   if (name === "home") return "";
   // The board or page shown, so the address names it.
   if (name === "logs") return `logs/${state.board ?? "default"}`;
@@ -678,7 +735,7 @@ export function pageTitle(part?: string | null) {
   const site = $("siteTitle")?.textContent?.trim() || document.title;
   document.title = part ? `${part} | ${site}` : site;
 }
-export function showTab(name) {
+export function showTab(name: string) {
   // What an action said belongs to the page it was done on.
   say("");
   pageTitle(name === "home" ? null : (PLACES[name] ?? null));
@@ -725,7 +782,12 @@ export function showTab(name) {
  * 페이지 표시 수 (cf_write_pages, cf_mobile_pages on a phone), with 처음,
  * 이전 and 다음 blocks, and 맨끝.
  */
-export function renderPages(nav, current, pages, pick) {
+export function renderPages(
+  nav: HTMLElement,
+  current: number,
+  pages: number,
+  pick: (page: number) => unknown,
+) {
   nav.replaceChildren();
   nav.hidden = pages <= 1;
   if (pages <= 1) return;
@@ -736,7 +798,11 @@ export function renderPages(nav, current, pages, pick) {
   );
   const first = Math.floor((current - 1) / size) * size + 1;
   const last = Math.min(pages, first + size - 1);
-  const button = (label, number, extra = {}) => {
+  const button = (
+    label: string,
+    number: number,
+    extra: Partial<HTMLButtonElement> = {},
+  ) => {
     const element = document.createElement("button");
     element.type = "button";
     element.textContent = label;
@@ -747,7 +813,7 @@ export function renderPages(nav, current, pages, pick) {
     element.onclick = () => run(() => pick(number));
     return element;
   };
-  const control = (label, number, ariaLabel) =>
+  const control = (label: string, number: number, ariaLabel: string) =>
     button(label, number, { ariaLabel, className: "page control" });
   nav.append(
     ...(current > 1 ? [control("처음", 1, "첫 페이지")] : []),

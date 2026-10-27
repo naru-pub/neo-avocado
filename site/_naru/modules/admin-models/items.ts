@@ -1,5 +1,5 @@
 // 아이템 관리: items and the shop, inventories, draws, exploration, recipes, the history, money and grants.
-import { displayWindow, type Model } from "./shared.js";
+import { type Data, displayWindow, type Model } from "./shared.js";
 
 const items: Model = {
   label: "아이템·상점",
@@ -230,10 +230,10 @@ export const itemsModels: Record<string, Model> = {
     fields: [
       { key: "item", label: "아이템", type: "item", required: true },
       { key: "enabled", label: "진열 중", type: "checkbox", default: true },
-      ...items.fields.filter(
+      ...(items.fields ?? []).filter(
         (field) =>
           ["shopTalk", "shopCategory", "price", "stock", "order"].includes(
-            field.key,
+            field.key ?? "",
           ) ||
           field.key?.startsWith("display.") ||
           field.key?.startsWith("requirements."),
@@ -267,7 +267,7 @@ export const itemsModels: Record<string, Model> = {
       )
         throw new Error("선택한 회원의 캐릭터가 아닙니다.");
       const item = references.items.find((row) => row.id === data.item);
-      data.name = item.data.name;
+      data.name = item?.data.name;
       data.character = data.character || null;
       if (!previous) data.from = "admin";
     },
@@ -334,7 +334,7 @@ export const itemsModels: Record<string, Model> = {
       // Only craft materials (adm/recipi_update.php:14-30), and no combination
       // twice (:48-51): which recipe a set of materials makes must be one.
       const unflagged = data.ingredients.find(
-        (entry) =>
+        (entry: Data) =>
           references.items.find((item) => item.id === entry.item)?.data
             .craftMaterial !== true,
       );
@@ -342,7 +342,7 @@ export const itemsModels: Record<string, Model> = {
         throw new Error(
           `${references.items.find((item) => item.id === unflagged.item)?.data.name ?? unflagged.item}은(는) 조합 재료로 사용 가능하게 설정되지 않은 아이템입니다.`,
         );
-      const combination = (ingredients) =>
+      const combination = (ingredients: unknown) =>
         (Array.isArray(ingredients) ? ingredients : [])
           .flatMap((entry) => Array(Number(entry.count) || 0).fill(entry.item))
           .sort()

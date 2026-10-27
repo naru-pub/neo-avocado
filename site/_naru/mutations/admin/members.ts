@@ -129,7 +129,7 @@ export const deleteMember = ownerOnly(async function deleteMember(
   const points = recommended
     ? amountOf(await communitySettings(ctx), "recommendReward")
     : 0;
-  if (points) {
+  if (points && recommended?.recommender) {
     const before = (await walletOf(ctx, recommended.recommender)).balance;
     const taken = Math.min(points, before);
     if (taken) {
@@ -182,16 +182,19 @@ export const bulk = ownerOnly(async function bulk(
     !ids.length ||
     ids.length > 100 ||
     ids.some((id) => typeof id !== "string" || !id) ||
-    !["level", "leave"].includes(action) ||
+    (action !== "level" && action !== "leave") ||
     (action === "level" &&
-      (!Number.isInteger(level) || level < 1 || level > 10))
+      (level === undefined ||
+        !Number.isInteger(level) ||
+        level < 1 ||
+        level > 10))
   )
     invalid(ctx);
   const list = JSON.stringify([...new Set(ids)]);
   const { changes } =
     action === "level"
       ? await ctx.sql`INSERT INTO members (member, level)
-          SELECT value, ${level} FROM json_each(${list}) WHERE true
+          SELECT value, ${level ?? null} FROM json_each(${list}) WHERE true
           ON CONFLICT (member) DO UPDATE SET level = excluded.level`
       : await ctx.sql`INSERT INTO members (member, left_on)
           SELECT value, ${kstDay(ctx.now)} FROM json_each(${list}) WHERE true

@@ -28,9 +28,7 @@
     "rules": {
       "recommended": true,
       "suspicious": {
-        "noAssignInExpressions": "off",
-        "noExplicitAny": "off",
-        "noImplicitAnyLet": "off"
+        "noAssignInExpressions": "off"
       }
     }
   },

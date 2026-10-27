@@ -5,6 +5,7 @@ import {
   CHARACTER_PAGE,
   type EditField,
   edit,
+  type Fields,
   formatTime,
   memberSettings,
   mine,
@@ -13,6 +14,8 @@ import {
   pageTitle,
   preloadNicks,
   query,
+  type Row,
+  type RowPage,
   renderPages,
   route,
   run,
@@ -23,6 +26,7 @@ import {
   state,
   TYPE_NAMES,
   uploadMedia,
+  within,
 } from "./core.js";
 import { writeTo } from "./messages.js";
 import { expText, moneyText } from "./names.js";
@@ -45,19 +49,23 @@ function keepNicks(nicks: Record<string, string> = {}) {
  */
 async function loadChoices() {
   const member = state.member;
-  const { fields, sides, classes } = await query("characters/sheet:choices");
+  const { fields, sides, classes } = await query<{
+    fields: Row[];
+    sides: Row[];
+    classes: Row[];
+  }>("characters/sheet:choices");
   if (state.member !== member) return;
   state.sides = sides;
   state.classes = classes;
-  choiceField("characterSide", state.sides);
-  choiceField("characterClass", state.classes);
+  choiceField("characterSide", sides);
+  choiceField("characterClass", classes);
   showFieldCatalogue(fields);
 }
 /**
  * The names a member may pick (si_auth, cl_auth: up to their level); the
  * site owner, all.
  */
-function pickable(rows) {
+function pickable(rows: Row[]): string[] {
   return rows
     .filter(
       (row) => state.owner || (Number(row.data.level) || 1) <= state.level,
@@ -65,7 +73,7 @@ function pickable(rows) {
     .map((row) => row.data.name);
 }
 /** The form's field as a select of the list's names, or free text. */
-function choiceField(id, rows) {
+function choiceField(id: string, rows: Row[]) {
   const current = $(id);
   const wanted = rows.length ? "SELECT" : "INPUT";
   if (current.tagName === wanted && wanted === "INPUT") return;
@@ -82,7 +90,12 @@ function choiceField(id, rows) {
   current.replaceWith(field);
 }
 /** The edit dialog's field for a list, keeping a value no longer on it. */
-function choiceEdit(name, label, rows, value) {
+function choiceEdit(
+  name: string,
+  label: string,
+  rows: Row[] | undefined,
+  value: string | undefined,
+): EditField {
   if (!rows?.length) return { name, label, value, max: 40 };
   const names = pickable(rows);
   return {
@@ -91,8 +104,8 @@ function choiceEdit(name, label, rows, value) {
     value: value ?? "",
     options: [
       ["", "선택 안 함"],
-      ...(value && !names.includes(value) ? [[value, value]] : []),
-      ...names.map((entry) => [entry, entry]),
+      ...(value && !names.includes(value) ? [[value, value] as const] : []),
+      ...names.map((entry) => [entry, entry] as const),
     ],
   };
 }
@@ -100,8 +113,15 @@ function choiceEdit(name, label, rows, value) {
  * The characters the filter picks by numbered pages: 멤버목록 oldest first
  * (get_character_list's ch_id asc), the rest newest first; `size` 0, all.
  */
-async function characterPage(filter, page, size, search = {}) {
-  const result = await query("characters/sheet:list", {
+async function characterPage(
+  filter: string | null,
+  page: number,
+  size: number,
+  search: Fields = {},
+) {
+  const result = await query<
+    RowPage & { total: number; nicks: Record<string, string> }
+  >("characters/sheet:list", {
     filter,
     page,
     size,
@@ -126,7 +146,7 @@ export async function loadCharacters({ page: number = 1 } = {}) {
   if (
     $<HTMLSelectElement>("characterFilter").value === "approved" &&
     state.names.sideTitle &&
-    state.sides.length >= 2
+    (state.sides?.length ?? 0) >= 2
   ) {
     await showBySide();
     state.charactersLoaded = true;
@@ -153,16 +173,22 @@ export async function loadCharacters({ page: number = 1 } = {}) {
   );
 }
 /** 신청자목록's applicants, read once a visit, and what narrows them. */
-const applicants = { rows: null, side: "", class: "", field: "nick", text: "" };
+const applicants = {
+  rows: null as Row[] | null,
+  side: "",
+  class: "",
+  field: "nick",
+  text: "",
+};
 const APPLICANT_PAGE = 10;
 /**
  * 신청자목록 (member/ready.php): ALL and each 소속 (with its 종족) and
  * their counts, the search, then 10 a page, newest first.
  */
 async function showApplicants(number = 1) {
-  const rows = applicants.rows;
+  const rows = applicants.rows ?? [];
   await preloadNicks(rows);
-  const nicks = new Map();
+  const nicks = new Map<string, string>();
   for (const row of rows)
     nicks.set(row.id, await nickOf(row.createdBy ?? row.data.owner));
   const searched = rows.filter((row) => {
@@ -172,12 +198,12 @@ async function showApplicants(number = 1) {
       applicants.field === "nick" ? nicks.get(row.id) : row.data.name;
     return String(value ?? "").includes(applicants.text);
   });
-  const count = (side, kind) =>
+  const count = (side: string, kind: string) =>
     searched.filter(
       (row) =>
         (!side || row.data.side === side) && (!kind || row.data.class === kind),
     ).length;
-  const filter = (label, side, kind) => {
+  const filter = (label: string, side: string, kind: string) => {
     const button = document.createElement("button");
     button.type = "button";
     button.textContent = `${label}(${count(side, kind)})`;
@@ -194,10 +220,10 @@ async function showApplicants(number = 1) {
     return button;
   };
   const sides = state.names.sideTitle
-    ? state.sides.map((row) => row.data.name)
+    ? (state.sides ?? []).map((row) => row.data.name)
     : [];
   const classes = state.names.classTitle
-    ? state.classes.map((row) => row.data.name)
+    ? (state.classes ?? []).map((row) => row.data.name)
     : [];
   $("applicantFilters").replaceChildren(
     filter("ALL", "", ""),
@@ -213,7 +239,7 @@ async function showApplicants(number = 1) {
         (!applicants.side || row.data.side === applicants.side) &&
         (!applicants.class || row.data.class === applicants.class),
     )
-    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    .sort((a, b) => ((a.createdAt ?? "") < (b.createdAt ?? "") ? 1 : -1));
   const pages = Math.ceil(shown.length / APPLICANT_PAGE);
   const current = Math.min(Math.max(1, number), Math.max(1, pages));
   $("characters").replaceChildren();
@@ -259,14 +285,15 @@ $("applicantSearch").onsubmit = (event) => {
 async function showBySide() {
   const characters = (await characterPage("approved", 1, 0)).documents;
   const sections = [
-    ...state.sides.map((side) => ({
+    ...(state.sides ?? []).map((side) => ({
       side,
       members: characters.filter((row) => row.data.side === side.data.name),
     })),
     {
       side: null,
       members: characters.filter(
-        (row) => !state.sides.some((side) => side.data.name === row.data.side),
+        (row) =>
+          !(state.sides ?? []).some((side) => side.data.name === row.data.side),
       ),
     },
   ].filter((section) => section.side || section.members.length);
@@ -301,7 +328,7 @@ async function loadFieldCatalogue() {
   return state.fieldCatalogue ?? [];
 }
 /** The registration form's inputs for the custom fields. */
-function showFieldCatalogue(rows) {
+function showFieldCatalogue(rows: Row[]) {
   state.fieldCatalogue = rows;
   // 신청자목록's search by each 공개 profile field (member/ready.php).
   const choice = $<HTMLSelectElement>("applicantField");
@@ -334,12 +361,18 @@ function showFieldCatalogue(rows) {
   return rows;
 }
 /** A one-line field's unit (ar_text), shown after it (viewer.skin.php:117). */
-const suffixOf = (row) =>
+const suffixOf = (row: Row) =>
   (row.data.type ?? "text") === "text" && typeof row.data.suffix === "string"
     ? row.data.suffix.trim()
     : "";
 /** A label and control for one custom field definition. */
-function fieldInput(row, value) {
+function fieldInput(
+  row: Row,
+  value: string,
+): [
+  HTMLLabelElement,
+  HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement,
+] {
   const label = document.createElement("label");
   label.textContent = `${row.data.label ?? row.id}${row.data.required ? " (신청 시 필수)" : ""}${row.data.visibility === "owner" ? " · 오너와 운영자만 봄" : ""}`;
   if (row.data.help) label.title = row.data.help;
@@ -369,7 +402,7 @@ function fieldInput(row, value) {
   return [label, input];
 }
 /** Custom values of a character the characters rule let the caller see, in catalogue order. */
-function renderFields(list, character) {
+function renderFields(list: HTMLElement, character: { data: Fields }) {
   list.replaceChildren();
   for (const row of state.fieldCatalogue ?? []) {
     const value = character.data.fields?.[row.id];
@@ -395,17 +428,18 @@ function renderFields(list, character) {
     list.append(term, detail);
   }
 }
-async function characterItem(character) {
-  const item = $<HTMLTemplateElement>(
-    "characterTemplate",
-  ).content.firstElementChild.cloneNode(true) as HTMLElement;
-  const image = item.querySelector<HTMLImageElement>(".character-image");
+async function characterItem(character: Row) {
+  const item = (
+    $<HTMLTemplateElement>("characterTemplate").content
+      .firstElementChild as HTMLElement
+  ).cloneNode(true) as HTMLElement;
+  const image = within<HTMLImageElement>(item, ".character-image");
   if (character.data.image) image.src = character.data.image;
   else image.remove();
   const name = document.createElement("a");
   name.href = `/character/${encodeURIComponent(character.id)}`;
   name.textContent = character.data.name;
-  item.querySelector(".character-name").replaceChildren(name);
+  within(item, ".character-name").replaceChildren(name);
   // 쪽지 to another member's owner, as the member list's memo link.
   const owner = character.createdBy ?? character.data.owner;
   if (state.member && owner && owner !== state.member.id) {
@@ -413,30 +447,29 @@ async function characterItem(character) {
     write.type = "button";
     write.textContent = "쪽지";
     write.onclick = () => run(() => writeTo(owner));
-    item.querySelector(".meta").append(write);
+    within(item, ".meta").append(write);
   }
   // An untitled 소속 or 종족 is not shown, as cf_side_title left empty.
-  item.querySelector(".character-side").textContent = [
+  within(item, ".character-side").textContent = [
     state.names.sideTitle && character.data.side,
     state.names.classTitle && character.data.class,
   ]
     .filter(Boolean)
     .join(" · ");
-  item.querySelector(".character-state").textContent = [
+  within(item, ".character-state").textContent = [
     TYPE_NAMES[character.data.type],
     STATE_NAMES[character.data.state],
   ]
     .filter(Boolean)
     .join(" · ");
-  item.querySelector(".character-profile").textContent =
-    character.data.profile ?? "";
-  item.querySelector(".author").textContent =
+  within(item, ".character-profile").textContent = character.data.profile ?? "";
+  within(item, ".author").textContent =
     `오너: ${await nickOf(character.createdBy ?? character.data.owner)}`;
-  const remove = item.querySelector<HTMLButtonElement>(".delete");
+  const remove = within<HTMLButtonElement>(item, ".delete");
   // 캐릭터 정보 삭제 only before approval (viewer.php:203); the owner, always.
   remove.hidden =
     !mine(character) || (character.data.state === "approved" && !state.owner);
-  const change = item.querySelector<HTMLButtonElement>(".edit");
+  const change = within<HTMLButtonElement>(item, ".edit");
   // An approved character is edited only while the owner allows editing.
   change.hidden =
     !mine(character) ||
@@ -456,7 +489,7 @@ async function characterItem(character) {
       state.speakers = null;
       item.remove();
     });
-  const main = item.querySelector<HTMLButtonElement>(".main-character");
+  const main = within<HTMLButtonElement>(item, ".main-character");
   main.hidden = !mine(character);
   main.onclick = () =>
     run(async () => {
@@ -475,8 +508,8 @@ async function characterItem(character) {
  * editing is closed, and the save spends it (inventory/use_item.php:27-28).
  */
 export async function editCharacter(
-  character,
-  onSaved: (saved) => unknown,
+  character: Row,
+  onSaved: (saved: Row) => unknown,
   ticket: string | null = null,
 ) {
   // Lists carry no custom values, so an edit starts from the full sheet.
@@ -551,7 +584,9 @@ export async function editCharacter(
         ? {
             options: [
               ["", "선택 안 함"],
-              ...(row.data.options ?? []).map((option) => [option, option]),
+              ...(row.data.options ?? []).map(
+                (option: string) => [option, option] as const,
+              ),
             ],
           }
         : row.data.type === "textarea"
@@ -597,27 +632,27 @@ export async function editCharacter(
     },
   );
 }
-function wireCharacterDetails(item, character) {
-  const details = item.querySelector(".character-details");
-  const addRelation = item.querySelector(".add-relation");
-  const addOutfit = item.querySelector(".add-outfit");
-  const defaultOutfit = item.querySelector(".default-outfit");
-  const allocate = item.querySelector(".allocate-stats");
+function wireCharacterDetails(item: HTMLElement, character: Row) {
+  const details = within<HTMLDetailsElement>(item, ".character-details");
+  const addRelation = within(item, ".add-relation");
+  const addOutfit = within(item, ".add-outfit");
+  const defaultOutfit = within(item, ".default-outfit");
+  const allocate = within(item, ".allocate-stats");
   for (const button of [addRelation, addOutfit, defaultOutfit])
     button.hidden = !mine(character);
   // What the owner shows on a character (ad_use_status, _title, _closet).
   const show = state.viewer;
-  item.querySelector(".stats-section").hidden =
+  within(item, ".stats-section").hidden =
     !show.stats && !show.exp && !show.rank;
-  item.querySelector(".stats").hidden = !show.stats;
-  item.querySelector(".titles-section").hidden = !show.titles;
+  within(item, ".stats").hidden = !show.stats;
+  within(item, ".titles-section").hidden = !show.titles;
   // The closet needs the 전신 too: an outfit is a 전신 (member/skin/
   // viewer.skin.php:7, member/viewer.php:79).
   // Relations are an approved character's (mypage/character/viewer.php:157,
   // member/skin/viewer.skin.php:201).
-  item.querySelector(".relations-section").hidden =
+  within(item, ".relations-section").hidden =
     character.data.state !== "approved";
-  item.querySelector(".closet-section").hidden = !show.closet || !bodyUsed();
+  within(item, ".closet-section").hidden = !show.closet || !bodyUsed();
   let loaded = false;
   const refresh = async () => {
     await loadFieldCatalogue();
@@ -625,20 +660,20 @@ function wireCharacterDetails(item, character) {
     const shown = await query("characters/sheet:details", {
       character: character.id,
     });
-    if (state.fieldCatalogue.length)
-      renderFields(item.querySelector(".character-fields"), {
+    if (state.fieldCatalogue?.length)
+      renderFields(within(item, ".character-fields"), {
         data: { fields: shown.fields },
       });
     const status = shown.status;
     // The points not yet given to a stat (status.inc.php's space point).
     const spent = status.definitions.reduce(
-      (total, definition) =>
+      (total: number, definition: Row) =>
         total + (status.state.stats[definition.id]?.allocated ?? 0),
       0,
     );
     const left = Math.max(0, status.state.points - spent);
     const approved = status.state.approved === true;
-    item.querySelector(".progression").textContent = [
+    within(item, ".progression").textContent = [
       state.viewer.exp ? expText(state.names, status.state.exp) : "",
       state.viewer.rank && status.rank ? status.rank : "",
       state.viewer.stats
@@ -647,7 +682,7 @@ function wireCharacterDetails(item, character) {
     ]
       .filter(Boolean)
       .join(" · ");
-    item.querySelector(".stats").replaceChildren();
+    within(item, ".stats").replaceChildren();
     for (const definition of status.definitions) {
       const li = document.createElement("li");
       const stat = status.state.stats[definition.id];
@@ -655,7 +690,7 @@ function wireCharacterDetails(item, character) {
       li.textContent = `${definition.data.name ?? definition.id}: ${stat.current} / ${
         definition.data.useMax ? definition.data.max : stat.max
       }`;
-      item.querySelector(".stats").append(li);
+      within(item, ".stats").append(li);
     }
     // Once approved, only the points left are spent, and no stat goes below
     // what it has (mypage/character/status.inc.php:17-25, 60).
@@ -669,7 +704,7 @@ function wireCharacterDetails(item, character) {
         approved
           ? `남은 능력치 포인트 배분 (남은 ${left})`
           : "능력치 포인트 배분",
-        status.definitions.map((definition) => ({
+        status.definitions.map((definition: Row) => ({
           name: definition.id,
           label: `${definition.data.name ?? definition.id}에 배분할 포인트${definition.data.help ? ` (${definition.data.help})` : ""}`,
           type: "number",
@@ -691,8 +726,8 @@ function wireCharacterDetails(item, character) {
         },
       );
     const titles = shown.titles;
-    const titleChoice = item.querySelector(".title-choice");
-    item.querySelector(".titles").replaceChildren();
+    const titleChoice = within<HTMLSelectElement>(item, ".title-choice");
+    within(item, ".titles").replaceChildren();
     titleChoice.replaceChildren();
     const none = document.createElement("option");
     none.value = "";
@@ -708,7 +743,7 @@ function wireCharacterDetails(item, character) {
         image.className = "title-image";
         span.prepend(image);
       }
-      item.querySelector(".titles").append(span, " ");
+      within(item, ".titles").append(span, " ");
       const option = document.createElement("option");
       option.value = title.id;
       option.textContent = title.data.name;
@@ -724,17 +759,17 @@ function wireCharacterDetails(item, character) {
         });
         await refresh();
       });
-    item.querySelector(".couples").replaceChildren();
+    within(item, ".couples").replaceChildren();
     for (const couple of shown.couples) {
       const li = document.createElement("li");
       li.textContent = `${couple.partner?.name ?? "삭제된 캐릭터"}${couple.data.since ? ` · ${couple.data.since}부터` : ""}`;
-      item.querySelector(".couples").append(li);
+      within(item, ".couples").append(li);
     }
     const clothes = shown.wardrobe;
-    item.querySelector(".relations").replaceChildren();
+    within(item, ".relations").replaceChildren();
     // rm_order, then the newest first, as the query answers them; one with
     // no summary is not shown (relation_list.php:4, 31-34).
-    for (const row of shown.relations.filter((row) =>
+    for (const row of shown.relations.filter((row: Row) =>
       String(row.data.memo ?? "").trim(),
     )) {
       const li = document.createElement("li");
@@ -788,9 +823,9 @@ function wireCharacterDetails(item, character) {
           });
         li.append(" ", change, " ", remove);
       }
-      item.querySelector(".relations").append(li);
+      within(item, ".relations").append(li);
     }
-    item.querySelector(".wardrobe").replaceChildren();
+    within(item, ".wardrobe").replaceChildren();
     for (const clothing of clothes) {
       const li = document.createElement("li");
       const image = document.createElement("img");
@@ -870,9 +905,9 @@ function wireCharacterDetails(item, character) {
           );
         li.append(" ", wear, " ", change, " ", remove);
       }
-      item.querySelector(".wardrobe").append(li);
+      within(item, ".wardrobe").append(li);
     }
-    let portrait = item.querySelector(".character-image");
+    let portrait = item.querySelector<HTMLImageElement>(".character-image");
     // The outfit is the 전신 (member/viewer.php:76), never the 두상.
     const src = character.data.image;
     if (src && !portrait) {
@@ -887,7 +922,7 @@ function wireCharacterDetails(item, character) {
   };
   // mypage/character/relation_list.php: the other character is named, and
   // found by its name (relation_update.php), with one read.
-  const relationEditor = (row?) =>
+  const relationEditor = (row?: Fields) =>
     run(async () => {
       const current = row?.target ?? null;
       edit(
@@ -1029,7 +1064,7 @@ function renderImageInputs() {
   $("characterImages").replaceChildren(...labels);
 }
 /** The edit dialog's fields for the used pictures. */
-function imageEdits(current): EditField[] {
+function imageEdits(current: Fields): EditField[] {
   return state.images
     .filter((slot) => slot.use)
     .map((slot) =>
@@ -1049,14 +1084,14 @@ function imageEdits(current): EditField[] {
     );
 }
 /** A relation's affinity as 0 to 5 hearts; older values are clamped. */
-const affinityOf = (value) =>
+const affinityOf = (value: unknown) =>
   Math.min(5, Math.max(0, Math.round(Number(value) || 0)));
-const hearts = (value) =>
+const hearts = (value: number) =>
   "♥".repeat(affinityOf(value)) + "♡".repeat(5 - affinityOf(value));
 const bodyUsed = () =>
   state.images.some((slot) => slot.slot === "body" && slot.use);
 /** The 흉상 and 전신 on a character's page; the worn outfit is the 전신. */
-function viewerFigures(character, outfit) {
+function viewerFigures(character: Row, outfit: Row | null) {
   const figures = document.createElement("div");
   figures.className = "viewer-figures";
   for (const slot of state.images) {
@@ -1077,7 +1112,7 @@ function viewerFigures(character, outfit) {
   return figures;
 }
 /** The owner's community settings, read once a page load. */
-let settingsRead;
+let settingsRead: Promise<Fields> | undefined;
 const communitySettings = () => (settingsRead ??= memberSettings());
 
 /**
@@ -1095,7 +1130,7 @@ $("characterForm").onsubmit = (event) => {
   run(async () => {
     const name = $<HTMLInputElement>("characterName").value.trim();
     if (!name) return;
-    const images = {};
+    const images: Record<string, string> = {};
     for (const input of $("characterImages").querySelectorAll<HTMLInputElement>(
       "[data-image]",
     )) {
@@ -1105,7 +1140,7 @@ $("characterForm").onsubmit = (event) => {
         : input.type === "file"
           ? ""
           : input.value.trim();
-      if (value) images[input.dataset.image] = value;
+      if (value) images[input.dataset.image ?? ""] = value;
     }
     const fields = Object.fromEntries(
       [
@@ -1122,7 +1157,7 @@ $("characterForm").onsubmit = (event) => {
       const chosen = input.files?.[0];
       if (!chosen) continue;
       const uploaded = await uploadMedia(chosen);
-      fields[input.dataset.fieldUpload] = uploaded.url;
+      fields[input.dataset.fieldUpload ?? ""] = uploaded.url;
     }
     const { document: character } = await mutate("characters/sheet:save", {
       data: {
@@ -1157,7 +1192,7 @@ $("characterForm").onsubmit = (event) => {
  * picture, and what the viewer adds: the experience history (exp.php) and,
  * where the owner shows them, the inventory and the owner's money.
  */
-export async function openCharacter(id) {
+export async function openCharacter(id: string) {
   showTab("character");
   route(`character/${id}`, { replace: true });
   $("characterSheet").replaceChildren();
@@ -1172,9 +1207,9 @@ export async function openCharacter(id) {
   keepNicks(nicks);
   const item = await characterItem(character);
   item.classList.add("viewer");
-  const details = item.querySelector<HTMLDetailsElement>(".character-details");
+  const details = within<HTMLDetailsElement>(item, ".character-details");
   details.open = true;
-  details.ontoggle?.(undefined);
+  details.ontoggle?.(new Event("toggle") as ToggleEvent);
   const sheet = await query("characters/progression:characterSheet", {
     character: id,
   });
@@ -1182,14 +1217,14 @@ export async function openCharacter(id) {
   const inventory = sheet.inventory ?? null;
   const extras = document.createElement("div");
   extras.className = "viewer-extras";
-  const heading = (text) => {
+  const heading = (text: string) => {
     const h3 = document.createElement("h3");
     h3.textContent = text;
     return h3;
   };
   const exp = document.createElement("ul");
   exp.className = "viewer-exp";
-  const showExp = (rows) => {
+  const showExp = (rows: Fields[]) => {
     for (const row of rows) {
       const li = document.createElement("li");
       li.textContent = `${formatTime(row.at)} · ${row.delta > 0 ? "+" : ""}${row.delta} (총 ${row.exp})${row.memo ? ` · ${row.memo}` : ""}`;
@@ -1263,7 +1298,7 @@ export async function openCharacter(id) {
           }),
         );
       details.append(summary);
-      const about = (className, text) => {
+      const about = (className: string, text: string) => {
         if (text)
           details.append(
             Object.assign(document.createElement("p"), {

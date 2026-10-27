@@ -2,9 +2,10 @@
 // lengths, the site's banned words, and when a post may no longer be edited.
 
 import type { Access, SqlCtx } from "./access.js";
-import { amountOf, communitySettings, one } from "./access.js";
+import { amountOf, communitySettings, only } from "./access.js";
 import type { Board, PostRow } from "./boards.js";
 import { isStaff } from "./boards.js";
+import type { Data } from "./json.js";
 import type { QueryCtx } from "./naru-types.js";
 
 type FailCtx = SqlCtx & Pick<QueryCtx, "fail">;
@@ -124,7 +125,7 @@ export function checkLength(
 }
 
 /** The site's banned words (cf_filter), comma-separated in the settings. */
-export function bannedWords(settings: Record<string, any> | undefined) {
+export function bannedWords(settings: Data | undefined) {
   const list = settings?.bannedWords;
   return typeof list === "string"
     ? list
@@ -168,7 +169,7 @@ export async function checkDelay(
   const delay = amountOf(await communitySettings(ctx), "writeDelay");
   if (!delay) return;
   const me = ctx.member.id;
-  const { last } = await one<{ last: number }>(
+  const { last } = await only<{ last: number }>(
     ctx,
     `SELECT max(coalesce((SELECT max(created_at) FROM posts WHERE owner = ?), 0),
        coalesce((SELECT max(created_at) FROM comments WHERE owner = ?), 0)) AS last`,
@@ -196,7 +197,7 @@ export async function checkEditable(
   const lock = boardNumber(board, "editLock");
   if (!lock || isStaff(access, board)) return;
   const me = ctx.member?.id ?? null;
-  const { count } = await one<{ count: number }>(
+  const { count } = await only<{ count: number }>(
     ctx,
     "SELECT count(*) AS count FROM comments WHERE post_id = ? AND owner IS NOT NULL AND owner IS NOT ?",
     [post.id, me],

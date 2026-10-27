@@ -343,7 +343,7 @@ export const boardsModels: Record<string, Model> = {
         throw new Error("제목 길이는 255자 이하입니다.");
       if (
         data.categories.length > 20 ||
-        data.categories.some((name) => name.length > 40)
+        data.categories.some((name: string) => name.length > 40)
       )
         throw new Error("분류는 20개 이하, 각 40자 이하입니다.");
       if (data.pageRows < 1 || data.pageRows > 100)
@@ -479,7 +479,7 @@ export const boardsModels: Record<string, Model> = {
       },
     ],
     check(data) {
-      const date = (value) => {
+      const date = (value: string) => {
         if (!value) return null;
         if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(value))
           throw new Error("기간을 확인하세요.");
@@ -498,11 +498,11 @@ export const boardsModels: Record<string, Model> = {
         throw new Error("종료는 시작보다 늦어야 합니다.");
       data.images = data.images
         .split(/\r?\n/)
-        .map((value) => value.trim())
+        .map((value: string) => value.trim())
         .filter(Boolean);
       if (
         data.images.length > 20 ||
-        data.images.some((value) => !plainHttps(value))
+        data.images.some((value: string) => !plainHttps(value))
       )
         throw new Error(
           "인증 정보 없는 HTTPS 이미지 주소를 최대 20개 입력하세요.",

@@ -10,12 +10,12 @@ import { invalid } from "../../modules/admin.js";
 import { type HistoryRow, historyOfRow } from "../../modules/members.js";
 import type { QueryCtx, SqlValue } from "../../modules/naru-types.js";
 
-const KINDS = {
+const KINDS: Record<string, string> = {
   money: "history.delta IS NOT NULL",
   exp: "history.exp_delta IS NOT NULL",
   buy: "history.kind = 'buy'",
 };
-const FIELDS = {
+const FIELDS: Record<string, string> = {
   nick: "history.owner IN (SELECT member FROM profiles WHERE nick LIKE ? ESCAPE '\\' LIMIT 100)",
   character:
     "history.character_id IN (SELECT id FROM characters WHERE name LIKE ? ESCAPE '\\' LIMIT 100)",
@@ -88,6 +88,6 @@ export const list = ownerOnly(async function list(
   }));
   return {
     documents,
-    nextCursor: rows.length > size ? documents.at(-1).id : null,
+    nextCursor: rows.length > size ? documents[documents.length - 1].id : null,
   };
 });

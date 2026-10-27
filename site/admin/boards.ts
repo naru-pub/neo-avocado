@@ -1,6 +1,15 @@
 // 게시판관리: the boards' list with 선택수정·선택삭제, 그룹적용·전체적용, and a group's 접근회원.
 
-import { $, CALLS, owner, references, run } from "./core.js";
+import type { Model } from "../_naru/modules/admin-model.js";
+import {
+  $,
+  type AdminRow,
+  CALLS,
+  ownerMutate,
+  ownerQuery,
+  references,
+  run,
+} from "./core.js";
 import { openForm } from "./editor.js";
 import { models } from "./forms.js";
 import { load } from "./list.js";
@@ -10,7 +19,7 @@ import { control } from "./views.js";
  * A board group's 접근회원 (boardgroupmember_list.php, _form, _update): who
  * has its access, each with 삭제, and a nickname to add.
  */
-export async function groupMembers(group) {
+export async function groupMembers(group: AdminRow) {
   const box = document.createElement("div");
   box.className = "group-members";
   const list = document.createElement("ul");
@@ -22,7 +31,7 @@ export async function groupMembers(group) {
     let after = "";
     let count = 0;
     do {
-      const page = await owner.query("admin/board_groups:members", {
+      const page = await ownerQuery("admin/board_groups:members", {
         group: group.id,
         after,
       });
@@ -35,7 +44,7 @@ export async function groupMembers(group) {
         remove.className = "danger";
         remove.onclick = () =>
           run(async () => {
-            await owner.mutate("admin/board_groups:setMember", {
+            await ownerMutate("admin/board_groups:setMember", {
               group: group.id,
               nick: member.nick,
               remove: true,
@@ -62,7 +71,7 @@ export async function groupMembers(group) {
   form.onsubmit = (event) => {
     event.preventDefault();
     run(async () => {
-      await owner.mutate("admin/board_groups:setMember", {
+      await ownerMutate("admin/board_groups:setMember", {
         group: group.id,
         nick: nick.value.trim(),
       });
@@ -76,7 +85,7 @@ export async function groupMembers(group) {
 }
 /** The 글 형식 choices, as the board form names them. */
 export const boardKinds = () =>
-  models.boards.fields.find((field) => field.key === "kind").options;
+  models.boards.fields?.find((field) => field.key === "kind")?.options ?? [];
 /**
  * A board in adm/board_list.php's list: chosen for 선택수정 or 선택삭제, with
  * the fields the list edits in place (그룹, 제목, 스킨 as 글 형식, and the
@@ -84,13 +93,17 @@ export const boardKinds = () =>
  * (board_copy.php): a new ID and name, its settings alone (구조만) or with
  * its posts (구조와 데이터).
  */
-export function boardRow(row) {
+export function boardRow(row: AdminRow) {
   const select = document.createElement("input");
   select.type = "checkbox";
   select.className = "board-select";
   select.value = row.id;
   select.setAttribute("aria-label", `${row.data.name} 선택`);
-  const field = (name, label, input: HTMLInputElement | HTMLSelectElement) => {
+  const field = (
+    name: string,
+    label: string,
+    input: HTMLInputElement | HTMLSelectElement,
+  ) => {
     input.name = name;
     input.dataset.board = row.id;
     input.setAttribute("aria-label", `${row.data.name} ${label}`);
@@ -110,7 +123,7 @@ export function boardRow(row) {
   const kind = field("kind", "글 형식", document.createElement("select"));
   kind.append(...boardKinds().map(([id, text]) => new Option(text, id)));
   kind.value = row.data.kind ?? "image";
-  const reward = (key, label) => {
+  const reward = (key: string, label: string) => {
     const input = field(key, label, document.createElement("input"));
     // Each may be negative: a charge (bo_*_point).
     (input as HTMLInputElement).type = "number";
@@ -157,7 +170,7 @@ export function boardRow(row) {
     run(async () => {
       go.disabled = true;
       try {
-        const result = await owner.mutate("admin/boards:copy", {
+        const result = await ownerMutate("admin/boards:copy", {
           id: row.id,
           target: target.value.trim(),
           name: title.value.trim(),
@@ -217,7 +230,7 @@ $("boardsSave").onclick = () =>
         >(`[data-board="${CSS.escape(id)}"]`))
           values[input.name] =
             input.type === "number" ? Number(input.value) : input.value;
-        await owner.mutate(CALLS.boards.save, { id, values });
+        await ownerMutate(CALLS.boards.save, { id, values });
         saved++;
       }
     } finally {
@@ -238,8 +251,11 @@ async function removeBoards(ids: string[], withPosts: boolean) {
   let removed = 0;
   try {
     for (const id of ids) {
-      if (withPosts) await owner.mutate("admin/boards:clear", { id });
-      await owner.mutate(CALLS.boards.remove, { section: "boards", id });
+      if (withPosts) await ownerMutate("admin/boards:clear", { id });
+      await ownerMutate(CALLS.boards.remove, {
+        section: "boards",
+        id,
+      });
       removed++;
     }
   } finally {
@@ -265,7 +281,7 @@ $("boardsRemove").onclick = () =>
  * board_form.php's 그룹적용 and 전체적용: the settings ticked here are
  * saved to every board of this board's group, or to every board, too.
  */
-export function boardApply(model) {
+export function boardApply(model: Model) {
   const fieldset = document.createElement("fieldset");
   fieldset.id = "boardApply";
   const legend = document.createElement("legend");
@@ -279,7 +295,7 @@ export function boardApply(model) {
   );
   const list = document.createElement("p");
   list.className = "apply-fields";
-  for (const field of model.fields) {
+  for (const field of model.fields ?? []) {
     if (!field.key || ["name", "group"].includes(field.key)) continue;
     if (field.type === "heading" || field.type === "group") continue;
     const label = document.createElement("label");

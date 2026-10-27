@@ -6,7 +6,7 @@
 // call. The record is the character's row: it is never made or deleted
 // alone.
 
-import { one, ownerOnly } from "../../modules/access.js";
+import { one, only, ownerOnly } from "../../modules/access.js";
 import {
   checked,
   conflict,
@@ -62,6 +62,6 @@ export const save = ownerOnly(async function save(
       actor: "site-owner",
     });
   return stateOf(
-    await one(ctx, `${STATE_SELECT} WHERE characters.id = ?`, [key]),
+    await only(ctx, `${STATE_SELECT} WHERE characters.id = ?`, [key]),
   );
 });

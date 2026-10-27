@@ -8,6 +8,7 @@ import {
   invalid,
   names,
   one,
+  only,
   parsed,
   signedIn,
   text,
@@ -51,6 +52,7 @@ import {
   withExp,
 } from "../../modules/characters.js";
 import { startWrite } from "../../modules/community.js";
+import type { Data } from "../../modules/json.js";
 import {
   addHistory,
   FAVORITE_LIMIT,
@@ -208,8 +210,8 @@ function filesOf(ctx: MutationCtx, value: unknown): string[] {
 }
 
 /** A post's actions, as its row keeps them. */
-const actionsOf = (row: PostRow | null): any[] => {
-  const list = parsed<any>(row?.actions, []);
+const actionsOf = (row: PostRow | null): Data[] => {
+  const list = parsed<unknown>(row?.actions, []);
   return Array.isArray(list) ? list : [];
 };
 
@@ -313,9 +315,9 @@ export async function write(
       ? await attachmentsOf(
           ctx,
           data.attachments,
-          parsed<any[]>(previous?.attachments, []),
+          parsed<Upload[]>(previous?.attachments, []),
         )
-      : parsed<any[]>(previous?.attachments, []);
+      : parsed<Upload[]>(previous?.attachments, []);
   if (board.data.kind !== "text" && attachments.length) invalid(ctx);
   // 업로드 등급 (bo_upload_level): who may add pictures and files.
   if (
@@ -422,7 +424,7 @@ export async function write(
   if (!previous) speaker = await speakerOf(ctx, data.character);
   else if (acting)
     // The post's character must still be the writer's to act for it.
-    await speakerOf(ctx, before.character ?? null);
+    await speakerOf(ctx, before?.character ?? null);
   // Dice once a post: on an edit only while it has none (write.skin.php:319).
   const dice = Boolean(before?.dice) || data.dice === true;
   const rolls =
@@ -492,7 +494,7 @@ export async function write(
     ).rows[0];
   } else {
     // The board's next number (wr_num): its highest plus one.
-    const { next } = await one<{ next: number }>(
+    const { next } = await only<{ next: number }>(
       ctx,
       "SELECT coalesce(max(number), 0) + 1 AS next FROM posts WHERE board = ?",
       [boardId],
@@ -647,7 +649,7 @@ export async function vote(
     ctx.fail("AUTH_REQUIRED", "회원만 가능합니다.", { reason: "sign_in" });
   const { row, board } = await readablePost(ctx, id);
   if (
-    !["good", "nogood"].includes(kind) ||
+    (kind !== "good" && kind !== "nogood") ||
     (kind === "good" && !board.data.useGood) ||
     (kind === "nogood" && !board.data.useNogood)
   )
@@ -670,7 +672,7 @@ export async function vote(
     );
   await ctx.sql`INSERT INTO post_votes (post_id, member, vote, created_at)
     VALUES (${row.id}, ${me}, ${kind === "good" ? 1 : -1}, ${ctx.now})`;
-  const { good, nogood } = await one<{ good: number; nogood: number }>(
+  const { good, nogood } = await only<{ good: number; nogood: number }>(
     ctx,
     `SELECT coalesce(sum(vote = 1), 0) AS good, coalesce(sum(vote = -1), 0) AS nogood
      FROM post_votes WHERE post_id = ?`,
@@ -688,7 +690,7 @@ export async function linkHit(
   { id, url }: { id?: string; url?: string } = {},
 ) {
   const { row } = await readablePost(ctx, id);
-  if (!parsed<string[]>(row.links, []).includes(url as string))
+  if (typeof url !== "string" || !parsed<string[]>(row.links, []).includes(url))
     ctx.fail("NOT_FOUND", "링크가 존재하지 않습니다.", { reason: "no_link" });
   await ctx.sql`INSERT INTO link_hits (post_id, url, hits) VALUES (${row.id}, ${url}, 1)
     ON CONFLICT (post_id, url) DO UPDATE SET hits = link_hits.hits + 1`;
@@ -704,7 +706,7 @@ export async function download(
   { id, url }: { id?: string; url?: string } = {},
 ) {
   const { row, access, board } = await readablePost(ctx, id);
-  const file = parsed<any[]>(row.attachments, []).find(
+  const file = parsed<Data[]>(row.attachments, []).find(
     (entry) => entry?.url === url,
   );
   if (!file)
@@ -767,7 +769,7 @@ export async function remove(
   const board = await boardOf(ctx, previous.board);
   const staff = isStaff(access, board);
   // A settled request stays (caculate/list.skin.php:109: 삭제 while wr_10 is empty).
-  if (parsed<any>(previous.settlement, {})?.state && !staff)
+  if (parsed<Data>(previous.settlement, {})?.state && !staff)
     ctx.fail("CONFLICT", "이미 처리된 정산글은 지울 수 없습니다.", {
       reason: "settled",
     });
@@ -928,7 +930,7 @@ export async function settle(
       reason: "invalid_input",
     });
   // 정산완료 or 반려, as the admin's reply offers (caculate/write_comment.php:28).
-  if (!["정산완료", "반려"].includes(state))
+  if (state !== "정산완료" && state !== "반려")
     ctx.fail("INVALID_REQUEST", "처리 상태는 정산완료 또는 반려입니다.", {
       reason: "invalid_input",
     });
@@ -938,7 +940,7 @@ export async function settle(
   const owner = row.owner;
   // A request is paid once: settling it again only changes its state
   // (caculate/write_comment_update.skin.php pays on a new reply, w != cu).
-  if (parsed<any>(row.settlement, {})?.state && (exp > 0 || money > 0))
+  if (parsed<Data>(row.settlement, {})?.state && (exp > 0 || money > 0))
     ctx.fail("CONFLICT", "이미 처리된 정산글에는 다시 지급할 수 없습니다.", {
       reason: "settled",
     });

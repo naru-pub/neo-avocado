@@ -10,6 +10,7 @@ import {
   kstDay,
   lacking,
   one,
+  signedIn,
 } from "./access.js";
 import type { PostRow } from "./boards.js";
 import { postReadable } from "./boards.js";
@@ -19,6 +20,7 @@ import {
   give,
   itemById,
   itemsByIds,
+  type Owned,
   openRecipes,
   ownedItem,
   ownedItems,
@@ -243,7 +245,7 @@ export async function callsUnread(ctx: SqlCtx): Promise<boolean> {
       ctx,
       `SELECT 1 FROM calls WHERE recipient = ?
        AND at > coalesce((SELECT calls_seen_at FROM profiles WHERE member = ?), 0) LIMIT 1`,
-      [ctx.member.id, ctx.member.id],
+      [signedIn(ctx), signedIn(ctx)],
     ),
   );
 }
@@ -403,11 +405,14 @@ export async function combineInPost(
     ctx.fail("INVALID_REQUEST", "레시피에 맞는 재료를 선택해 주세요.", {
       reason: "invalid_materials",
     });
-  const owned = await ownedItems(ctx, materials);
-  if (owned.some((row) => !row || row.data.character !== speaker.character))
-    ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
-      reason: "not_owned",
-    });
+  const owned: Owned[] = [];
+  for (const row of await ownedItems(ctx, materials)) {
+    if (!row || row.data.character !== speaker.character)
+      return ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
+        reason: "not_owned",
+      });
+    owned.push(row);
+  }
   await requireApproved(ctx, speaker);
   // it_use_recepi: only craft materials go into 조합.
   const catalogue = await itemsByIds(
@@ -432,7 +437,7 @@ export async function combineInPost(
   });
   const prize = recipe ? await itemById(ctx, recipe.data.item) : null;
   let balance = null;
-  if (prize) {
+  if (prize && recipe) {
     const cost = amount(recipe.data.cost ?? 0, "Crafting cost");
     const current = await wallet(ctx);
     if (current.balance < cost)

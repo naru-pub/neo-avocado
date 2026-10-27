@@ -34,6 +34,7 @@ import {
   explore,
   resolveCalls,
   rollDice,
+  type Speaker,
   speakerOf,
   useInPost,
 } from "../../modules/roleplay.js";
@@ -84,7 +85,7 @@ export async function write(
   const data: CommentInput = guest ? { ...given, character: undefined } : given;
   const post = await postRow(ctx, previous?.post_id ?? data.logId);
   const board = post ? await boardOf(ctx, post.board) : null;
-  if (!(await postReadable(ctx, post, access, ctx.member?.id, board)))
+  if (!post || !(await postReadable(ctx, post, access, ctx.member?.id, board)))
     ctx.fail("NOT_FOUND", "자료를 찾을 수 없습니다.", {
       reason: "document_not_found",
     });
@@ -144,7 +145,9 @@ export async function write(
   );
   body = calls.text;
   let row: CommentRow;
-  let speaker = previous ? parsed<any>(previous.speaker, null) : null;
+  let speaker = previous
+    ? parsed<Speaker | null>(previous.speaker, null)
+    : null;
   // 이 댓글와 관련된 답변댓글이 존재하므로 수정 할 수 없습니다
   // (bbs/write_comment_update.php:313), but for the staff.
   if (previous && !isStaff(access, board) && (await hasReplies(ctx, previous)))

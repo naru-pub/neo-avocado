@@ -1,4 +1,10 @@
-import { amount, imageUrl, invalid, text } from "../../modules/access.js";
+import {
+  amount,
+  imageUrl,
+  invalid,
+  signedIn,
+  text,
+} from "../../modules/access.js";
 import {
   characterKey,
   characterRow,
@@ -11,10 +17,11 @@ import { relationOf } from "../../modules/relations.js";
 /** Links a relation may list, one per line (rm_link). */
 const MAX_LINKS = 10;
 
-const notOwned = (ctx: MutationCtx) =>
-  ctx.fail("ACCESS_DENIED", "내 캐릭터만 바꿀 수 있습니다.", {
+function notOwned(ctx: MutationCtx): never {
+  return ctx.fail("ACCESS_DENIED", "내 캐릭터만 바꿀 수 있습니다.", {
     reason: "not_owned",
   });
+}
 
 /**
  * A relation belongs to the source character; the target's owner cannot
@@ -82,7 +89,7 @@ export async function relation(
           ).rows[0];
     if (
       !previous ||
-      previous.owner !== ctx.member.id ||
+      previous.owner !== signedIn(ctx) ||
       previous.character_id !== source.id
     )
       notOwned(ctx);
@@ -100,7 +107,7 @@ export async function relation(
   }
   const { rows } = await ctx.sql<RelationRow>(
     "INSERT INTO relations (affinity, memo, link, sort_order, target, owner, character_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *",
-    [...values, ctx.member.id, source.id, ctx.now],
+    [...values, signedIn(ctx), source.id, ctx.now],
   );
   return { document: relationOf(rows[0]) };
 }

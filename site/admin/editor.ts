@@ -1,10 +1,12 @@
 // An entry's form, drawn from its section's model (forms.ts), its uploads, and
 // saving it.
 
+import type { Data } from "../_naru/modules/admin-model.js";
 import { boardApply } from "./boards.js";
 import { openCharacterForm } from "./characters.js";
 import {
   $,
+  type AdminRow,
   CALLS,
   itemNames,
   loadNames,
@@ -13,13 +15,15 @@ import {
   named,
   newBoardRows,
   owner,
+  ownerClient,
+  ownerMutate,
   references,
   run,
   section,
   selected,
   setSelected,
 } from "./core.js";
-import { fieldValue, models, sectionLabel } from "./forms.js";
+import { fieldValue, type ModelField, models, sectionLabel } from "./forms.js";
 import { load } from "./list.js";
 import { adminRoute } from "./main.js";
 
@@ -28,7 +32,7 @@ import { adminRoute } from "./main.js";
  * every section's ID rules accept (a lowercase letter first, then lowercase
  * letters, digits and underscores).
  */
-export function suggestedId(section) {
+export function suggestedId(section: string) {
   const prefix = section.replace(/s$/, "").replace(/[^a-z0-9_]/g, "") || "id";
   const random = crypto
     .getRandomValues(new Uint32Array(1))[0]
@@ -37,7 +41,7 @@ export function suggestedId(section) {
     .slice(-4);
   return `${prefix}_${random}`;
 }
-export async function openForm(row = null) {
+export async function openForm(row: AdminRow | null = null) {
   const requestedSection = section;
   await loadReferences();
   if (requestedSection !== section || !owner) return;
@@ -49,7 +53,7 @@ export async function openForm(row = null) {
     : `${sectionLabel(section, itemNames).replace(/ 관리$/, "")} ${row ? "수정" : "등록"}`;
   $("adminFormStatus").textContent = "";
   $("adminFields").replaceChildren();
-  const fields = [
+  const fields: ModelField[] = [
     {
       key: "id",
       label: model.characterKey
@@ -68,7 +72,7 @@ export async function openForm(row = null) {
         ? { default: suggestedId(section) }
         : {}),
     },
-    ...model.fields,
+    ...(model.fields ?? []),
   ];
   if (model.characterKey)
     for (const definition of references.stats)
@@ -111,18 +115,19 @@ export async function openForm(row = null) {
       container = group;
       continue;
     }
-    const value =
+    // The record's JSON at the field, or its default.
+    const value: Data[string] =
       field.key === "id"
         ? (row?.id ?? model.fixedId ?? field.default)
         : section === "quests" && field.key === "images"
           ? (row?.data.images?.join("\n") ?? "")
           : section === "boards" && field.key === "pageRows" && !row
             ? newBoardRows
-            : (fieldValue(row?.data, field.key) ??
+            : (fieldValue(row?.data ?? null, field.key ?? "") ??
               (row ? field.default : (field.newDefault ?? field.default)));
     if (field.type === "ingredients") {
       const group = document.createElement("fieldset");
-      group.dataset.ingredients = field.key;
+      group.dataset.ingredients = field.key ?? "";
       const legend = document.createElement("legend");
       legend.textContent = named(field.label);
       group.append(legend);
@@ -189,7 +194,7 @@ export async function openForm(row = null) {
     label.textContent = named(field.label);
     // A pick from an owner's list; free text while that list is empty.
     const pickRows =
-      field.type === "pick" ? (references[field.from] ?? []) : null;
+      field.type === "pick" ? (references[field.from ?? ""] ?? []) : null;
     const isSelect =
       [
         "character",
@@ -199,23 +204,25 @@ export async function openForm(row = null) {
         "title",
         "choice",
         "profile",
-      ].includes(field.type) ||
-      (field.type === "pick" && (pickRows.length || !field.fallbackText));
+      ].includes(field.type ?? "") ||
+      (field.type === "pick" && (pickRows?.length || !field.fallbackText));
     // Each member set below is one the element made for the field has.
     const input = document.createElement(
       isSelect ? "select" : field.type === "textarea" ? "textarea" : "input",
     ) as HTMLInputElement;
-    input.name = field.key;
+    input.name = field.key ?? "";
     // An image field may be filled by an upload instead; buildRecord checks.
     input.required = Boolean(field.required) && !field.image;
     if (!isSelect && field.type !== "textarea")
-      input.type = ["optional-number", "decimal", "signed"].includes(field.type)
+      input.type = ["optional-number", "decimal", "signed"].includes(
+        field.type ?? "",
+      )
         ? "number"
-        : ["tokens", "pick", "css-color"].includes(field.type)
+        : ["tokens", "pick", "css-color"].includes(field.type ?? "")
           ? "text"
           : (field.type ?? "text");
     if (field.type === "css-color") input.placeholder = "#000000";
-    if (["number", "optional-number", "decimal"].includes(field.type)) {
+    if (["number", "optional-number", "decimal"].includes(field.type ?? "")) {
       input.min = "0";
       input.step = field.type === "decimal" ? "any" : "1";
     }
@@ -228,7 +235,7 @@ export async function openForm(row = null) {
         option.textContent = "선택하지 않음";
         input.append(option);
       }
-      const choices = pickRows
+      const choices: { id: string; data: Data }[] = pickRows
         ? pickRows.map((row) => ({
             id: field.valueBy === "name" ? row.data.name : row.id,
             data: { name: row.data.name },
@@ -243,7 +250,7 @@ export async function openForm(row = null) {
                 ? "characters"
                 : field.type === "stat"
                   ? "stats"
-                  : ["title", "titles"].includes(field.type)
+                  : field.type === "title" || field.type === "titles"
                     ? "titles"
                     : field.type === "profile"
                       ? "profiles"
@@ -276,7 +283,7 @@ export async function openForm(row = null) {
         field.type === "tokens" ? (value ?? []).join(", ") : (value ?? "");
     if (field.max) input.maxLength = field.max;
     if (field.key === "id" && (row || model.fixedId)) {
-      input.value = row?.id ?? model.fixedId;
+      input.value = row?.id ?? model.fixedId ?? "";
       input.disabled = true;
     }
     if (field.image) input.placeholder = "https://";
@@ -295,7 +302,7 @@ export async function openForm(row = null) {
  * Naru's media library searches the site's tables for each upload when it
  * opens, and marks those no row names 참조 없음 (unreferenced).
  */
-export function imageUpload(field, value) {
+export function imageUpload(field: ModelField, value: unknown) {
   const upload = document.createElement("label");
   upload.className = "image-upload";
   if (
@@ -314,19 +321,20 @@ export function imageUpload(field, value) {
   file.type = "file";
   file.accept = "image/*";
   file.multiple = Boolean(field.images);
-  file.dataset.uploadFor = field.key;
+  file.dataset.uploadFor = field.key ?? "";
   upload.append(file);
   return upload;
 }
 $("adminForm").onsubmit = async (event) => {
   event.preventDefault();
-  const button =
-    $("adminForm").querySelector<HTMLButtonElement>('[type="submit"]');
+  const button = $("adminForm").querySelector<HTMLButtonElement>(
+    '[type="submit"]',
+  ) as HTMLButtonElement;
   button.disabled = true;
   $("adminNav").inert = true;
   $<HTMLButtonElement>("adminNew").disabled = true;
   try {
-    const values: Record<string, any> = {};
+    const values: Data = {};
     // Each member read below is one the control has: a select's
     // selectedOptions only where it is multiple.
     for (const input of $("adminFields").querySelectorAll<
@@ -342,11 +350,11 @@ $("adminForm").onsubmit = async (event) => {
     for (const group of $("adminFields").querySelectorAll<HTMLElement>(
       "[data-ingredients]",
     ))
-      values[group.dataset.ingredients] = [
+      values[group.dataset.ingredients ?? ""] = [
         ...group.querySelectorAll(".ingredient-row"),
       ].map((line) => ({
-        item: line.querySelector<HTMLSelectElement>(".ingredient-item").value,
-        count: line.querySelector<HTMLInputElement>(".ingredient-count").value,
+        item: line.querySelector<HTMLSelectElement>(".ingredient-item")?.value,
+        count: line.querySelector<HTMLInputElement>(".ingredient-count")?.value,
         consume:
           line.querySelector<HTMLInputElement>(".ingredient-consume")
             ?.checked ?? false,
@@ -356,10 +364,10 @@ $("adminForm").onsubmit = async (event) => {
     )) {
       if (!file.files?.length) continue;
       $("adminFormStatus").textContent = "이미지를 올리는 중…";
-      const urls = [];
+      const urls: string[] = [];
       for (const chosen of file.files)
-        urls.push((await owner.media.upload(chosen)).url);
-      const key = file.dataset.uploadFor;
+        urls.push((await ownerClient().media.upload(chosen)).url);
+      const key = file.dataset.uploadFor ?? "";
       values[key] = file.multiple
         ? [values[key], ...urls].filter(Boolean).join("\n")
         : urls[0];
@@ -371,8 +379,8 @@ $("adminForm").onsubmit = async (event) => {
     // opened at.
     setSelected(
       models[section].fixedId
-        ? await owner.mutate(CALLS[section].save, { section, values })
-        : await owner.mutate(CALLS[section].save, {
+        ? await ownerMutate<AdminRow>(CALLS[section].save, { section, values })
+        : await ownerMutate<AdminRow>(CALLS[section].save, {
             section,
             id: values.id,
             values,
@@ -387,7 +395,7 @@ $("adminForm").onsubmit = async (event) => {
                   applyTo:
                     $("adminFields").querySelector<HTMLSelectElement>(
                       "[data-apply-to]",
-                    ).value,
+                    )?.value,
                   applyFields: [
                     ...$("adminFields").querySelectorAll<HTMLInputElement>(
                       "[data-apply-field]:checked",

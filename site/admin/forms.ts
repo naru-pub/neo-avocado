@@ -3,7 +3,8 @@
 // with); the menu and how a section and a member are named are the page's.
 
 import { models } from "../_naru/modules/admin-model.js";
-import { rename } from "../app/names.js";
+import { type Names, rename } from "../app/names.js";
+import type { AdminRow } from "./core.js";
 
 export type { Model, ModelField } from "../_naru/modules/admin-model.js";
 export {
@@ -18,7 +19,12 @@ export {
  * The admin menu, in the original's groups (adm/admin.menu100–900.php), each
  * section once. The site's own additions sit with what they belong to.
  */
-export const menu = [
+/** A group of the admin menu: its label and sections. */
+export interface MenuGroup {
+  label: string;
+  sections: string[];
+}
+export const menu: MenuGroup[] = [
   { label: "환경설정", sections: ["settings", "design", "menus", "banners"] },
   { label: "회원관리", sections: ["members", "activity", "visits"] },
   {
@@ -63,7 +69,11 @@ export const menu = [
  * A group's sections as the menu lists them: as in the original, 소속 and
  * 종족 are left out while untitled, unless one is open.
  */
-export function shownSections(group, names, current = null) {
+export function shownSections(
+  group: MenuGroup,
+  names: Names,
+  current: string | null = null,
+) {
   return group.sections.filter(
     (name) =>
       name === current ||
@@ -78,7 +88,7 @@ export function shownSections(group, names, current = null) {
  * A section's name in the owner's names (기타 항목명 설정), as the original's
  * menu says "랭킹 설정 관리", "화폐 관리", "소속 관리".
  */
-export function sectionLabel(name, names) {
+export function sectionLabel(name: string, names: Names) {
   if (name === "levels") return `${names.rankName} 설정`;
   if (name === "wallets") return `${names.moneyName} 관리`;
   if (name === "sides") return `${names.sideTitle || "소속"} 관리`;
@@ -90,7 +100,15 @@ export function sectionLabel(name, names) {
  * One member's line in 회원 관리 (adm/member_list.php): what the original's
  * columns show, from a row of admin/members:list.
  */
-export function memberSummary({ row, lastSeen, joinedAt = null }) {
+export function memberSummary({
+  row,
+  lastSeen,
+  joinedAt = null,
+}: {
+  row: AdminRow;
+  lastSeen: string | number | null;
+  joinedAt?: string | number | null;
+}) {
   const data = row.data;
   return [
     `등급 ${Number.isSafeInteger(data.level) ? data.level : 2}`,

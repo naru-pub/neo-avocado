@@ -35,7 +35,7 @@ export async function send(
   const recipient = target && target.state !== "deleted" ? target.owner : null;
   const from = await profileOf(ctx, me);
   const to = recipient ? await profileOf(ctx, recipient) : null;
-  if (!to || recipient === me)
+  if (!to || !recipient || recipient === me)
     ctx.fail("INVALID_REQUEST", "상대를 확인할 수 없습니다.", {
       reason: "no_recipient",
     });

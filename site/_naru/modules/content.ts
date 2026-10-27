@@ -25,7 +25,7 @@ export const MENU_PAGE = "site_menu";
  * read level (bbs/content.php, main.php), so a page without one is everyone's.
  */
 export const pageReadable = (row: ContentRow | null, access: Access) =>
-  Boolean(row) && row.enabled !== 0 && levelAllows(access, row.read_level);
+  row !== null && row.enabled !== 0 && levelAllows(access, row.read_level);
 
 /** A content page by ID, if the reader may see it. */
 export async function readablePage(

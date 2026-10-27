@@ -126,7 +126,7 @@ function arrive() {
 addEventListener("popstate", arrive);
 
 /** Opens `path` (one of the site's pages) as a new history entry. */
-export function navigate(path) {
+export function navigate(path: string) {
   history.pushState(null, "", path);
   return run(() => openRoute());
 }
@@ -155,7 +155,7 @@ document.addEventListener("click", (event) => {
   )
     return;
   // "#", "#top": the page's own business.
-  if (link.getAttribute("href").startsWith("#")) return;
+  if (link.getAttribute("href")?.startsWith("#")) return;
   const url = new URL(link.href, location.href);
   if (url.origin !== location.origin) return;
   if (url.hash || url.search) return;

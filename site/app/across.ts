@@ -3,17 +3,20 @@
 
 import {
   $,
+  type Fields,
   formatTime,
   mutate,
   nickOf,
   preloadNicks,
   query,
+  type Row,
   renderPages,
   route,
   run,
   say,
   showTab,
   state,
+  within,
 } from "./core.js";
 
 /** The board groups, as the group pickers list them. */
@@ -28,7 +31,7 @@ function fillGroups(select: HTMLSelectElement) {
   select.value = chosen;
 }
 /** Who wrote a post or comment, as far as the reader is shown. */
-async function writerOf(row) {
+async function writerOf(row: Row) {
   if (row.data.anonymous && !row.data.owner) return "익명의 누군가";
   if (row.data.guest?.name) return `${row.data.guest.name} (손님)`;
   return row.data.owner ? await nickOf(row.data.owner) : "알 수 없음";
@@ -45,11 +48,11 @@ export async function showRecent(page = 1) {
     page,
   });
   await preloadNicks(
-    result.entries.flatMap((entry) =>
+    result.entries.flatMap((entry: Fields) =>
       entry.comment ? [entry.post, entry.comment] : [entry.post],
     ),
   );
-  const body = $("newList").querySelector("tbody");
+  const body = within($("newList"), "tbody");
   body.replaceChildren();
   // new_delete.php is the 최고관리자's: here the site's 운영자.
   const staff = state.role === "moderator";
@@ -60,7 +63,7 @@ export async function showRecent(page = 1) {
   $<HTMLInputElement>("newAll").checked = false;
   for (const entry of result.entries) {
     const row = document.createElement("tr");
-    const cell = (...content) => {
+    const cell = (...content: (string | Node)[]) => {
       const td = document.createElement("td");
       td.append(...content);
       row.append(td);
@@ -185,11 +188,14 @@ export async function showSearch(
     after: more ? searchCursor : null,
   });
   if (!more) {
-    const total = result.counts.reduce((sum, entry) => sum + entry.count, 0);
+    const total = result.counts.reduce(
+      (sum: number, entry: Fields) => sum + entry.count,
+      0,
+    );
     $("searchSummary").textContent = result.counts.length
       ? `게시판 ${result.counts.length}개 · 게시물 ${total}개`
       : "검색된 자료가 하나도 없습니다.";
-    const pick = (label, id) => {
+    const pick = (label: string, id: string) => {
       const item = document.createElement("li");
       const button = document.createElement("button");
       button.type = "button";
@@ -202,7 +208,7 @@ export async function showSearch(
     if (result.counts.length)
       $("searchBoards").append(
         pick("전체게시판", ""),
-        ...result.counts.map((entry) =>
+        ...result.counts.map((entry: Fields) =>
           pick(`${entry.name} (${entry.count})`, entry.id),
         ),
       );

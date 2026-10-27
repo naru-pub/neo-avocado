@@ -23,6 +23,7 @@ import {
   ownedItem,
   ownedItems,
   pay,
+  present,
   recipeById,
   record,
   requireUsable,
@@ -93,7 +94,7 @@ export async function gift(
   const self = recipient === me;
   const receiver =
     typeof recipient === "string" ? await profileOf(ctx, recipient) : null;
-  if (!receiver || (self && !character))
+  if (typeof recipient !== "string" || !receiver || (self && !character))
     ctx.fail("INVALID_REQUEST", "받는 회원을 확인해 주세요.", {
       reason: "no_recipient",
     });
@@ -205,7 +206,10 @@ export async function craft(
         amount(ingredient.count, "Ingredient count"),
     );
   const owned = await ownedItems(ctx, materials);
-  if (owned.some((item) => !item || item.data.character !== character))
+  if (
+    !present(owned) ||
+    owned.some((item) => item.data.character !== character)
+  )
     notOwned(ctx);
   const provided = new Map<string, number>();
   for (const item of owned)
@@ -240,7 +244,7 @@ export async function craft(
   await spend(
     ctx,
     owned.filter(
-      (item) => catalogue.get(item.data.item).data.reusable !== true,
+      (item) => catalogue.get(item.data.item)?.data.reusable !== true,
     ),
   );
   const output = await give(ctx, prize, "craft", character);
@@ -317,7 +321,7 @@ export async function useItem(
     owned?: Owned | null;
   } = { name: owned.data.name };
   if (effect.type === "restore") {
-    if (!(await ownCharacter(ctx, character))) notOwned(ctx);
+    if (!character || !(await ownCharacter(ctx, character))) notOwned(ctx);
     result.document = await restoreStat(ctx, effect, character);
   } else if (effect.type === "draw") {
     const outcome = await draw(ctx, item.id);

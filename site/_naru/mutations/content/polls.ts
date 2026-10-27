@@ -41,7 +41,12 @@ export async function vote(
       { reason: "poll_level" },
     );
   const answers = poll.options.split("\n").filter(Boolean);
-  if (!Number.isInteger(choice) || choice < 1 || choice > answers.length)
+  if (
+    choice === undefined ||
+    !Number.isInteger(choice) ||
+    choice < 1 ||
+    choice > answers.length
+  )
     ctx.fail("INVALID_REQUEST", "항목을 선택하세요.", {
       reason: "invalid_input",
     });

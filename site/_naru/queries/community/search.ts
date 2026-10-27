@@ -10,6 +10,7 @@ import {
   invalid,
   kstDay,
   one,
+  only,
 } from "../../modules/access.js";
 import type {
   Board,
@@ -34,6 +35,7 @@ import {
   readableComments,
   readerOf,
 } from "../../modules/boards.js";
+import type { Data } from "../../modules/json.js";
 import type { QueryCtx, SqlValue } from "../../modules/naru-types.js";
 
 /**
@@ -82,7 +84,7 @@ const shown = (
 ) => presentPost(row, readerOf(ctx, access, board));
 
 /** 최근게시물's rows a page: cf_new_rows, 15 as installed. */
-function newRows(settings: Record<string, any>) {
+function newRows(settings: Data) {
   const value = settings.newRows;
   return Number.isSafeInteger(value) && value >= 1 ? Math.min(value, 50) : 15;
 }
@@ -166,7 +168,7 @@ export async function recent(
     });
   const union = parts.map((part) => part.text).join(" UNION ALL ");
   const values = parts.flatMap((part) => part.values);
-  const { total } = await one<{ total: number }>(
+  const { total } = await only<{ total: number }>(
     ctx,
     // At most the 1,000 pages a list goes to.
     `SELECT count(*) AS total FROM (SELECT 1 FROM (${union}) LIMIT ?)`,
@@ -216,6 +218,7 @@ export async function recent(
     const post = posts.get(comment ? comment.post_id : row.id);
     if (!post || (row.kind === "comment" && !comment)) continue;
     const board = boards.get(post.board);
+    if (!board) continue;
     entries.push({
       kind: row.kind,
       board: { id: board.id, name: board.data.name },
@@ -398,12 +401,12 @@ export async function everything(
       .map((board) => ({
         id: board.id,
         name: board.data.name,
-        count: found.get(board.id),
+        count: found.get(board.id) ?? 0,
       }));
   }
   const commentPhase = after?.startsWith(COMMENT_PHASE) ?? false;
   const offset = Number(
-    commentPhase ? after.slice(COMMENT_PHASE.length) : (after ?? 0),
+    after && commentPhase ? after.slice(COMMENT_PHASE.length) : (after ?? 0),
   );
   if (!Number.isSafeInteger(offset) || offset < 0) invalid(ctx);
   const found: PostRow[] = [];

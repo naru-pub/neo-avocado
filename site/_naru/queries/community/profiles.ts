@@ -84,7 +84,7 @@ export async function suggest(
 ) {
   signedIn(ctx);
   if (
-    !["member", "character"].includes(kind) ||
+    (kind !== "member" && kind !== "character") ||
     typeof text !== "string" ||
     text.length > 40
   )

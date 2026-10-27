@@ -1,5 +1,19 @@
 // What the admin sections' models (admin-model.ts and its areas) share: the
 // shape of a form and of a section, and the checks more than one makes.
+import type { Data } from "../json.js";
+
+/** A record's data, as an admin form makes it and the tables keep it. */
+export type { Data };
+/** A row of one of the owner's lists a form picks from. */
+export interface Reference {
+  id: string;
+  data: Data;
+  createdBy?: string | null;
+}
+/** The owner's lists a form picks from, by name (references[field.from]). */
+export type References = Record<string, Reference[]>;
+/** A choice's options: [value, text] pairs. */
+export type Options = readonly (readonly [value: string, text: string])[];
 /** One field of a section's form. */
 export interface ModelField {
   // Headings (type "heading") have no key.
@@ -12,7 +26,7 @@ export interface ModelField {
   max?: number;
   optional?: boolean;
   required?: boolean;
-  options?: any[];
+  options?: Options;
   image?: boolean;
   from?: string;
   valueBy?: string;
@@ -44,23 +58,23 @@ export interface Model {
    * form does not allow (with an Error the owner sees), or completing `data`.
    */
   check?(
-    data: Record<string, any>,
+    data: Data,
     context: {
       id: string;
-      values: Record<string, any>;
-      previous: { data: Record<string, any> } | null;
-      references: Record<string, any>;
+      values: Data;
+      previous: { data: Data } | null;
+      references: References;
     },
   ): void;
 }
 
-export const nonnegative = (value) => {
+export const nonnegative = (value: number) => {
   if (!Number.isSafeInteger(value) || value < 0)
     throw new Error("숫자는 0 이상의 정수여야 합니다.");
   return value;
 };
 /** A Korean local datetime-local value as milliseconds; null when blank, NaN when invalid. */
-export function kstStamp(value) {
+export function kstStamp(value: string) {
   if (!value) return null;
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(value)) return NaN;
   const stamp = Date.parse(`${value}+09:00`);
@@ -80,13 +94,13 @@ export function plainHttps(value: string) {
 }
 
 /** A menu's or banner's 보기 등급, 1–10. */
-export function viewLevel(data: Record<string, any>) {
+export function viewLevel(data: Data) {
   if (data.level < 1 || data.level > 10)
     throw new Error("보기 등급은 1~10입니다.");
 }
 
 /** An item's or listing's 진열 기간's hours (0–23) and weekdays. */
-export function displayWindow(data: Record<string, any>) {
+export function displayWindow(data: Data) {
   if (!data.display) return;
   const { fromHour, untilHour, weekdays } = data.display;
   for (const hour of [fromHour, untilHour])

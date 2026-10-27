@@ -82,15 +82,24 @@ function https(value: unknown): string | null {
   }
 }
 
+const ENTITIES: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
+const CHARACTERS: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  "#39": "'",
+};
+
 /** Text as HTML text and attribute values carry it. */
 export const escapeHtml = (value: unknown) =>
-  String(value ?? "").replace(
-    /[&<>"']/g,
-    (match) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
-        match
-      ],
-  );
+  String(value ?? "").replace(/[&<>"']/g, (match) => ENTITIES[match]);
 
 /** The opening of a text, plain and on one line, at most 150 characters. */
 export function opening(text: unknown, html = false): string {
@@ -98,8 +107,7 @@ export function opening(text: unknown, html = false): string {
   if (html)
     plain = plainText(plain).replace(
       /&(amp|lt|gt|quot|#39);/g,
-      (_, name) =>
-        ({ amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'" })[name],
+      (_, name: string) => CHARACTERS[name],
     );
   plain = plain.replace(/\s+/g, " ").trim();
   return plain.length > DESCRIPTION
@@ -292,7 +300,7 @@ async function postPreview(
 ): Promise<Preview | null> {
   if (!row || row.adult) return null;
   const on = board === undefined ? await boardOf(ctx, row.board) : board;
-  if (!(await postReadable(ctx, row, access, null, on))) return null;
+  if (!on || !(await postReadable(ctx, row, access, null, on))) return null;
   const { data } = presentPost(postOf(row), readerOf(ctx, access, on));
   return {
     title:
@@ -321,7 +329,7 @@ export const post: Page = async (ctx, { id, comment }, access) => {
 export const numbered: Page = async (ctx, { board: id, number }, access) => {
   if (!whole(number)) return false;
   const board = await boardOf(ctx, id);
-  if (!boardAllowed(board, access, "list")) return null;
+  if (!board || !boardAllowed(board, access, "list")) return null;
   const row = await one<PostRow>(
     ctx,
     `${POST_SELECT} WHERE board = ? AND number = ?`,
@@ -343,6 +351,7 @@ export const board: Page = async (
   if (page !== undefined && !whole(page)) return false;
   const found = await boardOf(ctx, id);
   if (
+    !found ||
     !boardAllowed(found, access, "list") ||
     !boardAllowed(found, access, "read")
   )

@@ -3,7 +3,7 @@
 // 관리자.
 
 import type { Access } from "../../modules/access.js";
-import { invalid, one } from "../../modules/access.js";
+import { invalid, only } from "../../modules/access.js";
 import type { Board, PostRow } from "../../modules/boards.js";
 import {
   accessOf,
@@ -45,7 +45,7 @@ async function destination(
     row.category && (moved.data.categories ?? []).includes(row.category)
       ? row.category
       : "";
-  const { next } = await one<{ next: number }>(
+  const { next } = await only<{ next: number }>(
     ctx,
     "SELECT coalesce(max(number), 0) + 1 AS next FROM posts WHERE board = ?",
     [moved.id],
@@ -89,7 +89,7 @@ async function threadOf(ctx: MutationCtx, row: PostRow) {
 /** The next number on a board. */
 async function nextNumber(ctx: MutationCtx, board: string) {
   return (
-    await one<{ next: number }>(
+    await only<{ next: number }>(
       ctx,
       "SELECT coalesce(max(number), 0) + 1 AS next FROM posts WHERE board = ?",
       [board],
@@ -123,7 +123,7 @@ async function copyThread(
   let copied: PostRow | null = null;
   for (const row of posts) {
     const body = await withMoveLog(ctx, row, "복사");
-    const copy = (
+    const copy: PostRow = (
       await ctx.sql<PostRow>(
         `INSERT INTO posts (board, number, category, body, ${kept.join(", ")}, reward, thread, reply_path)
          SELECT ?, ?, ?, ?, ${kept.join(", ")}, 0, ?, reply_path FROM posts WHERE id = ? RETURNING *`,

@@ -3,9 +3,18 @@
 import { renderContent } from "../shared/content-renderer.js";
 import { showRecent, showSearch } from "./across.js";
 import { loadContentBody, loadContentPages } from "./content.js";
-import { $, addressOf, query, run, say, showTab, state } from "./core.js";
+import {
+  $,
+  addressOf,
+  type Fields,
+  query,
+  run,
+  say,
+  showTab,
+  state,
+} from "./core.js";
 import { configureBoard, loadLogs } from "./logs.js";
-import { NAME_DEFAULTS } from "./names.js";
+import { NAME_DEFAULTS, type Names } from "./names.js";
 import { loadPoll, showPopups } from "./polls.js";
 
 /** Applies the owner's design, menus and banners (adm/design_form.php, menu_list.php). */
@@ -21,7 +30,8 @@ export async function loadSite() {
   if (site.nameField) {
     state.nameField = site.nameField;
     // The new character form's name, as the owner names it.
-    $("characterNameLabel").firstChild.textContent = `${site.nameField.label} `;
+    ($("characterNameLabel").firstChild as Text).textContent =
+      `${site.nameField.label} `;
     $("characterNameHelp").textContent = site.nameField.help;
     $("characterNameHelp").hidden = !site.nameField.help;
   }
@@ -93,22 +103,27 @@ export async function loadSite() {
  * The owner's names in the page's own text (기타 항목명 설정); a 소속 or 종족
  * left untitled is hidden, as in the original's profile.
  */
-function applyItemNames(names) {
+function applyItemNames(names: Names) {
   for (const element of document.querySelectorAll<HTMLElement>("[data-name]"))
-    element.textContent = names[element.dataset.name];
+    element.textContent = names[element.dataset.name as keyof Names];
   for (const element of document.querySelectorAll<HTMLElement>(
     "[data-name-shown]",
   ))
-    element.hidden = !names[element.dataset.nameShown];
+    element.hidden = !names[element.dataset.nameShown as keyof Names];
 }
 /**
  * cf_site_descript and cf_favicon (head.sub.php): the page's description
  * and the browser tab's icon, when the owner sets them, for the open tab.
  */
-function applyHead(design) {
+function applyHead(design: Fields) {
   // Without the owner's own, the route's tags stay (link previews read
   // those, which _naru/routes/ add: crawlers do not run this script).
-  const set = (selector, create, attribute, value) => {
+  const set = (
+    selector: string,
+    create: () => Element,
+    attribute: string,
+    value: string | undefined,
+  ) => {
     let element = document.head.querySelector(selector);
     if (!value) return;
     if (!element) document.head.append((element = create()));
@@ -132,9 +147,9 @@ function applyHead(design) {
  * 메인화면 구성 (main.php): the owner's site_main page in the home's place,
  * or the home as it is. Its placeholders become the parts they name.
  */
-async function showMainPage(enabled, banners) {
+async function showMainPage(enabled: boolean, banners: Fields[]) {
   // The card a previous {{OUTLOGIN}} moved returns home first.
-  cardHome.parent.insertBefore($("profileCard"), cardHome.next);
+  cardHome.parent?.insertBefore($("profileCard"), cardHome.next);
   $("mainPage").hidden = !enabled;
   if (enabled) $("banners").hidden = true;
   if (!enabled) return;
@@ -153,7 +168,7 @@ async function showMainPage(enabled, banners) {
  * menu's place, its 모바일 메뉴영역 on a phone, its placeholders expanded;
  * 운영 still closes it.
  */
-async function showMenuPage(banners) {
+async function showMenuPage(banners: Fields[]) {
   const result = await query("content/pages:contentPage", {
     id: "site_menu",
     mobile: window.innerWidth <= 700,
@@ -177,7 +192,12 @@ const cardHome = {
   next: $("profileCard").nextSibling,
 };
 /** A link that does what a page control does, for a placeholder. */
-function controlLink(text, href, className, action) {
+function controlLink(
+  text: string,
+  href: string,
+  className: string,
+  action: () => void,
+) {
   const link = document.createElement("a");
   link.href = href;
   link.className = className;
@@ -222,8 +242,8 @@ function twitterTimeline() {
   }
   return box;
 }
-function expandPlaceholders(container: HTMLElement, slides) {
-  const parts = {
+function expandPlaceholders(container: HTMLElement, slides: Fields[]) {
+  const parts: Record<string, () => Node | string | null> = {
     VISUAL_SLIDE: () => {
       const element = document.createElement("div");
       showSlides(element, slides);
@@ -260,7 +280,7 @@ function expandPlaceholders(container: HTMLElement, slides) {
   }
 }
 /** The site's name and logo, in the header. */
-function applyNames(design) {
+function applyNames(design: Fields) {
   if (design.title) {
     $("siteTitle").textContent = design.title;
     document.title = design.title;
@@ -276,7 +296,7 @@ function applyNames(design) {
     $<HTMLSourceElement>("siteLogoMobile").srcset = design.mobileLogo;
   else $("siteLogoMobile").removeAttribute("srcset");
 }
-function menuLink(menu) {
+function menuLink(menu: Fields) {
   const link = document.createElement("a");
   link.textContent = menu.name;
   if (menu.link.startsWith("https://")) {
@@ -325,7 +345,7 @@ function adminItem() {
   item.append(link);
   return item;
 }
-function renderMenus(menus) {
+function renderMenus(menus: Fields[]) {
   const nav = $("siteMenu");
   nav.replaceChildren();
   if (!menus.length) menus = DEFAULT_MENUS;
@@ -357,7 +377,7 @@ function renderMenus(menus) {
   nav.append(list);
   nav.hidden = false;
 }
-function bannerPicture(banner, linked = true) {
+function bannerPicture(banner: Fields, linked = true) {
   const picture = document.createElement("picture");
   if (banner.mobileImage) {
     const source = document.createElement("source");
@@ -387,7 +407,7 @@ const stopping = new WeakMap<HTMLElement, () => void>();
  * focus is on it, with 이전·다음 buttons. With reduced motion asked for, it
  * turns only by the buttons.
  */
-function showSlides(container: HTMLElement, banners) {
+function showSlides(container: HTMLElement, banners: Fields[]) {
   stopping.get(container)?.();
   stopping.delete(container);
   container.className = "banners";
@@ -407,12 +427,12 @@ function showSlides(container: HTMLElement, banners) {
   container.replaceChildren(...slides);
   if (slides.length < 2) return;
   let current = 0;
-  const go = (step) => {
+  const go = (step: number) => {
     slides[current].hidden = true;
     current = (current + step + slides.length) % slides.length;
     slides[current].hidden = false;
   };
-  const button = (text, className, step) => {
+  const button = (text: string, className: string, step: number) => {
     const element = document.createElement("button");
     element.type = "button";
     element.className = `slide-nav ${className}`;
@@ -427,19 +447,19 @@ function showSlides(container: HTMLElement, banners) {
   );
   if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
   let held = 0;
-  const hold = (change) => () => (held = Math.max(0, held + change));
+  const hold = (change: number) => () => (held = Math.max(0, held + change));
   container.addEventListener("mouseenter", hold(1));
   container.addEventListener("mouseleave", hold(-1));
   container.addEventListener("focusin", hold(1));
   container.addEventListener("focusout", hold(-1));
   // It turns while the page is in view, and stops once off the page.
-  let timer = null;
+  let timer: ReturnType<typeof setInterval> | null = null;
   const stop = () => {
-    clearInterval(timer);
+    if (timer !== null) clearInterval(timer);
     document.removeEventListener("visibilitychange", turn);
   };
   function turn() {
-    clearInterval(timer);
+    if (timer !== null) clearInterval(timer);
     timer = null;
     if (document.hidden) return;
     timer = setInterval(() => {
@@ -464,7 +484,7 @@ let afterEntrance: (() => void) | null = null;
  * home's route; this settles it once the site is known. Answers whether it
  * shows.
  */
-function showEntrance(site, design) {
+function showEntrance(site: Fields, design: Fields) {
   let entered = false;
   try {
     entered = sessionStorage.getItem(ENTRANCE_KEY) === "1";
@@ -497,7 +517,7 @@ $("entranceEnter").onclick = () => {
   afterEntrance = null;
   next?.();
 };
-function renderBanners(banners, entering = false) {
+function renderBanners(banners: Fields[], entering = false) {
   const main = banners.filter((banner) => banner.place === "main");
   showSlides($("banners"), main);
   $("banners").hidden = !main.length;
@@ -509,7 +529,7 @@ function renderBanners(banners, entering = false) {
   }
   openIntro(intro);
 }
-function openIntro(intro) {
+function openIntro(intro: Fields[]) {
   // intro.php: only on the main page, and not for a day once seen through
   // (its intro_close cookie, 24 hours).
   let closed = false;
@@ -532,7 +552,7 @@ function openIntro(intro) {
  * One intro picture at a time, each click the next (intro.php's stacked
  * .intro-item); the last one's click enters the site.
  */
-function showIntro(intro, index) {
+function showIntro(intro: Fields[], index: number) {
   const next = document.createElement("button");
   next.type = "button";
   next.className = "intro-item";
@@ -559,8 +579,8 @@ function enterSite() {
  * The owner's background music (cf_bgm): a YouTube playlist or video, played
  * on request in a frame that stays as the member moves around the page.
  */
-let music = null;
-function setMusic(bgm) {
+let music: { list?: string; video?: string } | null = null;
+function setMusic(bgm: { list?: string; video?: string } | null) {
   music = bgm;
   $("bgmPlayer").hidden = !bgm;
   if (!bgm) stopMusic();
@@ -578,7 +598,7 @@ $("bgmPlay").onclick = () => {
   frame.allow = "autoplay; encrypted-media";
   frame.src = music.list
     ? `https://www.youtube-nocookie.com/embed/videoseries?list=${encodeURIComponent(music.list)}&autoplay=1&loop=1&playsinline=1`
-    : `https://www.youtube-nocookie.com/embed/${encodeURIComponent(music.video)}?autoplay=1&loop=1&playlist=${encodeURIComponent(music.video)}&playsinline=1`;
+    : `https://www.youtube-nocookie.com/embed/${encodeURIComponent(music.video ?? "")}?autoplay=1&loop=1&playlist=${encodeURIComponent(music.video ?? "")}&playsinline=1`;
   $("bgmFrame").replaceChildren(frame);
   $("bgmPlayer").classList.add("playing");
   $("bgmPlay").hidden = true;
@@ -596,7 +616,7 @@ document.addEventListener("click", (event) => {
 });
 $("enterSite").onclick = enterSite;
 /** The address of what a menu entry names: board:free is /logs/free. */
-export function menuAddress(link) {
+export function menuAddress(link: string) {
   const [kind, id = ""] = String(link).split(":");
   const path =
     kind === "board"
@@ -609,7 +629,7 @@ export function menuAddress(link) {
   return addressOf(path);
 }
 /** Opens what a menu entry names: a board, a content page or a member tab. */
-export async function follow(link) {
+export async function follow(link: string) {
   const [kind, id] = link.split(":");
   if (kind === "board") {
     showTab("logs");

@@ -14,6 +14,7 @@ import {
   one,
   parsed,
   restrictedFor,
+  signedIn,
   text,
 } from "./access.js";
 import type { CharacterRow } from "./characters.js";
@@ -25,6 +26,7 @@ import {
   saveState,
   sheetOf,
 } from "./characters.js";
+import type { Data } from "./json.js";
 import type { Wallet } from "./members.js";
 import { addHistory, saveWallet, walletOf } from "./members.js";
 import type { QueryCtx, SqlValue } from "./naru-types.js";
@@ -71,12 +73,12 @@ export interface ItemRow {
 /** An item as pages and old code read it. */
 export interface Item {
   id: string;
-  data: Record<string, any>;
+  data: Data;
 }
 
 /** A row as an item document; what it has none of, it leaves out. */
 export function itemOf(row: ItemRow): Item {
-  const data: Record<string, any> = {
+  const data: Data = {
     name: row.name,
     description: row.description,
     effectDescription: row.effect_description,
@@ -100,7 +102,7 @@ export function itemOf(row: ItemRow): Item {
   if (row.display !== null) data.display = parsed(row.display, {});
   if (row.stock !== null) data.stock = row.stock;
   if (row.sell_price !== null) data.sellPrice = row.sell_price;
-  const effect = parsed<Record<string, any> | null>(row.effect, null);
+  const effect = parsed<Data | null>(row.effect, null);
   if (effect) data.effect = effect;
   if (row.personal !== 0) data.personal = true;
   if (row.item_type) data.itemType = row.item_type;
@@ -176,6 +178,10 @@ export function ownedOf(row: InventoryRow): Owned {
 }
 
 /** The caller's own copies of these IDs, in order, null where not theirs. */
+/** Whether every one of `rows` was found (none is null). */
+export const present = <T>(rows: readonly (T | null)[]): rows is T[] =>
+  rows.every((row) => row !== null);
+
 export async function ownedItems(
   ctx: SqlCtx,
   ids: readonly unknown[],
@@ -209,7 +215,7 @@ export async function give(
   item: Item,
   from: string,
   character: string | null = null,
-  owner: string = ctx.member.id,
+  owner: string = signedIn(ctx),
   gift: Record<string, unknown> = {},
 ): Promise<Owned> {
   const { rows } = await ctx.sql<InventoryRow>(
@@ -274,7 +280,7 @@ export async function draw(
       `SELECT item_id FROM ${table} WHERE ${scope} ORDER BY id DESC LIMIT 1`,
       values,
     ));
-  if (won.item_id === null) return { configured: true, prize: null };
+  if (!won || won.item_id === null) return { configured: true, prize: null };
   const prize = await itemById(ctx, won.item_id);
   if (!prize)
     throw new Error(`뽑기의 아이템 ${won.item_id}이 상점에 없습니다.`);
@@ -433,7 +439,7 @@ export async function inventoryOf(
         : await ctx.sql<InventoryRow>`SELECT * FROM inventory WHERE owner = ${member} AND character_id = ${key} AND id > ${after} ORDER BY id LIMIT 1000`;
     held.push(...rows);
     if (rows.length < 1000) break;
-    after = rows.at(-1).id;
+    after = rows[rows.length - 1].id;
   }
   return held.slice(0, INVENTORY_LIMIT).map(ownedOf);
 }
@@ -465,7 +471,7 @@ export async function characterInventory(ctx: SqlCtx, character: number) {
   const stacks = new Map<string, { count: number }>();
   const gifts = [];
   for (const row of rows) {
-    const gift = parsed<Record<string, any>>(row.gift, {});
+    const gift = parsed<Data>(row.gift, {});
     const entry = {
       name: row.name || row.item_name || "",
       image: row.image ?? null,
@@ -482,8 +488,12 @@ export async function characterInventory(ctx: SqlCtx, character: number) {
           from: String(gift.senderName ?? ""),
         },
       });
-    else if (stacks.has(row.item_id)) stacks.get(row.item_id).count += 1;
     else {
+      const stack = stacks.get(row.item_id);
+      if (stack) {
+        stack.count += 1;
+        continue;
+      }
       stacks.set(row.item_id, entry);
       entries.push(entry);
     }
@@ -494,7 +504,7 @@ export async function characterInventory(ctx: SqlCtx, character: number) {
 
 /** The caller's wallet: { balance, lastDaily }. */
 export async function wallet(ctx: SqlCtx): Promise<Wallet> {
-  const current = await walletOf(ctx, ctx.member.id);
+  const current = await walletOf(ctx, signedIn(ctx));
   amount(current.balance, "Balance");
   return current;
 }
@@ -511,7 +521,7 @@ export async function pay(
     throw new Error("Balance is outside its allowed range.");
   await saveWallet(
     ctx,
-    ctx.member.id,
+    signedIn(ctx),
     balance,
     Object.hasOwn(changes, "lastDaily") ? changes.lastDaily : undefined,
   );
@@ -522,8 +532,8 @@ export async function pay(
 export async function record(
   ctx: SqlCtx & { readonly now: number },
   kind: string,
-  details: Record<string, any>,
-  owner: string = ctx.member.id,
+  details: Data,
+  owner: string = signedIn(ctx),
 ) {
   await addHistory(ctx, { owner, kind, at: ctx.now, ...details });
 }
@@ -608,7 +618,7 @@ export async function requireUsable(
  */
 export async function restoreStat(
   ctx: EconomyCtx,
-  effect: Record<string, any>,
+  effect: Data,
   character: string,
 ) {
   const state = await characterState(ctx, character);
@@ -623,7 +633,9 @@ export async function restoreStat(
   stat.damage = Math.max(0, stat.damage - recovery);
   stat.current = Math.max(0, stat.max - stat.damage);
   await saveState(ctx, character, state.data);
-  return sheetOf(await characterRow(ctx, character));
+  const row = await characterRow(ctx, character);
+  if (!row) throw new Error("Character does not exist.");
+  return sheetOf(row);
 }
 
 /**
@@ -667,7 +679,7 @@ export async function profileTicket(
   ctx: EconomyCtx,
   ticket: unknown,
   character: CharacterRow | null,
-): Promise<{ owned: Owned; item: Item }> {
+): Promise<{ owned: Owned; item: Item; character: CharacterRow }> {
   const owned = await ownedItem(ctx, ticket);
   const item = owned ? await itemById(ctx, owned.data.item) : null;
   if (
@@ -684,5 +696,5 @@ export async function profileTicket(
       { reason: "invalid_ticket" },
     );
   await requireUsable(ctx, item, String(character.id));
-  return { owned, item };
+  return { owned, item, character };
 }

@@ -52,7 +52,13 @@ export const list = ownerOnly(async function list(
   const values: SqlValue[] = [needle, needle, side, side, kind, kind];
   // 전체 leaves out the deleted (삭제), which have a count of their own
   // (character_list.php:20-21, 58-59).
-  const counts = { all: 0, editing: 0, submitted: 0, approved: 0, deleted: 0 };
+  const counts: Record<string, number> = {
+    all: 0,
+    editing: 0,
+    submitted: 0,
+    approved: 0,
+    deleted: 0,
+  };
   for (const row of (
     await ctx.sql(
       `SELECT characters.state, count(*) AS count ${searched} GROUP BY characters.state`,

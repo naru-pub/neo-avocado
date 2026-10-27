@@ -23,10 +23,11 @@ export interface StartWriteOptions {
   revision?: string | null;
 }
 
-const guestPassword = (ctx: MutationCtx) =>
-  ctx.fail("ACCESS_DENIED", "비밀번호를 확인해 주세요. (4~64자)", {
+function guestPassword(ctx: MutationCtx): never {
+  return ctx.fail("ACCESS_DENIED", "비밀번호를 확인해 주세요. (4~64자)", {
     reason: "guest_password",
   });
+}
 
 /** The board a post or comment is on. */
 async function boardIdOf(
@@ -67,15 +68,28 @@ async function writerLevel(
  * password (bbs/password_check.php), checked against the hash its row keeps
  * (ten wrong tries an hour for each, by `post:<id>` or `comment:<id>`).
  */
+/** What startWrite answers: `previous` is the row an edit changes. */
+interface Started<T extends "post" | "comment", Previous> {
+  access: Access;
+  previous: (T extends "post" ? PostRow : CommentRow) | Previous;
+  guest: GuestWriter | null;
+}
+// An edit names its row, which is there (else NOT_FOUND); a new write has none.
+export async function startWrite<T extends "post" | "comment">(
+  ctx: MutationCtx,
+  kind: T,
+  options: StartWriteOptions & { id: string | number },
+): Promise<Started<T, never>>;
+export async function startWrite<T extends "post" | "comment">(
+  ctx: MutationCtx,
+  kind: T,
+  options: StartWriteOptions,
+): Promise<Started<T, null>>;
 export async function startWrite<T extends "post" | "comment">(
   ctx: MutationCtx,
   kind: T,
   { id = null, guest: given = null, revision = null }: StartWriteOptions,
-): Promise<{
-  access: Access;
-  previous: (T extends "post" ? PostRow : CommentRow) | null;
-  guest: GuestWriter | null;
-}> {
+): Promise<Started<T, null>> {
   if (id !== null && typeof id !== "string" && typeof id !== "number")
     invalid(ctx);
   const access = await accessOf(ctx);

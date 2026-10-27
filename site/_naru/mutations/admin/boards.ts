@@ -40,7 +40,7 @@ export const save = ownerOnly(async function save(
 ) {
   const { applyTo = "", applyFields = [], ...rest } = args ?? {};
   const keys = new Set(
-    models.boards.fields
+    (models.boards.fields ?? [])
       .map((field) => field.key)
       .filter((key) => key && !["name", "group"].includes(key)),
   );

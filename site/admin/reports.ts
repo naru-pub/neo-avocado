@@ -16,7 +16,7 @@ export const VISIT_BREAKDOWNS = [
 ];
 
 /** The day (YYYY-MM-DD) in Korea of an ISO time or epoch milliseconds. */
-export function koreanDay(at) {
+export function koreanDay(at: string | number | Date) {
   return new Date(new Date(at).getTime() + 9 * 3600 * 1000)
     .toISOString()
     .slice(0, 10);

@@ -104,7 +104,7 @@ export const report = ownerOnly(async function report(
   return {
     rows: listed,
     nextCursor:
-      rows.length > PAGE
+      rows.length > PAGE && last
         ? JSON.stringify([last.logs + last.comments, last.nick, last.id])
         : null,
   };

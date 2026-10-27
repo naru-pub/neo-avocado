@@ -1,24 +1,39 @@
-import createDOMPurify from "../vendor/purify.es.mjs";
+import createDOMPurify, { type DOMPurify } from "../vendor/purify.es.mjs";
 
-const sanitizers = new WeakMap();
+const sanitizers = new WeakMap<Window, DOMPurify>();
 /** Sanitized HTML as a fragment: no scripts, forms or page-global style/id/name. */
-export function sanitizedFragment(document, html) {
-  const window = document.defaultView;
-  if (!sanitizers.has(window)) sanitizers.set(window, createDOMPurify(window));
-  return sanitizers.get(window).sanitize(html ?? "", {
+export function sanitizedFragment(
+  document: Document,
+  html: string | null | undefined,
+) {
+  const window = document.defaultView as Window & typeof globalThis;
+  let sanitizer = sanitizers.get(window);
+  if (!sanitizer) {
+    sanitizer = createDOMPurify(window);
+    sanitizers.set(window, sanitizer);
+  }
+  return sanitizer.sanitize(html ?? "", {
     USE_PROFILES: { html: true },
     RETURN_DOM_FRAGMENT: true,
     FORBID_TAGS: ["style", "form", "input", "button", "select", "textarea"],
     FORBID_ATTR: ["style", "id", "name"],
   });
 }
-export function renderContent(container, page) {
+/** A content page (content/pages), as its renderer reads it. */
+export interface ContentPage {
+  name: string;
+  format?: string;
+  body?: string | null;
+  headerImage?: string | null;
+  footerImage?: string | null;
+}
+export function renderContent(container: HTMLElement, page: ContentPage) {
   const document = container.ownerDocument;
   container.replaceChildren();
   const heading = document.createElement("h2");
   heading.textContent = page.name;
   container.append(heading);
-  const artwork = (url) => {
+  const artwork = (url: string | null | undefined) => {
     if (!url) return;
     try {
       const parsed = new URL(url);

@@ -3,7 +3,7 @@
 // recipient of, written in the same transaction as what they tell.
 
 import type { SqlCtx } from "./access.js";
-import { one } from "./access.js";
+import { one, signedIn } from "./access.js";
 import { rowKey } from "./boards.js";
 import type { QueryCtx } from "./naru-types.js";
 import { type PushCtx, push } from "./push.js";
@@ -44,7 +44,7 @@ export async function ownMessage(
   id: unknown,
 ): Promise<MessageRow> {
   const key = rowKey(id);
-  const me = ctx.member.id;
+  const me = signedIn(ctx);
   const row =
     key === null
       ? null
@@ -90,7 +90,7 @@ export async function sendNote(
   const { rows } = await ctx.sql<{
     id: number;
   }>`INSERT INTO messages (sender, recipient, body, sent_at, gift)
-    VALUES (${ctx.member.id}, ${to}, ${body}, ${ctx.now}, ${JSON.stringify(gift)}) RETURNING id`;
+    VALUES (${signedIn(ctx)}, ${to}, ${body}, ${ctx.now}, ${JSON.stringify(gift)}) RETURNING id`;
   await push(ctx, [to], {
     title: "쪽지가 도착했습니다",
     body,

@@ -2,16 +2,20 @@
 // edited in place (선택수정), and its search and filters.
 
 import { moneyText } from "../app/names.js";
+import type { Fields } from "../shared/calls.js";
 import { boardRow, groupMembers } from "./boards.js";
 import { review, reviewFilters, reviewRow } from "./characters.js";
 import {
   $,
+  type AdminRow,
   CALLS,
   cursor,
   itemNames,
   loadReferences,
   named,
   owner,
+  ownerMutate,
+  ownerQuery,
   references,
   run,
   section,
@@ -122,7 +126,7 @@ export const QUICK: Record<
   ],
 };
 /** One list row's in-place fields, and its 선택 box. */
-export function quickFields(row) {
+export function quickFields(row: AdminRow) {
   const box = document.createElement("span");
   box.className = "quick-fields";
   const pick = document.createElement("input");
@@ -164,13 +168,13 @@ $("quickSave").onclick = () =>
       return ($("adminStatus").textContent =
         "선택수정 하실 항목을 하나 이상 선택하세요.");
     for (const pick of rows) {
-      const values = {};
-      for (const input of pick.parentElement.querySelectorAll<HTMLInputElement>(
+      const values: Record<string, string | boolean> = {};
+      for (const input of pick.parentElement?.querySelectorAll<HTMLInputElement>(
         "[data-key]",
-      ))
-        values[input.dataset.key] =
+      ) ?? [])
+        values[input.dataset.key ?? ""] =
           input.type === "checkbox" ? input.checked : input.value;
-      await owner.mutate(CALLS[section].save, {
+      await ownerMutate(CALLS[section].save, {
         section,
         id: pick.dataset.quick,
         values,
@@ -204,7 +208,7 @@ function pickBox(id: string, name: string, data: Record<string, string> = {}) {
   return pick;
 }
 /** The day and time a list shows, from a stored 한국 시간 or a moment. */
-const when = (value) =>
+const when = (value: unknown) =>
   value
     ? typeof value === "number"
       ? new Date(value).toLocaleString("ko-KR")
@@ -216,10 +220,10 @@ const when = (value) =>
  * characters; explorer_list.php's items and chance; quest_list.php's 종류,
  * 세력 and 기간; shop_list.php's item.
  */
-function rowSummary(row) {
+function rowSummary(row: AdminRow) {
   const data = row.data;
   const parts: (string | Node)[] = [];
-  const thumb = (url) => {
+  const thumb = (url: unknown) => {
     if (typeof url !== "string" || !url.startsWith("https://")) return;
     const image = document.createElement("img");
     image.src = url;
@@ -297,7 +301,7 @@ const SORTS: Record<string, [string, string][]> = {
   popups: [["startsAt", "시작"]],
   polls: [["createdAt", "만든 때"]],
 };
-let choicesFor = null;
+let choicesFor: string | null = null;
 async function showListChoices() {
   if (choicesFor === section) return;
   choicesFor = section;
@@ -322,7 +326,9 @@ async function showListChoices() {
   } else if (section === "quests") {
     filter.dataset.field = "side";
     filter.append(new Option("모든 세력", ""));
-    const sides = await owner.query(CALLS.sides.list, { section: "sides" });
+    const sides = await ownerQuery(CALLS.sides.list, {
+      section: "sides",
+    });
     for (const side of sides.documents)
       filter.append(new Option(side.data.name, side.data.name));
     filter.hidden = !sides.documents.length;
@@ -347,30 +353,30 @@ $("quickRemove").onclick = () =>
     const ids = picks.map((pick) => pick.dataset.quick);
     if (section === "history")
       for (let at = 0; at < ids.length; at += 20)
-        await owner.mutate(CALLS.history.remove, {
+        await ownerMutate(CALLS.history.remove, {
           ids: ids.slice(at, at + 20),
         });
     else if (models[section].holdings) {
       const byTitle = new Map<string, string[]>();
       for (const pick of picks)
-        byTitle.set(pick.dataset.title, [
-          ...(byTitle.get(pick.dataset.title) ?? []),
-          pick.dataset.quick,
+        byTitle.set(pick.dataset.title ?? "", [
+          ...(byTitle.get(pick.dataset.title ?? "") ?? []),
+          pick.dataset.quick ?? "",
         ]);
       for (const [title, characters] of byTitle)
-        await owner.mutate("admin/titles:grant", {
+        await ownerMutate("admin/titles:grant", {
           title,
           action: "revoke",
           characters,
         });
     } else
       for (const id of ids)
-        await owner.mutate(CALLS[section].remove, { section, id });
+        await ownerMutate(CALLS[section].remove, { section, id });
     $("adminStatus").textContent = `${ids.length}개를 삭제했습니다.`;
     await load();
   });
 /** What each kind of history entry was (전체 활동·구매 기록). */
-export const HISTORY_KINDS = {
+export const HISTORY_KINDS: Record<string, string> = {
   adjust: "운영자 조정",
   grant: "운영자 지급",
   daily: "첫 로그인",
@@ -395,7 +401,7 @@ export const HISTORY_KINDS = {
 export async function load({ more = false } = {}) {
   const requestedSection = section;
   const model = models[section];
-  $("adminHelp").textContent = named(model.help);
+  $("adminHelp").textContent = named(model.help ?? "");
   // The review registers characters too (adm/character_form.php, w='').
   $("adminNew").hidden =
     (Boolean(model.readOnly) && !model.review) || Boolean(model.noCreate);
@@ -418,7 +424,9 @@ export async function load({ more = false } = {}) {
     $("logSearch").hidden = true;
     $("recordSearch").hidden = true;
     $("quickTools").hidden = true;
-    const row = await owner.query(CALLS[section].get, { section });
+    const row = await ownerQuery<AdminRow | null>(CALLS[section].get, {
+      section,
+    });
     if (requestedSection === section) await openForm(row);
     return;
   }
@@ -461,8 +469,10 @@ export async function load({ more = false } = {}) {
   await showListChoices();
   $("logKind").hidden = section !== "history";
   // An inventory copy has no memo of its own.
-  document.querySelector<HTMLOptionElement>(
-    '#logField option[value="memo"]',
+  (
+    document.querySelector<HTMLOptionElement>(
+      '#logField option[value="memo"]',
+    ) as HTMLOptionElement
   ).hidden = section !== "history";
   if (
     section === "inventory" &&
@@ -470,17 +480,17 @@ export async function load({ more = false } = {}) {
   )
     $<HTMLSelectElement>("logField").value = "nick";
   const after = more ? cursor : null;
-  let page;
+  let page: Fields;
   if (model.holdings)
     // 타이틀 보유·착용 현황, found by character or title.
-    page = await owner.query(CALLS[section].list, {
+    page = await ownerQuery(CALLS[section].list, {
       section,
       search: $<HTMLInputElement>("holdingsSearch").value,
       after,
     });
   else if (section === "members")
     // 회원 관리 (adm/member_list.php): every member, found by nickname.
-    page = await owner.query(CALLS[section].list, {
+    page = await ownerQuery(CALLS[section].list, {
       section,
       search: $<HTMLInputElement>("memberSearch").value,
       field: $<HTMLSelectElement>("memberField").value,
@@ -490,7 +500,7 @@ export async function load({ more = false } = {}) {
   else if (model.review) {
     // Searched, filtered and counted by the server, as the original's list
     // does in SQL (adm/character_list.php:107-140).
-    page = await owner.query(CALLS[section].list, {
+    page = await ownerQuery(CALLS[section].list, {
       section,
       field: $<HTMLSelectElement>("reviewField").value,
       text: $<HTMLInputElement>("reviewSearch").value,
@@ -500,9 +510,13 @@ export async function load({ more = false } = {}) {
       after,
     });
     references.fields = page.fields;
-    reviewFilters(page);
+    reviewFilters({
+      sides: page.sides,
+      classes: page.classes,
+      counts: page.counts,
+    });
   } else if (section === "history" || section === "inventory")
-    page = await owner.query(CALLS[section].list, {
+    page = await ownerQuery(CALLS[section].list, {
       section,
       after,
       field: $<HTMLSelectElement>("logField").value,
@@ -512,7 +526,7 @@ export async function load({ more = false } = {}) {
         : {}),
     });
   else if (section === "items")
-    page = await owner.query(CALLS[section].list, {
+    page = await ownerQuery(CALLS[section].list, {
       section,
       after,
       category: $<HTMLSelectElement>("itemCategory").value,
@@ -522,7 +536,7 @@ export async function load({ more = false } = {}) {
   else {
     const [sort, order] = $<HTMLSelectElement>("recordSort").value.split(":");
     const filter = $<HTMLSelectElement>("recordFilter");
-    page = await owner.query(CALLS[section].list, {
+    page = await ownerQuery(CALLS[section].list, {
       section,
       after,
       search: $<HTMLInputElement>("recordText").value,
@@ -567,7 +581,7 @@ export async function load({ more = false } = {}) {
         run(async () => {
           revoke.disabled = true;
           try {
-            await owner.mutate("admin/titles:grant", {
+            await ownerMutate("admin/titles:grant", {
               title: row.titleId,
               action: "revoke",
               characters: [row.characterId],
@@ -620,7 +634,9 @@ export async function load({ more = false } = {}) {
               return;
             remove.disabled = true;
             try {
-              await owner.mutate(CALLS.history.remove, { ids: [row.id] });
+              await ownerMutate(CALLS.history.remove, {
+                ids: [row.id],
+              });
               $("adminStatus").textContent =
                 "기록을 지우고 경험치·화폐를 되돌렸습니다.";
               await load();
@@ -695,7 +711,7 @@ export async function load({ more = false } = {}) {
         if (!confirm("이 자료를 삭제할까요?")) return;
         // Its uploads stay; Naru's media library marks them 참조 없음 once no
         // row of the site's tables names them.
-        const removed = await owner.mutate(CALLS[section].remove, {
+        const removed = await ownerMutate(CALLS[section].remove, {
           section,
           id: row.id,
         });
@@ -721,7 +737,9 @@ export async function load({ more = false } = {}) {
             )
           )
             return;
-          await owner.mutate("admin/members:deleteMember", { id: row.id });
+          await ownerMutate("admin/members:deleteMember", {
+            id: row.id,
+          });
           $("adminStatus").textContent = "회원을 삭제했습니다.";
           await load();
         });

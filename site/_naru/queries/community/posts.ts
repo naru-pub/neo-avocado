@@ -5,7 +5,7 @@
 // open (사이트공개).
 
 import type { Access } from "../../modules/access.js";
-import { containing, invalid, one } from "../../modules/access.js";
+import { containing, invalid, one, only } from "../../modules/access.js";
 import {
   boardNumber,
   listsContent,
@@ -137,7 +137,7 @@ export async function page(
     values.unshift(tag);
   }
   const where = clauses.join(" AND ");
-  const { total } = await one<{ total: number }>(
+  const { total } = await only<{ total: number }>(
     ctx,
     `SELECT count(*) AS total FROM ${from} WHERE ${where}`,
     values,
@@ -155,7 +155,7 @@ export async function page(
   const documents = found.map((row) => {
     if (!secretReadable(row, access, viewer, board)) return lockedPost(row);
     let document = shown(ctx, access, postOf(row), board);
-    if (!document.data.locked) counts[document.id] = row.comment_count;
+    if (!document.data.locked) counts[document.id] = row.comment_count ?? 0;
     if (!content && !document.data.locked && document.data.text)
       document = {
         ...document,
@@ -179,7 +179,11 @@ export async function post(
   const access = await accessOf(ctx);
   let row: PostRow | null = null;
   if (id !== undefined) row = await postRow(ctx, id);
-  else if (typeof boardId === "string" && Number.isSafeInteger(number))
+  else if (
+    typeof boardId === "string" &&
+    number !== undefined &&
+    Number.isSafeInteger(number)
+  )
     row = await one<PostRow>(
       ctx,
       `${POST_SELECT} WHERE board = ? AND number = ?`,
@@ -209,6 +213,7 @@ export async function neighbors(ctx: QueryCtx, args: { id?: string }) {
   const board = row ? await boardOf(ctx, row.board) : null;
   if (
     !row ||
+    !board ||
     !boardAllowed(board, access, "list") ||
     !boardAllowed(board, access, "read") ||
     !secretReadable(row, access, ctx.member?.id, board)
@@ -345,7 +350,8 @@ export async function search(
   });
   // list.skin.php's 검색대상 (sfl): what a post's own words or writer are
   // looked for in, and what its comments' are (the "(코)" choices).
-  const matches = {
+  type Clause = { text: string; values: SqlValue[] };
+  const postClauses: Record<string, () => Clause> = {
     all: () => either(holding("posts", ["title", "body"]), named("posts")),
     title: () => ({
       text: "posts.title LIKE ? ESCAPE '\\'",
@@ -356,12 +362,14 @@ export async function search(
     writer: () => named("posts"),
     owner: () => named("posts", "nick"),
     character: () => named("posts", "character"),
-  }[field]?.();
-  const commentMatch = {
+  };
+  const commentClauses: Record<string, () => Clause> = {
     all: () => either(holding("comments", ["body"]), named("comments")),
     comment: () => holding("comments", ["body"]),
     commentWriter: () => named("comments"),
-  }[field]?.();
+  };
+  const matches = postClauses[field]?.();
+  const commentMatch = commentClauses[field]?.();
   const secret = secretClause(access, viewer, "posts", board);
   // 멤버공개: a visitor's search does not look inside them. In the 분류 being
   // read (sca), when one is.
@@ -371,7 +379,7 @@ export async function search(
   };
   const inComments = after?.startsWith(COMMENT_PHASE) ?? false;
   const offset = Number(
-    inComments ? after.slice(COMMENT_PHASE.length) : (after ?? 0),
+    after && inComments ? after.slice(COMMENT_PHASE.length) : (after ?? 0),
   );
   if (!Number.isSafeInteger(offset) || offset < 0) invalid(ctx);
   const found: PostRow[] = [];
@@ -475,7 +483,7 @@ export async function favorites(
     invalid(ctx);
   if (!ctx.member) return { documents: [], total: 0 };
   const access = await accessOf(ctx);
-  const { total } = await one<{ total: number }>(
+  const { total } = await only<{ total: number }>(
     ctx,
     "SELECT count(*) AS total FROM favorites WHERE member = ?",
     [ctx.member.id],
@@ -561,6 +569,7 @@ export async function latest(ctx: QueryCtx, args: { board?: string }) {
   const access = await accessOf(ctx);
   const board = await boardOf(ctx, args?.board);
   if (
+    !board ||
     !boardAllowed(board, access, "list") ||
     !boardAllowed(board, access, "read")
   )

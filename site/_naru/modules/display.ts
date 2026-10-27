@@ -23,9 +23,17 @@ export function onDisplay(display: Display | null | undefined, now: number) {
   const weekday = WEEKDAYS[korea.getUTCDay()];
   if (display.from && day < display.from) return false;
   if (display.until && day > display.until) return false;
-  if (Number.isInteger(display.fromHour) && hour < display.fromHour)
+  if (
+    display.fromHour !== undefined &&
+    Number.isInteger(display.fromHour) &&
+    hour < display.fromHour
+  )
     return false;
-  if (Number.isInteger(display.untilHour) && hour > display.untilHour)
+  if (
+    display.untilHour !== undefined &&
+    Number.isInteger(display.untilHour) &&
+    hour > display.untilHour
+  )
     return false;
   if (
     Array.isArray(display.weekdays) &&

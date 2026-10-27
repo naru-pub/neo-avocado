@@ -5,6 +5,7 @@
 
 import {
   one,
+  only,
   ownerOnly,
   rolesOf,
   rolesOfMembers,
@@ -85,7 +86,7 @@ export const list = ownerOnly(async function list(
     ctx,
     rows.map((row) => String(row.member)),
   );
-  const counts = await one<{ total: number; blocked: number; left: number }>(
+  const counts = await only<{ total: number; blocked: number; left: number }>(
     ctx,
     `SELECT count(*) AS total, coalesce(sum(blocked_on IS NOT NULL), 0) AS blocked,
        coalesce(sum(left_on IS NOT NULL), 0) AS left FROM members`,

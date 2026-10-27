@@ -35,7 +35,7 @@ async function build(directory) {
     }
     const target = join(out, path);
     await mkdir(dirname(target), { recursive: true });
-    if (entry.name.endsWith(".d.ts")) continue;
+    if (/\.d\.m?ts$/.test(entry.name)) continue;
     if (entry.name.endsWith(".ts")) {
       // Types removed and nothing else: comments and layout stay, so the
       // published files read as the sources do.

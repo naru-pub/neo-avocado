@@ -1,13 +1,16 @@
 // 캐릭터관리: the character review (승인·삭제), the character form, and title grants.
 
+import type { ModelField, Reference } from "../_naru/modules/admin-model.js";
 import {
   $,
+  type AdminRow,
   grantTitleId,
   imageSlots,
   itemNames,
   loadReferences,
   message,
-  owner,
+  ownerClient,
+  ownerMutate,
   references,
   run,
   section,
@@ -19,7 +22,7 @@ import { REVIEW_STATES } from "./forms.js";
 import { load } from "./list.js";
 import { adminRoute } from "./main.js";
 
-export const STATES = {
+export const STATES: Record<string, string> = {
   editing: "수정 중",
   submitted: "신청(수정 완료)",
   approved: "승인",
@@ -32,11 +35,19 @@ export const review = { state: "" };
  * The review's 소속 and 종족 choices (the values characters have) and its
  * state buttons with their counts (character_list.php:285-288).
  */
-export function reviewFilters({ sides, classes, counts }) {
+export function reviewFilters({
+  sides,
+  classes,
+  counts,
+}: {
+  sides: string[];
+  classes: string[];
+  counts: Record<string, number>;
+}) {
   for (const [id, values, title] of [
     ["reviewSide", sides, itemNames.sideTitle || "소속"],
     ["reviewClass", classes, itemNames.classTitle || "종족"],
-  ]) {
+  ] as const) {
     const select = $<HTMLSelectElement>(id);
     const chosen = select.value;
     select.replaceChildren(
@@ -71,7 +82,7 @@ export function reviewFilters({ sides, classes, counts }) {
 export function reviewChosen(
   button: string,
   verb: string,
-  act: (box) => Promise<void>,
+  act: (box: HTMLInputElement) => Promise<unknown>,
 ) {
   return () =>
     run(async () => {
@@ -102,8 +113,8 @@ export function reviewChosen(
       }
     });
 }
-export const reviewState = (state) => (box) =>
-  owner.mutate("characters/review:reviewCharacter", {
+export const reviewState = (state: string) => (box: HTMLInputElement) =>
+  ownerMutate("characters/review:reviewCharacter", {
     character: box.value,
     revision: box.dataset.revision,
     state,
@@ -112,11 +123,13 @@ export const reviewState = (state) => (box) =>
 $("reviewSave").onclick = reviewChosen("reviewSave", "수정할", (box) => {
   const row = box.closest("form") as HTMLFormElement;
   const state = row.querySelector<HTMLSelectElement>(".review-state");
-  return owner.mutate("characters/review:reviewCharacter", {
+  return ownerMutate("characters/review:reviewCharacter", {
     character: box.value,
     revision: box.dataset.revision,
-    type: row.querySelector<HTMLSelectElement>(".review-type").value,
-    ...(state.value !== state.dataset.was ? { state: state.value } : {}),
+    type: row.querySelector<HTMLSelectElement>(".review-type")?.value,
+    ...(state && state.value !== state.dataset.was
+      ? { state: state.value }
+      : {}),
   });
 });
 $("reviewApprove").onclick = reviewChosen(
@@ -132,15 +145,15 @@ $("reviewDelete").onclick = reviewChosen(
 $("reviewRemove").onclick = reviewChosen(
   "reviewRemove",
   "영구히 삭제할",
-  (box) => owner.mutate("characters/sheet:remove", { id: box.value }),
+  (box) => ownerMutate("characters/sheet:remove", { id: box.value }),
 );
-export const TYPES = [
+export const TYPES: [string, string][] = [
   ["main", "메인"],
   ["sub", "서브"],
   ["npc", "NPC"],
 ];
 /** One application: its sheet with every field, the decision and admin-only values. */
-export function reviewRow(row) {
+export function reviewRow(row: AdminRow) {
   const form = document.createElement("form");
   form.className = "review";
   const nick = row.nick;
@@ -190,7 +203,7 @@ export function reviewRow(row) {
   const sheet = document.createElement("dl");
   // In their order already (admin/character_review).
   const definitions = references.fields;
-  const adminInputs = [];
+  const adminInputs: HTMLInputElement[] = [];
   for (const field of definitions) {
     const term = document.createElement("dt");
     term.textContent = `${field.data.label ?? field.id}${field.data.visibility === "admin" ? " (운영자만)" : field.data.visibility === "owner" ? " (오너+운영자)" : ""}`;
@@ -225,14 +238,14 @@ export function reviewRow(row) {
     state.append(new Option(label, value));
   state.value = row.data.state ?? "submitted";
   state.dataset.was = state.value;
-  const decide = (state) =>
+  const decide = (state: string | null) =>
     run(async () => {
       for (const control of form.querySelectorAll<
         HTMLButtonElement | HTMLInputElement | HTMLSelectElement
       >("button,input,select"))
         control.disabled = true;
       try {
-        await owner.mutate("characters/review:reviewCharacter", {
+        await ownerMutate("characters/review:reviewCharacter", {
           character: row.id,
           revision: row.revision,
           type: type.value,
@@ -317,7 +330,7 @@ export function reviewRow(row) {
         control.disabled = true;
       try {
         // Outfits, relations and items go with it.
-        await owner.mutate("characters/sheet:move", {
+        await ownerMutate("characters/sheet:move", {
           id: row.id,
           nick,
           revision: row.revision,
@@ -354,8 +367,8 @@ export function reviewRow(row) {
  * Deletes a character as adm/character_delete.php does; the items it held
  * go back to their owners' own inventory.
  */
-export async function removeCharacter(row) {
-  await owner.mutate("characters/sheet:remove", { id: row.id });
+export async function removeCharacter(row: AdminRow) {
+  await ownerMutate("characters/sheet:remove", { id: row.id });
 }
 /**
  * The owner's full form for one character (adm/character_form.php:112-423):
@@ -363,7 +376,7 @@ export async function removeCharacter(row) {
  * picture and every custom field. Stats and points stay in 캐릭터 승인·경험치·
  * 능력치·타이틀. Image fields take a managed upload as the other forms do.
  */
-export async function openCharacterForm(row = null) {
+export async function openCharacterForm(row: AdminRow | null = null) {
   const { fields, sides, classes } = await loadReferences();
   setSelected(row);
   adminRoute([section, row ? row.id : "new"]);
@@ -374,21 +387,32 @@ export async function openCharacterForm(row = null) {
   $("characterFormStatus").textContent = "";
   const box = $("characterFields");
   box.replaceChildren();
-  const add = (text, input, image = null) => {
+  const add = <
+    T extends HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement,
+  >(
+    text: string,
+    input: T,
+    image: ModelField | null = null,
+  ) => {
     const label = document.createElement("label");
     label.append(text, input);
     box.append(label);
     if (image) box.append(imageUpload(image, input.value));
     return input;
   };
-  const textInput = (name, value, max) => {
+  const textInput = (name: string, value: string | undefined, max: number) => {
     const input = document.createElement("input");
     input.name = name;
     input.value = value ?? "";
     input.maxLength = max;
     return input;
   };
-  const choice = (name, value, options, empty = "선택하지 않음") => {
+  const choice = (
+    name: string,
+    value: string | undefined,
+    options: [string, string][],
+    empty: string | null = "선택하지 않음",
+  ) => {
     const select = document.createElement("select");
     select.name = name;
     if (empty !== null) select.append(new Option(empty, ""));
@@ -408,9 +432,17 @@ export async function openCharacterForm(row = null) {
   );
   add("캐릭터 종류", choice("type", row?.data.type ?? "main", TYPES, null));
   // A pick from the owner's list; free text while it is empty.
-  const listed = (name, label, rows, value) => {
+  const listed = (
+    name: string,
+    label: string,
+    rows: Reference[],
+    value: string | undefined,
+  ) => {
     // In their order already (admin/references).
-    const names = rows.map((entry) => [entry.data.name, entry.data.name]);
+    const names = rows.map((entry): [string, string] => [
+      entry.data.name,
+      entry.data.name,
+    ]);
     add(
       label,
       names.length ? choice(name, value, names) : textInput(name, value, 40),
@@ -431,6 +463,7 @@ export async function openCharacterForm(row = null) {
     image.placeholder = "https://";
     add(`${slot.label}${slot.use ? "" : " (사용 안 함)"}`, image, {
       key: slot.key,
+      label: slot.label,
       image: true,
     });
   }
@@ -439,7 +472,7 @@ export async function openCharacterForm(row = null) {
     const label = `${field.data.label ?? field.id}${field.data.visibility === "admin" ? " (운영자만)" : field.data.visibility === "owner" ? " (오너+운영자)" : ""}`;
     const key = `field:${field.id}`;
     const type = field.data.type ?? "text";
-    let input;
+    let input: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
     if (type === "textarea") {
       input = document.createElement("textarea");
       input.name = key;
@@ -449,21 +482,25 @@ export async function openCharacterForm(row = null) {
       input = choice(
         key,
         value,
-        (field.data.options ?? []).map((option) => [option, option]),
+        (field.data.options ?? []).map((option: string): [string, string] => [
+          option,
+          option,
+        ]),
         "",
       );
     else {
       input = textInput(key, value, type === "text" ? 200 : 2000);
       if (type === "url" || type === "image") input.placeholder = "https://";
     }
-    add(label, input, type === "image" ? { key, image: true } : null);
+    add(label, input, type === "image" ? { key, label, image: true } : null);
   }
   $("characterForm").hidden = false;
 }
 $("characterForm").onsubmit = async (event) => {
   event.preventDefault();
-  const button =
-    $("characterForm").querySelector<HTMLButtonElement>('[type="submit"]');
+  const button = $("characterForm").querySelector<HTMLButtonElement>(
+    '[type="submit"]',
+  ) as HTMLButtonElement;
   button.disabled = true;
   $("adminNav").inert = true;
   try {
@@ -477,16 +514,16 @@ $("characterForm").onsubmit = async (event) => {
     )) {
       if (!file.files?.length) continue;
       $("characterFormStatus").textContent = "이미지를 올리는 중…";
-      values[file.dataset.uploadFor] = (
-        await owner.media.upload(file.files[0])
+      values[file.dataset.uploadFor ?? ""] = (
+        await ownerClient().media.upload(file.files[0])
       ).url;
     }
     $("characterFormStatus").textContent = "";
-    const fields = {};
+    const fields: Record<string, string> = {};
     for (const [key, value] of Object.entries(values))
       if (key.startsWith("field:")) fields[key.slice(6)] = value;
     const row = selected;
-    await owner.mutate("characters/sheet:save", {
+    await ownerMutate("characters/sheet:save", {
       ...(row ? { id: row.id, revision: row.revision } : { nick: values.nick }),
       data: {
         name: values.name,
@@ -534,7 +571,7 @@ $("titleGrantForm").onsubmit = async (event) => {
   $("adminNav").inert = true;
   try {
     // One call for every character: all of it is done, or none.
-    const result = await owner.mutate("admin/titles:grant", {
+    const result = await ownerMutate("admin/titles:grant", {
       title: grantTitleId,
       action: $<HTMLSelectElement>("titleGrantAction").value,
       allApproved: $<HTMLInputElement>("titleGrantAll").checked,

@@ -11,10 +11,23 @@ import { configModels } from "./admin-models/config.js";
 import { itemsModels } from "./admin-models/items.js";
 import { membersModels } from "./admin-models/members.js";
 import { otherModels } from "./admin-models/other.js";
-import { type Model, nonnegative, plainHttps } from "./admin-models/shared.js";
+import {
+  type Data,
+  type Model,
+  type ModelField,
+  nonnegative,
+  plainHttps,
+  type References,
+} from "./admin-models/shared.js";
 import { colorOf } from "./design.js";
 
-export type { Model, ModelField } from "./admin-models/shared.js";
+export type {
+  Data,
+  Model,
+  ModelField,
+  Reference,
+  References,
+} from "./admin-models/shared.js";
 
 /** Every section's model, by section. */
 export const models: Record<string, Model> = {
@@ -26,27 +39,31 @@ export const models: Record<string, Model> = {
   ...otherModels,
 };
 
-export function fieldValue(data, key) {
-  return key.split(".").reduce((value, part) => value?.[part], data);
+/** The value at a dotted `key` ("display.fromHour") of a record's data. */
+export function fieldValue(data: Data | null, key: string): unknown {
+  return key
+    .split(".")
+    .reduce<Data | null | undefined>((value, part) => value?.[part], data);
 }
-function setField(data, key, value) {
+function setField(data: Data, key: string, value: unknown) {
   const path = key.split(".");
+  const last = path.pop() as string;
   let target = data;
-  for (const part of path.slice(0, -1)) {
+  for (const part of path) {
     if (!target[part] || typeof target[part] !== "object") target[part] = {};
     target = target[part];
   }
-  if (value === undefined) delete target[path.at(-1)];
-  else target[path.at(-1)] = value;
+  if (value === undefined) delete target[last];
+  else target[last] = value;
 }
 /**
  * A pick from one of the owner's lists (references[field.from]): its ID, or
  * its name with valueBy "name"; several with `multiple`. With an empty list
  * and `fallbackText`, any short text.
  */
-function picked(field, value, references) {
-  const rows = references[field.from] ?? [];
-  const choices = rows.map((row) =>
+function picked(field: ModelField, value: unknown, references: References) {
+  const rows = references[field.from ?? ""] ?? [];
+  const choices: unknown[] = rows.map((row) =>
     field.valueBy === "name" ? row.data.name : row.id,
   );
   if (field.multiple) {
@@ -65,34 +82,41 @@ function picked(field, value, references) {
     throw new Error(`${field.label}을(를) 선택하세요.`);
   return value;
 }
-export function buildRecord(section, values, previous, references) {
+export function buildRecord(
+  section: string,
+  values: Data,
+  previous: { data: Data } | null,
+  references: References,
+) {
   const model = models[section];
   if (!model) throw new Error("알 수 없는 관리 항목입니다.");
   const id = model.fixedId ?? values.id;
   if (typeof id !== "string" || !/^[a-zA-Z0-9_-]{1,64}$/.test(id))
     throw new Error("ID는 영문·숫자·밑줄·하이픈 1~64자로 입력하세요.");
-  const data = structuredClone(previous?.data ?? {});
-  for (const field of model.fields) {
+  const data: Data = structuredClone(previous?.data ?? {});
+  for (const field of model.fields ?? []) {
     // A section title on the form, as the original's settings page has.
-    if (field.type === "heading" || field.type === "group") continue;
+    if (field.type === "heading" || field.type === "group" || !field.key)
+      continue;
     const value = values[field.key];
     if (field.transient) {
       if (value === undefined && !field.required) continue;
       if (
         typeof value !== "string" ||
         (field.required && !value.trim()) ||
-        value.length > field.max
+        value.length > (field.max ?? 2000)
       )
         throw new Error(`${field.label}을(를) 입력하세요.`);
       continue;
     }
-    let result;
+    let result: unknown;
     if (field.type === "checkbox") result = Boolean(value);
     // A whole number that may be negative (글읽기 포인트).
     else if (field.type === "signed") {
-      result = Number(value ?? 0);
-      if (!Number.isSafeInteger(result) || Math.abs(result) > 1_000_000_000)
+      const number = Number(value ?? 0);
+      if (!Number.isSafeInteger(number) || Math.abs(number) > 1_000_000_000)
         throw new Error(`${field.label}을(를) 정수로 입력하세요.`);
+      result = number;
     } else if (field.type === "number" || field.type === "optional-number")
       result =
         field.type === "optional-number" &&
@@ -100,9 +124,10 @@ export function buildRecord(section, values, previous, references) {
           ? undefined
           : nonnegative(Number(value));
     else if (field.type === "decimal") {
-      result = Number(value);
-      if (!Number.isFinite(result) || result < 0)
+      const number = Number(value);
+      if (!Number.isFinite(number) || number < 0)
         throw new Error("무게는 유한한 0 이상의 수여야 합니다.");
+      result = number;
     } else if (field.type === "tokens") {
       if (typeof value !== "string" || value.length > 2000)
         throw new Error("세력·종족 목록을 확인하세요.");
@@ -116,9 +141,9 @@ export function buildRecord(section, values, previous, references) {
       ];
     } else if (field.type === "ingredients") {
       if (!Array.isArray(value)) throw new Error("재료 목록을 확인하세요.");
-      const ids = new Set();
+      const ids = new Set<unknown>();
       let total = 0;
-      result = value.map((row) => {
+      result = value.map((row: Data) => {
         const count = nonnegative(Number(row.count));
         if (
           !count ||
@@ -136,14 +161,14 @@ export function buildRecord(section, values, previous, references) {
           ...(field.consumes ? { consume: row.consume === true } : {}),
         };
       });
-      if (total > field.maxCount || (section === "recipes" && !total))
+      if (total > (field.maxCount ?? 0) || (section === "recipes" && !total))
         throw new Error(`재료는 1~${field.maxCount}개로 설정하세요.`);
     } else if (field.type === "pick") {
       result = picked(field, value, references);
     } else if (field.type === "choice" && field.multiple) {
       // Several of a choice's options (design_form.php's 상·하·좌·우).
-      const choices = field.options.map(([id]) => id);
-      const list = Array.isArray(value) ? value : [];
+      const choices: unknown[] = (field.options ?? []).map(([id]) => id);
+      const list: unknown[] = Array.isArray(value) ? value : [];
       if (list.some((entry) => !choices.includes(entry)))
         throw new Error(`${field.label}을(를) 확인하세요.`);
       result = choices.filter((choice) => list.includes(choice));
@@ -158,12 +183,12 @@ export function buildRecord(section, values, previous, references) {
         );
       result = value.trim();
     } else if (
-      ["item", "stat", "title", "choice", "profile"].includes(field.type)
+      ["item", "stat", "title", "choice", "profile"].includes(field.type ?? "")
     ) {
       if (field.optional && !value)
         result = ["gacha", "explore"].includes(section) ? null : undefined;
       else {
-        const choices = field.options
+        const choices: unknown[] = field.options
           ? field.options.map(([id]) => id)
           : references[
               field.type === "item"
@@ -181,7 +206,9 @@ export function buildRecord(section, values, previous, references) {
     } else if (field.type === "titles") {
       if (
         !Array.isArray(value) ||
-        value.some((id) => !references.titles.some((row) => row.id === id))
+        value.some(
+          (id: unknown) => !references.titles.some((row) => row.id === id),
+        )
       )
         throw new Error("지급할 타이틀을 확인하세요.");
       result = [...new Set(value)];
@@ -195,7 +222,7 @@ export function buildRecord(section, values, previous, references) {
       result = value.trim();
       if (field.type === "url" && value && !plainHttps(value))
         throw new Error("이미지는 인증 정보 없는 HTTPS 주소여야 합니다.");
-      if (field.type === "color" && !/^#[0-9a-fA-F]{6}$/.test(result))
+      if (field.type === "color" && !/^#[0-9a-fA-F]{6}$/.test(value))
         throw new Error(`${field.label}을(를) 확인하세요.`);
       if (
         field.type === "date" &&
@@ -230,13 +257,19 @@ export const REVIEW_STATES = ["editing", "submitted", "approved", "deleted"];
  */
 export function formValues(
   section: string,
-  data: Record<string, any> | null,
-  references: { stats?: { id: string }[] } = {},
+  data: Data | null,
+  references: { stats?: { id: string; data?: Data }[] } = {},
 ): Record<string, unknown> {
   const model = models[section];
   const values: Record<string, unknown> = {};
   for (const field of model?.fields ?? []) {
-    if (["heading", "group"].includes(field.type) || field.transient) continue;
+    if (
+      field.type === "heading" ||
+      field.type === "group" ||
+      field.transient ||
+      !field.key
+    )
+      continue;
     const value =
       section === "quests" && field.key === "images"
         ? Array.isArray(data?.images)
@@ -251,19 +284,21 @@ export function formValues(
           ? Array.isArray(value)
             ? value.join(", ")
             : (value ?? "")
-          : ["ingredients", "titles"].includes(field.type) ||
-              (["pick", "choice"].includes(field.type) && field.multiple)
+          : field.type === "ingredients" ||
+              field.type === "titles" ||
+              ((field.type === "pick" || field.type === "choice") &&
+                field.multiple)
             ? Array.isArray(value)
               ? value
               : []
             : field.type === "choice"
-              ? (value ?? field.options[0][0])
+              ? (value ?? field.options?.[0]?.[0])
               : (value ?? "");
   }
   if (section === "character_state")
     for (const definition of references.stats ?? []) {
       const stat = data?.stats?.[definition.id];
-      const initial = (definition as any).data?.initial ?? 0;
+      const initial = definition.data?.initial ?? 0;
       values[`allocated:${definition.id}`] = stat?.allocated ?? 0;
       values[`damage:${definition.id}`] =
         stat?.damage ?? (stat?.max ?? initial) - (stat?.current ?? initial);

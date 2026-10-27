@@ -6,11 +6,15 @@ import { onDisplay } from "../_naru/modules/display.js";
 import { editCharacter } from "./characters.js";
 import {
   $,
+  type Args,
+  type EditField,
   edit,
+  type Fields,
   formatTime,
   mutate,
   ownCharacters,
   query,
+  type Row,
   renderPages,
   route,
   run,
@@ -54,14 +58,16 @@ async function loadShop() {
   state.itemCatalog.clear();
   for (const item of shop.items) state.itemCatalog.set(item.id, item);
   // 상점 진열: each further sale as its item, on the entry's terms.
-  shopOffers = (shop.offers ?? []).flatMap((offer) => {
-    const item = state.itemCatalog.get(offer.item);
-    if (!item) return [];
-    const data = { ...item.data, ...offer.data, hidden: false };
-    if (offer.data.stock === undefined) delete data.stock;
-    if (offer.data.display === undefined) delete data.display;
-    return [{ id: item.id, entry: offer.id, data }];
-  });
+  shopOffers = (shop.offers ?? []).flatMap(
+    (offer: Row & { item: string }): Listing[] => {
+      const item = state.itemCatalog.get(offer.item);
+      if (!item) return [];
+      const data: Fields = { ...item.data, ...offer.data, hidden: false };
+      if (offer.data.stock === undefined) delete data.stock;
+      if (offer.data.display === undefined) delete data.display;
+      return [{ id: item.id, entry: offer.id, data }];
+    },
+  );
   showCategory();
   showInventory(shop.inventory);
   showRecipes(shop.recipes);
@@ -79,10 +85,11 @@ async function loadShopFront() {
     .map((name) => name.trim())
     .filter(Boolean);
   state.shopCategories = categories.length ? categories : ["일반"];
-  if (!state.shopCategories.includes(state.shopCategory))
+  if (!state.shopCategories.includes(state.shopCategory ?? ""))
     state.shopCategory = state.shopCategories[0];
-  state.shopGreeting = settings.shopGreeting ?? "";
-  $("shopTalk").textContent = state.shopGreeting;
+  const greeting: string = settings.shopGreeting ?? "";
+  state.shopGreeting = greeting;
+  $("shopTalk").textContent = greeting;
   $("shopNpc").hidden = !settings.shopNpc;
   if (settings.shopNpc) $<HTMLImageElement>("shopNpc").src = settings.shopNpc;
   $("shopCategories").replaceChildren(
@@ -100,7 +107,7 @@ async function loadShopFront() {
   );
 }
 /** Shows one category's items (a button, or the shop/카테고리 address). */
-export function showShopCategory(name) {
+export function showShopCategory(name: string) {
   state.shopCategory = name;
   if (!state.shopCategories) return;
   for (const button of $("shopCategories").children)
@@ -142,7 +149,7 @@ async function loadShopCharacter() {
  * Whether the chosen character may see an item: one kept for some 세력 or
  * 종족 is left out for the others, and for no character (shop/index.php:33,36).
  */
-function forCharacter(item) {
+function forCharacter(item: Listing) {
   const requirements = item.data.requirements ?? {};
   const character = state.shopCharacter;
   return [
@@ -156,10 +163,17 @@ function forCharacter(item) {
   );
 }
 /** The shop's items of the chosen category, from what has been read. */
-let shopOffers = [];
+/** An item as the shop sells it: from the catalog, or an entry's terms (상점 진열). */
+interface Listing extends Row {
+  entry?: string;
+}
+let shopOffers: Listing[] = [];
 function showCategory(number = 1) {
   const first = state.shopCategories?.[0];
-  const shown = [...state.itemCatalog.values(), ...shopOffers].filter(
+  const shown: Listing[] = [
+    ...state.itemCatalog.values(),
+    ...shopOffers,
+  ].filter(
     (item) =>
       !item.data.hidden &&
       onDisplay(item.data.display, Date.now()) &&
@@ -184,7 +198,7 @@ function showCategory(number = 1) {
   );
   renderPages($("itemPages"), current, pages, (next) => showCategory(next));
 }
-function itemPortrait(data) {
+function itemPortrait(data: Fields | undefined) {
   const portrait = document.createElement("div");
   portrait.className = "item-portrait";
   if (data?.image?.startsWith("https://")) {
@@ -202,7 +216,7 @@ function itemPortrait(data) {
   return portrait;
 }
 /** 상세이미지 (it_1): the item's larger picture, in its detail, when set. */
-function detailPicture(data) {
+function detailPicture(data: Fields | undefined) {
   if (!data?.detailImage?.startsWith("https://")) return [];
   const image = document.createElement("img");
   image.src = data.detailImage;
@@ -212,14 +226,15 @@ function detailPicture(data) {
   return [image];
 }
 /** An item's name from the catalog, for requirements and recipes. */
-const itemName = (id) => state.itemCatalog.get(id)?.data.name ?? id;
+const itemName = (id: string): string =>
+  state.itemCatalog.get(id)?.data.name ?? id;
 /**
  * What buying costs (_ajax.shop_item.php's $money): the money, the
  * experience it consumes and the items it takes, joined with +.
  */
-function priceText(item) {
+function priceText(item: Listing) {
   const r = item.data.requirements ?? {};
-  const parts = [];
+  const parts: string[] = [];
   if ((item.data.price ?? 0) > 0 && r.consumeMoney !== false)
     parts.push(moneyText(state.names, item.data.price));
   if (r.exp && r.consumeExp) parts.push(expText(state.names, r.exp));
@@ -228,7 +243,7 @@ function priceText(item) {
   return parts.join(" + ") || "무료";
 }
 /** What else buying asks of the character, beyond its price. */
-function requirementsText(r) {
+function requirementsText(r: Fields) {
   return [
     r.approved ? "승인 캐릭터" : "",
     r.sides?.length
@@ -241,8 +256,8 @@ function requirementsText(r) {
     r.title ? `타이틀 ${r.title}${r.consumeTitle ? " 소모" : " 필요"}` : "",
     r.limit !== undefined ? `캐릭터별 ${r.limit}회` : "",
     ...(r.items ?? [])
-      .filter((entry) => !entry.consume)
-      .map((entry) => `${itemName(entry.item)} ${entry.count}개 필요`),
+      .filter((entry: Fields) => !entry.consume)
+      .map((entry: Fields) => `${itemName(entry.item)} ${entry.count}개 필요`),
   ]
     .filter(Boolean)
     .join(" · ");
@@ -251,8 +266,8 @@ function requirementsText(r) {
  * The copies of each needed item from the chosen character's inventory,
  * gifts last, as the original takes them without asking; null if short.
  */
-function pickMaterials(needs) {
-  const picked = [];
+function pickMaterials(needs: Fields[] | undefined) {
+  const picked: string[] = [];
   for (const need of needs ?? []) {
     const copies = state.inventoryRows
       .filter((row) => row.data.item === need.item)
@@ -270,7 +285,7 @@ function pickMaterials(needs) {
   return picked;
 }
 /** The shop's list: each item's picture and name (shop.skin.php). */
-function shopItem(item) {
+function shopItem(item: Listing) {
   const row = document.createElement("li");
   row.className = "shop-item";
   const pick = document.createElement("button");
@@ -282,7 +297,7 @@ function shopItem(item) {
   return row;
 }
 /** The item picked (shop.item.skin.php): the NPC speaks, 구매하기 below. */
-function showShopDetail(item) {
+function showShopDetail(item: Listing) {
   $("shopTalk").textContent =
     item.data.shopTalk ||
     `${item.data.name}${item.data.description ? ` — ${item.data.description}` : ""}`;
@@ -314,7 +329,8 @@ function showShopDetail(item) {
         }),
       );
   // 구매하기 only for an approved character (shop.item.skin.php:24).
-  if (state.shopCharacter?.approved === true) {
+  const buyer = state.shopCharacter;
+  if (buyer?.approved === true) {
     const buy = document.createElement("button");
     buy.type = "button";
     buy.textContent = item.data.stock === 0 ? "품절" : "구매하기";
@@ -329,10 +345,10 @@ function showShopDetail(item) {
         {
           item: item.id,
           ...(item.entry ? { entry: item.entry } : {}),
-          character: state.shopCharacter.id,
+          character: buyer.id,
           ...(materials.length ? { materials } : {}),
         },
-        (result) => `${result.owned.data.name}을(를) 샀습니다.`,
+        (result: Fields) => `${result.owned.data.name}을(를) 샀습니다.`,
       );
     };
     detail.append(buy);
@@ -351,10 +367,10 @@ async function loadInventory() {
  * The chosen character's inventory (inventory/list.inc.php): gifts one by
  * one with a mark, the rest one slot an item with its count.
  */
-function showInventory(rows) {
+function showInventory(rows: Row[]) {
   state.inventoryRows = rows;
   const gifts = state.inventoryRows.filter((row) => row.data.sender);
-  const groups = new Map();
+  const groups = new Map<string, Row[]>();
   for (const row of state.inventoryRows)
     if (!row.data.sender)
       groups.set(row.data.item, [...(groups.get(row.data.item) ?? []), row]);
@@ -373,7 +389,7 @@ function showInventory(rows) {
         open.append(
           Object.assign(document.createElement("i"), {
             className: "count",
-            textContent: copies.length,
+            textContent: String(copies.length),
           }),
         );
       if (owned.data.sender)
@@ -403,7 +419,7 @@ function showInventory(rows) {
  * price, what it is and does, a gift's message and sender, and 판매하기,
  * 사용하기 and 선물하기 where the item allows them.
  */
-function showInventoryDetail(owned) {
+function showInventoryDetail(owned: Row) {
   const item = state.itemCatalog.get(owned.data.item)?.data;
   const detail = $("inventoryDetail");
   detail.replaceChildren(
@@ -453,7 +469,7 @@ function showInventoryDetail(owned) {
   }
   const actions = document.createElement("p");
   actions.className = "actions";
-  const button = (label, onclick) => {
+  const button = (label: string, onclick: () => void) => {
     const control = document.createElement("button");
     control.type = "button";
     control.textContent = label;
@@ -466,7 +482,7 @@ function showInventoryDetail(owned) {
         spend(
           "economy/inventory:sell",
           { inventory: owned.id },
-          (result) => `${result.name}을(를) 판매했습니다.`,
+          (result: Fields) => `${result.name}을(를) 판매했습니다.`,
         );
     });
   if (item?.effect?.type && item.usable !== false)
@@ -483,7 +499,10 @@ function showInventoryDetail(owned) {
           value: owned.data.character ?? "",
           options: [
             ["", "회원 인벤토리"],
-            ...state.ownCharacters.map((row) => [row.id, row.data.name]),
+            ...state.ownCharacters.map((row): [string, string] => [
+              row.id,
+              row.data.name,
+            ]),
           ],
         },
       ],
@@ -503,7 +522,7 @@ function showInventoryDetail(owned) {
  * 선물하기 (inventory/inc/send_item_form.php): to a character named by the
  * sender, another member's or their own, with a message.
  */
-function giveItem(owned) {
+function giveItem(owned: Row) {
   edit(
     `${owned.data.name} 선물`,
     [
@@ -542,7 +561,7 @@ $("inventoryCharacter").onchange = () =>
       loadShopCharacter().then(() => showCategory()),
     ]);
   });
-const HISTORY_NAMES = {
+const HISTORY_NAMES: Record<string, string> = {
   adjust: "운영자 잔액 조정",
   daily: "첫 로그인",
   signup: "회원가입 축하",
@@ -573,13 +592,13 @@ $("historyPanel").ontoggle = () => {
   if ($<HTMLDetailsElement>("historyPanel").open) run(() => loadHistory());
 };
 $("moreHistory").onclick = () => run(() => loadHistory({ more: true }));
-async function useInventory(owned) {
+async function useInventory(owned: Row) {
   const item = state.itemCatalog.get(owned.data.item);
   const effect = item?.data.effect;
-  if (!effect || item.data.usable === false)
+  if (!item || !effect || item.data.usable === false)
     return say("사용할 수 없는 아이템입니다.");
-  const fields = [];
-  let characters = [];
+  const fields: EditField[] = [];
+  let characters: Row[] = [];
   const requirements = item.data.useRequirements ?? {};
   if (
     ["restore", "profile"].includes(effect.type) ||
@@ -598,7 +617,7 @@ async function useInventory(owned) {
     // period, and saving it spends the ticket (inventory/use_item.php:27-28,
     // character_form_update.php:18,268).
     if (effect.type === "profile") {
-      const open = (chosen) =>
+      const open = (chosen: Row) =>
         editCharacter(
           chosen,
           async () => {
@@ -617,13 +636,16 @@ async function useInventory(owned) {
             label: "수정할 캐릭터",
             required: true,
             value: characters[0].id,
-            options: characters.map((row) => [row.id, row.data.name]),
+            options: characters.map((row): [string, string] => [
+              row.id,
+              row.data.name,
+            ]),
           },
         ],
         ({ character }) => {
           const chosen = characters.find((row) => row.id === character);
           // The form opens once this dialog has closed.
-          setTimeout(() => run(() => open(chosen)));
+          if (chosen) setTimeout(() => run(() => open(chosen)));
         },
       );
     }
@@ -632,7 +654,10 @@ async function useInventory(owned) {
       label: "캐릭터",
       required: true,
       value: characters[0].id,
-      options: characters.map((row) => [row.id, row.data.name]),
+      options: characters.map((row): [string, string] => [
+        row.id,
+        row.data.name,
+      ]),
     });
   }
   if (effect.type === "create")
@@ -685,7 +710,7 @@ async function useInventory(owned) {
   );
 }
 /** The recipes members may craft (the owner's hidden ones are not read). */
-function showRecipes(recipes) {
+function showRecipes(recipes: Row[]) {
   state.recipes = recipes;
   $("recipe").replaceChildren();
   for (const row of state.recipes) {
@@ -700,7 +725,7 @@ function showRecipes(recipes) {
       (row) => row.id === $<HTMLSelectElement>("recipe").value,
     );
     $("recipeDescription").textContent = recipe
-      ? `${recipe.data.description ?? ""} · ${moneyText(state.names, recipe.data.cost ?? 0)} · 재료: ${(recipe.data.ingredients ?? []).map((ingredient) => `${itemName(ingredient.item)} × ${ingredient.count}`).join(", ")}`
+      ? `${recipe.data.description ?? ""} · ${moneyText(state.names, recipe.data.cost ?? 0)} · 재료: ${(recipe.data.ingredients ?? []).map((ingredient: Fields) => `${itemName(ingredient.item)} × ${ingredient.count}`).join(", ")}`
       : "";
   };
   $("recipe").onchange = describeRecipe;
@@ -722,14 +747,18 @@ $("craftForm").onsubmit = (event) => {
         ? { character: state.inventoryCharacter }
         : {}),
     },
-    (result) => `${result.owned.data.name}을(를) 만들었습니다.`,
+    (result: Fields) => `${result.owned.data.name}을(를) 만들었습니다.`,
   );
 };
 /**
  * 경제 뮤테이션 하나를 부르고, 결과를 알린 뒤 잔액과 인벤토리를 다시 읽는다.
  * 값을 정하는 것은 서버이므로 페이지는 결과만 보여 준다.
  */
-function spend(reference, args, success) {
+function spend(
+  reference: string,
+  args: Args,
+  success: (result: Fields) => string,
+) {
   return run(async () => {
     const result = await mutate(reference, args);
     say(success(result));
@@ -745,7 +774,7 @@ $("gacha").onclick = () =>
   spend(
     "economy/shop:gacha",
     state.inventoryCharacter ? { character: state.inventoryCharacter } : null,
-    (result) =>
+    (result: Fields) =>
       result.owned
         ? `뽑기에서 ${result.owned.data.name}이(가) 나왔습니다!`
         : "아무것도 나오지 않았습니다.",

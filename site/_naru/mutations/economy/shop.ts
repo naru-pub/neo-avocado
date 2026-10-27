@@ -18,6 +18,7 @@ import {
   offerData,
   ownedItems,
   pay,
+  present,
   record,
   requireSideAndClass,
   spend,
@@ -45,13 +46,11 @@ export async function buy(
   let listing = await itemById(ctx, item);
   // 상점 진열 (avo_shop): an entry sells its item on its own terms, and
   // counts its own stock and 구매 한도.
-  let limitKey = listing?.id;
+  let limitKey = listing?.id ?? "";
   if (entry !== undefined) {
-    const row = await one<any>(
-      ctx,
-      "SELECT * FROM shop_entries WHERE id = ? AND enabled != 0",
-      [entry],
-    );
+    const row = await one<
+      Parameters<typeof offerData>[0] & { id: number; item_id: string }
+    >(ctx, "SELECT * FROM shop_entries WHERE id = ? AND enabled != 0", [entry]);
     if (!listing || !row || row.item_id !== listing.id)
       ctx.fail("NOT_FOUND", "없는 아이템입니다.", { reason: "no_item" });
     listing = { ...listing, data: { ...listing.data, ...offerData(row) } };
@@ -145,7 +144,10 @@ export async function buy(
     needed.set(exchange.item, { count, consume: exchange.consume === true });
   }
   const supplied = await ownedItems(ctx, materials);
-  if (supplied.some((row) => !row || row.data.character !== character))
+  if (
+    !present(supplied) ||
+    supplied.some((row) => row.data.character !== character)
+  )
     ctx.fail("ACCESS_DENIED", "내가 가진 아이템이 아닙니다.", {
       reason: "not_owned",
     });
@@ -171,7 +173,7 @@ export async function buy(
   await saveState(ctx, character, next);
   await spend(
     ctx,
-    supplied.filter((row) => needed.get(row.data.item).consume),
+    supplied.filter((row) => needed.get(row.data.item)?.consume),
   );
   if (typeof stock === "number")
     await (entry !== undefined

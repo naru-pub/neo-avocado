@@ -4,7 +4,7 @@
 (() => {
   const KEY = "neo-avocado-scheme";
   const root = document.documentElement;
-  const apply = (choice) => {
+  const apply = (choice: string | null) => {
     if (choice === "light" || choice === "dark") root.dataset.theme = choice;
     else delete root.dataset.theme;
   };
