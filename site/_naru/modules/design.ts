@@ -7,6 +7,8 @@
 // owner writes can end a rule or add one. The page sets the text as a
 // <style> element's textContent; it applies with 디자인 사용 on.
 
+import { imageUrl } from "./access.js";
+
 /** A colour the original's text fields take: #rgb…#rrggbbaa, rgb(), rgba(), transparent. */
 const COLOR =
   /^(?:#[0-9a-f]{3,4}|#[0-9a-f]{6}|#[0-9a-f]{8}|rgba?\(\s*\d{1,3}%?\s*,\s*\d{1,3}%?\s*,\s*\d{1,3}%?\s*(?:,\s*(?:0|1|0?\.\d{1,4}|\d{1,3}%)\s*)?\)|transparent)$/i;
@@ -432,4 +434,85 @@ export function designCss(saved: Record<string, any> = {}): string {
       ],
     );
   return css;
+}
+
+/** 디자인's colours (design.colors) and the page's variables they set. */
+const SITE_COLORS = {
+  accent: "--avocado",
+  muted: "--pit",
+  paper: "--paper",
+  ink: "--ink",
+  line: "--line",
+  surface: "--surface",
+};
+const hex = (value: unknown): string | null =>
+  typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value : null;
+const image = (value: unknown): string | null => {
+  try {
+    return imageUrl(value);
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * The page's whole look from the design settings: the <body> classes, the
+ * `design` layer (the colours and backgrounds as variables, then designCss)
+ * and 사용자 CSS. The site query hands it to the page (app/site.ts), and each
+ * page's route writes it into index.html's <head> (previews.ts), so the first
+ * paint already has it.
+ */
+export function designLook(saved: Record<string, any> = {}) {
+  const enabled = saved.enabled === true;
+  const layout = designLayout(saved);
+  const font = ["serif", "mono"].includes(saved.font) ? saved.font : null;
+  const classes = enabled
+    ? [
+        "designed",
+        ...(layout.useHeader === false ? ["no-header"] : []),
+        ...(layout.menuPosition === "top" ? ["menu-top"] : []),
+        ...(font ? [`font-${font}`] : []),
+      ]
+    : [];
+  const vars: Record<string, string> = {};
+  if (enabled) {
+    for (const [key, variable] of Object.entries(SITE_COLORS))
+      if (hex(saved.colors?.[key])) vars[variable] = saved.colors[key];
+    const background = image(saved.background);
+    if (background) {
+      // The owner's picture at its own size, repeated and placed as they
+      // chose (background_repeat, background_position).
+      vars["--site-background-size"] = "auto";
+      vars["--site-background"] = `url("${encodeURI(background)}")`;
+    }
+    // m_background: a phone's own picture (style.css's narrow layout).
+    const mobile = image(saved.mobileBackground);
+    if (mobile) {
+      vars["--site-mobile-background-size"] = "auto";
+      vars["--site-mobile-background"] = `url("${encodeURI(mobile)}")`;
+    }
+    const repeat = choice(saved.backgroundRepeat, REPEATS);
+    if (repeat) vars["--site-background-repeat"] = repeat;
+    const position = choice(saved.backgroundPosition, POSITIONS);
+    if (position) vars["--site-background-position"] = position;
+    if (hex(saved.backgroundColor))
+      vars["--site-background-color"] = saved.backgroundColor;
+    const header = image(saved.headerBackground);
+    if (header)
+      vars["--site-header-background"] = `url("${encodeURI(header)}")`;
+  }
+  const declarations = Object.entries(vars)
+    .map(([name, value]) => `  ${name}: ${value};\n`)
+    .join("");
+  const rootRule = declarations ? `:root {\n${declarations}}\n` : "";
+  return {
+    classes,
+    layer: enabled ? `@layer design {\n${rootRule}${designCss(saved)}}\n` : "",
+    // 사용자 CSS: the owner's own, after the rest, whether 디자인 사용 is on
+    // or not.
+    customCss:
+      typeof saved.customCss === "string"
+        ? saved.customCss.slice(0, 50000)
+        : "",
+  };
 }

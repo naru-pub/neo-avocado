@@ -564,3 +564,56 @@ test("index.html names its scripts and styles from the site's root, as every add
   assert.ok(paths.length >= 5);
   for (const path of paths) assert.match(path, /^\//, path);
 });
+
+test("every page's head has the look already, so the first paint is the owner's", async () => {
+  const site = await testSite();
+  // A fresh site has none: index.html's own styles alone.
+  const plain = await site.route("/home");
+  assert.doesNotMatch(plain.head, /<style|<script/);
+  setSettings(site, "design", {
+    enabled: true,
+    colors: { accent: "#123456" },
+    useHeader: false,
+    menuPosition: "top",
+    font: "serif",
+    background: "https://media.naru.pub/bg.png",
+    customCss: ".log-title { color: #c04; } /* </style><script>x()</script> */",
+  });
+  const { design } = await site.query("content/site:site");
+  for (const path of ["/", "/home", "/members", "/logs"]) {
+    const { head } = await site.route(path);
+    // The same design layer and 사용자 CSS the site query hands the page,
+    // in the <style> elements it reuses, the owner's last.
+    const layer = head.match(/<style id="designStyles">([^]*?)<\/style>/)[1];
+    const own = head.match(/<style id="ownerStyles">([^]*?)<\/style>/)[1];
+    assert.equal(layer, design.layer, path);
+    assert.match(layer, /--avocado: #123456;/);
+    assert.match(
+      layer,
+      /--site-background: url\("https:\/\/media\.naru\.pub\/bg\.png"\);/,
+    );
+    assert.ok(head.indexOf("ownerStyles") > head.indexOf("designStyles"));
+    // Nothing in the owner's CSS ends its element: "</" is written "<\/".
+    assert.equal(own, design.customCss.replace(/<\//g, "<\\/"));
+    assert.doesNotMatch(head, /<\/style><script>x\(\)/);
+    // The <body> classes, set the moment <body> exists.
+    assert.match(
+      head,
+      /document\.body\.classList\.add\(\.\.\.\["designed","no-header","menu-top","font-serif"\]\)/,
+    );
+  }
+  assert.deepEqual(design.classes, [
+    "designed",
+    "no-header",
+    "menu-top",
+    "font-serif",
+  ]);
+  // A closed site's pages have no preview, only the look every visitor gets.
+  setSettings(site, "community", { siteOpen: false });
+  const closed = await site.route("/home");
+  assert.match(
+    closed.head,
+    /^<meta name="robots" content="noindex, nofollow" \/>\n<style id="designStyles">/,
+  );
+  assert.doesNotMatch(closed.head, /og:|<title>/);
+});

@@ -478,6 +478,9 @@ test("the site frame shows only safe design values and menus/banners a reader ma
     useHeader: true,
     menuPosition: "left",
     css: ":root:has(body.site.designed) {\n  --menu-width: 200px;\n  --menu-height: 50px;\n}\n",
+    // With 디자인 사용 off: no classes and no design layer.
+    classes: [],
+    layer: "",
     customCss: "",
     ownerMarks: { prefix: "▶", suffix: "◀" },
     counter: "",

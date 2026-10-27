@@ -1225,6 +1225,9 @@ test("디자인 설정 adds its CSS, hides the header or tops the menu, and show
       useHeader: false,
       menuPosition: "top",
       css: "body.site.designed .comment {\n  color: #eee;\n}\n",
+      classes: ["designed", "no-header", "menu-top"],
+      layer:
+        "@layer design {\n:root {\n  --avocado: #123456;\n}\nbody.site.designed .comment {\n  color: #eee;\n}\n}\n",
       counter:
         '<a href="https://whos.amung.us/"><img src="https://c.example/c.png"></a><script>alert(1)</script>',
     },
@@ -1236,7 +1239,7 @@ test("디자인 설정 adds its CSS, hides the header or tops the menu, and show
   const { body } = window.document;
   assert.equal(
     window.document.getElementById("designStyles").textContent,
-    // In the design layer, colours included, so 사용자 CSS (no layer) beats it.
+    // The design layer as the server made it (designLook).
     "@layer design {\n:root {\n  --avocado: #123456;\n}\nbody.site.designed .comment {\n  color: #eee;\n}\n}\n",
   );
   assert.equal(window.document.documentElement.getAttribute("style"), null);

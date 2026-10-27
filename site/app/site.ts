@@ -8,14 +8,6 @@ import { renderContent } from "../shared/content-renderer.js";
 import { showRecent, showSearch } from "./across.js";
 import { loadPoll, showPopups } from "./polls.js";
 
-const SITE_COLORS = {
-  accent: "--avocado",
-  muted: "--pit",
-  paper: "--paper",
-  ink: "--ink",
-  line: "--line",
-  surface: "--surface",
-};
 /** Applies the owner's design, menus and banners (adm/design_form.php, menu_list.php). */
 export async function loadSite() {
   const site = await query("content/site:site");
@@ -56,70 +48,28 @@ export async function loadSite() {
   if (site.paging) state.paging = { ...state.paging, ...site.paging };
   state.counter = design.enabled ? (design.counter ?? "") : "";
   state.ownerMarks = design.ownerMarks ?? { prefix: "▶", suffix: "◀" };
-  document.body.classList.toggle(
-    "no-header",
-    design.enabled && design.useHeader === false,
-  );
-  document.body.classList.toggle(
-    "menu-top",
-    design.enabled && design.menuPosition === "top",
-  );
-  // The template's styles are the `template` layer (index.html), 디자인's
-  // the `design` layer after it, and 사용자 CSS none: unlayered rules beat
-  // every layer's, so the owner's need no !important or matching selectors.
-  const vars = {};
-  if (design.enabled) {
-    for (const [key, variable] of Object.entries(SITE_COLORS))
-      if (design.colors[key]) vars[variable] = design.colors[key];
-    if (design.background) {
-      // The owner's picture at its own size, repeated and placed as they
-      // chose (background_repeat, background_position).
-      vars["--site-background-size"] = "auto";
-      vars["--site-background"] = `url("${encodeURI(design.background)}")`;
-    }
-    // m_background: a phone's own picture (style.css's narrow layout).
-    if (design.mobileBackground) {
-      vars["--site-mobile-background-size"] = "auto";
-      vars["--site-mobile-background"] =
-        `url("${encodeURI(design.mobileBackground)}")`;
-    }
-    if (design.backgroundRepeat)
-      vars["--site-background-repeat"] = design.backgroundRepeat;
-    if (design.backgroundPosition)
-      vars["--site-background-position"] = design.backgroundPosition;
-    if (design.backgroundColor)
-      vars["--site-background-color"] = design.backgroundColor;
-    if (design.headerBackground)
-      vars["--site-header-background"] =
-        `url("${encodeURI(design.headerBackground)}")`;
-  }
-  // The rest of 디자인 설정, as the server made it from checked values.
+  // The look as the server made it (designLook in _naru/modules/design.ts),
+  // which each page's head already carries (previews.ts), so this only
+  // refreshes it: the <body> classes, the `design` layer after the
+  // template's, and 사용자 CSS in no layer, whose unlayered rules beat every
+  // layer's, so the owner's need no !important or matching selectors.
+  for (const name of ["no-header", "menu-top", "font-serif", "font-mono"])
+    document.body.classList.toggle(name, (design.classes ?? []).includes(name));
   let styles = document.getElementById("designStyles");
   if (!styles) {
     styles = document.createElement("style");
     styles.id = "designStyles";
     document.head.append(styles);
   }
-  const declarations = Object.entries(vars)
-    .map(([name, value]) => `  ${name}: ${value};\n`)
-    .join("");
-  const rootRule = declarations ? `:root {\n${declarations}}\n` : "";
-  styles.textContent = design.enabled
-    ? `@layer design {\n${rootRule}${design.css ?? ""}}\n`
-    : "";
-  // 사용자 CSS, after the design's.
+  styles.textContent = design.layer ?? "";
   let own = document.getElementById("ownerStyles");
   if (!own) {
     own = document.createElement("style");
     own.id = "ownerStyles";
   }
-  // Last in <head> again whenever the design's is made.
+  // Last in <head>, after the design's.
   document.head.append(own);
   own.textContent = design.customCss ?? "";
-  if (!design.enabled) return;
-  document.body.classList.remove("font-serif", "font-mono");
-  if (design.font !== "sans")
-    document.body.classList.add(`font-${design.font}`);
 }
 /**
  * The owner's names in the page's own text (기타 항목명 설정); a 소속 or 종족

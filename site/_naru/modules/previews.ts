@@ -24,6 +24,7 @@ import {
 import type { Board, PostRow } from "./boards.js";
 import { characterKey, characterRow, shownCharacter } from "./characters.js";
 import { MAIN_PAGE, MENU_PAGE, readablePage } from "./content.js";
+import { designLook } from "./design.js";
 import type { QueryCtx } from "./naru-types.js";
 import { placeOf, whole, type Place } from "./places.js";
 
@@ -200,17 +201,50 @@ export const NOT_FOUND = Object.freeze({
 export const CLOSED_HEAD = '<meta name="robots" content="noindex, nofollow" />';
 
 /**
+ * The page's look (designLook) in index.html's <head>, as app/site.ts would
+ * apply it once the site query answers, so the first paint is already the
+ * owner's: the design layer and 사용자 CSS as the <style> elements the page
+ * reuses, and the <body> classes set the moment <body> exists, before
+ * anything in it is drawn. Nothing in the CSS can end its element: a `</` in
+ * it is written `<\/`, which CSS reads as the same two characters.
+ */
+export async function lookHead(ctx: QueryCtx): Promise<string> {
+  const look = designLook(await settingsOf(ctx, "design"));
+  const css = (text: string) => text.replace(/<\//g, "<\\/");
+  const classes = JSON.stringify(look.classes).replace(/</g, "\\u003c");
+  return [
+    ...(look.layer
+      ? [`<style id="designStyles">${css(look.layer)}</style>`]
+      : []),
+    ...(look.customCss
+      ? [`<style id="ownerStyles">${css(look.customCss)}</style>`]
+      : []),
+    ...(look.classes.length
+      ? [
+          `<script>new MutationObserver((_, o) => { if (document.body) { document.body.classList.add(...${classes}); o.disconnect(); } }).observe(document.documentElement, { childList: true });</script>`,
+        ]
+      : []),
+  ].join("\n");
+}
+
+/**
  * A route: index.html with `page`'s preview (the site's own without one),
- * and the home's with its entrance (entranceHead), kept at the edge for CACHE
- * seconds. A closed site's pages show none (CLOSED_HEAD).
+ * and the home's with its entrance (entranceHead), and every page's look
+ * (lookHead), kept at the edge for CACHE seconds. A closed site's pages show
+ * no preview (CLOSED_HEAD), only the look every visitor gets anyway.
  */
 export function route(page?: Page, { entrance = false } = {}) {
   return async (ctx: QueryCtx, input: RouteInput) => {
     const access = await communityAccess(ctx);
     const shown = page ? await page(ctx, input?.params ?? {}, access) : null;
     if (shown === false) return NOT_FOUND;
+    const look = await lookHead(ctx);
     if (access.closed)
-      return { file: "index.html", head: CLOSED_HEAD, cache: CACHE };
+      return {
+        file: "index.html",
+        head: [CLOSED_HEAD, look].filter(Boolean).join("\n"),
+        cache: CACHE,
+      };
     const site = await siteOf(ctx);
     const origin =
       typeof input?.origin === "string" &&
@@ -226,6 +260,7 @@ export function route(page?: Page, { entrance = false } = {}) {
           input?.path ?? "/",
         ),
         ...(entrance ? [await entranceHead(ctx)] : []),
+        ...(look ? [look] : []),
       ].join("\n"),
       cache: CACHE,
     };

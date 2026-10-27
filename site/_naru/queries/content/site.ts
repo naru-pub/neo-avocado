@@ -18,7 +18,12 @@ import {
   backgroundMusic,
   readablePage,
 } from "../../modules/content.js";
-import { designCss, designLayout, ownerMarks } from "../../modules/design.js";
+import {
+  designCss,
+  designLayout,
+  designLook,
+  ownerMarks,
+} from "../../modules/design.js";
 import { imageSlotsOf, nameFieldOf, viewerOf } from "../../modules/images.js";
 import { latestPoll } from "../../modules/polls.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
@@ -85,6 +90,7 @@ interface BannerRow {
 export async function site(ctx: QueryCtx) {
   const access = await communityAccess(ctx);
   const saved = await settingsOf(ctx, "design");
+  const look = designLook(saved);
   const colors = {};
   for (const key of COLORS)
     if (/^#[0-9a-f]{6}$/i.test(saved.colors?.[key] ?? ""))
@@ -113,12 +119,11 @@ export async function site(ctx: QueryCtx) {
     useHeader: designLayout(saved).useHeader,
     menuPosition: designLayout(saved).menuPosition,
     css: designCss(saved),
-    // 사용자 CSS: the owner's own, after the rest, whether 디자인 사용 is on or
-    // not. CSS set as a style element's text runs no script.
-    customCss:
-      typeof saved.customCss === "string"
-        ? saved.customCss.slice(0, 50000)
-        : "",
+    // The look as the page applies it, and as each page's head already has
+    // it (designLook): the <body> classes, the design layer, 사용자 CSS.
+    classes: look.classes,
+    layer: look.layer,
+    customCss: look.customCss,
     // 「작성자」 원글 작성자's 접두문자 and 접미문자, which the page writes as text.
     ownerMarks: ownerMarks(saved),
     // mmb_counter: the owner's HTML, which the page sanitizes as posts.
