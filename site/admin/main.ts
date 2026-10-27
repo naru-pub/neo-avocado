@@ -1,7 +1,7 @@
 // The owner's admin page: its addresses (#/<section>/<entry>), the menu,
 // signing in, and what opens first.
 import { models, menu, sectionLabel, shownSections } from "./forms.js";
-import { config } from "../shared/config.js";
+import { connectNaru } from "../shared/connect.js";
 import {
   $,
   CALLS,
@@ -133,8 +133,7 @@ $("adminSignOut").onclick = () =>
     $("adminWelcome").hidden = false;
   });
 await run(async () => {
-  const { createNaru } = await import("https://sdk.naru.pub/sdk/1.1.0/naru.js");
-  setNaru(createNaru(config.site ? { site: config.site } : undefined));
+  setNaru(await connectNaru());
   renderNav();
   setOwner(await naru.auth.session());
   if (!owner) return;

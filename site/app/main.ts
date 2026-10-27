@@ -7,7 +7,7 @@
 // This file signs the visitor or member in and starts the page; each part of
 // the community lives in app/ (core.js is what they share).
 
-import { config } from "../shared/config.js";
+import { connectNaru } from "../shared/connect.js";
 import {
   $,
   clearPrivateViews,
@@ -48,8 +48,7 @@ import "./across.js";
 export { diceOf } from "./posts.js";
 
 async function connect() {
-  const { createNaru } = await import("https://sdk.naru.pub/sdk/1.1.0/naru.js");
-  state.naru = createNaru(config.site ? { site: config.site } : undefined);
+  state.naru = await connectNaru();
 }
 $("checkAdmission").onclick = () => run(start);
 $("editProfile").onclick = () => {
