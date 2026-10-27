@@ -3,11 +3,11 @@
 // changing, and whether they may. The community/posts and
 // community/comments mutations start from here.
 import type { Access } from "./access.js";
-import { accessOf, boardOf, commentRow, isStaff, postRow } from "./boards.js";
-import type { CommentRow, PostRow } from "./boards.js";
-import type { GuestCredentials, MutationCtx } from "./naru-types.js";
 import { invalid, one, reservedNick } from "./access.js";
+import type { CommentRow, PostRow } from "./boards.js";
+import { accessOf, boardOf, commentRow, isStaff, postRow } from "./boards.js";
 import { nickTaken, nickValid } from "./members.js";
+import type { GuestCredentials, MutationCtx } from "./naru-types.js";
 
 /** A guest writer: the name they post under and their password's hash. */
 export interface GuestWriter {

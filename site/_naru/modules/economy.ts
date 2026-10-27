@@ -4,6 +4,8 @@
 // 조합 and items, its rewards), so an
 // item reads the same everywhere. Items and held copies keep the shape pages
 // know ({ id, data }); a held copy's ID is its row's number as a string.
+
+import type { SqlCtx } from "./access.js";
 import {
   amount,
   imageUrl,
@@ -14,9 +16,7 @@ import {
   restrictedFor,
   text,
 } from "./access.js";
-import type { SqlCtx } from "./access.js";
-import { addHistory, saveWallet, walletOf } from "./members.js";
-import type { Wallet } from "./members.js";
+import type { CharacterRow } from "./characters.js";
 import {
   characterKey,
   characterRow,
@@ -25,7 +25,8 @@ import {
   saveState,
   sheetOf,
 } from "./characters.js";
-import type { CharacterRow } from "./characters.js";
+import type { Wallet } from "./members.js";
+import { addHistory, saveWallet, walletOf } from "./members.js";
 import type { QueryCtx, SqlValue } from "./naru-types.js";
 
 /** What economy code uses of a call's ctx: the caller, `sql`, `fail` and `now`. */
@@ -424,7 +425,7 @@ export async function inventoryOf(
   // Every copy, a statement's 1,000 at a time (the original's list has no
   // cap), up to INVENTORY_LIMIT.
   const held: InventoryRow[] = [];
-  for (let after = 0; held.length < INVENTORY_LIMIT;) {
+  for (let after = 0; held.length < INVENTORY_LIMIT; ) {
     const { rows } = all
       ? await ctx.sql<InventoryRow>`SELECT * FROM inventory WHERE owner = ${member} AND id > ${after} ORDER BY id LIMIT 1000`
       : key === null

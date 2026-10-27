@@ -1,5 +1,5 @@
 // The member's own history: what moved their money, items or experience.
-import { signedIn, invalid } from "../../modules/access.js";
+import { invalid, signedIn } from "../../modules/access.js";
 import { historyPage } from "../../modules/members.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
 

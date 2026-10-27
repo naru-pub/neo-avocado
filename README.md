@@ -47,7 +47,7 @@
 
 개발할 때는:
 
-- 사이트로 올라가는 것은 `site/` 폴더입니다. 소스는 TypeScript(`.ts`)이고, `npm run build`가
+- 사이트로 올라가는 것은 `site/` 폴더입니다. 소스는 TypeScript(`.ts`)이고, `pnpm build`가
   `site/`를 같은 경로의 JavaScript로 `dist/`에 만들며, 나루에는 이 `dist/`가 올라갑니다
   (구조는 [docs/architecture.md](docs/architecture.md)). main에 푸시하면 GitHub
   Actions가 검사한 뒤 `dist/`를 네오 아보카도 템플릿의 다음 버전으로 올리고(나루
@@ -60,10 +60,10 @@
   화면 사진은 `PLAYWRIGHT_MODULE=… node scripts/screenshots.mjs <주소>`가
   운영 중인 커뮤니티를 손님으로 찍어 `landing/screenshots/`(라이트·다크)와 템플릿
   미리보기 `docs/template-preview.jpg`로 만듭니다.
-- 검사: `npm run typecheck`, `npm test`(빌드 후 `dist/`를 검사), `npm run lint`
+- 검사: `pnpm typecheck`, `pnpm test`(빌드 후 `dist/`를 검사), `pnpm lint`
 - 로컬 나루(naru-dev)에서 실제 Chromium으로 전체 흐름:
-  `NARU_REPO_PATH=… PLAYWRIGHT_MODULE=… npm run test:e2e`(다른 빌드와 동시에 돌리지 않음)
-- 직접 써 보기: `npm run build` 후 나루 저장소의 `control-plane/`에서
+  `NARU_REPO_PATH=… PLAYWRIGHT_MODULE=… pnpm test:e2e`(다른 빌드와 동시에 돌리지 않음)
+- 직접 써 보기: `pnpm build` 후 나루 저장소의 `control-plane/`에서
   `pnpm naru-dev ~/Git/neo-avocado/dist --site neo-avocado` 후 http://localhost:4000
 
 ## 백업과 복원
@@ -560,8 +560,8 @@ ID가 `site_main`인 내용 페이지는 원본의 **메인화면 구성**처럼
 운영자가 쓴 HTML은 [DOMPurify](https://github.com/cure53/DOMPurify)로 정리하여 표시합니다.
 스크립트·폼·전체 페이지에 영향을 주는 스타일/ID/이름은 표시하지 않습니다.
 원본의 PHP include와 skin 파일은 내용이나 정적 테마 구성요소로 옮겨야 합니다.
-`npm run vendor:content`로 잠긴 의존성에서 배포용 자산을 갱신하고,
-`npm run vendor:check`로 자산이 의존성과 일치하는지 검사합니다.
+`pnpm vendor:content`로 잠긴 의존성에서 배포용 자산을 갱신하고,
+`pnpm vendor:check`로 자산이 의존성과 일치하는지 검사합니다.
 
 ## 코드 둘러보기
 

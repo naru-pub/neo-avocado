@@ -4,17 +4,17 @@
 import {
   amount,
   communitySettings,
+  invalid,
   kstDay,
   lacking,
   signedIn,
   text,
-  invalid,
 } from "../../modules/access.js";
 import { pay, record, wallet } from "../../modules/economy.js";
 import { messageOf, ownMessage } from "../../modules/mail.js";
 import { profileOf } from "../../modules/members.js";
-import { push } from "../../modules/push.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
+import { push } from "../../modules/push.js";
 
 /** Messages a member may send a day unless the owner sets another number. */
 const MESSAGE_DAILY_LIMIT = 100;

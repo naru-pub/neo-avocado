@@ -1,16 +1,16 @@
+import { invalid, ownerOnly } from "../../modules/access.js";
+import type { CharacterRow } from "../../modules/characters.js";
 import {
   CHARACTER_STATES,
   CHARACTER_TYPES,
-  MAX_FIELD_TEXT,
   characterRow,
   checkRevision,
   fieldCatalogue,
   fieldsOf,
+  MAX_FIELD_TEXT,
   presentCharacter,
   stateChanged,
 } from "../../modules/characters.js";
-import type { CharacterRow } from "../../modules/characters.js";
-import { ownerOnly, invalid } from "../../modules/access.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
 /**

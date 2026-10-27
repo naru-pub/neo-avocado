@@ -1,11 +1,12 @@
-// 실행: npm test
+// 실행: pnpm test
 // The foundation's queries and mutations on a real SQLite database with the
 // site's migrations (tests/sql-ctx.mjs): membership, presence, the site's
 // frame and pages, and profiles. The owner's admin is tests/admin.test.mjs.
-import { test } from "node:test";
+
 import assert from "node:assert/strict";
+import { test } from "node:test";
+import { joined, M1, M2, OWNER, refusal, setSettings } from "./helpers.mjs";
 import { sqlOf, testSite } from "./sql-ctx.mjs";
-import { M1, M2, OWNER, joined, refusal, setSettings } from "./helpers.mjs";
 
 const wallet = (site, member) =>
   site.rows(
@@ -364,41 +365,44 @@ test("디자인 설정's styles become the design CSS, and nothing else does", a
   );
   const { css } = design;
   // menu_width as set; menu_height malformed, the original's 50.
-  assert.match(css, /--menu-width: 240px;\n  --menu-height: 50px;/);
+  assert.match(css, /--menu-width: 240px;\n {2}--menu-height: 50px;/);
   assert.match(
     css,
-    /body\.site\.designed #boardDescription \{\n  background-color: rgba\(0, 0, 0, \.5\);\n  color: #eee;\n  border-top-color: #555555;\n  border-top-style: dashed;\n  border-top-width: 1px;\n  border-bottom-color: #555555;/,
+    /body\.site\.designed #boardDescription \{\n {2}background-color: rgba\(0, 0, 0, \.5\);\n {2}color: #eee;\n {2}border-top-color: #555555;\n {2}border-top-style: dashed;\n {2}border-top-width: 1px;\n {2}border-bottom-color: #555555;/,
   );
   assert.doesNotMatch(css, /border-middle/);
   // A colour that is not one is left out; the margin stays.
   assert.match(
     css,
-    /body\.site\.designed \.comment \{\n  margin-bottom: 10px !important;\n\}/,
+    /body\.site\.designed \.comment \{\n {2}margin-bottom: 10px !important;\n\}/,
   );
   assert.match(
     css,
-    /button:hover:not\(:disabled\)[^{]*\{\n  background: #222222;/,
+    /button:hover:not\(:disabled\)[^{]*\{\n {2}background: #222222;/,
   );
   // A picture's address must be plain HTTPS: the broken one is dropped.
   assert.doesNotMatch(css, /m\.png"\);\}/);
   assert.match(
     css,
-    /@media \(max-width: 1024px\) \{\nbody\.site\.designed \.site-menu \{\n  background-image: url\("https:\/\/c\.example\/m\.png"\);\n  background-attachment: fixed;/,
+    /@media \(max-width: 1024px\) \{\nbody\.site\.designed \.site-menu \{\n {2}background-image: url\("https:\/\/c\.example\/m\.png"\);\n {2}background-attachment: fixed;/,
   );
   assert.match(
     css,
-    /border-top-left-radius: 4px;\n  border-bottom-right-radius: 8px;/,
+    /border-top-left-radius: 4px;\n {2}border-bottom-right-radius: 8px;/,
   );
-  assert.match(css, /\.site-menu a \{\n  color: #ffffff;\n  font-size: 14px;/);
+  assert.match(
+    css,
+    /\.site-menu a \{\n {2}color: #ffffff;\n {2}font-size: 14px;/,
+  );
   // 해시태그 has a colour only.
-  assert.match(css, /\.hash-tag \{\n  color: #29c7c9;\n\}/);
+  assert.match(css, /\.hash-tag \{\n {2}color: #29c7c9;\n\}/);
   assert.match(css, /box-shadow: 0 0 3px 0 #000000/);
   assert.doesNotMatch(css, /#123456|display:none|\}\s*body\{/);
   // Nothing outside a rule's body: every line is a selector, a declaration or a brace.
   for (const line of css.split("\n").filter(Boolean))
     assert.match(
       line,
-      /^(?:@media \([a-z-]+: \d+px\) \{|[^{};]+[,{]|  [a-z-]+: [^;{}]+;|\})$/,
+      /^(?:@media \([a-z-]+: \d+px\) \{|[^{};]+[,{]| {2}[a-z-]+: [^;{}]+;|\})$/,
       line,
     );
 });
@@ -911,11 +915,11 @@ test("디자인's 로그 card and 원글 작성자 styles, and the writer's 접�
   ({ design } = await site.query("content/site:site"));
   assert.match(
     design.css,
-    /body\.site\.designed #logs > \.log \{\n  background-color: #111111;\n  border-bottom-color: #333333;\n  border-bottom-style: solid;\n  border-bottom-width: 2px;\n  margin-bottom: 30px !important;\n\}/,
+    /body\.site\.designed #logs > \.log \{\n {2}background-color: #111111;\n {2}border-bottom-color: #333333;\n {2}border-bottom-style: solid;\n {2}border-bottom-width: 2px;\n {2}margin-bottom: 30px !important;\n\}/,
   );
   assert.match(
     design.css,
-    /body\.site\.designed \.comment\.owner > \.author \{\n  color: #29c7c9;\n  font-size: 13px;\n\}/,
+    /body\.site\.designed \.comment\.owner > \.author \{\n {2}color: #29c7c9;\n {2}font-size: 13px;\n\}/,
   );
   // The marks are text for the page, never CSS; a cleared one stays blank.
   assert.doesNotMatch(design.css, /★/);

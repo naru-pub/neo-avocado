@@ -3,11 +3,11 @@
 // turned on RSS 보이기 (bo_use_rss_view). Naru's routes answer it as
 // application/rss+xml.
 import { GUEST_ACCESS, siteOpen } from "./access.js";
-import { POST_SELECT, boardAllowed, boardOf, plainText } from "./boards.js";
 import type { PostRow } from "./boards.js";
-import { NOT_FOUND, escape, siteOf } from "./previews.js";
-import type { RouteInput } from "./previews.js";
+import { boardAllowed, boardOf, POST_SELECT, plainText } from "./boards.js";
 import type { QueryCtx } from "./naru-types.js";
+import type { RouteInput } from "./previews.js";
+import { escapeHtml, NOT_FOUND, siteOf } from "./previews.js";
 
 /** How long Naru's edge keeps a feed, in seconds. */
 const CACHE = 300;
@@ -92,14 +92,14 @@ export async function feed(ctx: QueryCtx, input: RouteInput) {
     ).slice(0, TEXT);
     const picture = https(post.image);
     // The description is HTML, escaped into the XML: the picture, the text.
-    const description = `${picture ? `<p><img src="${escape(picture)}" alt=""></p>` : ""}<p>${escape(text).replace(/\n/g, "<br>")}</p>`;
+    const description = `${picture ? `<p><img src="${escapeHtml(picture)}" alt=""></p>` : ""}<p>${escapeHtml(text).replace(/\n/g, "<br>")}</p>`;
     return [
       "<item>",
-      `<title>${escape(post.title || `${board.data.name} No. ${post.number}`)}</title>`,
-      `<link>${escape(link)}</link>`,
-      `<guid isPermaLink="true">${escape(link)}</guid>`,
-      `<description>${escape(description)}</description>`,
-      `<dc:creator>${escape(creator(post))}</dc:creator>`,
+      `<title>${escapeHtml(post.title || `${board.data.name} No. ${post.number}`)}</title>`,
+      `<link>${escapeHtml(link)}</link>`,
+      `<guid isPermaLink="true">${escapeHtml(link)}</guid>`,
+      `<description>${escapeHtml(description)}</description>`,
+      `<dc:creator>${escapeHtml(creator(post))}</dc:creator>`,
       `<dc:date>${new Date(post.created_at).toUTCString()}</dc:date>`,
       "</item>",
     ].join("\n");
@@ -109,9 +109,9 @@ export async function feed(ctx: QueryCtx, input: RouteInput) {
     '<?xml version="1.0" encoding="utf-8" ?>',
     '<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">',
     "<channel>",
-    `<title>${escape(title)}</title>`,
-    `<link>${escape(`${origin}/logs/${encodeURIComponent(board.id)}`)}</link>`,
-    `<description>${escape(site.description)}</description>`,
+    `<title>${escapeHtml(title)}</title>`,
+    `<link>${escapeHtml(`${origin}/logs/${encodeURIComponent(board.id)}`)}</link>`,
+    `<description>${escapeHtml(site.description)}</description>`,
     "<language>ko</language>",
     ...items,
     "</channel>",

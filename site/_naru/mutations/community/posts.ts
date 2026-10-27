@@ -5,40 +5,13 @@ import {
   amount,
   communitySettings,
   imageUrl,
+  invalid,
   names,
   one,
   parsed,
   signedIn,
   text,
-  invalid,
 } from "../../modules/access.js";
-import {
-  HTML_LIMIT,
-  POST_SELECT,
-  REPLY_DEPTH,
-  replyPlace,
-  TEXT_LIMIT,
-  accessOf,
-  boardOf,
-  boardPoints,
-  downloadable,
-  isStaff,
-  memoOf,
-  payReward,
-  plainText,
-  postOf,
-  postReadable,
-  postRow,
-  readablePost,
-  requireBoard,
-  saveCommentSearch,
-  savePostSearch,
-  saveTags,
-  tagsOf,
-  canRepay,
-  takeBackReward,
-} from "../../modules/boards.js";
-import type { PostRow } from "../../modules/boards.js";
 import {
   boardNumber,
   checkBannedWords,
@@ -46,19 +19,51 @@ import {
   checkEditable,
   checkLength,
 } from "../../modules/board-options.js";
-import { startWrite } from "../../modules/community.js";
+import type { PostRow } from "../../modules/boards.js";
+import {
+  accessOf,
+  boardOf,
+  boardPoints,
+  canRepay,
+  downloadable,
+  HTML_LIMIT,
+  isStaff,
+  memoOf,
+  POST_SELECT,
+  payReward,
+  postOf,
+  postReadable,
+  postRow,
+  REPLY_DEPTH,
+  readablePost,
+  replyPlace,
+  requireBoard,
+  saveCommentSearch,
+  savePostSearch,
+  saveTags,
+  TEXT_LIMIT,
+  tagsOf,
+  takeBackReward,
+} from "../../modules/boards.js";
 import {
   characterState,
   saveState,
   withExp,
 } from "../../modules/characters.js";
+import { startWrite } from "../../modules/community.js";
 import {
-  FAVORITE_LIMIT,
   addHistory,
+  FAVORITE_LIMIT,
   profileOf,
   saveWallet,
   walletOf,
 } from "../../modules/members.js";
+import type {
+  GuestCredentials,
+  MutationCtx,
+  SqlValue,
+} from "../../modules/naru-types.js";
+import type { Speaker } from "../../modules/roleplay.js";
 import {
   combineInPost,
   deliverCalls,
@@ -68,12 +73,6 @@ import {
   speakerOf,
   useInPost,
 } from "../../modules/roleplay.js";
-import type { Speaker } from "../../modules/roleplay.js";
-import type {
-  GuestCredentials,
-  MutationCtx,
-  SqlValue,
-} from "../../modules/naru-types.js";
 
 /** What a writer sends for a post. */
 export interface PostInput {

@@ -1,29 +1,30 @@
 // Boards and their logs: a board's list and pages, 분류, tags and search, a post
 // opened alone, choosing a board and what it allows, and emoticons.
+
+import { sanitizedFragment } from "../shared/content-renderer.js";
 import {
-  state,
   $,
-  route,
-  query,
+  boardStaff,
+  mutate,
   pageTitle,
   preloadNicks,
+  query,
   renderPages,
+  route,
   run,
   say,
   showTab,
-  boardStaff,
-  mutate,
+  state,
 } from "./core.js";
-import { watchBoard, showNewPost } from "./live.js";
-import { sanitizedFragment } from "../shared/content-renderer.js";
+import { showNewPost, watchBoard } from "./live.js";
+// The writing form, which wires its own controls as it loads.
+import { listDrafts } from "./log-form.js";
 import {
   countView,
   logItem,
   showNeighbors,
   transferDialog,
 } from "./log-item.js";
-// The writing form, which wires its own controls as it loads.
-import { listDrafts } from "./log-form.js";
 
 /** A board's own number setting, else the original's default. */
 export function boardSetting(id, key, fallback) {
@@ -212,7 +213,7 @@ export async function openPost(id, { comment = null, log = null } = {}) {
   // and a member short of it does not read (bbs/board.php:130).
   const priced = Boolean(
     state.member &&
-    state.boards.find((row) => row.id === board)?.data.readReward,
+      state.boards.find((row) => row.id === board)?.data.readReward,
   );
   if (priced) {
     try {

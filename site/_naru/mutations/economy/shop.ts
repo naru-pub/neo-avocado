@@ -1,17 +1,18 @@
 // The shop (shop/index.php): buying an item as one's approved character,
 // and the paid gacha (뽑기).
+
+import { activeMember, amount, lacking, one } from "../../modules/access.js";
+import type { Progress } from "../../modules/characters.js";
+import {
+  characterState,
+  ownCharacter,
+  saveState,
+  withExp,
+} from "../../modules/characters.js";
 import { onDisplay } from "../../modules/display.js";
 import {
-  activeMember,
-  amount,
-  lacking,
-  names,
-  one,
-  restrictedFor,
-} from "../../modules/access.js";
-import {
-  GACHA_COST,
   draw,
+  GACHA_COST,
   give,
   itemById,
   offerData,
@@ -22,13 +23,6 @@ import {
   spend,
   wallet,
 } from "../../modules/economy.js";
-import {
-  characterState,
-  ownCharacter,
-  saveState,
-  withExp,
-} from "../../modules/characters.js";
-import type { Progress } from "../../modules/characters.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
 /**

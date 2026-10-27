@@ -1,30 +1,34 @@
 // Comments under posts. Visitors comment where the board lets level 1, as
 // guests with a name and password.
-import { one, parsed, text, invalid } from "../../modules/access.js";
-import {
-  COMMENT_LIMIT,
-  COMMENT_REPLY_DEPTH,
-  replyPlace,
-  commentRow,
-  boardOf,
-  commentOf,
-  isStaff,
-  memoOf,
-  payReward,
-  postReadable,
-  postRow,
-  requireBoard,
-  saveCommentSearch,
-  canRepay,
-  takeBackReward,
-} from "../../modules/boards.js";
-import type { CommentRow } from "../../modules/boards.js";
+import { invalid, one, parsed, text } from "../../modules/access.js";
 import {
   checkBannedWords,
   checkDelay,
   checkLength,
 } from "../../modules/board-options.js";
+import type { CommentRow } from "../../modules/boards.js";
+import {
+  boardOf,
+  COMMENT_LIMIT,
+  COMMENT_REPLY_DEPTH,
+  canRepay,
+  commentOf,
+  commentRow,
+  isStaff,
+  memoOf,
+  payReward,
+  postReadable,
+  postRow,
+  replyPlace,
+  requireBoard,
+  saveCommentSearch,
+  takeBackReward,
+} from "../../modules/boards.js";
 import { startWrite } from "../../modules/community.js";
+import type {
+  GuestCredentials,
+  MutationCtx,
+} from "../../modules/naru-types.js";
 import {
   deliverCalls,
   explore,
@@ -33,10 +37,6 @@ import {
   speakerOf,
   useInPost,
 } from "../../modules/roleplay.js";
-import type {
-  GuestCredentials,
-  MutationCtx,
-} from "../../modules/naru-types.js";
 
 /** What a writer sends for a comment. */
 export interface CommentInput {

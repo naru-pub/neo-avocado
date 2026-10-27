@@ -7,12 +7,14 @@
 // 19금 post, a members-only board) shows the site's own preview, which tells
 // nothing of it. A closed site's pages show no preview at all, not even the
 // site's own name, description or picture.
-import { communityAccess, imageUrl, one, settingsOf } from "./access.js";
+
 import type { Access } from "./access.js";
+import { communityAccess, imageUrl, one, settingsOf } from "./access.js";
+import type { Board, PostRow } from "./boards.js";
 import {
-  POST_SELECT,
   boardAllowed,
   boardOf,
+  POST_SELECT,
   plainText,
   postOf,
   postReadable,
@@ -21,12 +23,11 @@ import {
   readerOf,
   rowKey,
 } from "./boards.js";
-import type { Board, PostRow } from "./boards.js";
 import { characterKey, characterRow, shownCharacter } from "./characters.js";
 import { MAIN_PAGE, MENU_PAGE, readablePage } from "./content.js";
 import { designLook } from "./design.js";
 import type { QueryCtx } from "./naru-types.js";
-import { placeOf, whole, type Place } from "./places.js";
+import { type Place, placeOf, whole } from "./places.js";
 
 /**
  * What Naru hands a route (routes.ts): the path asked, the address it was
@@ -82,7 +83,7 @@ function https(value: unknown): string | null {
 }
 
 /** Text as HTML text and attribute values carry it. */
-export const escape = (value: unknown) =>
+export const escapeHtml = (value: unknown) =>
   String(value ?? "").replace(
     /[&<>"']/g,
     (match) =>
@@ -151,11 +152,11 @@ export function headOf(
     (site.address ? `${site.address}${TEMPLATE_IMAGE}` : null);
   const url = `${site.address}${page?.canonical ?? pathOf(path)}`;
   const meta = (attribute: string, name: string, content: string) =>
-    `<meta ${attribute}="${name}" content="${escape(content)}" />`;
+    `<meta ${attribute}="${name}" content="${escapeHtml(content)}" />`;
   return [
-    `<title>${escape(title ? `${title} - ${site.name}` : site.name)}</title>`,
+    `<title>${escapeHtml(title ? `${title} - ${site.name}` : site.name)}</title>`,
     meta("name", "description", description),
-    `<link rel="canonical" href="${escape(url)}" />`,
+    `<link rel="canonical" href="${escapeHtml(url)}" />`,
     meta("property", "og:site_name", site.name),
     meta("property", "og:type", page?.type ?? "website"),
     meta("property", "og:title", title || site.name),
@@ -185,7 +186,7 @@ export async function entranceHead(ctx: QueryCtx): Promise<string> {
     paper: design.enabled === true ? color(design.colors?.paper) : null,
     ink: design.enabled === true ? color(design.colors?.ink) : null,
   };
-  return `<meta name="neo-avocado-entrance" content="${escape(JSON.stringify(entrance))}" />`;
+  return `<meta name="neo-avocado-entrance" content="${escapeHtml(JSON.stringify(entrance))}" />`;
 }
 
 /** What a route answers for an address that is no page. */

@@ -1,14 +1,15 @@
-// 실행: npm test
+// 실행: pnpm test
 // The site's routes (_naru/routes/) on a real SQLite database with the
 // site's migrations (tests/sql-ctx.mjs): every address the pages know is
 // served as index.html with its link preview, read as a visitor reads, and
 // what a visitor may not read (secret, 멤버공개 and 19금 posts, boards above
 // level 1 or in a members-only group) shows the site's own; a closed site's
 // pages show none.
-import { test } from "node:test";
+
 import assert from "node:assert/strict";
+import { test } from "node:test";
+import { character, insert, setSettings } from "./helpers.mjs";
 import { testSite } from "./sql-ctx.mjs";
-import { setSettings, insert, character } from "./helpers.mjs";
 
 /** A board open to visitors (level 1) unless `data` says otherwise. */
 const board = (site, id, { options = {}, ...data } = {}) =>
@@ -40,21 +41,21 @@ function tags(answer) {
   assert.equal(answer.file, "index.html");
   assert.equal(answer.cache, 60);
   const found = {};
-  const unescape = (text) =>
+  const unescapeHtml = (text) =>
     text
       .replace(/&lt;/g, "<")
       .replace(/&gt;/g, ">")
       .replace(/&quot;/g, '"')
       .replace(/&#39;/g, "'")
       .replace(/&amp;/g, "&");
-  found.title = unescape(answer.head.match(/<title>([^<]*)<\/title>/)[1]);
-  found.canonical = unescape(
+  found.title = unescapeHtml(answer.head.match(/<title>([^<]*)<\/title>/)[1]);
+  found.canonical = unescapeHtml(
     answer.head.match(/<link rel="canonical" href="([^"]*)" \/>/)[1],
   );
   for (const [, , name, content] of answer.head.matchAll(
     /<meta (name|property)="([^"]+)" content="([^"]*)" \/>/g,
   ))
-    if (name !== "neo-avocado-entrance") found[name] = unescape(content);
+    if (name !== "neo-avocado-entrance") found[name] = unescapeHtml(content);
   return found;
 }
 /** The home's entrance (index.html opens it on arrival), or null without one. */
@@ -584,8 +585,8 @@ test("every page's head has the look already, so the first paint is the owner's"
     const { head } = await site.route(path);
     // The same design layer and 사용자 CSS the site query hands the page,
     // in the <style> elements it reuses, the owner's last.
-    const layer = head.match(/<style id="designStyles">([^]*?)<\/style>/)[1];
-    const own = head.match(/<style id="ownerStyles">([^]*?)<\/style>/)[1];
+    const layer = head.match(/<style id="designStyles">([\s\S]*?)<\/style>/)[1];
+    const own = head.match(/<style id="ownerStyles">([\s\S]*?)<\/style>/)[1];
     assert.equal(layer, design.layer, path);
     assert.match(layer, /--avocado: #123456;/);
     assert.match(

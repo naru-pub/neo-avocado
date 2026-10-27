@@ -127,8 +127,9 @@ try {
   await owner.page.locator("#adminSignIn").click();
   await owner.page.locator("#adminWorkspace").waitFor();
   await owner.page.evaluate(async () => {
-    const { createNaru } =
-      await import("https://sdk.naru.pub/sdk/1.1.0/naru.js");
+    const { createNaru } = await import(
+      "https://sdk.naru.pub/sdk/1.1.0/naru.js"
+    );
     const admin = await createNaru().auth.session();
     const save = (section, id, values) =>
       admin.mutate(`admin/${section}:save`, { id, values, create: true });
@@ -155,8 +156,9 @@ try {
     await who.page.locator("#profileForm button").click();
     await who.page.locator("#community").waitFor();
     await who.page.evaluate(async (nick) => {
-      const { createNaru } =
-        await import("https://sdk.naru.pub/sdk/1.1.0/naru.js");
+      const { createNaru } = await import(
+        "https://sdk.naru.pub/sdk/1.1.0/naru.js"
+      );
       const member = await createNaru().members.session();
       await member.mutate("characters/sheet:save", {
         data: { name: `${nick}의 캐릭터`, profile: "", fields: { age: "17" } },

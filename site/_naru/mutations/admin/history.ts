@@ -5,13 +5,14 @@
 // below take back their bonus points (or reaching one adds them); a money
 // entry's comes off its member's balance in the same way. An entry whose
 // undoing would leave less than none is refused, and the call keeps nothing.
-import { invalid } from "../../modules/admin.js";
+
 import {
   amount,
   communitySettings,
   one,
   ownerOnly,
 } from "../../modules/access.js";
+import { invalid } from "../../modules/admin.js";
 import { withExp } from "../../modules/characters.js";
 import { saveWallet, walletOf } from "../../modules/members.js";
 import type { MutationCtx } from "../../modules/naru-types.js";

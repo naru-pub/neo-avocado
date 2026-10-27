@@ -1,6 +1,7 @@
 // 접속자 집계: the owner deletes the days kept from before one.
-import { invalid } from "../../modules/admin.js";
+
 import { ownerOnly } from "../../modules/access.js";
+import { invalid } from "../../modules/admin.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
 /** Deletes every day before `before` (YYYY-MM-DD); answers how many. */

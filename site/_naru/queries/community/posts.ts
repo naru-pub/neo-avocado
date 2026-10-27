@@ -3,32 +3,14 @@
 // password, 관심로그, 로그내역, and a board's newest post for the page's
 // 새 글 notice. Visitors read the boards open to level 1 while the site is
 // open (사이트공개).
-import { containing, one, invalid } from "../../modules/access.js";
+
 import type { Access } from "../../modules/access.js";
+import { containing, invalid, one } from "../../modules/access.js";
 import {
-  FULL_TEXT_MIN,
-  POST_SELECT,
-  TAGS,
-  accessOf,
-  boardAllowed,
-  boardOf,
-  boardsOf,
-  commentOf,
-  excerpt,
-  isStaff,
-  lockedPost,
-  phrase,
-  postOf,
-  postReadable,
-  postRow,
-  presentComment,
-  presentPost,
-  readerOf,
-  requireBoard,
-  secretClause,
-  secretReadable,
-  readableComments,
-} from "../../modules/boards.js";
+  boardNumber,
+  listsContent,
+  sortOf,
+} from "../../modules/board-options.js";
 import type {
   Board,
   CommentRow,
@@ -36,10 +18,29 @@ import type {
   Written,
 } from "../../modules/boards.js";
 import {
-  boardNumber,
-  listsContent,
-  sortOf,
-} from "../../modules/board-options.js";
+  accessOf,
+  boardAllowed,
+  boardOf,
+  boardsOf,
+  commentOf,
+  excerpt,
+  FULL_TEXT_MIN,
+  isStaff,
+  lockedPost,
+  POST_SELECT,
+  phrase,
+  postOf,
+  postReadable,
+  postRow,
+  presentComment,
+  presentPost,
+  readableComments,
+  readerOf,
+  requireBoard,
+  secretClause,
+  secretReadable,
+  TAGS,
+} from "../../modules/boards.js";
 import type { QueryCtx, SqlValue } from "../../modules/naru-types.js";
 
 /** The board, if the caller may list and read it; else ACCESS_DENIED. */

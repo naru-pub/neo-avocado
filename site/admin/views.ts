@@ -1,11 +1,9 @@
 // 관리자메인 and the owner's reports (접속자 집계, 활동량), drawn as tables
 // with their filters.
-import { koreanDay, VISIT_BREAKDOWNS } from "./reports.js";
-import { menu, sectionLabel, shownSections } from "./forms.js";
+
 import {
   $,
   CALLS,
-  cursor,
   itemNames,
   loadReferences,
   owner,
@@ -13,7 +11,9 @@ import {
   run,
   setCursor,
 } from "./core.js";
+import { menu, sectionLabel, shownSections } from "./forms.js";
 import { adminRoute } from "./main.js";
+import { koreanDay, VISIT_BREAKDOWNS } from "./reports.js";
 
 /* ------------------------------------------------------- 관리자메인 --- */
 
@@ -220,7 +220,7 @@ export async function activityView() {
   const output = document.createElement("div");
   // 100 members a page, 더 보기 for the next, each after the last one read.
   let rows = [];
-  let cursor = null;
+  const cursor = null;
   const draw = async ({ more = false } = {}) => {
     // "all" stands for every board, which has no ID of its own.
     adminRoute(["activity", board.value || "all", from.value, to.value]);

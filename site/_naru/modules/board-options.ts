@@ -1,9 +1,10 @@
 // A board's own settings for what is written on it (adm/board_form.php):
 // lengths, the site's banned words, and when a post may no longer be edited.
-import { amountOf, communitySettings, one } from "./access.js";
+
 import type { Access, SqlCtx } from "./access.js";
-import { isStaff } from "./boards.js";
+import { amountOf, communitySettings, one } from "./access.js";
 import type { Board, PostRow } from "./boards.js";
+import { isStaff } from "./boards.js";
 import type { QueryCtx } from "./naru-types.js";
 
 type FailCtx = SqlCtx & Pick<QueryCtx, "fail">;

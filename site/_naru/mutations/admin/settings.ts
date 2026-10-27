@@ -1,8 +1,9 @@
 // The owner's settings, one form each: 커뮤니티 설정, 디자인 and 프로필 기본
 // 항목, checked as their forms check them (modules/admin-model.ts). A save
 // that sends only some fields keeps the others.
-import { checked, settingsKeyOf, settingsRecord } from "../../modules/admin.js";
+
 import { ownerOnly } from "../../modules/access.js";
+import { checked, settingsKeyOf, settingsRecord } from "../../modules/admin.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
 export const save = ownerOnly(async function save(

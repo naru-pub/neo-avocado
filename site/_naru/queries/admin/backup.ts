@@ -1,7 +1,8 @@
 // 데이터 백업 (adm/data_backup_update.php): a category's rows, a table and a
 // page at a time, which the page joins into one file to keep.
-import { invalid } from "../../modules/admin.js";
+
 import { ownerOnly } from "../../modules/access.js";
+import { invalid } from "../../modules/admin.js";
 import { BACKUP, BACKUP_ROWS } from "../../modules/backup.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
 

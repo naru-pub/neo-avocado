@@ -1,17 +1,17 @@
 // A log's comments: their list, replies (wr_comment_reply), secret comments,
 // edits and deletes.
 import {
-  state,
   boardStaff,
-  mine,
   edit,
+  mine,
   mutate,
-  withGuestPassword,
   run,
+  state,
+  withGuestPassword,
 } from "./core.js";
-import { speakerLabel, diceText, postText, actionItem } from "./posts.js";
-import { kindOf, loadEmoticons } from "./logs.js";
 import { fullTime } from "./log-item.js";
+import { kindOf, loadEmoticons } from "./logs.js";
+import { actionItem, diceText, postText, speakerLabel } from "./posts.js";
 
 /** Who wrote a post or comment, as far as the reader is shown. */
 export const writerOf = (row) => row.createdBy ?? row.data.owner ?? null;

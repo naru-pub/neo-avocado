@@ -5,14 +5,15 @@
 // of experience goes into its owner's history with the reason, in the same
 // call. The record is the character's row: it is never made or deleted
 // alone.
+
+import { one, ownerOnly } from "../../modules/access.js";
 import {
-  STATE_SELECT,
   checked,
   conflict,
   invalid,
+  STATE_SELECT,
   stateOf,
 } from "../../modules/admin.js";
-import { one, ownerOnly } from "../../modules/access.js";
 import {
   characterKey,
   checkRevision,

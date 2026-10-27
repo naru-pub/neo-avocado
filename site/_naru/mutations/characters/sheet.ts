@@ -2,6 +2,9 @@
 // fields the admin defines. The site owner edits, deletes, moves and creates
 // any member's, as the original's admin (adm/character_form.php,
 // character_delete.php).
+
+import { ownerOnly } from "../../modules/access.js";
+import type { SheetInput } from "../../modules/characters.js";
 import {
   characterRow,
   checkRevision,
@@ -11,9 +14,7 @@ import {
   removeCharacter,
   saveSheet,
 } from "../../modules/characters.js";
-import type { SheetInput } from "../../modules/characters.js";
 import { profileTicket, record, spend } from "../../modules/economy.js";
-import { ownerOnly } from "../../modules/access.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
 /**

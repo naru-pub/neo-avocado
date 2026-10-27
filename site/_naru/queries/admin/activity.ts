@@ -4,8 +4,9 @@
 // warnings; most active first, then by nickname, 100 a page: each page
 // after the last one's (activity, nickname, member), so a community of any
 // size is read to its end.
-import { invalid, kstStart } from "../../modules/admin.js";
+
 import { ownerOnly } from "../../modules/access.js";
+import { invalid, kstStart } from "../../modules/admin.js";
 import type { QueryCtx, SqlValue } from "../../modules/naru-types.js";
 
 const DAY = 24 * 3600 * 1000;

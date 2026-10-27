@@ -2,36 +2,37 @@
 // posts and comments on every board the reader may read, and 전체검색
 // (bbs/search.php), a search of them all. Visitors read what level 1 may
 // while the site is open (사이트공개).
+
+import type { Access } from "../../modules/access.js";
 import {
   communitySettings,
   containing,
+  invalid,
   kstDay,
   one,
-  invalid,
 } from "../../modules/access.js";
-import type { Access } from "../../modules/access.js";
+import type {
+  Board,
+  CommentRow,
+  PostRow,
+  Written,
+} from "../../modules/boards.js";
 import {
-  FULL_TEXT_MIN,
-  POST_SELECT,
   accessOf,
   boardAllowed,
   boardsOf,
   boardsViewable,
   commentOf,
   excerpt,
+  FULL_TEXT_MIN,
   isStaff,
+  POST_SELECT,
   phrase,
   postOf,
   presentComment,
   presentPost,
   readableComments,
   readerOf,
-} from "../../modules/boards.js";
-import type {
-  Board,
-  CommentRow,
-  PostRow,
-  Written,
 } from "../../modules/boards.js";
 import type { QueryCtx, SqlValue } from "../../modules/naru-types.js";
 

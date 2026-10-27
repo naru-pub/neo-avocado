@@ -1,5 +1,5 @@
 // 캐릭터관리: profile fields and images, the review, each character's record, titles, ranks, stats, couples, 소속 and 종족.
-import { nonnegative, type Model } from "./shared.js";
+import { type Model, nonnegative } from "./shared.js";
 
 export const charactersModels: Record<string, Model> = {
   character_fields: {

@@ -4,6 +4,8 @@
 // starts from here, so a post reads the same everywhere. Posts and
 // comments keep the shape pages know ({ id, data }); an ID is its row's
 // number as a string.
+
+import type { Access, SqlCtx } from "./access.js";
 import {
   communityAccess,
   communitySettings,
@@ -12,7 +14,6 @@ import {
   parsed,
   siteOpen,
 } from "./access.js";
-import type { Access, SqlCtx } from "./access.js";
 import { addHistory, saveWallet, walletOf } from "./members.js";
 import type { QueryCtx, SqlValue } from "./naru-types.js";
 
@@ -698,13 +699,13 @@ export async function postReadable(
 ): Promise<boolean> {
   return Boolean(
     row &&
-    (!row.members_only || Boolean(viewer)) &&
-    boardAllowed(
-      (board = board === undefined ? await boardOf(ctx, row.board) : board),
-      access,
-      "read",
-    ) &&
-    secretReadable(row, access, viewer, board),
+      (!row.members_only || Boolean(viewer)) &&
+      boardAllowed(
+        (board = board === undefined ? await boardOf(ctx, row.board) : board),
+        access,
+        "read",
+      ) &&
+      secretReadable(row, access, viewer, board),
   );
 }
 

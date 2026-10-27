@@ -1,9 +1,9 @@
 // How a post or comment is shown: its text, dice and the character it speaks as.
 
 import { emoticonContent } from "../shared/emoticons.js";
+import { openCharacter } from "./characters.js";
 import { nickOf, ownCharacters, query, run, state } from "./core.js";
 import { openLogNumber, searchTag } from "./logs.js";
-import { openCharacter } from "./characters.js";
 import { writeTo } from "./messages.js";
 
 // 댓글 주사위: 굴린 값을 페이지가 정하면 누구나 원하는 눈을 적을 수 있다.

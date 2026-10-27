@@ -3,26 +3,26 @@
 import {
   $,
   CHARACTER_PAGE,
-  memberSettings,
-  mutate,
-  query,
-  edit,
   type EditField,
+  edit,
+  formatTime,
+  memberSettings,
   mine,
+  mutate,
   nickOf,
+  pageTitle,
   preloadNicks,
+  query,
+  renderPages,
+  route,
   run,
+  STATE_NAMES,
   say,
   show,
   showTab,
   state,
-  STATE_NAMES,
   TYPE_NAMES,
   uploadMedia,
-  route,
-  formatTime,
-  renderPages,
-  pageTitle,
 } from "./core.js";
 import { writeTo } from "./messages.js";
 import { expText, moneyText } from "./names.js";
@@ -70,7 +70,8 @@ function choiceField(id, rows) {
   const wanted = rows.length ? "SELECT" : "INPUT";
   if (current.tagName === wanted && wanted === "INPUT") return;
   const field = document.createElement(wanted.toLowerCase()) as
-    HTMLInputElement | HTMLSelectElement;
+    | HTMLInputElement
+    | HTMLSelectElement;
   field.id = id;
   if (wanted === "INPUT") (field as HTMLInputElement).maxLength = 40;
   else

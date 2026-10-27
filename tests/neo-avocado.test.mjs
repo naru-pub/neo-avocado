@@ -1,11 +1,13 @@
-// 실행: npm test
-import { test } from "node:test";
+// 실행: pnpm test
+
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { test } from "node:test";
 import { SourceTextModule, SyntheticModule } from "node:vm";
 import { JSDOM } from "jsdom";
-import { matches } from "./where.mjs";
 import { memberSettings } from "../dist/_naru/modules/access.js";
+import { matches } from "./where.mjs";
+
 const root = new URL("../dist/", import.meta.url);
 
 /** How a fake Naru answers a call its test did not expect: ctx.fail. */

@@ -2,25 +2,25 @@
 // Prices and balances are decided by the economy's mutations; the page
 // shows results.
 
+import { onDisplay } from "../_naru/modules/display.js";
+import { editCharacter } from "./characters.js";
 import {
   $,
   edit,
   formatTime,
+  mutate,
   ownCharacters,
+  query,
+  renderPages,
+  route,
   run,
-  say,
   SHOP_PAGE,
+  say,
   showTab,
   state,
   uploadMedia,
-  route,
-  renderPages,
-  query,
-  mutate,
 } from "./core.js";
 import { amountText, expText, moneyText } from "./names.js";
-import { onDisplay } from "../_naru/modules/display.js";
-import { editCharacter } from "./characters.js";
 
 async function loadShop() {
   state.ownCharacters = await ownCharacters();

@@ -1,4 +1,5 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+
 const root = new URL("../", import.meta.url);
 const sources = {
   "purify.es.mjs": "dist/purify.es.mjs",
@@ -16,6 +17,6 @@ for (const [target, source] of Object.entries(sources)) {
   const path = new URL(`site/vendor/${target}`, root);
   if (process.argv.includes("--check")) {
     if ((await readFile(path, "utf8")) !== bytes)
-      throw new Error(`${target} is stale; run npm run vendor:content`);
+      throw new Error(`${target} is stale; run pnpm vendor:content`);
   } else await writeFile(path, bytes);
 }

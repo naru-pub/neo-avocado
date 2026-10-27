@@ -1,12 +1,12 @@
-import { amount, imageUrl, text, invalid } from "../../modules/access.js";
+import { amount, imageUrl, invalid, text } from "../../modules/access.js";
 import {
   characterKey,
   characterRow,
   ownCharacter,
 } from "../../modules/characters.js";
-import { relationOf } from "../../modules/relations.js";
-import type { RelationRow } from "../../modules/relations.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
+import type { RelationRow } from "../../modules/relations.js";
+import { relationOf } from "../../modules/relations.js";
 
 /** Links a relation may list, one per line (rm_link). */
 const MAX_LINKS = 10;

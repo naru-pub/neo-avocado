@@ -2,18 +2,18 @@
 import {
   amount,
   communitySettings,
+  invalid,
   ownerOnly,
   text,
-  invalid,
 } from "../../modules/access.js";
-import { itemById } from "../../modules/economy.js";
-import type { Item } from "../../modules/economy.js";
+import type { CharacterRow } from "../../modules/characters.js";
 import {
   characterState,
   saveState,
   withExp,
 } from "../../modules/characters.js";
-import type { CharacterRow } from "../../modules/characters.js";
+import type { Item } from "../../modules/economy.js";
+import { itemById } from "../../modules/economy.js";
 import {
   addHistory,
   profileByNick,

@@ -4,19 +4,15 @@
 // save with them (modules/admin.ts), so a form's rules hold on the server.
 // Each area's sections, with their own rules, are in admin-models/, as the
 // admin menu groups them.
-import { colorOf } from "./design.js";
+
 import { boardsModels } from "./admin-models/boards.js";
 import { charactersModels } from "./admin-models/characters.js";
 import { configModels } from "./admin-models/config.js";
 import { itemsModels } from "./admin-models/items.js";
 import { membersModels } from "./admin-models/members.js";
 import { otherModels } from "./admin-models/other.js";
-import {
-  kstStamp,
-  nonnegative,
-  plainHttps,
-  type Model,
-} from "./admin-models/shared.js";
+import { type Model, nonnegative, plainHttps } from "./admin-models/shared.js";
+import { colorOf } from "./design.js";
 
 export type { Model, ModelField } from "./admin-models/shared.js";
 

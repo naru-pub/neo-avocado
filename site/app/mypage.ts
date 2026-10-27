@@ -1,28 +1,29 @@
 // 마이페이지 (mypage/): the member's account, characters and posts, their
 // experience history, and leaving the community. 우편함 and 호출내역 are the
 // messages and calls views, under the same menu.
+
+import { openCharacterForm } from "./characters.js";
 import {
   $,
   formatTime,
+  memberSettings,
+  mutate,
+  nickOf,
   ownCharacters,
+  preloadNicks,
+  query,
+  renderPages,
   run,
+  STATE_NAMES,
   say,
+  show,
   showAdmission,
   showTab,
   state,
-  STATE_NAMES,
-  renderPages,
-  show,
-  memberSettings,
-  mutate,
-  query,
   suggestNames,
-  nickOf,
-  preloadNicks,
 } from "./core.js";
-import { expText, moneyText } from "./names.js";
 import { configureBoard, openLogNumber } from "./logs.js";
-import { openCharacterForm } from "./characters.js";
+import { expText, moneyText } from "./names.js";
 
 /** 계정정보: the profile, the member's characters, and leaving. */
 async function loadMyPage() {
@@ -93,13 +94,15 @@ async function loadMyPage() {
   const statuses = new Map<string, any>(
     state.viewer.rank || state.viewer.exp
       ? await Promise.all(
-          characters.map(async (character): Promise<[string, any]> => [
-            character.id,
-            // A card without them still shows.
-            await query("characters/progression:characterStatus", {
-              character: character.id,
-            }).catch(() => null),
-          ]),
+          characters.map(
+            async (character): Promise<[string, any]> => [
+              character.id,
+              // A card without them still shows.
+              await query("characters/progression:characterStatus", {
+                character: character.id,
+              }).catch(() => null),
+            ],
+          ),
         )
       : [],
   );

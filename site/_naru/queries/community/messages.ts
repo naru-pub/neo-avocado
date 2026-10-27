@@ -1,9 +1,9 @@
 // 쪽지함 (mypage/memo/index.php) and a conversation (memo_view.php): the
 // member's own mail, as each side's box shows it.
-import { signedIn, invalid } from "../../modules/access.js";
-import { messageOf } from "../../modules/mail.js";
-import type { MessageRow } from "../../modules/mail.js";
+import { invalid, signedIn } from "../../modules/access.js";
 import { rowKey } from "../../modules/boards.js";
+import type { MessageRow } from "../../modules/mail.js";
+import { messageOf } from "../../modules/mail.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
 
 /** Correspondents a 쪽지함 page shows. */

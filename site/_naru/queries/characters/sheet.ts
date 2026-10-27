@@ -3,7 +3,8 @@
 // reader may see, the owner's lists and fields to fill, and what a
 // character's page shows beside its sheet. Visitors read them while the
 // site is open (사이트공개).
-import { containing, one, signedIn, invalid } from "../../modules/access.js";
+import { containing, invalid, one, signedIn } from "../../modules/access.js";
+import type { CharacterRow } from "../../modules/characters.js";
 import {
   characterRow,
   characterState,
@@ -17,7 +18,8 @@ import {
   viewable,
   visibleFields,
 } from "../../modules/characters.js";
-import type { CharacterRow } from "../../modules/characters.js";
+import type { QueryCtx, SqlValue } from "../../modules/naru-types.js";
+import type { CoupleRow } from "../../modules/relations.js";
 import {
   coupleOf,
   outfitOf,
@@ -25,8 +27,6 @@ import {
   relationOf,
   relationsOf,
 } from "../../modules/relations.js";
-import type { CoupleRow } from "../../modules/relations.js";
-import type { QueryCtx, SqlValue } from "../../modules/naru-types.js";
 
 /** What a list may narrow to: 신청자 (editing or submitted), 승인. */
 const FILTERS = {

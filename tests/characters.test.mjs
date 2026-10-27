@@ -1,20 +1,21 @@
-// 실행: npm test
+// 실행: pnpm test
 // The characters' queries and mutations on a real SQLite database with the
 // site's migrations (tests/sql-ctx.mjs): sheets and their custom fields,
 // the review, the official record (stats, titles, ranks), relations,
 // outfits, couples and the viewer. The owner's admin is tests/admin.test.mjs.
-import { test } from "node:test";
+
 import assert from "node:assert/strict";
-import { testSite } from "./sql-ctx.mjs";
+import { test } from "node:test";
 import {
+  character,
   M1,
   M2,
   OWNER,
+  profile,
   refusal,
   setSettings,
-  profile,
-  character,
 } from "./helpers.mjs";
+import { testSite } from "./sql-ctx.mjs";
 
 const define = (site, code, data = {}) =>
   site.run(

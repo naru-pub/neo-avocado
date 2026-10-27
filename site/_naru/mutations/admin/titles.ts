@@ -1,8 +1,9 @@
 // 타이틀 (adm/title_list.php): the owner deletes titles, and gives one to
 // characters or takes it back (title_has_list.php), each in one call;
 // saving one is admin/records'.
-import { invalid } from "../../modules/admin.js";
+
 import { one, ownerOnly } from "../../modules/access.js";
+import { invalid } from "../../modules/admin.js";
 import { characterKey } from "../../modules/characters.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 

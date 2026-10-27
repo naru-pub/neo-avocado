@@ -1,4 +1,7 @@
 // A post's comments as readers see them, oldest first.
+
+import { invalid } from "../../modules/access.js";
+import type { CommentRow } from "../../modules/boards.js";
 import {
   accessOf,
   boardOf,
@@ -8,9 +11,7 @@ import {
   presentComment,
   readerOf,
 } from "../../modules/boards.js";
-import type { CommentRow } from "../../modules/boards.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
-import { invalid } from "../../modules/access.js";
 
 /** Comments a page reads at a time. */
 const COMMENT_PAGE = 50;

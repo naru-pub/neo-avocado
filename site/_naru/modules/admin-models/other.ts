@@ -1,5 +1,5 @@
 // 기타관리 (adm/admin.menu900.php): popups, polls and backups.
-import { schedule, type Model } from "./shared.js";
+import { type Model, schedule } from "./shared.js";
 
 export const otherModels: Record<string, Model> = {
   // 팝업레이어관리 (adm/newwinlist.php, newwinform.php).

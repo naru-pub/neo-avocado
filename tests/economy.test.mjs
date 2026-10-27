@@ -1,27 +1,28 @@
-// 실행: npm test
+// 실행: pnpm test
 // The economy's queries and mutations on a real SQLite database with the
 // site's migrations (tests/sql-ctx.mjs): the shop and the gacha, what
 // members hold and do with it, money sent and its ledger, the owner's
 // grants, items following a deleted or moved character, and the 쪽지 a
 // gift sends. The owner's admin is tests/admin.test.mjs.
-import { test } from "node:test";
+
 import assert from "node:assert/strict";
-import { testSite } from "./sql-ctx.mjs";
+import { test } from "node:test";
 import { onDisplay } from "../dist/_naru/modules/display.js";
 import { GACHA_COST } from "../dist/_naru/modules/economy.js";
 import {
+  balanceOf,
+  character,
+  count,
+  insert,
   M1,
   M2,
   OWNER,
+  profile,
   refusal,
   setSettings,
-  insert,
-  profile,
-  character,
   wallet,
-  balanceOf,
-  count,
 } from "./helpers.mjs";
+import { testSite } from "./sql-ctx.mjs";
 
 /** What the tabs say of community/inbox:status. */
 const tabs = ({ messages, calls }) => ({ messages, calls });

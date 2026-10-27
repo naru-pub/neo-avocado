@@ -1,13 +1,14 @@
 // 회원 잔액 (adm/point_list.php's balances): each member's money and the day
 // of their last login reward, by member, with their nickname.
+
+import { ownerOnly } from "../../modules/access.js";
 import {
-  PAGE,
-  TABLES,
   offsetOf,
+  PAGE,
   pageOf,
   recordOf,
+  TABLES,
 } from "../../modules/admin.js";
-import { ownerOnly } from "../../modules/access.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
 
 export const list = ownerOnly(async function list(

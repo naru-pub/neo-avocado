@@ -1,29 +1,30 @@
-// 실행: npm test
+// 실행: pnpm test
 // The boards' queries and mutations on a real SQLite database with the
 // site's migrations (tests/sql-ctx.mjs): who may read and write which
 // board, posts and comments with their secrets, 멤버공개 and 익명, guests'
 // posts and passwords, roleplay in posts (speakers, dice, 탐색, items,
 // 조합, calls), the board page, search, Q&A and settlement boards, 관심
 // and rewards. The owner's admin is tests/admin.test.mjs.
-import { test } from "node:test";
+
 import assert from "node:assert/strict";
-import { testSite } from "./sql-ctx.mjs";
+import { test } from "node:test";
 import {
+  balanceOf,
+  count,
+  insert,
+  joined,
   M1,
   M2,
   M3,
   OWNER,
-  VISITOR,
-  refusal,
-  reasonOf,
-  setSettings,
-  insert,
-  joined,
   profile,
+  reasonOf,
+  refusal,
+  setSettings,
+  VISITOR,
   wallet,
-  balanceOf,
-  count,
 } from "./helpers.mjs";
+import { testSite } from "./sql-ctx.mjs";
 
 /** What the tabs say of community/inbox:status. */
 const tabs = ({ messages, calls }) => ({ messages, calls });

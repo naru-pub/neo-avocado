@@ -171,7 +171,8 @@ body.site.designed > :not(.top):not(dialog):not(template):not(script) {
   box-sizing: border-box;
   max-width: 1000px;
   margin-left: calc(
-    var(--menu-width) + max(10px, (100% - var(--menu-width) - 1000px) / 2)
+    var(--menu-width) +
+    max(10px, (100% - var(--menu-width) - 1000px) / 2)
   );
   margin-right: auto;
   padding-left: 10px;

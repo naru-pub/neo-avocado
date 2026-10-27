@@ -1,18 +1,11 @@
 // 환경설정 (adm/admin.menu100.php): the site's settings, its design, menus and banners.
+import { BACKGROUNDS, BOXES, BUTTONS, PANELS, TEXTS } from "../design.js";
 import {
-  BACKGROUNDS,
-  BOXES,
-  BUTTONS,
-  PANELS,
-  TEXTS,
-  colorOf,
-} from "../design.js";
-import {
-  viewLevel,
   kstStamp,
-  schedule,
   type Model,
   type ModelField,
+  schedule,
+  viewLevel,
 } from "./shared.js";
 
 /** design_form.php's 배경반복, 배경위치, 배경크기 and 고정, blank first. */

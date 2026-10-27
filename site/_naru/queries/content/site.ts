@@ -13,9 +13,9 @@ import {
   signedIn,
 } from "../../modules/access.js";
 import {
+  backgroundMusic,
   MAIN_PAGE,
   MENU_PAGE,
-  backgroundMusic,
   readablePage,
 } from "../../modules/content.js";
 import {
@@ -25,8 +25,8 @@ import {
   ownerMarks,
 } from "../../modules/design.js";
 import { imageSlotsOf, nameFieldOf, viewerOf } from "../../modules/images.js";
-import { latestPoll } from "../../modules/polls.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
+import { latestPoll } from "../../modules/polls.js";
 
 const COLORS = ["accent", "muted", "paper", "ink", "line", "surface"];
 // The background's 배경반복 and 배경위치 (adm/design_form.php's cs_etc_2,

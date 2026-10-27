@@ -1,8 +1,9 @@
 // 타이틀 보유·착용 현황 (adm/title_has_list.php): every title a character
 // holds, and whether it shows it, found by character or title name or ID, a
 // page at a time; a deleted title's or character's ID stands for its name.
-import { PAGE, invalid, offsetOf, pageOf } from "../../modules/admin.js";
+
 import { ownerOnly } from "../../modules/access.js";
+import { invalid, offsetOf, PAGE, pageOf } from "../../modules/admin.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
 
 export const list = ownerOnly(async function list(

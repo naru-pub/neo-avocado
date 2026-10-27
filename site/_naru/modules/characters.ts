@@ -8,21 +8,22 @@
 // areas' (a post's speaker, the shop), so a character reads the same
 // everywhere. A character keeps the shape pages
 // know ({ id, data, revision }), its ID a string of its row's number.
+
+import type { SqlCtx } from "./access.js";
 import {
+  amount,
   communityAccess,
   communitySettings,
-  amount,
   imageUrl,
+  invalid,
   names,
   one,
   parsed,
   siteOpen,
   text,
-  invalid,
 } from "./access.js";
-import type { SqlCtx } from "./access.js";
-import { profileByNick, profileOf, setMainCharacter } from "./members.js";
 import type { Profile } from "./members.js";
+import { profileByNick, profileOf, setMainCharacter } from "./members.js";
 import type { QueryCtx, SqlValue } from "./naru-types.js";
 
 /** What character code uses of a call's ctx: the caller, `sql`, `fail` and `now`. */

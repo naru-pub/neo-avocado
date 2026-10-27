@@ -8,27 +8,27 @@
 // the community lives in app/ (core.js is what they share).
 
 import { connectNaru } from "../shared/connect.js";
+import { loadCharacters } from "./characters.js";
 import {
   $,
   clearPrivateViews,
   edit,
   memberSettings,
-  mutate,
-  query,
   movedSinceOpening,
+  mutate,
   opening,
+  query,
   run,
   say,
   show,
   showAdmission,
   showTab,
-  state,
   standing,
+  state,
 } from "./core.js";
 import { listen } from "./live.js";
-import { loadSite } from "./site.js";
 import { loadBoards, loadLogs } from "./logs.js";
-import { loadCharacters } from "./characters.js";
+import { loadSite } from "./site.js";
 import "./shop.js";
 import "./messages.js";
 import "./calls.js";

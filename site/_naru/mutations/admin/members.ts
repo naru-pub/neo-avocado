@@ -3,17 +3,7 @@
 // role and board groups, which are Naru roles (staff, group-<id>); 활동량
 // 관리 saves the warnings alone. Deleting a member's record takes those
 // roles too; deleting the member (member_delete.php) takes their data.
-import {
-  MEMBER_SELECT,
-  TABLES,
-  checked,
-  conflict,
-  invalid,
-  memberData,
-  rolesOfData,
-  setRolesOf,
-  writeRow,
-} from "../../modules/admin.js";
+
 import {
   amountOf,
   communitySettings,
@@ -22,6 +12,17 @@ import {
   ownerOnly,
   rolesOf,
 } from "../../modules/access.js";
+import {
+  checked,
+  conflict,
+  invalid,
+  MEMBER_SELECT,
+  memberData,
+  rolesOfData,
+  setRolesOf,
+  TABLES,
+  writeRow,
+} from "../../modules/admin.js";
 import {
   addHistory,
   nickTaken,

@@ -8,13 +8,13 @@ what was not is [porting.md](porting.md).
 
 | Path                      | What it is                                                                          |
 | ------------------------- | ----------------------------------------------------------------------------------- |
-| `site/`                   | What Naru publishes; `npm run build` compiles it into `dist/`, the TypeScript as JS |
+| `site/`                   | What Naru publishes; `pnpm build` compiles it into `dist/`, the TypeScript as JS |
 | `site/index.html`         | The community's one page; `site/app/` draws it (`main.ts`, one module per area)     |
 | `site/admin/`             | The owner's admin page (`main.ts`), one module per area, and its menu (`forms.ts`)  |
 | `site/shared/`            | What both pages use: the site's address (`config.ts`), HTML and emoticon rendering  |
 | `site/styles/`, `vendor/` | The styles (base, 디자인 사용 off, 디자인) and vendored libraries (DOMPurify)       |
 | `site/_naru/`             | The site's code on Naru (below)                                                     |
-| `types/`                  | Naru's own type declarations, copied by `npm run sync:naru`                         |
+| `types/`                  | Naru's own type declarations, copied by `pnpm sync:naru`                         |
 | `tests/`, `scripts/`      | Tests and the build, deploy and sync scripts                                        |
 
 The build publishes `site/` alone, with `LICENSE` as `LICENSE.txt`; this
@@ -138,8 +138,8 @@ re-exported by `modules/naru-types.ts`; the pages' client is typed by
 
 ## Tests
 
-- `npm run typecheck`, `npm test` and `npm run lint` pass before each
-  commit. `npm test` builds, then tests `dist/`.
+- `pnpm typecheck`, `pnpm test` and `pnpm lint` pass before each
+  commit. `pnpm test` builds, then tests `dist/`.
 - The site's code is tested with `tests/sql-ctx.mjs`: `await testSite()`
   gives a database with the schema applied; `site.query(name, args, who)`
   and `site.mutate(...)` call the built code (`who` is `{ member: "m-1" }`,
@@ -151,5 +151,5 @@ re-exported by `modules/naru-types.ts`; the pages' client is typed by
 - `tests/neo-avocado.test.mjs` runs the page in JSDOM against a synthetic
   SDK.
 - The end-to-end suite runs the built site on naru-dev in Chromium:
-  `NARU_REPO_PATH=<naru-pub> PLAYWRIGHT_MODULE=<playwright's index.mjs> npm run test:e2e`.
+  `NARU_REPO_PATH=<naru-pub> PLAYWRIGHT_MODULE=<playwright's index.mjs> pnpm test:e2e`.
   Run it alone: a build during it changes the files naru-dev serves.

@@ -3,10 +3,11 @@
 // index.html with its link preview (modules/previews.ts). What a path names
 // is read in modules/places.ts, as the page's router reads it; a listed path
 // that names nothing is 404.
-import { page, type RouteInput } from "./modules/previews.js";
-import { placeOf } from "./modules/places.js";
-import { feed } from "./modules/rss.js";
+
 import type { QueryCtx } from "./modules/naru-types.js";
+import { placeOf } from "./modules/places.js";
+import { page, type RouteInput } from "./modules/previews.js";
+import { feed } from "./modules/rss.js";
 
 export default async function route(ctx: QueryCtx, input: RouteInput) {
   const place = placeOf(input?.path ?? "/");

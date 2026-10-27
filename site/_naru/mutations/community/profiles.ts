@@ -1,6 +1,6 @@
 // A member changes their own nickname and preferences (프로필 수정); the
 // rest of the profile is kept by the community's own code.
-import { reservedNick, signedIn, invalid } from "../../modules/access.js";
+import { invalid, reservedNick, signedIn } from "../../modules/access.js";
 import {
   birthYearValid,
   nickTaken,

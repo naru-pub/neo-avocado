@@ -9,7 +9,7 @@ import {
   references,
   run,
 } from "./core.js";
-import { control, table } from "./views.js";
+import { control } from "./views.js";
 
 /* ----------------------------------------------------------- grants --- */
 

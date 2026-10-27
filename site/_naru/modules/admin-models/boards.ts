@@ -1,5 +1,5 @@
 // 게시판관리 (adm/admin.menu300.php): boards and their groups, content pages, quests and emoticons.
-import { plainHttps, type Model } from "./shared.js";
+import { type Model, plainHttps } from "./shared.js";
 
 export const boardsModels: Record<string, Model> = {
   boards: {

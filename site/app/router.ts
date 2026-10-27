@@ -2,13 +2,17 @@
 // and whenever the address changes: a shared link, a reload, the back and
 // forward buttons, a link within the site. app/core.js's route() writes the
 // addresses.
+
+import { type Place, placeOf } from "../_naru/modules/places.js";
+import { showRecent, showSearch } from "./across.js";
+import { openCharacter } from "./characters.js";
 import {
   $,
   opening,
   run,
   say,
-  shownAddress,
   showingAddress,
+  shownAddress,
   showTab,
   state,
 } from "./core.js";
@@ -20,11 +24,8 @@ import {
   openPost,
 } from "./logs.js";
 import { openMessage } from "./messages.js";
-import { showRecent, showSearch } from "./across.js";
-import { follow } from "./site.js";
-import { openCharacter } from "./characters.js";
 import { showShopCategory } from "./shop.js";
-import { placeOf, type Place } from "../_naru/modules/places.js";
+import { follow } from "./site.js";
 
 export function openRoute(path = location.pathname) {
   showingAddress(location.pathname);

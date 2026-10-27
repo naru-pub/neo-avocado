@@ -6,8 +6,8 @@ import {
   moneyInUse,
   names,
 } from "../../modules/access.js";
-import { pay, record, wallet } from "../../modules/economy.js";
 import { characterRow } from "../../modules/characters.js";
+import { pay, record, wallet } from "../../modules/economy.js";
 import { sendNote } from "../../modules/mail.js";
 import { profileOf, saveWallet, walletOf } from "../../modules/members.js";
 import type { MutationCtx } from "../../modules/naru-types.js";

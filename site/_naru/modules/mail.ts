@@ -1,11 +1,12 @@
 // Mail's rows (migrations/0005_mail.sql): a message as pages know it, the
 // one a member may see, and the notes a gift or money sent tells its
 // recipient of, written in the same transaction as what they tell.
-import { one } from "./access.js";
+
 import type { SqlCtx } from "./access.js";
+import { one } from "./access.js";
 import { rowKey } from "./boards.js";
 import type { QueryCtx } from "./naru-types.js";
-import { push, type PushCtx } from "./push.js";
+import { type PushCtx, push } from "./push.js";
 
 export interface MessageRow {
   id: number;

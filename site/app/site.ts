@@ -1,11 +1,11 @@
 // The site's look and navigation: design, menus, banners and the intro.
 
-import { $, addressOf, run, say, showTab, state, query } from "./core.js";
-import { configureBoard, loadLogs } from "./logs.js";
-import { loadContentBody, loadContentPages } from "./content.js";
-import { NAME_DEFAULTS } from "./names.js";
 import { renderContent } from "../shared/content-renderer.js";
 import { showRecent, showSearch } from "./across.js";
+import { loadContentBody, loadContentPages } from "./content.js";
+import { $, addressOf, query, run, say, showTab, state } from "./core.js";
+import { configureBoard, loadLogs } from "./logs.js";
+import { NAME_DEFAULTS } from "./names.js";
 import { loadPoll, showPopups } from "./polls.js";
 
 /** Applies the owner's design, menus and banners (adm/design_form.php, menu_list.php). */

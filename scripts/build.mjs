@@ -1,16 +1,28 @@
 // Builds the site Naru publishes, site/, into dist/: each TypeScript file
 // compiled to JavaScript at the same path, beside the pages, styles,
 // vendored libraries and the _naru folder's other files as they are.
-import ts from "typescript";
-import { format } from "prettier";
-import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+
+import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Biome } from "@biomejs/js-api/nodejs";
+import ts from "typescript";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 // What Naru publishes is site/; the rest is the repository's.
 const site = join(root, "site");
 const out = join(root, "dist");
+
+// The compiled JavaScript is formatted as the sources are (biome.json's
+// formatter settings), for owners who read what their site serves.
+const { formatter, javascript } = JSON.parse(
+  await readFile(join(root, "biome.json"), "utf8"),
+);
+const biome = new Biome();
+const { projectKey } = biome.openProject(root);
+biome.applyConfiguration(projectKey, { formatter, javascript });
+const format = (content, filePath) =>
+  biome.formatContent(projectKey, content, { filePath }).content;
 
 async function build(directory) {
   for (const entry of await readdir(join(site, directory), {
@@ -38,10 +50,7 @@ async function build(directory) {
         },
       });
       const published = target.replace(/\.ts$/, ".js");
-      await writeFile(
-        published,
-        await format(outputText, { filepath: published }),
-      );
+      await writeFile(published, format(outputText, published));
     } else if (!/\.[^./]+$/.test(entry.name))
       // Naru serves files by extension: LICENSE and the like go as .txt.
       await cp(join(site, path), `${target}.txt`);

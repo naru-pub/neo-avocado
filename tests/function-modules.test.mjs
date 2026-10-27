@@ -1,6 +1,6 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
+import test from "node:test";
 
 // The pages call site functions, queries and mutations by
 // "<module/path>:<export>", as the SDK takes them. Every such reference must

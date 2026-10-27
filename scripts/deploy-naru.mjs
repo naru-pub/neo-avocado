@@ -6,7 +6,7 @@
 //
 //   node scripts/deploy-naru.mjs <directory> <naru login> [target folder]
 import { createHash } from "node:crypto";
-import { readFile, readdir } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { extname, join, relative, sep } from "node:path";
 
 const [directory = "dist", site, targetPrefix = ""] = process.argv.slice(2);

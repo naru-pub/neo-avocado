@@ -97,10 +97,10 @@ who may sign in, and the community's level, warnings and leaving day are its
 
 ## Verifying
 
-- `npm test`: the queries and mutations against a real SQLite database with
+- `pnpm test`: the queries and mutations against a real SQLite database with
   the schema (`tests/sql-ctx.mjs`), one suite per area and the admin
   (`tests/admin.test.mjs`), and page behaviour against a synthetic SDK.
-- `npm run test:e2e`: the whole site on naru-dev (Naru's real edge Worker,
+- `pnpm test:e2e`: the whole site on naru-dev (Naru's real edge Worker,
   tables, queries, mutations and live queries) in Chromium, as an owner, two
   members and a guest.
 - `tests/bench.mjs`: each screen's load time on naru-dev with network delays

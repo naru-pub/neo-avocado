@@ -22,7 +22,7 @@ export function emoticonParts(text, definitions) {
     );
   const parts = [];
   let plain = "";
-  for (let position = 0; position < text.length;) {
+  for (let position = 0; position < text.length; ) {
     const found = entries.find((row) =>
       text.startsWith(row.data.name, position),
     );

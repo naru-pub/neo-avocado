@@ -1,7 +1,8 @@
 // Every admin section's plain list and entry (modules/admin-calls.ts's
 // RECORD_CALLS): `{ section, ... }`, for the owner only.
-import { getRecord, listRecords, recordSection } from "../../modules/admin.js";
+
 import { ownerOnly } from "../../modules/access.js";
+import { getRecord, listRecords, recordSection } from "../../modules/admin.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
 
 export const list = ownerOnly(

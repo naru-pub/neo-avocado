@@ -1,16 +1,16 @@
 // 알림 (ajax/board_call.php): the member's calls ([[nick]]) and comment
 // notices, and whether any is new.
-import { signedIn, invalid } from "../../modules/access.js";
+import { invalid, signedIn } from "../../modules/access.js";
+import type { Board, PostRow } from "../../modules/boards.js";
 import {
   accessOf,
   boardOf,
   postReadable,
   rowKey,
 } from "../../modules/boards.js";
-import type { Board, PostRow } from "../../modules/boards.js";
-import { callsUnread } from "../../modules/roleplay.js";
 import { profileOf } from "../../modules/members.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
+import { callsUnread } from "../../modules/roleplay.js";
 
 interface CallRow {
   id: number;

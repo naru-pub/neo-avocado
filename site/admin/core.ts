@@ -1,16 +1,16 @@
 // What every part of the admin page shares: the owner's client and the page's
 // state, each section's calls, the forms' references and the owner's names,
 // and run().
-import { type NaruClient } from "https://sdk.naru.pub/sdk/1.1.0/naru.js";
-import { type Names, NAME_DEFAULTS, namesOf, rename } from "../app/names.js";
-import { imageSlotsOf } from "../_naru/modules/images.js";
+import type { NaruClient } from "https://sdk.naru.pub/sdk/1.1.0/naru.js";
 import {
   type AdminCall,
-  RECORD_CALLS,
-  OWN_CALLS,
-  SETTINGS_SECTIONS,
   adminCall,
+  OWN_CALLS,
+  RECORD_CALLS,
+  SETTINGS_SECTIONS,
 } from "../_naru/modules/admin-calls.js";
+import { imageSlotsOf } from "../_naru/modules/images.js";
+import { NAME_DEFAULTS, type Names, namesOf, rename } from "../app/names.js";
 import { renderNav } from "./main.js";
 
 export const $ = <T extends HTMLElement = HTMLElement>(id: string) =>

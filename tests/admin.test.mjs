@@ -1,23 +1,24 @@
-// 실행: npm test
+// 실행: pnpm test
 // The owner's admin (admin/) on a real SQLite database with the site's
 // migrations (tests/sql-ctx.mjs): each section's owner-only queries and
 // mutations, saves checked as the forms check them, members' Naru roles,
 // balances and records saved with their history, titles given and taken
 // back in one call, and the reports' SQL.
-import { test } from "node:test";
+
 import assert from "node:assert/strict";
 import { readdir } from "node:fs/promises";
-import { testSite } from "./sql-ctx.mjs";
+import { test } from "node:test";
 import {
+  adminMutate,
+  adminQuery,
+  character,
   M1,
   OWNER,
+  profile,
   refusal,
   refusedWith,
-  profile,
-  character,
-  adminQuery,
-  adminMutate,
 } from "./helpers.mjs";
+import { testSite } from "./sql-ctx.mjs";
 
 const query = (site, name, args = {}) => adminQuery(site, name, args);
 const mutate = (site, name, args = {}) => adminMutate(site, name, args);

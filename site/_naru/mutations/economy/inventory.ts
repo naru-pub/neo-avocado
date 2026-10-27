@@ -3,10 +3,17 @@
 import {
   activeMember,
   amount,
+  invalid,
   lacking,
   signedIn,
-  invalid,
 } from "../../modules/access.js";
+import type { Character } from "../../modules/characters.js";
+import {
+  characterKey,
+  characterRow,
+  ownCharacter,
+} from "../../modules/characters.js";
+import type { Owned } from "../../modules/economy.js";
 import {
   draw,
   give,
@@ -23,13 +30,6 @@ import {
   spend,
   wallet,
 } from "../../modules/economy.js";
-import type { Owned } from "../../modules/economy.js";
-import {
-  characterKey,
-  characterRow,
-  ownCharacter,
-} from "../../modules/characters.js";
-import type { Character } from "../../modules/characters.js";
 import { sendNote } from "../../modules/mail.js";
 import { profileOf } from "../../modules/members.js";
 import type { MutationCtx } from "../../modules/naru-types.js";

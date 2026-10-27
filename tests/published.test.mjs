@@ -1,11 +1,12 @@
-// 실행: npm test
+// 실행: pnpm test
 // What dist/ publishes to Naru, which serves nothing under _naru/: the pages
 // import none of it, and every page import names a published file.
-import { test } from "node:test";
+
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const dist = fileURLToPath(new URL("../dist/", import.meta.url));

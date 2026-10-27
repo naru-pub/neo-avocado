@@ -1,15 +1,16 @@
 // 아이템 지급·보유 현황 (adm/inventory_list.php): every copy members and their
 // characters hold, a page at a time, each with its owner's nickname and its
 // character's name.
+
+import { containing, ownerOnly } from "../../modules/access.js";
 import {
-  PAGE,
-  TABLES,
   invalid,
   offsetOf,
+  PAGE,
   pageOf,
   recordOf,
+  TABLES,
 } from "../../modules/admin.js";
-import { containing, ownerOnly } from "../../modules/access.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
 
 // Searched as adm/inventory_list.php: `field` (nick, character or item)

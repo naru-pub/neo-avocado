@@ -2,13 +2,13 @@
 // member may see, the recipes, and the chosen character's inventory (or
 // what no character holds). The balance is economy/wallet:wallet.
 import { signedIn } from "../../modules/access.js";
+import { ownCharacter } from "../../modules/characters.js";
 import {
   inventoryOf,
   openRecipes,
   shopOffers,
   visibleItems,
 } from "../../modules/economy.js";
-import { ownCharacter } from "../../modules/characters.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
 
 /**

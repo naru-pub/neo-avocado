@@ -15,6 +15,7 @@ import {
 } from "../../modules/access.js";
 import {
   addHistory,
+  birthYearValid,
   nickTaken,
   nickValid,
   profileByNick,
@@ -22,7 +23,6 @@ import {
   saveWallet,
   walletOf,
 } from "../../modules/members.js";
-import { birthYearValid } from "../../modules/members.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
 /**

@@ -1,7 +1,8 @@
 // 게시판관리: the boards' list with 선택수정·선택삭제, 그룹적용·전체적용, and a group's 접근회원.
-import { models } from "./forms.js";
+
 import { $, CALLS, owner, references, run } from "./core.js";
 import { openForm } from "./editor.js";
+import { models } from "./forms.js";
 import { load } from "./list.js";
 import { control } from "./views.js";
 

@@ -1,9 +1,9 @@
 // 커플목록 (couple/): every couple the owner registered, with both
 // characters' pictures and names.
 import { viewable } from "../../modules/characters.js";
-import { coupleOf } from "../../modules/relations.js";
-import type { CoupleRow } from "../../modules/relations.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
+import type { CoupleRow } from "../../modules/relations.js";
+import { coupleOf } from "../../modules/relations.js";
 
 export async function list(ctx: QueryCtx) {
   await viewable(ctx);

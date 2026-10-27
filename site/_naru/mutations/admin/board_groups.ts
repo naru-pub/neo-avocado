@@ -1,7 +1,8 @@
 // 게시판 그룹's 접근회원 (adm/boardgroupmember_update.php); saving and deleting
 // a group are admin/records'.
-import { invalid, setRolesOf } from "../../modules/admin.js";
+
 import { GROUP_ROLE, one, ownerOnly, rolesOf } from "../../modules/access.js";
+import { invalid, setRolesOf } from "../../modules/admin.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 
 /**

@@ -1,6 +1,8 @@
 // An entry's form, drawn from its section's model (forms.ts), its uploads, and
 // saving it.
-import { models, sectionLabel, fieldValue } from "./forms.js";
+
+import { boardApply } from "./boards.js";
+import { openCharacterForm } from "./characters.js";
 import {
   $,
   CALLS,
@@ -17,10 +19,9 @@ import {
   selected,
   setSelected,
 } from "./core.js";
-import { adminRoute } from "./main.js";
-import { boardApply } from "./boards.js";
+import { fieldValue, models, sectionLabel } from "./forms.js";
 import { load } from "./list.js";
-import { openCharacterForm } from "./characters.js";
+import { adminRoute } from "./main.js";
 
 /**
  * An ID for a new row: the section's name and four random characters, which

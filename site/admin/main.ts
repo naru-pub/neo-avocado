@@ -1,7 +1,8 @@
 // The owner's admin page: its addresses (#/<section>/<entry>), the menu,
 // signing in, and what opens first.
-import { models, menu, sectionLabel, shownSections } from "./forms.js";
+
 import { connectNaru } from "../shared/connect.js";
+import { openCharacterForm } from "./characters.js";
 import {
   $,
   CALLS,
@@ -9,7 +10,6 @@ import {
   loadNames,
   naru,
   owner,
-  reportFilters,
   routing,
   run,
   section,
@@ -19,9 +19,9 @@ import {
   setRouting,
   setSection,
 } from "./core.js";
-import { load } from "./list.js";
-import { openCharacterForm } from "./characters.js";
 import { openForm } from "./editor.js";
+import { menu, models, sectionLabel, shownSections } from "./forms.js";
+import { load } from "./list.js";
 import { maintain } from "./members.js";
 // Each part of the page, which wires its own controls as it loads.
 import "./list.js";

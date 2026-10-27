@@ -4,8 +4,11 @@
 // (character_list.php:285-288), the 소속 and 종족 characters have to filter
 // by, and the profile fields every sheet is shown with. A character's sheet
 // with all its fields, for the owner's form.
-import { PAGE, invalid, offsetOf, pageOf } from "../../modules/admin.js";
+
+import { ownerOnly } from "../../modules/access.js";
+import { invalid, offsetOf, PAGE, pageOf } from "../../modules/admin.js";
 import { REVIEW_STATES } from "../../modules/admin-model.js";
+import type { CharacterRow } from "../../modules/characters.js";
 import {
   characterRow,
   definitionDocument,
@@ -13,8 +16,6 @@ import {
   fieldsOf,
   sheetOf,
 } from "../../modules/characters.js";
-import type { CharacterRow } from "../../modules/characters.js";
-import { ownerOnly } from "../../modules/access.js";
 import type { QueryCtx, SqlValue } from "../../modules/naru-types.js";
 
 export const list = ownerOnly(async function list(

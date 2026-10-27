@@ -1,15 +1,16 @@
 // 회원 잔액: the owner sets a member's balance with a reason, which their
 // history keeps as an adjustment (adm/point_list.php), both in this one
 // call. Balances are never deleted.
+
+import { one, ownerOnly } from "../../modules/access.js";
 import {
-  TABLES,
   checked,
   conflict,
   invalid,
   recordOf,
+  TABLES,
   writeRow,
 } from "../../modules/admin.js";
-import { one, ownerOnly } from "../../modules/access.js";
 import { addHistory } from "../../modules/members.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
 

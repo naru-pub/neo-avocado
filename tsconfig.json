@@ -1,5 +1,5 @@
 {
-  // The site's pages and its Naru functions, rules and modules. `npm run
+  // The site's pages and its Naru functions, rules and modules. `pnpm
   // build` compiles each file to JavaScript at the same path under dist/,
   // which is what Naru publishes; this only checks the types.
   "compilerOptions": {

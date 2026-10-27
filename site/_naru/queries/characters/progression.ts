@@ -9,8 +9,8 @@ import {
   shownCharacter,
   viewable,
 } from "../../modules/characters.js";
-import { historyPage, walletOf } from "../../modules/members.js";
 import { characterInventory } from "../../modules/economy.js";
+import { historyPage, walletOf } from "../../modules/members.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
 
 /** Experience history rows a page (member/exp.php's cf_page_rows). */

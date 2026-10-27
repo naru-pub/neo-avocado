@@ -1,15 +1,15 @@
 // 옷장 (mypage/character/closet.php): a character's outfits, each a 전신,
 // and the one it wears.
 import { imageUrl, text } from "../../modules/access.js";
+import type { CharacterRow } from "../../modules/characters.js";
 import {
   characterKey,
   ownCharacter,
   presentCharacter,
 } from "../../modules/characters.js";
-import type { CharacterRow } from "../../modules/characters.js";
-import { outfitOf } from "../../modules/relations.js";
-import type { OutfitRow } from "../../modules/relations.js";
 import type { MutationCtx } from "../../modules/naru-types.js";
+import type { OutfitRow } from "../../modules/relations.js";
+import { outfitOf } from "../../modules/relations.js";
 
 const notOwned = (ctx: MutationCtx) =>
   ctx.fail("ACCESS_DENIED", "내 캐릭터만 바꿀 수 있습니다.", {

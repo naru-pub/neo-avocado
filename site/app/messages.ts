@@ -1,21 +1,21 @@
 // Private messages between members.
 
+import { openCharacter } from "./characters.js";
 import {
   $,
   formatTime,
+  mutate,
   nickOf,
+  query,
+  renderPages,
+  route,
   run,
   say,
   showTab,
   state,
-  route,
-  renderPages,
-  query,
-  mutate,
   suggestNames,
 } from "./core.js";
 import { moneyText } from "./names.js";
-import { openCharacter } from "./characters.js";
 
 $("tabMessages").onclick = () =>
   run(async () => {

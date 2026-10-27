@@ -4,16 +4,16 @@
 import {
   $,
   formatTime,
+  mutate,
   nickOf,
   preloadNicks,
   query,
   renderPages,
   route,
   run,
+  say,
   showTab,
   state,
-  mutate,
-  say,
 } from "./core.js";
 
 /** The board groups, as the group pickers list them. */

@@ -1,5 +1,5 @@
 // 회원관리 (adm/admin.menu200.php): members, and the activity and visit reports.
-import { type Model } from "./shared.js";
+import type { Model } from "./shared.js";
 
 export const membersModels: Record<string, Model> = {
   members: {

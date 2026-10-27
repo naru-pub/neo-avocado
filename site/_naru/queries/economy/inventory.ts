@@ -1,7 +1,7 @@
 // What a member holds (inventory/list.inc.php), with the items it is of.
 import { signedIn } from "../../modules/access.js";
-import { inventoryOf, itemsByIds } from "../../modules/economy.js";
 import { ownCharacter } from "../../modules/characters.js";
+import { inventoryOf, itemsByIds } from "../../modules/economy.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
 
 /**

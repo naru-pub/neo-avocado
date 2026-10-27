@@ -4,9 +4,10 @@
 // search theirs: `kind` (money, exp, or buy for 구매기록) and `field`
 // (nick, character, item or memo) holding `text`. Each entry names its
 // member and character.
-import { invalid } from "../../modules/admin.js";
-import { historyOfRow, type HistoryRow } from "../../modules/members.js";
+
 import { containing, ownerOnly } from "../../modules/access.js";
+import { invalid } from "../../modules/admin.js";
+import { type HistoryRow, historyOfRow } from "../../modules/members.js";
 import type { QueryCtx, SqlValue } from "../../modules/naru-types.js";
 
 const KINDS = {

@@ -1,6 +1,8 @@
 // Members' rows in the site's tables: profiles, 관심 posts, wallets and
 // history. Queries and mutations use them; a profile and a history row keep
 // the shape pages know ({ id, data }).
+
+import type { SqlCtx } from "./access.js";
 import {
   communityAccess,
   communityAmount,
@@ -8,7 +10,6 @@ import {
   one,
   parsed,
 } from "./access.js";
-import type { SqlCtx } from "./access.js";
 import type { QueryCtx, SqlValue } from "./naru-types.js";
 
 /** A profile as pages and old code read it. */

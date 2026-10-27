@@ -1,13 +1,14 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
 // The admin's forms and their checks (buildRecord), which the owner's
 // mutations run on the server (tests/admin.test.mjs), and the page's menu.
 import {
   buildRecord,
   formValues,
-  models,
   memberSummary,
+  models,
 } from "../dist/admin/forms.js";
+
 const references = {
   profiles: [
     { id: "member-a", data: { nick: "A" } },

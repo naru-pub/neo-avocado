@@ -1,5 +1,5 @@
 // 캐릭터관리: the character review (승인·삭제), the character form, and title grants.
-import { REVIEW_STATES } from "./forms.js";
+
 import {
   $,
   grantTitleId,
@@ -14,10 +14,10 @@ import {
   selected,
   setSelected,
 } from "./core.js";
-import { load } from "./list.js";
-import { control } from "./views.js";
-import { adminRoute } from "./main.js";
 import { imageUpload } from "./editor.js";
+import { REVIEW_STATES } from "./forms.js";
+import { load } from "./list.js";
+import { adminRoute } from "./main.js";
 
 export const STATES = {
   editing: "수정 중",

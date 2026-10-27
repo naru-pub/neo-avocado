@@ -17,9 +17,10 @@
 // passwords (hashed here as a plain marker, not a real hash); a
 // statement's limits (100 bound values, 1,000 rows). What it does not: Naru's checks on names, a call's limits,
 // and the 3-second statement time.
-import { DatabaseSync } from "node:sqlite";
+
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const dist = fileURLToPath(new URL("../dist/_naru/", import.meta.url));

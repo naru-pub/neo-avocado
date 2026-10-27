@@ -1,22 +1,23 @@
-// 실행: npm test
+// 실행: pnpm test
 // Mail's queries and mutations on a real SQLite database with the site's
 // migrations (tests/sql-ctx.mjs): sending 쪽지 to 1–20 members with its cost
 // and daily limit, each side's box, reading and removing, the 쪽지함 grouped
 // by correspondent, a conversation, and what community/inbox:status tells a
 // member's pages.
-import { test } from "node:test";
+
 import assert from "node:assert/strict";
-import { testSite } from "./sql-ctx.mjs";
+import { test } from "node:test";
 import {
+  balanceOf,
   M1,
   M2,
   M3,
+  profile,
   refusal,
   setSettings,
-  profile,
   wallet,
-  balanceOf,
 } from "./helpers.mjs";
+import { testSite } from "./sql-ctx.mjs";
 
 const messages = (site) => site.rows("SELECT * FROM messages ORDER BY id");
 const send = (site, recipients, body, who = M1) =>

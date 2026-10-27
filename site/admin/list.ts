@@ -1,12 +1,13 @@
 // A section's list (load): its entries a page at a time, the smaller lists
 // edited in place (선택수정), and its search and filters.
-import { models, memberSummary } from "./forms.js";
+
 import { moneyText } from "../app/names.js";
+import { boardRow, groupMembers } from "./boards.js";
+import { review, reviewFilters, reviewRow } from "./characters.js";
 import {
   $,
   CALLS,
   cursor,
-  grantTitleId,
   itemNames,
   loadReferences,
   named,
@@ -18,10 +19,9 @@ import {
   setGrantTitleId,
 } from "./core.js";
 import { openForm } from "./editor.js";
-import { activityView, mainView, visitsView } from "./views.js";
+import { memberSummary, models } from "./forms.js";
 import { backupView, grantsView } from "./tools.js";
-import { review, reviewFilters, reviewRow } from "./characters.js";
-import { boardRow, groupMembers } from "./boards.js";
+import { activityView, mainView, visitsView } from "./views.js";
 
 /**
  * Each section's owner-only queries and mutations (_naru/queries/admin/,

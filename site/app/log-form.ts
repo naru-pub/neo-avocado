@@ -2,19 +2,19 @@
 // item or materials it uses.
 import {
   $,
-  state,
-  run,
-  showTab,
-  guestCredentials,
-  say,
-  uploadMedia,
-  mutate,
   boardStaff,
-  query,
   formatTime,
+  guestCredentials,
+  mutate,
+  query,
+  run,
+  say,
+  showTab,
+  state,
+  uploadMedia,
 } from "./core.js";
 import { showNewPost } from "./live.js";
-import { wireItemChoice, postInventory, wireSpeakerChoice } from "./posts.js";
+import { forgetInventory, logItem } from "./log-item.js";
 import {
   boardSetting,
   configureBoard,
@@ -22,7 +22,7 @@ import {
   loadLogs,
   uploadCountOf,
 } from "./logs.js";
-import { forgetInventory, logItem } from "./log-item.js";
+import { postInventory, wireItemChoice, wireSpeakerChoice } from "./posts.js";
 
 // bo_use_file_content: a 설명 box for each file chosen.
 $("logAttachments").addEventListener("change", () => {

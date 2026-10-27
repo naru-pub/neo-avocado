@@ -1,33 +1,27 @@
 // One log as the list shows it (mmb_list_item): its picture, text, speaker,
 // dice, actions, links and files, its edits and votes; and, opened alone, the
 // posts beside it and its 조회수.
+
+import { emoticonContent } from "../shared/emoticons.js";
+import { commentItem } from "./comments.js";
 import {
-  state,
-  mine,
   $,
   boardStaff,
-  run,
-  mutate,
+  type EditField,
   edit,
-  say,
-  query,
   formatTime,
+  guestCredentials,
+  mine,
+  mutate,
+  preloadNicks,
+  query,
+  run,
+  say,
+  state,
   uploadMedia,
   withGuestPassword,
-  preloadNicks,
-  guestCredentials,
-  type EditField,
 } from "./core.js";
-import {
-  postInventory,
-  postText,
-  diceText,
-  actionItem,
-  speakerLabel,
-  wireSpeakerChoice,
-  wireItemChoice,
-} from "./posts.js";
-import { emoticonContent } from "../shared/emoticons.js";
+import { startReply } from "./log-form.js";
 import {
   boardSetting,
   imageWidthOf,
@@ -39,8 +33,15 @@ import {
   previewOf,
   uploadCountOf,
 } from "./logs.js";
-import { startReply } from "./log-form.js";
-import { commentItem } from "./comments.js";
+import {
+  actionItem,
+  diceText,
+  postInventory,
+  postText,
+  speakerLabel,
+  wireItemChoice,
+  wireSpeakerChoice,
+} from "./posts.js";
 
 /** 2026-10-16 15:11:33, as the original prints a comment's wr_datetime. */
 export function fullTime(at) {

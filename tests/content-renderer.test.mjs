@@ -1,7 +1,8 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { JSDOM } from "jsdom";
 import { renderContent } from "../dist/shared/content-renderer.js";
+
 test("content preserves rich HTML while removing executable markup and form controls", () => {
   const document = new JSDOM().window.document,
     container = document.createElement("article");

@@ -1,7 +1,8 @@
 // 게시판 그룹's 접근회원 (adm/boardgroupmember_list.php); the groups' list and
 // one group are admin/records'.
-import { invalid } from "../../modules/admin.js";
+
 import { GROUP_ROLE, ownerOnly } from "../../modules/access.js";
+import { invalid } from "../../modules/admin.js";
 import type { QueryCtx } from "../../modules/naru-types.js";
 
 /** Members a page of 접근회원 lists. */
