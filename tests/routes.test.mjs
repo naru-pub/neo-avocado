@@ -617,3 +617,21 @@ test("every page's head has the look already, so the first paint is the owner's"
   );
   assert.doesNotMatch(closed.head, /og:|<title>/);
 });
+
+test("the owner's /_owner/style.css is in every page's head once turned on, before 사용자 CSS", async () => {
+  const site = await testSite();
+  setSettings(site, "design", { customCss: "a { color: red; }" });
+  assert.doesNotMatch((await site.route("/home")).head, /_owner/);
+  setSettings(site, "design", {
+    customCss: "a { color: red; }",
+    ownerFiles: true,
+  });
+  assert.equal((await site.query("content/site:site")).design.ownerFiles, true);
+  const { head } = await site.route("/home");
+  assert.match(
+    head,
+    /<link rel="stylesheet" id="ownerFile" href="\/_owner\/style\.css" \/>\n<style id="ownerStyles">/,
+  );
+  // Its script waits for the page's (app/site.ts), so the head has none.
+  assert.doesNotMatch(head, /script\.js/);
+});

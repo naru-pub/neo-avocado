@@ -3111,6 +3111,49 @@ test("a plain board without 전체목록보이기 shows a post opened alone with
   assert.equal($("logs").hidden, false);
 });
 
+test("the owner's _owner/ files load after the page's own, once, when turned on", async () => {
+  const database = fakeDatabase({ [PROFILES]: [me] });
+  const customCss = ".log-title { color: #c04; }";
+  database.site = {
+    design: {
+      enabled: false,
+      title: "",
+      font: "sans",
+      colors: {},
+      customCss,
+      ownerFiles: true,
+    },
+  };
+  const { window, settle } = await page(database, {
+    url: "https://neo-avocado.naru.pub/logs/default",
+  });
+  await settle();
+  const { document } = window;
+  const file = document.getElementById("ownerFile");
+  assert.equal(file.getAttribute("href"), "/_owner/style.css");
+  // 사용자 CSS keeps the last word.
+  const styles = document.querySelectorAll('style, link[rel="stylesheet"]');
+  assert.equal(styles[styles.length - 1].id, "ownerStyles");
+  assert.equal(styles[styles.length - 2], file);
+  const scripts = document.querySelectorAll("#ownerScript");
+  assert.equal(scripts.length, 1);
+  assert.equal(scripts[0].getAttribute("src"), "/_owner/script.js");
+  assert.equal(scripts[0].getAttribute("type"), "module");
+});
+test("without the switch the page loads nothing of _owner/", async () => {
+  const database = fakeDatabase({ [PROFILES]: [me] });
+  database.site = {
+    design: { enabled: false, title: "", font: "sans", colors: {} },
+  };
+  const { window, settle } = await page(database, {
+    url: "https://neo-avocado.naru.pub/logs/default",
+  });
+  await settle();
+  assert.equal(
+    window.document.querySelector('[src*="_owner"], [href*="_owner"]'),
+    null,
+  );
+});
 test("사용자 CSS is the page's last style, with 디자인 사용 off too", async () => {
   const database = fakeDatabase({ [PROFILES]: [me] });
   const customCss = ".log-title { color: #c04; }";

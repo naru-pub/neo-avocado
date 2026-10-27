@@ -514,5 +514,9 @@ export function designLook(saved: Record<string, any> = {}) {
       typeof saved.customCss === "string"
         ? saved.customCss.slice(0, 50000)
         : "",
+    // The owner's own files in Naru's _owner/ folder, which no template
+    // update touches: /_owner/style.css before 사용자 CSS, and
+    // /_owner/script.js once the page is set up.
+    ownerFiles: saved.ownerFiles === true,
   };
 }

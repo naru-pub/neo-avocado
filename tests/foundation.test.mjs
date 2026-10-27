@@ -482,6 +482,8 @@ test("the site frame shows only safe design values and menus/banners a reader ma
     classes: [],
     layer: "",
     customCss: "",
+    // The owner's _owner/ files are off until the owner turns them on.
+    ownerFiles: false,
     ownerMarks: { prefix: "▶", suffix: "◀" },
     counter: "",
   });

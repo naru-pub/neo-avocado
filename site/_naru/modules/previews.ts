@@ -60,6 +60,8 @@ export type Page = (
   access: Access,
 ) => Promise<Preview | null | false>;
 
+/** The owner's stylesheet in Naru's _owner/ folder (designLook's ownerFiles). */
+export const OWNER_STYLE = "/_owner/style.css";
 /** How long Naru's edge may keep a page, in seconds. */
 export const CACHE = 60;
 /** The template's own name and description, until the owner sets theirs. */
@@ -215,6 +217,9 @@ export async function lookHead(ctx: QueryCtx): Promise<string> {
   return [
     ...(look.layer
       ? [`<style id="designStyles">${css(look.layer)}</style>`]
+      : []),
+    ...(look.ownerFiles
+      ? [`<link rel="stylesheet" id="ownerFile" href="${OWNER_STYLE}" />`]
       : []),
     ...(look.customCss
       ? [`<style id="ownerStyles">${css(look.customCss)}</style>`]

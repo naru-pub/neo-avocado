@@ -62,6 +62,16 @@ export async function loadSite() {
     document.head.append(styles);
   }
   styles.textContent = design.layer ?? "";
+  // The owner's stylesheet in Naru's _owner/ folder, which no template
+  // update touches: before 사용자 CSS, which keeps the last word.
+  const file = document.getElementById("ownerFile");
+  if (design.ownerFiles && !file) {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.id = "ownerFile";
+    link.href = "/_owner/style.css";
+    document.head.append(link);
+  } else if (!design.ownerFiles) file?.remove();
   let own = document.getElementById("ownerStyles");
   if (!own) {
     own = document.createElement("style");
@@ -70,6 +80,14 @@ export async function loadSite() {
   // Last in <head>, after the design's.
   document.head.append(own);
   own.textContent = design.customCss ?? "";
+  // And its script, once the template's has set the page up.
+  if (design.ownerFiles && !document.getElementById("ownerScript")) {
+    const script = document.createElement("script");
+    script.type = "module";
+    script.id = "ownerScript";
+    script.src = "/_owner/script.js";
+    document.body.append(script);
+  }
 }
 /**
  * The owner's names in the page's own text (기타 항목명 설정); a 소속 or 종족

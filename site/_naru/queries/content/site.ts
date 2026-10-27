@@ -124,6 +124,7 @@ export async function site(ctx: QueryCtx) {
     classes: look.classes,
     layer: look.layer,
     customCss: look.customCss,
+    ownerFiles: look.ownerFiles,
     // 「작성자」 원글 작성자's 접두문자 and 접미문자, which the page writes as text.
     ownerMarks: ownerMarks(saved),
     // mmb_counter: the owner's HTML, which the page sanitizes as posts.

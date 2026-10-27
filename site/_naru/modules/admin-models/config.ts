@@ -799,6 +799,13 @@ export const configModels: Record<string, Model> = {
         type: "textarea",
         max: 50000,
       },
+      // Naru's _owner/ folder, which no template update touches.
+      {
+        key: "ownerFiles",
+        label:
+          "사이트 주인 파일 불러오기 (사이트의 /_owner/style.css와 /_owner/script.js를 템플릿 뒤에 불러옵니다. 템플릿을 업데이트해도 나루가 건드리지 않는 폴더이니, 파일을 올린 뒤 켜세요)",
+        type: "checkbox",
+      },
     ],
     check(data) {
       if (
