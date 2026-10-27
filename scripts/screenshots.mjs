@@ -20,12 +20,10 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const out = join(root, "landing/screenshots");
 await mkdir(out, { recursive: true });
 
-/** Pages a visitor reaches, and what to scroll to first (null: the top). */
+/** Pages a visitor reaches, as the landing shows them. */
 const PAGES = [
-  { name: "members", path: "/members", scroll: null },
-  { name: "character", path: "/character/1", scroll: null },
-  { name: "log", path: "/post/1", scroll: "text=No. 1" },
-  { name: "home", path: "/home", scroll: null },
+  { name: "home", path: "/home" },
+  { name: "members", path: "/members" },
 ];
 
 /** A visitor's tab, past the entrance (cf_intro), which shows once a visit. */
@@ -48,8 +46,6 @@ try {
     });
     for (const shot of PAGES) {
       await page.goto(`${origin}${shot.path}`, { waitUntil: "networkidle" });
-      if (shot.scroll)
-        await page.locator(shot.scroll).first().scrollIntoViewIfNeeded();
       await page.waitForTimeout(500);
       await page.screenshot({
         path: join(
