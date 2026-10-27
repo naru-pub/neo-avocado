@@ -341,10 +341,14 @@ try {
   await menu(bob, "로그");
   assert.equal(await bob.locator("#status").textContent(), "");
 
-  // 마이페이지's 로그내역 lists the member's own posts.
+  // 마이페이지's 로그내역 lists the member's own posts as the original's
+  // (mypage/log/index.php): board and number, with the newest comments,
+  // not the text; hers is the log Bob commented on.
   await menu(alice, "마이페이지");
   await alice.locator("#myLogsTab").click();
-  await alice.locator("#myLogs li", { hasText: "첫 로그" }).waitFor();
+  const mine = alice.locator("#myLogs > li", { hasText: "멋져요" });
+  await mine.waitFor();
+  assert.match(await mine.textContent(), /\[로그\] No\. \d+/);
 
   // The owner pairs two characters, as the form does: 초록 and one the
   // owner registers for Bob. Members see them in 커플목록.
@@ -876,8 +880,9 @@ try {
     "새순",
   );
   await owner.goto(`${origin}/admin/#/board_groups`);
+  // A row shows its ID; its name is in the row's own edit field.
   await owner
-    .locator("#adminRows li", { hasText: "시험 그룹" })
+    .locator("#adminRows li", { hasText: "e2e-group" })
     .locator("button", { hasText: "접근회원" })
     .click();
   await owner
