@@ -14,8 +14,7 @@ what was not is [porting.md](porting.md).
 | `site/shared/`            | What both pages use: the site's address (`config.ts`), HTML and emoticon rendering  |
 | `site/styles/`, `vendor/` | The styles (base, 디자인 사용 off, 디자인) and vendored libraries (DOMPurify)       |
 | `site/_naru/`             | The site's code on Naru (below)                                                     |
-| `types/`                  | Naru's own type declarations, copied by `pnpm sync:naru`                         |
-| `tests/`, `scripts/`      | Tests and the build, deploy and sync scripts                                        |
+| `tests/`, `scripts/`      | Tests and the build and deploy scripts                                             |
 
 The build publishes `site/` alone, with `LICENSE` as `LICENSE.txt`; this
 file, the README and the tests stay in the repository.
@@ -69,9 +68,10 @@ experience history, a title given to many characters.
 
 ## What Naru gives the site's code
 
-Its types are `types/naru-functions.d.ts` (Naru's `functions.d.ts`),
-re-exported by `modules/naru-types.ts`; the pages' client is typed by
-`types/naru.d.ts`, which `tsconfig.json` maps the SDK's address to.
+Its types are `@naru-pub/sdk/functions`, re-exported by
+`modules/naru-types.ts`. The pages import their client from `@naru-pub/sdk`;
+the build turns that into its address on `sdk.naru.pub`, at the installed
+version.
 
 - `ctx.sql` runs one statement: ``ctx.sql`SELECT ... WHERE id = ${id}` ``
   (values are bound, never spliced) or `ctx.sql(text, values)`, answering
@@ -151,5 +151,5 @@ re-exported by `modules/naru-types.ts`; the pages' client is typed by
 - `tests/neo-avocado.test.mjs` runs the page in JSDOM against a synthetic
   SDK.
 - The end-to-end suite runs the built site on naru-dev in Chromium:
-  `NARU_REPO_PATH=<naru-pub> PLAYWRIGHT_MODULE=<playwright's index.mjs> pnpm test:e2e`.
+  `PLAYWRIGHT_MODULE=<playwright's index.mjs> pnpm test:e2e`.
   Run it alone: a build during it changes the files naru-dev serves.

@@ -46,6 +46,14 @@ test("the pages import nothing from _naru/, and every import is published", asyn
   }
 });
 
+test("the pages load the SDK from Naru, not by its package name", async () => {
+  const sources = await Promise.all(
+    (await pages()).map((file) => readFile(join(dist, file), "utf8")),
+  );
+  assert.ok(sources.some((source) => source.includes("https://sdk.naru.pub/")));
+  assert.ok(!sources.some((source) => source.includes("@naru-pub/sdk")));
+});
+
 test("the modules the pages share are published as Naru runs them", async () => {
   for (const module of ["names.js", "admin-model.js", "admin-models/boards.js"])
     assert.equal(

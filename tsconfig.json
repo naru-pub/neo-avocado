@@ -12,12 +12,7 @@
     "skipLibCheck": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": false,
-    "types": [],
-    // The SDK the pages load at run time, typed by its own declarations
-    // (a copy of https://sdk.naru.pub/sdk/1.1.0/naru.d.ts).
-    "paths": {
-      "https://sdk.naru.pub/sdk/1.1.0/naru.js": ["./types/naru.d.ts"]
-    }
+    "types": []
   },
   "include": ["**/*.ts"],
   "exclude": ["node_modules", "dist", "vendor"]

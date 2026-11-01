@@ -3,7 +3,7 @@
 // member's token goes through the edge to the control plane (CONTROL_MS),
 // anything else is answered at the edge (EDGE_MS).
 //
-//   NARU_REPO_PATH=/path/to/naru PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs \
+//   PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs \
 //     node tests/bench.mjs [site directory]
 import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -11,8 +11,6 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const repo = process.env.NARU_REPO_PATH;
-if (!repo) throw new Error("Set NARU_REPO_PATH to a Naru checkout.");
 const { chromium } = await import(
   process.env.PLAYWRIGHT_MODULE || "playwright"
 );
@@ -35,7 +33,7 @@ const naru = spawn(
     state,
   ]),
   {
-    cwd: join(repo, "control-plane"),
+    cwd: fileURLToPath(new URL("..", import.meta.url)),
     detached: true,
     stdio: ["ignore", "pipe", "pipe"],
   },

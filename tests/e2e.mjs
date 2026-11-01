@@ -3,7 +3,7 @@
 // naru.pub. Nothing here imitates
 // Naru; a real Chromium drives the real pages.
 //
-//   NARU_REPO_PATH=/path/to/naru PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs \
+//   PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs \
 //     node tests/e2e.mjs
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -12,8 +12,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const repo = process.env.NARU_REPO_PATH;
-if (!repo) throw new Error("Set NARU_REPO_PATH to a Naru checkout.");
 const { chromium } = await import(
   process.env.PLAYWRIGHT_MODULE || "playwright"
 );
@@ -35,7 +33,7 @@ const naru = spawn(
     state,
   ],
   {
-    cwd: join(repo, "control-plane"),
+    cwd: fileURLToPath(new URL("..", import.meta.url)),
     detached: true,
     stdio: ["ignore", "pipe", "pipe"],
   },

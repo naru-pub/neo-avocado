@@ -62,9 +62,8 @@
   미리보기 `docs/template-preview.jpg`로 만듭니다.
 - 검사: `pnpm typecheck`, `pnpm test`(빌드 후 `dist/`를 검사), `pnpm lint`
 - 로컬 나루(naru-dev)에서 실제 Chromium으로 전체 흐름:
-  `NARU_REPO_PATH=… PLAYWRIGHT_MODULE=… pnpm test:e2e`(다른 빌드와 동시에 돌리지 않음)
-- 직접 써 보기: `pnpm build` 후 나루 저장소의 `control-plane/`에서
-  `pnpm naru-dev ~/Git/neo-avocado/dist --site neo-avocado` 후 http://localhost:4000
+  `PLAYWRIGHT_MODULE=… pnpm test:e2e`(다른 빌드와 동시에 돌리지 않음)
+- 직접 써 보기: `pnpm build` 후 `pnpm naru-dev dist --site neo-avocado --state .naru-dev`, http://localhost:4000
 
 ## 백업과 복원
 

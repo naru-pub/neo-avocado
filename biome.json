@@ -13,7 +13,6 @@
       "**/*.json",
       "**/*.css",
       "!site/vendor/**/*",
-      "!types/**/*",
       "!dist/**/*"
     ],
     "ignoreUnknown": false

@@ -2,12 +2,7 @@
 // run(), the site's queries and mutations, and the edit dialog.
 // It imports no other part but names.js, so it is always ready before them.
 
-import type {
-  Json,
-  Live,
-  Member,
-  NaruClient,
-} from "https://sdk.naru.pub/sdk/1.1.0/naru.js";
+import type { Json, Live, Member, NaruClient } from "@naru-pub/sdk";
 import { imageSlotsOf, viewerOf } from "../_naru/modules/images.js";
 import type { Args, Fields, Row, RowPage } from "../shared/calls.js";
 import type { Emoticon } from "../shared/emoticons.js";

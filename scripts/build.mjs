@@ -24,6 +24,14 @@ biome.applyConfiguration(projectKey, { formatter, javascript });
 const format = (content, filePath) =>
   biome.formatContent(projectKey, content, { filePath }).content;
 
+// The pages import @naru-pub/sdk from Naru, at the address of the installed
+// version, rather than a copy of it: Naru serves the SDK's fixes there, and
+// naru-dev's import map points it at the local server.
+const { version } = JSON.parse(
+  await readFile(join(root, "node_modules/@naru-pub/sdk/package.json"), "utf8"),
+);
+const NARU_SDK = `https://sdk.naru.pub/sdk/${version.replace(/-.*/, "")}/naru.js`;
+
 async function build(directory) {
   for (const entry of await readdir(join(site, directory), {
     withFileTypes: true,
@@ -50,7 +58,13 @@ async function build(directory) {
         },
       });
       const published = target.replace(/\.ts$/, ".js");
-      await writeFile(published, format(outputText, published));
+      await writeFile(
+        published,
+        format(
+          outputText.replaceAll('"@naru-pub/sdk"', `"${NARU_SDK}"`),
+          published,
+        ),
+      );
     } else if (!/\.[^./]+$/.test(entry.name))
       // Naru serves files by extension: LICENSE and the like go as .txt.
       await cp(join(site, path), `${target}.txt`);

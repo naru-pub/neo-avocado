@@ -1,11 +1,7 @@
 // What every part of the admin page shares: the owner's client and the page's
 // state, each section's calls, the forms' references and the owner's names,
 // and run().
-import type {
-  Admin,
-  Json,
-  NaruClient,
-} from "https://sdk.naru.pub/sdk/1.1.0/naru.js";
+import type { Admin, Json, NaruClient } from "@naru-pub/sdk";
 import {
   type AdminCall,
   adminCall,
